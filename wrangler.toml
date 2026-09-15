@@ -1,7 +1,7 @@
 name = "card-losverd-es"
 main = "src/index.ts"
 compatibility_date = "2026-09-15"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "enable_nodejs_inspector_module"]
 
 [[d1_databases]]
 binding = "DB"
