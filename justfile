@@ -26,7 +26,7 @@ typecheck:
 
 # Lint and format
 lint:
-    npx eslint src test
+    npx eslint .
 format:
     npx prettier --write "src/**/*.{ts,sql,json}"
 

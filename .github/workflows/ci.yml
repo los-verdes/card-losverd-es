@@ -13,7 +13,8 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+      - uses: extractions/setup-just@v2
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run test:coverage
+      - run: just typecheck
+      - run: just lint
+      - run: just test-coverage
