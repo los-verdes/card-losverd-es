@@ -6,11 +6,10 @@
   "type": "module",
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.1.10",
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-istanbul": "^4.1.11",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.5.0",
