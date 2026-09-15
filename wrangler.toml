@@ -1,0 +1,19 @@
+name = "card-losverd-es"
+main = "src/index.ts"
+compatibility_date = "2026-09-15"
+compatibility_flags = ["nodejs_compat", "enable_nodejs_inspector_module"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "card-losverd-es-db"
+database_id = "REPLACE_WITH_TERRAFORM_OUTPUT_d1_database_id"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "card-losverd-es-assets"
+
+[env.preview]
+name = "card-losverd-es-preview"
+
+[env.production]
+name = "card-losverd-es"
