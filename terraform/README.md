@@ -10,6 +10,15 @@ Manages the durable Cloudflare resources this service depends on: the D1 databas
 4. `terraform apply -var="cloudflare_account_id=<your account id>"`
 5. Copy the `d1_database_id` output into `wrangler.toml`'s `[[d1_databases]]` block.
 
+## API token permissions
+
+The current token ("Los Verdes - card-verd-es - GitHub & Terraform API token") is shared between this Terraform config and `.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret. As provisioned (2026-09-14, expires **2026-09-17 -- renew before then**, see repo-root TODO), it has:
+
+* Scope: **All accounts** (not narrowed to the single Los Verdes account -- broader than least-privilege; worth tightening once things stabilize).
+* Permissions: `Account Settings:Read`, `D1:Edit`, `Workers Scripts:Edit`.
+
+**Known gap:** it does *not* include `Workers R2 Storage:Edit`, which `r2_bucket.tf`'s `cloudflare_r2_bucket` resource needs to create/manage the R2 bucket -- a `terraform apply` that touches the R2 resource will fail permission checks until that's added to the token. Also missing (not needed yet, but will be at Phase 8 cutover): `Zone > Workers Routes:Edit` scoped to the `losverd.es` zone, for wiring up the `card.losverd.es` custom domain/route. See the migration plan's Execution Status section for the standing TODO on sorting these out.
+
 ## Remote state
 
 State is currently local-only (no backend configured). Worth deciding on a remote backend (Terraform Cloud, an R2-backed S3-compatible backend, or reusing the existing GCS backend from `digital-membership`) before this goes further than solo experimentation -- flagged here rather than decided, since it's a call worth making deliberately.

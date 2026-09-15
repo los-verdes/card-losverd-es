@@ -8,6 +8,9 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+# `CLOUDFLARE_API_TOKEN` needs: Account Settings:Read, D1:Edit, Workers Scripts:Edit
+# (shared with terraform/ -- see terraform/README.md's "API token permissions" section
+# for the known gaps and the token's expiration/renewal note).
 jobs:
   deploy:
     runs-on: ubuntu-latest
