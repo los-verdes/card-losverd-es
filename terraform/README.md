@@ -5,14 +5,16 @@ Manages the durable Cloudflare resources this service depends on: the D1 databas
 ## Setup
 
 1. `export CLOUDFLARE_API_TOKEN=...` (a token scoped to D1 + R2 admin on the target account).
-2. `terraform init`
-3. `terraform plan -var="cloudflare_account_id=<your account id>"`
-4. `terraform apply -var="cloudflare_account_id=<your account id>"`
+2. `just tf-init`
+3. `just tf-plan <your account id>`
+4. `just tf-apply <your account id>`
 5. Copy the `d1_database_id` output into `wrangler.toml`'s `[[d1_databases]]` block.
+
+(The `just tf-*` recipes are thin wrappers around `terraform init`/`plan`/`apply` run from `terraform/` -- see the `justfile` at the repo root.)
 
 ## API token permissions
 
-The current token ("Los Verdes - card-verd-es - GitHub & Terraform API token") is shared between this Terraform config and `.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret. As provisioned (2026-09-14, expires **2026-09-17 -- renew before then**, see repo-root TODO), it has:
+The current token ("Los Verdes - card-verd-es - GitHub & Terraform API token") is shared between this Terraform config and `.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret. As provisioned (2026-09-14, expires **2027-09-17 -- renew before then**; see the Google Calendar reminder set for 2027-09-01), it has:
 
 * Scope: **All accounts** (not narrowed to the single Los Verdes account -- broader than least-privilege; worth tightening once things stabilize).
 * Permissions: `Account Settings:Read`, `D1:Edit`, `Workers Scripts:Edit`.

@@ -50,3 +50,13 @@ deploy-preview:
 
 deploy-prod:
     npx wrangler deploy --env production
+
+# Terraform tasks (see terraform/README.md for required vars/env)
+tf-init:
+    cd terraform && terraform init
+
+tf-plan account_id:
+    cd terraform && terraform plan -var="cloudflare_account_id={{account_id}}"
+
+tf-apply account_id:
+    cd terraform && terraform apply -var="cloudflare_account_id={{account_id}}"

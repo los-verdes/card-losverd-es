@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS members (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    membership_tier TEXT NOT NULL DEFAULT 'standard', -- e.g. adult, youth, family
+    membership_tier TEXT NOT NULL DEFAULT 'standard', -- e.g. standard, los-pringles, cut-crew, etc.
     status TEXT NOT NULL DEFAULT 'active',    -- active, expired, revoked
     expiration_date TEXT,                     -- ISO8601 string (YYYY-MM-DD)
     auth_token TEXT NOT NULL,                 -- Secret token generated for Apple PassKit auth
