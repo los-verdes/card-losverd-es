@@ -11,3 +11,6 @@ coverage/
 *.tfstate.*
 crash.log
 crash.*.log
+
+# Local planning/reference docs -- not part of this repo's history
+.ai/
