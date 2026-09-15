@@ -14,3 +14,6 @@ crash.*.log
 
 # Local planning/reference docs -- not part of this repo's history
 .ai/
+
+# Phase 1.0.1 spike build artifact (see justfile's verify-pkcs7-openssl)
+.verify-pkcs7-bundle.mjs
