@@ -2,8 +2,8 @@ import type { Env } from "./index";
 import { enqueueEtlSync, type EtlSyncMessage } from "./queues/etlSync";
 
 /**
- * Cron string -> etl-sync message, per Phase 2.5.3 of
- * `.ai/gcp-to-cf_plan.md`. Keep this in sync with `[triggers].crons` once
+ * Cron string -> etl-sync message, per the migration plan's Phase 2.5.3.
+ * Keep this in sync with `[triggers].crons` once
  * that block is added to `wrangler.toml` (not yet present - see
  * docs/bigcommerce-ingestion.md section 3/5).
  */

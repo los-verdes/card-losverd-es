@@ -72,7 +72,7 @@ const bigcommerce = new Hono<{ Bindings: Env }>();
 
 /**
  * BigCommerce order webhook receiver. Validates fast and enqueues, per
- * Phase 2.5.5 of `.ai/gcp-to-cf_plan.md` - no order sync work happens
+ * the migration plan's Phase 2.5.5 - no order sync work happens
  * inline in this request. Mirrors
  * `member_card/routes/bigcommerce.py::order_webhook()`.
  */

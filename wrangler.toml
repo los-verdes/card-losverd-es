@@ -64,9 +64,9 @@ APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 
 # `[env.production]` deliberately does NOT exist: Wrangler's named
 # environments do not inherit top-level `vars`/`d1_databases`/`r2_buckets`
-# at all (confirmed the hard way -- see the Handoff note in
-# .ai/gcp-to-cf_plan.md for how this was caught: the first real CI deploy
-# using `--env production` silently shipped a Worker with every binding
+# at all (confirmed the hard way -- see the migration plan's Handoff note
+# for how this was caught: the first real CI deploy using
+# `--env production` silently shipped a Worker with every binding
 # missing, `/healthz` still worked since it needs none, but every other
 # route 500'd). Since `env.production`'s Worker name was identical to the
 # top-level one anyway, deploying via the unqualified top-level config

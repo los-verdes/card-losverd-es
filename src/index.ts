@@ -41,7 +41,7 @@ app.route("/bigcommerce", bigcommerce);
 app.route("/passkit", passkit);
 
 // Phase 1.0.2 risk spike: Satori + @resvg/resvg-wasm card-image rendering.
-// Not real member data -- see .ai/gcp-to-cf_plan.md Phase 1.0.2 and
+// Not real member data -- see the migration plan's Phase 1.0.2 and
 // src/spikes/card-rendering/ for details.
 app.route('/spikes/card-rendering', cardRenderingSpike);
 
