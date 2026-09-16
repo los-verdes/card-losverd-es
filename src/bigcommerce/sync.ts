@@ -136,7 +136,7 @@ function computeExpirationDate(dateCreated: string): string {
 
 function computeStatus(
   expirationDate: string,
-  now: Date = new Date(),
+  now: Date,
 ): "active" | "expired" {
   return expirationDate >= now.toISOString().slice(0, 10)
     ? "active"
@@ -149,8 +149,60 @@ export interface MemberUpsertInput {
   lastName: string;
   email: string;
   membershipTier: string;
+  /** `YYYY-MM-DD` of the membership order's creation - a `member_since` candidate. */
+  orderDate: string;
   expirationDate: string;
-  status: "active" | "expired";
+}
+
+interface ExistingMembershipState {
+  status: string;
+  expiration_date: string | null;
+  member_since: string | null;
+}
+
+interface MergedMembershipState {
+  status: string;
+  expirationDate: string;
+  memberSince: string;
+}
+
+/**
+ * Merges one order's membership dates into whatever a `members` row
+ * already holds, such that syncing orders in *any* sequence converges on
+ * the same result (webhooks and the scheduled resync don't deliver orders
+ * chronologically - e.g. an old order's status change re-fires its
+ * webhook long after a renewal has synced):
+ *
+ * - `member_since` only ever moves earlier. This is also what protects the
+ *   one-time Squarespace-era backfill (plan Phase 2.2) from being clobbered
+ *   by a later BigCommerce order.
+ * - `expiration_date` only ever moves later - an older order must not roll
+ *   back a renewal. `status` is then derived from the merged expiration,
+ *   mirroring the Python app's "any membership still active" semantics.
+ * - `'revoked'` is left alone: it's an admin action, not something order
+ *   data expresses (docs/bigcommerce-ingestion.md section 2).
+ *
+ * ISO `YYYY-MM-DD` strings sort chronologically, so plain string
+ * comparison is correct here.
+ */
+export function mergeMembershipState(
+  existing: ExistingMembershipState | null,
+  input: Pick<MemberUpsertInput, "orderDate" | "expirationDate">,
+  now: Date = new Date(),
+): MergedMembershipState {
+  const memberSince =
+    existing?.member_since && existing.member_since < input.orderDate
+      ? existing.member_since
+      : input.orderDate;
+  const expirationDate =
+    existing?.expiration_date && existing.expiration_date > input.expirationDate
+      ? existing.expiration_date
+      : input.expirationDate;
+  const status =
+    existing?.status === "revoked"
+      ? "revoked"
+      : computeStatus(expirationDate, now);
+  return { status, expirationDate, memberSince };
 }
 
 /**
@@ -173,23 +225,26 @@ export async function upsertMemberFromOrder(
   const now = Date.now();
 
   const existing = await env.DB.prepare(
-    "SELECT member_id FROM members WHERE email = ?",
+    "SELECT member_id, status, expiration_date, member_since FROM members WHERE email = ?",
   )
     .bind(email)
-    .first<{ member_id: string }>();
+    .first<{ member_id: string } & ExistingMembershipState>();
+
+  const merged = mergeMembershipState(existing, input);
 
   if (existing) {
     await env.DB.prepare(
       `UPDATE members
-       SET first_name = ?, last_name = ?, membership_tier = ?, status = ?, expiration_date = ?, last_updated_at = ?
+       SET first_name = ?, last_name = ?, membership_tier = ?, status = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
        WHERE member_id = ?`,
     )
       .bind(
         input.firstName,
         input.lastName,
         input.membershipTier,
-        input.status,
-        input.expirationDate,
+        merged.status,
+        merged.expirationDate,
+        merged.memberSince,
         now,
         existing.member_id,
       )
@@ -202,17 +257,27 @@ export async function upsertMemberFromOrder(
   // ON CONFLICT is a safety net for the TOCTOU gap between the SELECT above
   // and this INSERT (e.g. two overlapping syncs for the same customer) -
   // etl-sync's queue concurrency is capped at 1 (Phase 2.5.1) specifically
-  // to make that rare, not to make it impossible.
+  // to make that rare, not to make it impossible. The date columns repeat
+  // mergeMembershipState()'s never-regress rules in SQL, since the
+  // conflicting row wasn't visible when `merged` was computed. (SQLite's
+  // multi-argument MIN()/MAX() return NULL if any argument is NULL, hence
+  // the COALESCEs.)
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(member_id) DO UPDATE SET
        first_name = excluded.first_name,
        last_name = excluded.last_name,
        email = excluded.email,
        membership_tier = excluded.membership_tier,
-       status = excluded.status,
-       expiration_date = excluded.expiration_date,
+       expiration_date = MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date),
+       status = CASE
+         WHEN members.status = 'revoked' THEN 'revoked'
+         WHEN MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date) >= ?
+           THEN 'active'
+         ELSE 'expired'
+       END,
+       member_since = MIN(COALESCE(members.member_since, excluded.member_since), excluded.member_since),
        last_updated_at = excluded.last_updated_at`,
   )
     .bind(
@@ -221,10 +286,12 @@ export async function upsertMemberFromOrder(
       input.lastName,
       email,
       input.membershipTier,
-      input.status,
-      input.expirationDate,
+      merged.status,
+      merged.expirationDate,
+      merged.memberSince,
       authToken,
       now,
+      new Date(now).toISOString().slice(0, 10),
     )
     .run();
 }
@@ -233,15 +300,14 @@ function upsertInputFromOrder(
   order: BigCommerceOrder,
   membershipTier: string,
 ): MemberUpsertInput {
-  const expirationDate = computeExpirationDate(order.date_created);
   return {
     customerId: order.customer_id,
     firstName: order.billing_address.first_name,
     lastName: order.billing_address.last_name,
     email: order.billing_address.email,
     membershipTier,
-    expirationDate,
-    status: computeStatus(expirationDate),
+    orderDate: new Date(order.date_created).toISOString().slice(0, 10),
+    expirationDate: computeExpirationDate(order.date_created),
   };
 }
 
