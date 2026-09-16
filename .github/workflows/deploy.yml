@@ -8,9 +8,9 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
-# `CLOUDFLARE_API_TOKEN` needs: Account Settings:Read, D1:Edit, Workers Scripts:Edit
-# (shared with terraform/ -- see terraform/README.md's "API token permissions" section
-# for the known gaps and the token's expiration/renewal note).
+# `CLOUDFLARE_API_TOKEN` is shared with terraform/ -- see terraform/README.md's
+# "API token permissions" section for its current scope and the tracked
+# least-privilege follow-up (issue #15).
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -28,10 +28,12 @@ jobs:
       - name: Apply D1 migrations
         run: just db-migrate-remote
         env:
-          # AWS_ vars are _not_ AWS credentials. They are CloudFlare R2
-          # credentials named this way for the benefit of terraform's s3 remote state backend.
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # `just db-migrate-remote` is a plain `wrangler d1 migrations
+          # apply` -- it never touches Terraform or the S3/R2 state backend,
+          # so this step deliberately does NOT receive AWS_ACCESS_KEY_ID/
+          # AWS_SECRET_ACCESS_KEY (those are the R2 remote-state credentials,
+          # only needed by `just tf-*`, which CI doesn't run -- see
+          # terraform/README.md). No step in this workflow needs them.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
