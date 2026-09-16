@@ -1,6 +1,6 @@
 /**
- * PassKit device-token authorization (Phase 4.1/4.3/4.4 of
- * `.ai/gcp-to-cf_plan.md`): Apple devices authenticate to the web service
+ * PassKit device-token authorization (the migration plan's Phase
+ * 4.1/4.3/4.4): Apple devices authenticate to the web service
  * with `Authorization: ApplePass <authenticationToken>`, where the token is
  * the one baked into the member's `pass.json` at issuance
  * (`members.auth_token`). This file is also where Phase 2.3.4's

@@ -1,5 +1,5 @@
--- Adds the "member since" date used on the pass/card face, per Phase 2.1/2.2
--- of `.ai/gcp-to-cf_plan.md`. For members with BigCommerce-only history this
+-- Adds the "member since" date used on the pass/card face, per the
+-- migration plan's Phase 2.1/2.2. For members with BigCommerce-only history this
 -- is derivable from synced order data; for early members it's only
 -- recoverable from historical Squarespace orders in Postgres (Squarespace
 -- itself is no longer accessible) and gets backfilled once from there -- see

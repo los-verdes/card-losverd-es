@@ -6,8 +6,8 @@ import { signManifestDetached } from './signer';
 /**
  * Phase 1.0.1 risk spike: PKCS#7 pass signing on Cloudflare Workers.
  *
- * This is throwaway/spike code -- see the migration plan
- * (.ai/gcp-to-cf_plan.md, Phase 1.0.1 and Phase 4.6) and the PR description
+ * This is throwaway/spike code -- see the migration plan (Phase 1.0.1 and
+ * Phase 4.6) and the PR description
  * for the feasibility verdict and required human follow-ups (real Apple
  * cert chain, real-device Wallet install). It is intentionally NOT mounted
  * as a production pass-serving endpoint -- it exists to manually exercise

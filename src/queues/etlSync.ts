@@ -7,8 +7,8 @@ import {
 } from "../bigcommerce/sync";
 
 /**
- * `etl-sync` queue message schema, per Phase 2.5.4 of
- * `.ai/gcp-to-cf_plan.md`. Kept in its own module so both the BigCommerce
+ * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
+ * Kept in its own module so both the BigCommerce
  * webhook route (producer) and this queue's consumer/scheduled trigger
  * (Phase 2.5.3) share one definition.
  */

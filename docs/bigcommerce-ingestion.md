@@ -1,10 +1,10 @@
 # BigCommerce Order Ingestion — Design
 
 Design for the "Order Ingestion" row of the Target Architecture Overview in
-`.ai/gcp-to-cf_plan.md`. Follows the conventions already established by
-Phase 2.3 (Member Auth) and Phase 2.5 (Async/Background Processing) — in
-particular, this is the producer Phase 2.5.5 already names for the
-`etl-sync` Cloudflare Queue.
+the migration plan (tracked separately from this repo). Follows the
+conventions already established by Phase 2.3 (Member Auth) and Phase 2.5
+(Async/Background Processing) — in particular, this is the producer Phase
+2.5.5 already names for the `etl-sync` Cloudflare Queue.
 
 Guiding constraint (Phase 2.2): **D1 is a refreshable cache of BigCommerce,
 not a system of record.** Every write described below is an idempotent
