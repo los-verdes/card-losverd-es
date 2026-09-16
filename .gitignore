@@ -21,3 +21,6 @@ crash.*.log
 # Claude Code scratch state (background-agent worktrees, etc.) - not part of
 # this repo's history.
 .claude/
+.legacy-import-bundle.mjs
+# Legacy Postgres export + generated import SQL contain member PII -- never commit.
+.legacy-export/

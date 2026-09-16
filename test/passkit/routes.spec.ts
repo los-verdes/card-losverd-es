@@ -404,3 +404,24 @@ describe("POST /v1/log", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("member_since overrides on issued passes", () => {
+  it("shows a member_since_overrides date instead of the order-derived one", async () => {
+    await seedTemplateAssets();
+    const { memberId, authToken } = await seedMember({ memberId: "LV-40001" }); // members.member_since = 2021-07-15
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('lv-40001@example.com', '2016-03-01', 'manual')",
+    ).run();
+
+    const res = await SELF.fetch(`${BASE}/v1/passes/${PASS_TYPE_ID}/${memberId}`, {
+      headers: { authorization: `ApplePass ${authToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const passJson = JSON.stringify(JSON.parse(new TextDecoder().decode(files["pass.json"])));
+    expect(passJson).toContain("Mar 2016");
+    expect(passJson).not.toContain("Jul 2021");
+    await env.DB.exec("DELETE FROM member_since_overrides");
+  });
+});

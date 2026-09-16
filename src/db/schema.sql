@@ -80,3 +80,44 @@ CREATE TABLE IF NOT EXISTS oauth_identities (
 );
 
 CREATE INDEX IF NOT EXISTS idx_oauth_identities_user ON oauth_identities(user_id);
+
+-- Member-since overrides + legacy cards (see migrations/0005_legacy_export.sql,
+-- including the triggers that bump members.last_updated_at on override changes)
+CREATE TABLE IF NOT EXISTS member_since_overrides (
+    email TEXT PRIMARY KEY,                   -- lower-cased, matching members.email
+    member_since TEXT NOT NULL,               -- ISO8601 date (YYYY-MM-DD); wins over members.member_since
+    source TEXT NOT NULL CHECK (source IN ('legacy_postgres', 'manual')),
+    note TEXT,
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
+CREATE TRIGGER IF NOT EXISTS member_since_overrides_after_insert
+AFTER INSERT ON member_since_overrides
+BEGIN
+    UPDATE members SET last_updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    WHERE email = NEW.email;
+END;
+
+CREATE TRIGGER IF NOT EXISTS member_since_overrides_after_update
+AFTER UPDATE ON member_since_overrides
+BEGIN
+    UPDATE members SET last_updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    WHERE email IN (OLD.email, NEW.email);
+END;
+
+CREATE TRIGGER IF NOT EXISTS member_since_overrides_after_delete
+AFTER DELETE ON member_since_overrides
+BEGIN
+    UPDATE members SET last_updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    WHERE email = OLD.email;
+END;
+
+CREATE TABLE IF NOT EXISTS legacy_membership_cards (
+    serial_number TEXT PRIMARY KEY,           -- legacy card UUID, lower-case hyphenated form (as in the QR URL)
+    email TEXT NOT NULL,                      -- lower-cased card holder email
+    full_name TEXT,
+    member_since TEXT,                        -- ISO8601 date (YYYY-MM-DD)
+    member_until TEXT                         -- ISO8601 date (YYYY-MM-DD)
+);
+
+CREATE INDEX IF NOT EXISTS idx_legacy_membership_cards_email ON legacy_membership_cards(email);

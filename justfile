@@ -92,3 +92,11 @@ verify-pkcs7-openssl:
     npx esbuild scripts/spikes/verify-pkcs7-openssl.ts --bundle --platform=node --format=esm --packages=external --outfile=.verify-pkcs7-bundle.mjs
     node .verify-pkcs7-bundle.mjs
     rm -f .verify-pkcs7-bundle.mjs
+
+# Legacy Postgres export -> D1 import SQL (one-time; see
+# scripts/legacy-export/README.md). Bundled first for the same reason as
+# verify-pkcs7-openssl above.
+legacy-import-sql export_json out_sql:
+    npx esbuild scripts/legacy-export/build-import-sql.ts --bundle --platform=node --format=esm --packages=external --outfile=.legacy-import-bundle.mjs
+    node .legacy-import-bundle.mjs {{export_json}} {{out_sql}}
+    rm -f .legacy-import-bundle.mjs
