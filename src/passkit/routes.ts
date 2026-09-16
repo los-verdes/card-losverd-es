@@ -22,7 +22,10 @@ interface MemberRow {
   last_updated_at: number;
 }
 
-async function getMember(env: Env, memberId: string): Promise<MemberRow | null> {
+async function getMember(
+  env: Env,
+  memberId: string,
+): Promise<MemberRow | null> {
   return env.DB.prepare("SELECT * FROM members WHERE member_id = ?")
     .bind(memberId)
     .first<MemberRow>();
@@ -62,7 +65,12 @@ function signingCredentials(env: Env): PassSigningCredentials {
 // thumbnail.png, confirmed against a real production pass while building
 // the Phase 4 content generator (see generator.ts / PR #10): it's a
 // `generic`-style pass, which doesn't render a strip image.
-const TEMPLATE_ASSET_FILES = ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"];
+const TEMPLATE_ASSET_FILES = [
+  "icon.png",
+  "icon@2x.png",
+  "logo.png",
+  "logo@2x.png",
+];
 
 async function loadTemplateAssets(
   bucket: R2Bucket,
@@ -158,7 +166,10 @@ passkit.get(
       "SELECT m.member_id as member_id, m.last_updated_at as last_updated_at " +
       "FROM registrations r JOIN members m ON m.member_id = r.serial_number " +
       "WHERE r.device_library_identifier = ? AND r.pass_type_identifier = ?";
-    const params: (string | number)[] = [deviceLibraryIdentifier, passTypeIdentifier];
+    const params: (string | number)[] = [
+      deviceLibraryIdentifier,
+      passTypeIdentifier,
+    ];
     if (passesUpdatedSince !== null && Number.isFinite(passesUpdatedSince)) {
       query += " AND m.last_updated_at > ?";
       params.push(passesUpdatedSince);
@@ -205,7 +216,12 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   }
 
   const passTypeIdentifier = c.env.PASSKIT_PASS_TYPE_IDENTIFIER;
-  let bundle = await getCachedPass(c.env.ASSETS, passTypeIdentifier, serialNumber);
+  let bundle = await getCachedPass(
+    c.env.ASSETS,
+    passTypeIdentifier,
+    serialNumber,
+    member.last_updated_at,
+  );
   if (!bundle) {
     const assets = await loadTemplateAssets(c.env.ASSETS);
     bundle = await assemblePassBundle(
@@ -214,7 +230,13 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
       assets,
       signingCredentials(c.env),
     );
-    await putCachedPass(c.env.ASSETS, passTypeIdentifier, serialNumber, bundle);
+    await putCachedPass(
+      c.env.ASSETS,
+      passTypeIdentifier,
+      serialNumber,
+      member.last_updated_at,
+      bundle,
+    );
   }
 
   return new Response(bundle, {

@@ -312,6 +312,28 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
     const second = await SELF.fetch(path(memberId), { headers });
     expect(second.status).toBe(200);
   });
+
+  it("regenerates instead of serving a stale cached pass once the member has been updated", async () => {
+    await seedTemplateAssets();
+    const { memberId, authToken } = await seedMember({
+      memberId: "LV-30005",
+      lastUpdatedAt: 1_000,
+    });
+    const headers = { authorization: `ApplePass ${authToken}` };
+    expect((await SELF.fetch(path(memberId), { headers })).status).toBe(200);
+
+    await env.DB.prepare(
+      "UPDATE members SET last_name = 'Doe-Smith', last_updated_at = 2000 WHERE member_id = ?",
+    )
+      .bind(memberId)
+      .run();
+
+    const res = await SELF.fetch(path(memberId), { headers });
+    expect(res.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const passJson = JSON.parse(new TextDecoder().decode(files["pass.json"]));
+    expect(JSON.stringify(passJson)).toContain("Doe-Smith");
+  });
 });
 
 describe("DELETE /v1/devices/.../registrations/...", () => {
