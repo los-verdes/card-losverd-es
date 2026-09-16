@@ -77,20 +77,20 @@ order to one `members` row:
 
 | `members` column | Source | Notes |
 | :--- | :--- | :--- |
-| `member_id` | `BC-{customer_id}` if inserting a brand-new row | Stable, deterministic, regenerable from BigCommerce alone — satisfies Phase 2.2's "resync can always repair drift." If a row is matched by email instead (see below), the **existing** `member_id` is preserved rather than overwritten, so pre-migrated Apple/Google Wallet pass state (Phase 2.2's one-time Postgres migration, keyed by the old `LV-XXXXX`-style IDs) doesn't get its primary key pulled out from under it by a later resync. |
+| `member_id` | `BC-{customer_id}` if inserting a brand-new row | Stable, deterministic, regenerable from BigCommerce alone — satisfies Phase 2.2's "resync can always repair drift." If a row is matched by email instead (see below), the **existing** `member_id` is preserved rather than overwritten: it's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so a later resync must never change it. |
 | `first_name` / `last_name` | `order.billing_address.first_name/.last_name` | Same field the Python `insert_order_as_membership()` uses. |
 | `email` | `order.billing_address.email`, lower-cased | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
 | `membership_tier` | SKU of the first order line item matching a configured `MEMBERSHIP_SKU_TIER_MAP` entry | The Python app treats membership as effectively single-tier (`BIGCOMMERCE_MEMBERSHIP_SKUS`, default `LOSV-MEM-0001`); the D1 schema comment already anticipates more (`standard`, `los-pringles`, `cut-crew`), so this design introduces an explicit SKU→tier map (a plain object literal for now) rather than assuming one SKU. An order with no matching SKU is not a membership order and is skipped (ack'd, no D1 write) — mirrors the Python ETL's `ignored_line_items` filtering. |
 | `status` | `'active'` if the (merged) `expiration_date >= today`, else `'expired'` | Mirrors `AnnualMembership.is_active` (created_on within the last 365 days) across *all* of a member's orders, not just the one being synced. The sync never sets `'revoked'`, and doesn't preserve it either: the legacy app has no revocation concept, so a sync re-derives status from expiration like any other row. |
 | `expiration_date` | `order.date_created + 365 days`, formatted `YYYY-MM-DD` — but only if later than the existing value | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Only ever moves later: webhooks and the scheduled resync don't deliver orders chronologically (e.g. a status change on an old order re-fires its webhook after a renewal already synced), so an older order must not roll back a renewal. |
 | `member_since` | `order.date_created`, formatted `YYYY-MM-DD` — but only if earlier than the existing value | Only ever moves earlier. Besides making out-of-order syncs converge, this is what keeps the migration plan's one-time Squarespace-era `member_since` backfill (Phase 2.2) from being clobbered by a later BigCommerce order. |
-| `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data (Phase 2.2 exception) — a resync must never rotate it out from under an already-installed pass. |
+| `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data — a resync must never rotate it out from under an already-installed pass. |
 | `last_updated_at` | `Date.now()` | Cache-validation timestamp Apple's polling endpoint (`Phase 4.2`) compares against. |
 | `created_at` | DB default | Untouched on update. |
 
 **Upsert strategy:** look up the existing row by `email` first (the
-natural join key with any Phase-2.2-migrated member, whose `member_id`
-predates this sync entirely), falling back to `member_id = BC-{customerId}`
+natural join key with any member row that predates this sync, e.g. one
+created before the member's BigCommerce customer id was known), falling back to `member_id = BC-{customerId}`
 if no email match exists yet. Update in place if found (preserving
 `member_id`, `auth_token`, `created_at`); otherwise insert a new row. This
 is two sequential D1 statements (`SELECT` then `UPDATE`/`INSERT`), not a
