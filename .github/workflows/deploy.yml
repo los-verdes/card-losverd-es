@@ -67,15 +67,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          # No `environment:` input -- Wrangler's named environments don't
-          # inherit top-level vars/bindings at all, and `env.production`
-          # doesn't exist for exactly that reason (see wrangler.toml).
-          # `command` explicitly targets the top-level config (`--env=""`)
-          # rather than leaving Wrangler to guess: the action's own
-          # `environment` input can't do this itself -- it only appends
-          # `--env <value>` when the value is truthy, so an empty string
-          # there is silently dropped and produces the exact same
-          # "multiple environments defined, no target specified" warning
-          # this is meant to avoid (confirmed against the action's source,
-          # cloudflare/wrangler-action's wranglerAction.ts).
-          command: deploy --env=""
+          # Plain `wrangler deploy`: wrangler.toml defines no named
+          # environments, so there's nothing to target.
+          command: deploy

@@ -45,17 +45,10 @@ db-migrate-remote:
 r2-init-local:
     npx wrangler r2 bucket create card-losverd-es-assets || true
 
-# Deploy to Cloudflare Workers
-deploy-preview:
-    npx wrangler deploy --env preview
-
-# No `--env production`: that named environment doesn't exist in
-# wrangler.toml (Wrangler environments don't inherit top-level
-# vars/bindings, which silently shipped a Worker with none -- see
-# wrangler.toml's comment). Deploying unqualified uses the top-level config,
-# which has every binding.
-deploy-prod:
-    npx wrangler deploy --env=""
+# Deploy to Cloudflare Workers. There's one environment -- production (see
+# wrangler.toml); CI normally does this on merge to main.
+deploy:
+    npx wrangler deploy
 
 # Terraform tasks (see terraform/README.md for required vars/env)
 local_tf_cmd := f"""

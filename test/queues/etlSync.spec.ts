@@ -33,8 +33,8 @@ function makeBatch(
 
 describe("enqueueEtlSync", () => {
   // wrangler.toml binds the real etl-sync queue, which the test runtime
-  // provisions locally. Tests swap in a fake or remove the binding
-  // explicitly, so nothing is ever delivered to the local consumer.
+  // provisions locally. Tests swap in a fake so nothing is ever delivered
+  // to the local consumer, then restore the real binding.
   const realQueue = env.ETL_SYNC_QUEUE;
 
   afterEach(() => {
@@ -42,21 +42,7 @@ describe("enqueueEtlSync", () => {
     env.ETL_SYNC_QUEUE = realQueue;
   });
 
-  it("no-ops with a warning when ETL_SYNC_QUEUE isn't bound (e.g. the preview environment)", async () => {
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    await expect(
-      enqueueEtlSync(env, { type: "run_slack_members_etl" }),
-    ).resolves.toBeUndefined();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("no ETL_SYNC_QUEUE binding in this environment"),
-      expect.anything(),
-    );
-  });
-
-  it("sends the message onto ETL_SYNC_QUEUE when bound", async () => {
+  it("sends the message onto ETL_SYNC_QUEUE", async () => {
     const sent: EtlSyncMessage[] = [];
     (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
       send: async (message: EtlSyncMessage) => {

@@ -78,9 +78,11 @@ describe("signWebhookToken / verifyWebhookAuthorization", () => {
 });
 
 describe("POST /bigcommerce/order-webhook", () => {
+  const realQueue = env.ETL_SYNC_QUEUE;
+
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
+    env.ETL_SYNC_QUEUE = realQueue;
   });
 
   it("rejects an invalid JSON body", async () => {
@@ -189,23 +191,4 @@ describe("POST /bigcommerce/order-webhook", () => {
     expect(sent).toEqual([]);
   });
 
-  it("still returns 200 when ETL_SYNC_QUEUE isn't bound (e.g. the preview environment)", async () => {
-    // Removed explicitly: wrangler.toml binds the real queue, and this test
-    // must not depend on an earlier test's afterEach having removed it.
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const res = await SELF.fetch(
-      "https://example.com/bigcommerce/order-webhook",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: await validAuthHeader(),
-        },
-        body: JSON.stringify(webhookPayload()),
-      },
-    );
-
-    expect(res.status).toBe(200);
-  });
 });

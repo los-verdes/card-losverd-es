@@ -112,11 +112,7 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 
 * `src/queues/etlSync.ts` defines the `EtlSyncMessage` discriminated union
   (verbatim from Phase 2.5.4) and `enqueueEtlSync(env, message)` — a thin
-  wrapper that calls `env.ETL_SYNC_QUEUE.send(message)` **if the binding
-  is present**, and otherwise `console.warn`s and no-ops -- which is what
-  happens in the `preview` environment, deliberately given no queue
-  bindings so it can't steal production's consumer or feed it preview
-  traffic.
+  wrapper around `env.ETL_SYNC_QUEUE.send(message)`.
 * `src/queues/etlSync.ts` also exports the `queue()` consumer entrypoint
   (`handleEtlSyncBatch`), which dispatches each message's `type` to the
   matching `sync.ts` function and acks/retries per-message exactly as

@@ -19,25 +19,11 @@ export type EtlSyncMessage =
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" };
 
-/**
- * Enqueue a message onto the `etl-sync` queue.
- *
- * The `ETL_SYNC_QUEUE` binding exists in production (wrangler.toml,
- * terraform/queues.tf) but deliberately not in the `preview` environment,
- * where a producer would feed preview traffic into production's queue. So
- * a missing binding logs and drops the message rather than throwing.
- */
+/** Enqueue a message onto the `etl-sync` queue (the single typed send site). */
 export async function enqueueEtlSync(
   env: Env,
   message: EtlSyncMessage,
 ): Promise<void> {
-  if (!env.ETL_SYNC_QUEUE) {
-    console.warn(
-      "enqueueEtlSync(): no ETL_SYNC_QUEUE binding in this environment - dropping message",
-      message,
-    );
-    return;
-  }
   await env.ETL_SYNC_QUEUE.send(message);
 }
 

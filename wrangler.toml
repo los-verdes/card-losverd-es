@@ -93,53 +93,7 @@ max_retries = 0
 # No [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts) would
 # call BigCommerce with placeholder credentials until real secrets are set.
 
-# `[env.production]` deliberately does NOT exist: Wrangler's named
-# environments do not inherit top-level `vars`/`d1_databases`/`r2_buckets`
-# at all (confirmed the hard way -- see the migration plan's Handoff note
-# for how this was caught: the first real CI deploy using
-# `--env production` silently shipped a Worker with every binding
-# missing, `/healthz` still worked since it needs none, but every other
-# route 500'd). Since `env.production`'s Worker name was identical to the
-# top-level one anyway, deploying via the unqualified top-level config
-# (see justfile's `deploy-prod` / deploy.yml) is both simpler and correct,
-# with zero risk of the two configs drifting apart.
-#
-# `env.preview` deliberately gets NO queue bindings: a queue can only have one
-# consumer, so declaring one here would steal production's, and a producer
-# would feed preview traffic into production's queue. Without the binding,
-# enqueueEtlSync() logs and drops messages in preview.
-#
-# `env.preview` is a genuinely distinct Worker (different name), so it
-# needs -- and gets -- its own copy of every binding below. It currently
-# points at the *same* D1 database and R2 bucket as production (no
-# separate preview resources are provisioned in Terraform yet) -- fine for
-# now given this project's no-SLA risk posture, but means preview testing
-# can affect real data. Worth revisiting before relying on it for the
-# Phase 8 pre-cutover validation the migration plan describes.
-[env.preview]
-name = "card-losverd-es-preview"
-
-[[env.preview.d1_databases]]
-binding = "DB"
-database_name = "card-losverd-es-db"
-database_id = "6ff0c181-2a0c-43ab-9c16-2c9d78827d6f"
-migrations_dir = "src/db/migrations"
-
-[[env.preview.r2_buckets]]
-binding = "ASSETS"
-bucket_name = "card-losverd-es-assets"
-
-[env.preview.vars]
-BIGCOMMERCE_STORE_HASH = "REPLACE_WITH_BIGCOMMERCE_STORE_HASH"
-BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
-BIGCOMMERCE_ACCESS_TOKEN = "REPLACE_WITH_WRANGLER_SECRET"
-BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "REPLACE_WITH_WRANGLER_SECRET"
-PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
-PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
-PASSKIT_ORGANIZATION_NAME = "Los Verdes"
-PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
-APPLE_PASS_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
-APPLE_PASS_KEY_PEM = "REPLACE_WITH_WRANGLER_SECRET"
-APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
-AUTH_APPLE_ID = "es.losverd.card"
-APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+# No named Wrangler environments: this single Worker is production, even
+# before card.losverd.es points at it. Keep it that way -- named environments
+# don't inherit top-level vars/bindings at all, which once silently shipped a
+# Worker with none (see the migration plan's Handoff note).

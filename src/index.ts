@@ -17,9 +17,7 @@ export interface Env {
   BIGCOMMERCE_ACCESS_TOKEN: string;
   BIGCOMMERCE_WEBHOOK_SIGNING_KEY: string;
   // etl-sync queue producer (Phase 2.5.2; terraform/queues.tf, wrangler.toml).
-  // Optional: deliberately absent in the `preview` environment, where
-  // `enqueueEtlSync()` logs and drops messages instead.
-  ETL_SYNC_QUEUE?: Queue<EtlSyncMessage>;
+  ETL_SYNC_QUEUE: Queue<EtlSyncMessage>;
   // Not secret -- public pass/branding identifiers, see Phase 4.
   PASSKIT_PASS_TYPE_IDENTIFIER: string;
   PASSKIT_TEAM_IDENTIFIER: string;
