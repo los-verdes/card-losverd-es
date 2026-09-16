@@ -26,6 +26,12 @@ export interface Env {
   APPLE_PASS_CERT_PEM: string;
   APPLE_PASS_KEY_PEM: string;
   APPLE_WWDR_CERT_PEM: string;
+  // Secret -- HS256 key for the `lv_session` cookie (Phase 2.3.1). Freshly
+  // generated, NOT the legacy app's SECRET_KEY. Deliberately not given a
+  // placeholder in wrangler.toml `[vars]`: set via `wrangler secret put`
+  // (or `.dev.vars` locally). An unset key fails closed -- session
+  // middleware throws rather than signing with an empty key.
+  SESSION_SIGNING_KEY: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

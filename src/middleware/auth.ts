@@ -3,14 +3,25 @@
  * 4.1/4.3/4.4): Apple devices authenticate to the web service
  * with `Authorization: ApplePass <authenticationToken>`, where the token is
  * the one baked into the member's `pass.json` at issuance
- * (`members.auth_token`). This file is also where Phase 2.3.4's
+ * (`members.auth_token`). This file also holds Phase 2.3.4's
  * `requireAuth`/`requireAdmin`/`requireActiveMembership` member-session
- * middleware will eventually live (per Phase 2.3.8 of the plan) -- unrelated
- * concerns sharing one file by convention (all "authorization middleware"),
- * not by any shared code, so don't be surprised this file is PassKit-only
- * for now.
+ * middleware (per Phase 2.3.8 of the plan) -- unrelated concerns sharing one
+ * file by convention (all "authorization middleware"), not by any shared
+ * code.
  */
 
+import { every } from "hono/combine";
+import { createMiddleware } from "hono/factory";
+import {
+  clearSessionCookie,
+  issueSessionToken,
+  readSessionCookie,
+  setSessionCookie,
+  shouldRenewSession,
+  verifySessionToken,
+  type Session,
+} from "../auth/session";
+import type { Env } from "../index";
 import { timingSafeEqual } from "../lib/timingSafeEqual";
 
 const AUTH_SCHEME_PREFIX = "ApplePass ";
@@ -32,3 +43,107 @@ export function verifyPassAuthorization(
     expectedToken,
   );
 }
+
+export const LOGIN_PATH = "/login";
+export const NO_ACTIVE_MEMBERSHIP_PATH = "/no-active-membership";
+
+export type AuthEnv = {
+  Bindings: Env;
+  Variables: { session: Session };
+};
+
+async function loadUser(
+  env: Env,
+  userId: number,
+): Promise<{ id: number; is_admin: number } | null> {
+  return env.DB.prepare("SELECT id, is_admin FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ id: number; is_admin: number }>();
+}
+
+/**
+ * Verifies the session cookie and sets `c.get("session")`, else redirects
+ * to login. Mirrors the legacy `login_required`.
+ *
+ * No D1 read on the hot path -- except when the session is due for
+ * sliding renewal, where the user is re-read rather than the old cookie's
+ * claims being copied forward. Otherwise an active user's session (and its
+ * `isAdmin` claim) would renew indefinitely after the account was deleted
+ * or demoted.
+ */
+export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
+  const secret = c.env.SESSION_SIGNING_KEY;
+  const token = readSessionCookie(c);
+  let session = token ? await verifySessionToken(secret, token) : null;
+  if (!session) {
+    return c.redirect(LOGIN_PATH);
+  }
+
+  let renewedToken: string | null = null;
+  if (shouldRenewSession(session)) {
+    const user = await loadUser(c.env, session.userId);
+    if (!user) {
+      clearSessionCookie(c);
+      return c.redirect(LOGIN_PATH);
+    }
+    renewedToken = await issueSessionToken(secret, {
+      userId: user.id,
+      isAdmin: user.is_admin === 1,
+    });
+    session = (await verifySessionToken(secret, renewedToken)) as Session;
+  }
+
+  c.set("session", session);
+  await next();
+  if (renewedToken) {
+    setSessionCookie(c, renewedToken);
+  }
+});
+
+/**
+ * `requireAuth` + an admin check against D1 (not just the cookie's
+ * `isAdmin` claim, so demoting an admin takes effect immediately). Admin
+ * routes are rare, so the extra read is negligible. Mirrors the legacy
+ * `roles_required("admin")`.
+ */
+export const requireAdmin = every(
+  requireAuth,
+  createMiddleware<AuthEnv>(async (c, next) => {
+    const user = await loadUser(c.env, c.get("session").userId);
+    if (user?.is_admin !== 1) {
+      return c.text("Forbidden", 403);
+    }
+    await next();
+  }),
+);
+
+/**
+ * `requireAuth` + at least one current membership for the user, else
+ * redirect to the no-active-membership page. Mirrors the legacy
+ * `active_membership_card_required`.
+ *
+ * Membership rows are matched by `members.user_id` *or* email, since
+ * `members` rows are created by BigCommerce order sync, usually before any
+ * login has linked them. Checks `expiration_date` directly rather than
+ * trusting `status = 'active'`, which is only recomputed when a sync
+ * touches the row.
+ */
+export const requireActiveMembership = every(
+  requireAuth,
+  createMiddleware<AuthEnv>(async (c, next) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const membership = await c.env.DB.prepare(
+      `SELECT 1 FROM members m JOIN users u ON u.id = ?
+       WHERE (m.user_id = u.id OR m.email = u.email)
+         AND m.status != 'revoked'
+         AND m.expiration_date >= ?
+       LIMIT 1`,
+    )
+      .bind(c.get("session").userId, today)
+      .first();
+    if (!membership) {
+      return c.redirect(NO_ACTIVE_MEMBERSHIP_PATH);
+    }
+    await next();
+  }),
+);
