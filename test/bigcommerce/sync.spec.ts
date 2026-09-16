@@ -238,7 +238,7 @@ describe("mergeMembershipState", () => {
   it("fills a null member_since/expiration_date from the order", () => {
     expect(
       mergeMembershipState(
-        { status: "active", expiration_date: null, member_since: null },
+        { expiration_date: null, member_since: null },
         input,
         NOW,
       ),
@@ -252,7 +252,6 @@ describe("mergeMembershipState", () => {
   it("never moves member_since later (e.g. a Squarespace-era backfill)", () => {
     const merged = mergeMembershipState(
       {
-        status: "active",
         expiration_date: "2027-01-15",
         member_since: "2016-03-01",
       },
@@ -265,7 +264,6 @@ describe("mergeMembershipState", () => {
   it("moves member_since earlier when an older order turns up", () => {
     const merged = mergeMembershipState(
       {
-        status: "active",
         expiration_date: "2027-01-15",
         member_since: "2026-06-01",
       },
@@ -278,7 +276,6 @@ describe("mergeMembershipState", () => {
   it("never rolls expiration_date back for an older order, and keeps status active", () => {
     const merged = mergeMembershipState(
       {
-        status: "active",
         expiration_date: "2027-06-01",
         member_since: "2024-06-01",
       },
@@ -292,7 +289,6 @@ describe("mergeMembershipState", () => {
   it("re-activates an expired member when a renewal extends expiration_date", () => {
     const merged = mergeMembershipState(
       {
-        status: "expired",
         expiration_date: "2025-01-15",
         member_since: "2024-01-15",
       },
@@ -306,7 +302,6 @@ describe("mergeMembershipState", () => {
   it("marks a member expired when even the latest expiration_date has passed", () => {
     const merged = mergeMembershipState(
       {
-        status: "active",
         expiration_date: "2025-01-15",
         member_since: "2024-01-15",
       },
@@ -316,18 +311,6 @@ describe("mergeMembershipState", () => {
     expect(merged.status).toBe("expired");
   });
 
-  it("leaves a revoked member revoked, even on a renewal order", () => {
-    const merged = mergeMembershipState(
-      {
-        status: "revoked",
-        expiration_date: "2025-01-15",
-        member_since: "2024-01-15",
-      },
-      input,
-      NOW,
-    );
-    expect(merged.status).toBe("revoked");
-  });
 });
 
 describe("upsertMemberFromOrder: never-regress rules", () => {
@@ -444,7 +427,20 @@ describe("upsertMemberFromOrder: never-regress rules", () => {
     expect(member?.member_since).toBe("2024-01-15");
   });
 
-  it("ON CONFLICT path: leaves a revoked member revoked", async () => {
+  it("re-derives a revoked member's status from expiration like any other (revocation isn't sticky)", async () => {
+    await insertMember("LV-10023", "jane.doe@example.com", {
+      status: "revoked",
+      expirationDate: "2020-01-15",
+      memberSince: "2019-01-15",
+    });
+
+    await upsertMemberFromOrder(env, renewalOrder);
+
+    const member = await getMemberByEmail("jane.doe@example.com");
+    expect(member?.status).toBe("active");
+  });
+
+  it("ON CONFLICT path: re-derives a revoked member's status too", async () => {
     await insertMember("BC-42", "old.address@example.com", {
       status: "revoked",
       expirationDate: "2020-01-15",
@@ -454,7 +450,7 @@ describe("upsertMemberFromOrder: never-regress rules", () => {
     await upsertMemberFromOrder(env, renewalOrder);
 
     const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.status).toBe("revoked");
+    expect(member?.status).toBe("active");
   });
 });
 
