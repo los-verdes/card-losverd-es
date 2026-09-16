@@ -60,6 +60,13 @@ APPLE_PASS_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 APPLE_PASS_KEY_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 
+# Sign in with Apple identifiers (Phase 2.3.2, src/auth/authjs.ts) - not
+# secret, the legacy app's real values. The key ID/private key and Google
+# OAuth credentials are secrets with deliberately no placeholder here (see
+# SESSION_SIGNING_KEY in src/index.ts): set via `wrangler secret put`.
+AUTH_APPLE_ID = "es.losverd.card"
+APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+
 # TODO(Phase 2.5.2): etl-sync queue producer/consumer config isn't set up
 # yet - see docs/bigcommerce-ingestion.md sections 3 and 5.
 # [[queues.producers]]
@@ -109,3 +116,5 @@ PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
 APPLE_PASS_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 APPLE_PASS_KEY_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
+AUTH_APPLE_ID = "es.losverd.card"
+APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"

@@ -73,7 +73,12 @@ interface PassJson {
 export type PassAssetFiles = Record<string, Uint8Array>;
 
 async function sha1Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-1", bytes);
+  // Never SharedArrayBuffer-backed; the narrowing satisfies the DOM lib types
+  // that @auth/core's preact dependency pulls into the program.
+  const digest = await crypto.subtle.digest(
+    "SHA-1",
+    bytes as Uint8Array<ArrayBuffer>,
+  );
   return [...new Uint8Array(digest)]
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

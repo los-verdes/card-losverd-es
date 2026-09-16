@@ -249,7 +249,8 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
     );
   }
 
-  return new Response(bundle, {
+  // See sha1Hex in generator.ts for why this narrowing is needed.
+  return new Response(bundle as Uint8Array<ArrayBuffer>, {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.apple.pkpass",
