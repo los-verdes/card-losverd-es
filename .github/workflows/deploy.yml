@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: dev
-      url: https://cf-card.losverd.es
+      # TODO: eventually pull this from a job step's output
+      url: https://card-losverd-es.jeff-hogan1.workers.dev
     steps:
       - uses: actions/checkout@v4
       - uses: extractions/setup-just@v2
