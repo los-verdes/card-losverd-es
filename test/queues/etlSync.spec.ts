@@ -32,12 +32,18 @@ function makeBatch(
 }
 
 describe("enqueueEtlSync", () => {
+  // wrangler.toml binds the real etl-sync queue, which the test runtime
+  // provisions locally. Tests swap in a fake or remove the binding
+  // explicitly, so nothing is ever delivered to the local consumer.
+  const realQueue = env.ETL_SYNC_QUEUE;
+
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
+    env.ETL_SYNC_QUEUE = realQueue;
   });
 
-  it("no-ops with a warning when ETL_SYNC_QUEUE isn't bound yet (Phase 2.5.2 not wired up)", async () => {
+  it("no-ops with a warning when ETL_SYNC_QUEUE isn't bound (e.g. the preview environment)", async () => {
+    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await expect(
@@ -45,7 +51,7 @@ describe("enqueueEtlSync", () => {
     ).resolves.toBeUndefined();
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("ETL_SYNC_QUEUE binding is not configured"),
+      expect.stringContaining("no ETL_SYNC_QUEUE binding in this environment"),
       expect.anything(),
     );
   });

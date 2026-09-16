@@ -67,11 +67,31 @@ APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 AUTH_APPLE_ID = "es.losverd.card"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 
-# TODO(Phase 2.5.2): etl-sync queue producer/consumer config isn't set up
-# yet - see docs/bigcommerce-ingestion.md sections 3 and 5.
-# [[queues.producers]]
-# queue = "etl-sync"
-# binding = "ETL_SYNC_QUEUE"
+# Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
+# terraform/queues.tf; bindings live here. src/index.ts's queue() handler
+# routes batches by queue name.
+[[queues.producers]]
+queue = "etl-sync"
+binding = "ETL_SYNC_QUEUE"
+
+# Concurrency 1: a webhook-triggered order sync and a scheduled full resync
+# never race each other's D1 writes, and BigCommerce rate limits aren't hit
+# by parallel syncs (Phase 2.5.1).
+[[queues.consumers]]
+queue = "etl-sync"
+max_batch_size = 1
+max_batch_timeout = 30
+max_retries = 5
+max_concurrency = 1
+dead_letter_queue = "etl-sync-dlq"
+
+[[queues.consumers]]
+queue = "etl-sync-dlq"
+max_batch_size = 10
+max_retries = 0
+
+# No [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts) would
+# call BigCommerce with placeholder credentials until real secrets are set.
 
 # `[env.production]` deliberately does NOT exist: Wrangler's named
 # environments do not inherit top-level `vars`/`d1_databases`/`r2_buckets`
@@ -83,6 +103,11 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # top-level one anyway, deploying via the unqualified top-level config
 # (see justfile's `deploy-prod` / deploy.yml) is both simpler and correct,
 # with zero risk of the two configs drifting apart.
+#
+# `env.preview` deliberately gets NO queue bindings: a queue can only have one
+# consumer, so declaring one here would steal production's, and a producer
+# would feed preview traffic into production's queue. Without the binding,
+# enqueueEtlSync() logs and drops messages in preview.
 #
 # `env.preview` is a genuinely distinct Worker (different name), so it
 # needs -- and gets -- its own copy of every binding below. It currently

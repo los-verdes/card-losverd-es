@@ -3,9 +3,9 @@ import { enqueueEtlSync, type EtlSyncMessage } from "./queues/etlSync";
 
 /**
  * Cron string -> etl-sync message, per the migration plan's Phase 2.5.3.
- * Keep this in sync with `[triggers].crons` once
- * that block is added to `wrangler.toml` (not yet present - see
- * docs/bigcommerce-ingestion.md section 3/5).
+ * Keep this in sync with `[triggers].crons` once that block is added to
+ * `wrangler.toml` -- held back until real BigCommerce credentials are set,
+ * since these jobs would otherwise fail against placeholder secrets.
  */
 const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   "0 */6 * * *": { type: "run_slack_members_etl" },

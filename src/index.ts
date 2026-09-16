@@ -4,7 +4,8 @@ import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
 import passkit from "./passkit/routes";
-import { handleEtlSyncBatch, type EtlSyncMessage } from "./queues/etlSync";
+import { handleQueueBatch } from "./queues";
+import type { EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
 import { pkcs7SigningSpike } from './spikes/pkcs7-signing/route';
 
@@ -15,10 +16,9 @@ export interface Env {
   BIGCOMMERCE_CLIENT_ID: string;
   BIGCOMMERCE_ACCESS_TOKEN: string;
   BIGCOMMERCE_WEBHOOK_SIGNING_KEY: string;
-  // TODO(Phase 2.5.2): not yet declared in wrangler.toml - see
-  // docs/bigcommerce-ingestion.md section 3/5. `enqueueEtlSync()` no-ops
-  // when this binding is absent, so the rest of the ingestion path works
-  // without it today.
+  // etl-sync queue producer (Phase 2.5.2; terraform/queues.tf, wrangler.toml).
+  // Optional: deliberately absent in the `preview` environment, where
+  // `enqueueEtlSync()` logs and drops messages instead.
   ETL_SYNC_QUEUE?: Queue<EtlSyncMessage>;
   // Not secret -- public pass/branding identifiers, see Phase 4.
   PASSKIT_PASS_TYPE_IDENTIFIER: string;
@@ -85,6 +85,6 @@ app.route('/spikes/pkcs7-signing', pkcs7SigningSpike);
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
     app.fetch(request, env, ctx),
-  queue: handleEtlSyncBatch,
+  queue: handleQueueBatch,
   scheduled,
 };

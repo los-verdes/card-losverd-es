@@ -189,9 +189,11 @@ describe("POST /bigcommerce/order-webhook", () => {
     expect(sent).toEqual([]);
   });
 
-  it("still returns 200 when ETL_SYNC_QUEUE isn't configured yet (Phase 2.5.2 not wired up)", async () => {
-    // No env.ETL_SYNC_QUEUE set here - matches this repo's current
-    // wrangler.toml, which has no queue binding declared yet.
+  it("still returns 200 when ETL_SYNC_QUEUE isn't bound (e.g. the preview environment)", async () => {
+    // Removed explicitly: wrangler.toml binds the real queue, and this test
+    // must not depend on an earlier test's afterEach having removed it.
+    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await SELF.fetch(
       "https://example.com/bigcommerce/order-webhook",
       {
