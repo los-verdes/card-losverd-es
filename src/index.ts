@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import bigcommerce from "./bigcommerce/routes";
 import { handleEtlSyncBatch, type EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
+import { pkcs7SigningSpike } from './spikes/pkcs7-signing/route';
 
 export interface Env {
   DB: D1Database;
@@ -21,6 +22,11 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 app.route("/bigcommerce", bigcommerce);
+
+// Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
+// test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
+// real pass-serving surface (that's Phase 4).
+app.route('/spikes/pkcs7-signing', pkcs7SigningSpike);
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
