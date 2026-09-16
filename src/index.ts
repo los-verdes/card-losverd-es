@@ -3,7 +3,6 @@ import bigcommerce from "./bigcommerce/routes";
 import passkit from "./passkit/routes";
 import { handleEtlSyncBatch, type EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
-import { cardRenderingSpike } from './spikes/card-rendering/route';
 import { pkcs7SigningSpike } from './spikes/pkcs7-signing/route';
 
 export interface Env {
@@ -39,11 +38,6 @@ app.route("/bigcommerce", bigcommerce);
 // ("https://card.losverd.es/passkit") -- Apple appends `/v1/...` to
 // whatever `webServiceURL` a pass declares.
 app.route("/passkit", passkit);
-
-// Phase 1.0.2 risk spike: Satori + @resvg/resvg-wasm card-image rendering.
-// Not real member data -- see the migration plan's Phase 1.0.2 and
-// src/spikes/card-rendering/ for details.
-app.route('/spikes/card-rendering', cardRenderingSpike);
 
 // Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
 // test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
