@@ -80,3 +80,19 @@ CREATE TABLE IF NOT EXISTS oauth_identities (
 );
 
 CREATE INDEX IF NOT EXISTS idx_oauth_identities_user ON oauth_identities(user_id);
+
+-- Legacy Postgres exports (see migrations/0005_legacy_export.sql)
+CREATE TABLE IF NOT EXISTS legacy_member_since (
+    email TEXT PRIMARY KEY,                   -- lower-cased, matching members.email
+    member_since TEXT NOT NULL                -- ISO8601 date (YYYY-MM-DD)
+);
+
+CREATE TABLE IF NOT EXISTS legacy_membership_cards (
+    serial_number TEXT PRIMARY KEY,           -- legacy card UUID, lower-case hyphenated form (as in the QR URL)
+    email TEXT NOT NULL,                      -- lower-cased card holder email
+    full_name TEXT,
+    member_since TEXT,                        -- ISO8601 date (YYYY-MM-DD)
+    member_until TEXT                         -- ISO8601 date (YYYY-MM-DD)
+);
+
+CREATE INDEX IF NOT EXISTS idx_legacy_membership_cards_email ON legacy_membership_cards(email);
