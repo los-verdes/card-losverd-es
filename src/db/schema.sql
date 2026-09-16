@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS members (
     membership_tier TEXT NOT NULL DEFAULT 'standard', -- e.g. standard, los-pringles, cut-crew, etc.
     status TEXT NOT NULL DEFAULT 'active',    -- active, expired, revoked
     expiration_date TEXT,                     -- ISO8601 string (YYYY-MM-DD)
+    member_since TEXT,                        -- ISO8601 string (YYYY-MM-DD); see migrations/0003_member_since.sql
     auth_token TEXT NOT NULL,                 -- Secret token generated for Apple PassKit auth
     last_updated_at INTEGER NOT NULL,         -- Unix epoch (ms) for cache validation
     created_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
