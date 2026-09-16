@@ -17,3 +17,7 @@ crash.*.log
 
 # Phase 1.0.1 spike build artifact (see justfile's verify-pkcs7-openssl)
 .verify-pkcs7-bundle.mjs
+
+# Claude Code scratch state (background-agent worktrees, etc.) - not part of
+# this repo's history.
+.claude/
