@@ -155,13 +155,12 @@ export interface MemberUpsertInput {
 }
 
 interface ExistingMembershipState {
-  status: string;
   expiration_date: string | null;
   member_since: string | null;
 }
 
 interface MergedMembershipState {
-  status: string;
+  status: "active" | "expired";
   expirationDate: string;
   memberSince: string;
 }
@@ -179,8 +178,6 @@ interface MergedMembershipState {
  * - `expiration_date` only ever moves later - an older order must not roll
  *   back a renewal. `status` is then derived from the merged expiration,
  *   mirroring the Python app's "any membership still active" semantics.
- * - `'revoked'` is left alone: it's an admin action, not something order
- *   data expresses (docs/bigcommerce-ingestion.md section 2).
  *
  * ISO `YYYY-MM-DD` strings sort chronologically, so plain string
  * comparison is correct here.
@@ -198,20 +195,19 @@ export function mergeMembershipState(
     existing?.expiration_date && existing.expiration_date > input.expirationDate
       ? existing.expiration_date
       : input.expirationDate;
-  const status =
-    existing?.status === "revoked"
-      ? "revoked"
-      : computeStatus(expirationDate, now);
-  return { status, expirationDate, memberSince };
+  return {
+    status: computeStatus(expirationDate, now),
+    expirationDate,
+    memberSince,
+  };
 }
 
 /**
  * Idempotent upsert into `members` (see docs/bigcommerce-ingestion.md
  * section 2 for the full column-by-column mapping rationale).
  *
- * Matches by `email` first (the natural join key with any pre-migrated
- * member row from Phase 2.2's one-time Postgres pass-state migration,
- * whose `member_id` predates this sync). Falls back to inserting a new row
+ * Matches by `email` first (the natural join key with any member row that
+ * predates this sync, whose `member_id` must be preserved). Falls back to inserting a new row
  * keyed by a deterministic `BC-{customerId}` id when no match exists. Never
  * touches `auth_token` or `created_at` on an update - those represent
  * Apple/Google Wallet pass state that only this table's *sync* code should
@@ -225,7 +221,7 @@ export async function upsertMemberFromOrder(
   const now = Date.now();
 
   const existing = await env.DB.prepare(
-    "SELECT member_id, status, expiration_date, member_since FROM members WHERE email = ?",
+    "SELECT member_id, expiration_date, member_since FROM members WHERE email = ?",
   )
     .bind(email)
     .first<{ member_id: string } & ExistingMembershipState>();
@@ -272,7 +268,6 @@ export async function upsertMemberFromOrder(
        membership_tier = excluded.membership_tier,
        expiration_date = MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date),
        status = CASE
-         WHEN members.status = 'revoked' THEN 'revoked'
          WHEN MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date) >= ?
            THEN 'active'
          ELSE 'expired'
