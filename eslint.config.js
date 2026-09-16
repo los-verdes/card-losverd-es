@@ -3,7 +3,7 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
 	{
-		ignores: ["coverage/**", "dist/**", ".wrangler/**"],
+		ignores: ["coverage/**", "dist/**", ".wrangler/**", ".claude/**"],
 	},
 	{
 		rules: {

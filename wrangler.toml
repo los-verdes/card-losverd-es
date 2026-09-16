@@ -36,6 +36,20 @@ BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
 BIGCOMMERCE_ACCESS_TOKEN = "REPLACE_WITH_WRANGLER_SECRET"
 BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "REPLACE_WITH_WRANGLER_SECRET"
 
+# Apple PassKit identifiers (Phase 4) - not secret, safe to commit. Real
+# values come from Apple's Developer/PassKit portal, not Terraform.
+PASSKIT_PASS_TYPE_IDENTIFIER = "REPLACE_WITH_APPLE_PASS_TYPE_IDENTIFIER"
+PASSKIT_TEAM_IDENTIFIER = "REPLACE_WITH_APPLE_TEAM_IDENTIFIER"
+PASSKIT_ORGANIZATION_NAME = "Los Verdes"
+PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
+# Real Apple Pass Type ID cert/key + WWDR intermediate aren't available in
+# this environment yet (see the migration plan's Phase 0.2 credential
+# inventory) - placeholders only, per the same pattern as the BigCommerce
+# secrets above.
+APPLE_PASS_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
+APPLE_PASS_KEY_PEM = "REPLACE_WITH_WRANGLER_SECRET"
+APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
+
 # TODO(Phase 2.5.2): etl-sync queue producer/consumer config isn't set up
 # yet - see docs/bigcommerce-ingestion.md sections 3 and 5.
 # [[queues.producers]]
