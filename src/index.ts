@@ -1,7 +1,8 @@
-import { Hono } from "hono";
+import { Hono } from 'hono';
 import bigcommerce from "./bigcommerce/routes";
 import { handleEtlSyncBatch, type EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
+import { cardRenderingSpike } from './spikes/card-rendering/route';
 import { pkcs7SigningSpike } from './spikes/pkcs7-signing/route';
 
 export interface Env {
@@ -22,6 +23,11 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 app.route("/bigcommerce", bigcommerce);
+
+// Phase 1.0.2 risk spike: Satori + @resvg/resvg-wasm card-image rendering.
+// Not real member data -- see .ai/gcp-to-cf_plan.md Phase 1.0.2 and
+// src/spikes/card-rendering/ for details.
+app.route('/spikes/card-rendering', cardRenderingSpike);
 
 // Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
 // test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
