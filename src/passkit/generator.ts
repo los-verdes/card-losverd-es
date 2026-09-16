@@ -9,6 +9,8 @@ export interface MemberPassInput {
   membershipTier: string;
   status: "active" | "expired" | "revoked";
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
+  /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
+  memberSince: string | null;
   authToken: string;
 }
 
@@ -18,6 +20,46 @@ export interface PassKitConfig {
   teamIdentifier: string;
   organizationName: string;
   /** Apple polls this for registration/update checks -- see Phase 4.1/4.2. */
+  webServiceURL: string;
+}
+
+type PassTextAlignment =
+  | "PKTextAlignmentLeft"
+  | "PKTextAlignmentCenter"
+  | "PKTextAlignmentRight"
+  | "PKTextAlignmentNatural";
+
+interface PassField {
+  key: string;
+  label: string;
+  value: string;
+  textAlignment: PassTextAlignment;
+}
+
+interface PassJson {
+  formatVersion: 1;
+  passTypeIdentifier: string;
+  serialNumber: string;
+  teamIdentifier: string;
+  organizationName: string;
+  description: string;
+  suppressStripShine: false;
+  generic: {
+    primaryFields: PassField[];
+    secondaryFields: PassField[];
+    auxiliaryFields: PassField[];
+    backFields: PassField[];
+  };
+  barcode: {
+    format: "PKBarcodeFormatQR";
+    message: string;
+    messageEncoding: "iso-8859-1";
+    altText: string;
+  };
+  backgroundColor: string;
+  foregroundColor: string;
+  logoText: string;
+  authenticationToken: string;
   webServiceURL: string;
 }
 
@@ -45,38 +87,128 @@ export async function buildManifest(
   return new TextEncoder().encode(JSON.stringify(manifest));
 }
 
-// TODO(human): Implement buildPassJson -- the actual `pass.json` content for
-// a real Los Verdes membership pass (see Apple's PassKit Package Format
-// Reference for the full field vocabulary). This is a product/design
-// decision, not a technical one, so it's yours rather than something to
-// invent unilaterally.
-//
-// Must return UTF-8-encoded JSON bytes for a `generic` pass (no boarding
-// pass/coupon/event ticket structure needed) with at least:
-//   - formatVersion: 1
-//   - passTypeIdentifier, teamIdentifier, organizationName, webServiceURL
-//     (from `config`)
-//   - serialNumber: member.memberId
-//   - authenticationToken: member.authToken (Apple's device-registration
-//     auth scheme, see Phase 4.1)
-//   - description (required by Apple; shown to VoiceOver users)
-//   - some `generic.primaryFields`/`secondaryFields`/`auxiliaryFields`
-//     layout showing at minimum the member's name and membership tier --
-//     consider also surfacing `status`/`expirationDate` (e.g. greyed out or
-//     a backFields note when status is "expired"/"revoked")
-//   - a `barcode` (format "PKBarcodeFormatQR" is a reasonable default;
-//     `message` is typically the serialNumber so `/verify-pass/<serial>`-style
-//     lookups keep working)
-//
-// Colors (`backgroundColor`/`foregroundColor`/`labelColor`) and
-// `backFields` are up to you too -- there's no existing Jinja pass template
-// to port from 1:1 since this is a from-scratch TypeScript pass, unlike the
-// card-image side (Phase 1.0.2) which re-authored an existing design.
-function buildPassJson(
+function formatMemberSince(isoDate: string): string {
+  // e.g. "Jul 2021" -- matches the real example pass's "Member Since" field.
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(isoDate));
+}
+
+function formatExpirationDate(isoDate: string): string {
+  // e.g. "Feb 17, 2024" -- matches the real example pass's "Good through" field.
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(isoDate));
+}
+
+/**
+ * Builds `pass.json` content for a real Los Verdes membership pass. Field
+ * structure, labels, and date formats (member_since as "Jul 2021",
+ * expiration as "Feb 17, 2024") come from a real pass pulled from the
+ * legacy production app (`lv_apple_pass-hogan.pkpass`), not invented from
+ * the Apple PassKit spec alone.
+ *
+ * Two things that real example did which this deliberately does NOT
+ * replicate, since they look like legacy-app bugs rather than intended
+ * behavior: its `organizationName` was set to the Apple Developer Team ID
+ * instead of a human-readable name (here it comes from `config` as its own
+ * distinct value -- getting that right is the caller's job, not this
+ * function's), and its `backgroundColor` was a malformed
+ * `"rgb((0, 177, 64)"` string rather than valid `"rgb(0, 177, 64)"`.
+ *
+ * The real example's barcode encoded a full HMAC-signed `/verify-pass/...`
+ * URL (Phase 2.3.1's `PASS_SIGNATURE_KEY`), which needs a signing key this
+ * pure function doesn't have. Using the bare serialNumber as the barcode
+ * message instead, per this TODO's own suggestion -- once the route layer
+ * (Phase 4.1-4.5) exists to compute the signed URL, thread a `verifyUrl`
+ * through `MemberPassInput` the same way `authToken` is threaded today.
+ */
+export function buildPassJson(
   member: MemberPassInput,
   config: PassKitConfig,
 ): Uint8Array {
-  throw new Error("not implemented");
+  const secondaryFields: PassField[] = [];
+  if (member.memberSince) {
+    secondaryFields.push({
+      key: "member_since",
+      label: "Member Since",
+      value: formatMemberSince(member.memberSince),
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
+  if (member.expirationDate) {
+    secondaryFields.push({
+      key: "membership_expiry",
+      label: "Good through",
+      value: formatExpirationDate(member.expirationDate),
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
+
+  const backFields: PassField[] = [
+    {
+      key: "member_id",
+      label: "Card #",
+      value: member.memberId,
+      textAlignment: "PKTextAlignmentLeft",
+    },
+  ];
+  if (member.status !== "active") {
+    backFields.push({
+      key: "status",
+      label: "Status",
+      value: member.status === "expired" ? "Expired" : "Revoked",
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
+
+  const pass: PassJson = {
+    formatVersion: 1,
+    passTypeIdentifier: config.passTypeIdentifier,
+    serialNumber: member.memberId,
+    teamIdentifier: config.teamIdentifier,
+    organizationName: config.organizationName,
+    description: "Los Verdes Membership Card",
+    suppressStripShine: false,
+    generic: {
+      primaryFields: [
+        {
+          key: "name",
+          label: "Member Name",
+          value: `${member.firstName} ${member.lastName}`,
+          textAlignment: "PKTextAlignmentLeft",
+        },
+      ],
+      secondaryFields,
+      auxiliaryFields: [
+        {
+          key: "membership_tier",
+          label: "Tier",
+          value: member.membershipTier,
+          textAlignment: "PKTextAlignmentLeft",
+        },
+      ],
+      backFields,
+    },
+    barcode: {
+      format: "PKBarcodeFormatQR",
+      message: member.memberId,
+      messageEncoding: "iso-8859-1",
+      altText: "",
+    },
+    backgroundColor: "rgb(0, 177, 64)",
+    foregroundColor: "rgb(0, 0, 0)",
+    logoText: "Los Verdes",
+    authenticationToken: member.authToken,
+    webServiceURL: config.webServiceURL,
+  };
+
+  return new TextEncoder().encode(JSON.stringify(pass));
 }
 
 /**
