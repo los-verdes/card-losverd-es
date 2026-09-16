@@ -64,6 +64,17 @@ describe("signWebhookToken / verifyWebhookAuthorization", () => {
     expect(verifyWebhookAuthorization(null, "expected-token")).toBe(false);
     expect(verifyWebhookAuthorization(undefined, "expected-token")).toBe(false);
   });
+
+  it("rejects a token of a different length without throwing (constant-time compare's length guard)", async () => {
+    const token = await signWebhookToken(
+      "test-signing-key",
+      PURE_FN_TEST_STORE_HASH,
+      "client-abc",
+    );
+    expect(verifyWebhookAuthorization(`bearer ${token}extra`, token)).toBe(
+      false,
+    );
+  });
 });
 
 describe("POST /bigcommerce/order-webhook", () => {

@@ -1,7 +1,10 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BigCommerceClient,
   syncBigCommerceOrder,
+  syncCustomersEtl,
+  syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
   upsertMemberFromOrder,
   type BigCommerceOrder,
@@ -218,6 +221,65 @@ describe("upsertMemberFromOrder", () => {
   });
 });
 
+describe("BigCommerceClient", () => {
+  const client = new BigCommerceClient("store123", "test-access-token");
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("getOrder throws with status + body on a non-ok response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("server exploded", { status: 500 }),
+    );
+    await expect(client.getOrder(1)).rejects.toThrow(/500/);
+  });
+
+  it("getOrderProducts returns [] on a 204 (BigCommerce's empty-line-items response)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    await expect(client.getOrderProducts(1)).resolves.toEqual([]);
+  });
+
+  it("getOrderProducts throws with status + body on a non-ok, non-204 response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("forbidden", { status: 403 }),
+    );
+    await expect(client.getOrderProducts(1)).rejects.toThrow(/403/);
+  });
+
+  it("listOrdersPage returns [] on a 204 (past the last page)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    await expect(client.listOrdersPage(1)).resolves.toEqual([]);
+  });
+
+  it("listOrdersPage throws with status + body on a non-ok, non-204 response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("bad gateway", { status: 502 }),
+    );
+    await expect(client.listOrdersPage(1)).rejects.toThrow(/502/);
+  });
+
+  it("listOrdersPage defaults to no extra filter params when none are given", async () => {
+    let requestedUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        requestedUrl = typeof input === "string" ? input : input.toString();
+        return new Response(null, { status: 204 });
+      },
+    );
+
+    await client.listOrdersPage(3);
+
+    const params = new URL(requestedUrl).searchParams;
+    expect(params.get("page")).toBe("3");
+    expect(params.get("min_date_modified")).toBeNull();
+  });
+});
+
 describe("syncBigCommerceOrder", () => {
   beforeEach(() => {
     env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
@@ -262,6 +324,19 @@ describe("syncBigCommerceOrder", () => {
     await syncBigCommerceOrder(env, "store123", order.id);
 
     expect(await countMembers()).toBe(0);
+  });
+
+  it("computes status=expired for an order whose one-year membership period has already lapsed", async () => {
+    const order = makeOrder({ id: 3003, date_created: "2020-01-01T00:00:00.000Z" });
+    const products = makeProducts();
+    mockBigCommerceOrderFetch(order, products);
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    const member = await getMemberByEmail("jane.doe@example.com");
+    expect(member?.status).toBe("expired");
+    // 2020 is a leap year, so +365 days from Jan 1 lands on Dec 31, not Jan 1.
+    expect(member?.expiration_date).toBe("2020-12-31");
   });
 });
 
@@ -350,5 +425,113 @@ describe("syncSubscriptionsEtl", () => {
     await syncSubscriptionsEtl(env, { loadAll: true });
 
     expect(await countMembers()).toBe(1);
+  });
+
+  it("stops at the MAX_PAGES safety cap instead of paging forever", async () => {
+    // Mirrors sync.ts's private MAX_PAGES=50: mock every page as non-empty
+    // (never returning the 204 that would otherwise end the loop) so the
+    // cap itself - not "ran out of orders" - is what stops the sync.
+    const MAX_PAGES = 50;
+    let pageRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/orders?")) {
+          pageRequests++;
+          return new Response(JSON.stringify([makeOrder({ id: pageRequests })]), {
+            status: 200,
+          });
+        }
+        if (url.includes("/products")) {
+          // Non-membership SKU: resolveMembershipTier() returns null, so no
+          // D1 write happens per page - keeps this test fast across 50 pages.
+          return new Response(
+            JSON.stringify(makeProducts([{ sku: "NON-MEMBERSHIP-SKU", name: "T-Shirt" }])),
+            { status: 200 },
+          );
+        }
+        throw new Error(`Unexpected fetch() call in test: ${url}`);
+      },
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(pageRequests).toBe(MAX_PAGES);
+    expect(result.ordersProcessed).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`MAX_PAGES=${MAX_PAGES}`),
+    );
+  });
+
+  it("uses a default lookback window for min_date_modified on a first incremental run (no watermark yet)", async () => {
+    let requestedUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/orders?")) {
+          requestedUrl = url;
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected fetch() call in test: ${url}`);
+      },
+    );
+
+    // No `loadAll` -> the incremental path, and no prior etl_sync_state row
+    // for this job -> getWatermark()'s "no watermark yet" branch.
+    await syncSubscriptionsEtl(env);
+
+    expect(new URL(requestedUrl).searchParams.get("min_date_modified")).toBeTruthy();
+  });
+
+  it("uses the stored watermark (minus the overlap window) as min_date_modified on a later incremental run", async () => {
+    const DEFAULT_LOOKBACK_HOURS_MS = 12 * 60 * 60 * 1000;
+    const priorRun = Date.UTC(2026, 0, 1);
+    await env.DB.prepare(
+      "INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, ?)",
+    )
+      .bind("sync_subscriptions_etl", priorRun, priorRun)
+      .run();
+
+    let requestedUrl = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/orders?")) {
+          requestedUrl = url;
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected fetch() call in test: ${url}`);
+      },
+    );
+
+    await syncSubscriptionsEtl(env);
+
+    const expectedOverlapSince = priorRun - DEFAULT_LOOKBACK_HOURS_MS;
+    expect(new URL(requestedUrl).searchParams.get("min_date_modified")).toBe(
+      new Date(expectedOverlapSince).toUTCString(),
+    );
+  });
+});
+
+describe("syncCustomersEtl / syncMinibcSubscriptionsEtl (stubs)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("syncCustomersEtl resolves without touching D1 or BigCommerce (not yet implemented)", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    await expect(syncCustomersEtl(env)).resolves.toBeUndefined();
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining("not yet implemented"),
+    );
+  });
+
+  it("syncMinibcSubscriptionsEtl resolves without touching D1 or BigCommerce (not yet implemented)", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    await expect(syncMinibcSubscriptionsEtl(env)).resolves.toBeUndefined();
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining("not yet implemented"),
+    );
   });
 });
