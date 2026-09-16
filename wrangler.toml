@@ -1,7 +1,7 @@
 name = "card-losverd-es"
 main = "src/index.ts"
 compatibility_date = "2026-09-15"
-compatibility_flags = ["nodejs_compat", "enable_nodejs_inspector_module"]
+compatibility_flags = ["nodejs_compat"]
 
 # Non-JS static assets bundled directly into the Worker via Wrangler's
 # esbuild-based bundler at build time (rather than fetched at request time or
