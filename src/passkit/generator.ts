@@ -1,4 +1,5 @@
 import { zipSync } from "fflate";
+import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { signManifestDetached, type PassSigningCredentials } from "./signer";
 
 /** The subset of a `members` row (Phase 2.1) needed to build a pass. */
@@ -87,25 +88,6 @@ export async function buildManifest(
   return new TextEncoder().encode(JSON.stringify(manifest));
 }
 
-function formatMemberSince(isoDate: string): string {
-  // e.g. "Jul 2021" -- matches the real example pass's "Member Since" field.
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(isoDate));
-}
-
-function formatExpirationDate(isoDate: string): string {
-  // e.g. "Feb 17, 2024" -- matches the real example pass's "Good through" field.
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(isoDate));
-}
-
 /**
  * Builds `pass.json` content for a real Los Verdes membership pass. Field
  * structure, labels, and date formats (member_since as "Jul 2021",
@@ -137,7 +119,7 @@ export function buildPassJson(
     secondaryFields.push({
       key: "member_since",
       label: "Member Since",
-      value: formatMemberSince(member.memberSince),
+      value: formatMonthYear(member.memberSince),
       textAlignment: "PKTextAlignmentLeft",
     });
   }
@@ -145,7 +127,7 @@ export function buildPassJson(
     secondaryFields.push({
       key: "membership_expiry",
       label: "Good through",
-      value: formatExpirationDate(member.expirationDate),
+      value: formatShortDate(member.expirationDate),
       textAlignment: "PKTextAlignmentLeft",
     });
   }
