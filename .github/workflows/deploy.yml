@@ -66,4 +66,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          environment: production
+          # No `environment:` -- Wrangler's named environments don't inherit
+          # top-level vars/bindings at all, and `env.production` doesn't
+          # exist for exactly that reason (see wrangler.toml). Deploying
+          # unqualified uses the top-level config directly, which has every
+          # binding.
