@@ -1,12 +1,13 @@
-# Legacy Wallet Pass Compatibility — Audit & Open Decisions
+# Legacy Wallet Pass Compatibility — Audit & Decisions
 
-The migration plan's Phase 2.2 commits to carrying already-installed Apple
-Wallet passes across cutover ("existing members keep receiving push
-updates ... with no reinstall required"). This doc records what the legacy
-`digital-membership` app actually embeds in those passes, where the current
-`card-losverd-es` implementation doesn't line up with it yet, and the
-decisions needed before the Phase 2.2 pass-state migration script can be
-written.
+The migration plan's Phase 2.2 originally committed to carrying
+already-installed Apple Wallet passes across cutover ("existing members keep
+receiving push updates ... with no reinstall required"). This doc records
+what the legacy `digital-membership` app actually embeds in those passes,
+where the new `card-losverd-es` implementation differs, and the decisions
+made about each gap (§4). **Outcome: installed passes are not migrated.**
+The only legacy pass data carried forward is what's needed to keep old QR
+codes verifiable.
 
 Sources: the legacy app's `member_card/models/membership_card.py`,
 `member_card/routes/passkit.py`, `member_card/passes/__init__.py`,
@@ -35,96 +36,100 @@ is unique, with a single `membership_card_id`).
 
 ## 2. What already lines up
 
-* **`webServiceURL` → DNS-only cutover works for Apple.** Already
-  `card.losverd.es/passkit`, and `src/index.ts` mounts PassKit at
-  `/passkit`, so devices will reach the Worker with no pass changes.
+* **`webServiceURL`.** Already `card.losverd.es/passkit`, and `src/index.ts`
+  mounts PassKit at `/passkit`, so legacy passes' (never-working) update
+  requests reach the Worker after cutover; they just won't match a member
+  (§3.1).
 * **Pass type / team identifiers** — `wrangler.toml` now sets them to the
   legacy values (previously `REPLACE_WITH_...` placeholders). Note the
   plan's Phase 4.7 example topic `pass.es.losverd.membership` is wrong;
   the real APNs topic is `pass.es.losverd.card`.
-* **`passesUpdatedSince` tags.** Legacy `lastUpdated` is a Flask-serialized
-  datetime (RFC 1123 string). After cutover, devices send that back; the
-  new route's `Number(...)` yields `NaN`, which it already treats as "no
-  filter" and returns every registered serial. Devices then refetch each
-  pass once and pick up the new epoch-ms tag. Self-healing, one extra
-  fetch per device, no change needed.
+* **`passesUpdatedSince` tags.** Legacy-format (non-numeric) tags are
+  already handled safely: the new route's `Number(...)` yields `NaN`, which
+  it treats as "no filter" rather than erroring.
 
 ## 3. Gaps
 
-### 3.1 Serial number → member lookup (blocks pass updates)
+### 3.1 Serial numbers don't match — but legacy pass updates never worked
 
 The new routes resolve `:serialNumber` via `members.member_id`, and
 `registrations.serial_number` has a foreign key to `members(member_id)`.
-Legacy serials are per-card UUID integers, so as of today every installed
-pass would get **401 on its first post-cutover update fetch** (it still
-displays, it just never updates again).
+Legacy serials are per-card UUID integers, so installed legacy passes
+won't match anything post-cutover.
 
-### 3.2 Auth token requires the legacy `SECRET_KEY` at export time
+That turns out not to matter much, because **the legacy pass update flow
+never worked**, so no installed pass has ever received an update. Members
+already get a new pass each year. Evidence from the legacy code:
 
-`members.auth_token` must equal the exact string embedded in the installed
-pass, which is an HMAC of the card's raw token, not the raw token itself.
-The export must compute
-`urlsafe_b64encode(HMAC-SHA256(SECRET_KEY * 5, token.hex))` — Python's
+* No APNs client exists anywhere in `member_card/` — nothing ever pushed an
+  update to a device.
+* `get_serial_numbers_for_device_passes` compares a `datetime` to the
+  `passesUpdatedSince` query-string value (`time_updated >= passes_updated_since`),
+  which raises `TypeError` → 500 whenever a device sends that parameter. The
+  code itself records a real device log of this (2022): *"Get serial #s
+  task ... encountered error: Unexpected response code 500"*.
+* `apple_device_registration.device_library_identifier` is `UNIQUE`, so a
+  device can't register a second (renewed) card.
+
+### 3.2 Pass auth tokens (moot after D1)
+
+Installed passes authenticate with
+`urlsafe_b64encode(HMAC-SHA256(SECRET_KEY * 5, card.authentication_token.hex))`.
+With no pass-state migration (D1), nothing needs to reproduce these. Kept
+for reference, since the **same scheme signs QR codes** (§3.3): Python's
 `urlsafe_b64encode` keeps `=` padding, so a Node port needs
 `digest("base64url")` **plus** re-added padding (plain `"base64"` differs
 whenever the output contains `+`/`/`). `SECRET_KEY * 5` is Python string
 repetition, then UTF-8 encoded. Cross-checked test vector: key
 `"test-secret-key-abc" * 5`, message `0cd5ad745fbc40fd9569747fec277013` →
-`x_td-tSCx3v0XBxKhhIrhJwPOBn6f7blXnFwhpYIzcM=`. This is compatible with Phase 2.3.1's decision to retire
-`SECRET_KEY` from the *running* Worker: the key is only needed by the
-one-shot export, and the resulting token strings are stored as opaque
-values.
+`x_td-tSCx3v0XBxKhhIrhJwPOBn6f7blXnFwhpYIzcM=`.
 
-### 3.3 QR code verification signatures
+### 3.3 QR code verification
 
-Every existing QR code (Apple passes not yet refreshed, Google Wallet
-passes, emailed card images) carries a `verify-pass` signature made with
-`SECRET_KEY * 5`. Phase 2.3.1 plans a freshly generated
-`PASS_SIGNATURE_KEY`, which would make **all existing QR codes fail
-verification**. Also, `src/passkit/generator.ts` and `src/google/jwt.ts`
-currently encode the bare serial as the barcode, not a signed URL, and
-no `/verify-pass/...` route exists yet.
+Every existing QR code (installed Apple passes, Google Wallet passes,
+emailed card images) encodes
+`/verify-pass/{uuid}?signature=urlsafe_b64encode(HMAC-SHA256(SECRET_KEY * 5, str(uuid)))`.
+Legacy `verify_pass` (`member_card/app.py`, `@login_required`) verifies the
+signature, then **looks the card up by UUID** to show whose card it is and
+whether it's expired (`member_until < now` → "CARD EXPIRED (but valid)!").
+
+`src/passkit/generator.ts` and `src/google/jwt.ts` currently encode the
+bare serial as the barcode, and no `/verify-pass` route exists yet.
 
 ### 3.4 Google Wallet object ids
 
 New `objectId()` is `{issuerId}.{memberId}`; legacy is
-`{issuerId}.{uuid-string}`. Lower impact than Apple: Google passes aren't
-device-polled, and the legacy app never updates objects via the Wallet API
+`{issuerId}.{uuid-string}`. The legacy app never updates Google objects
 (its `GooglePayApiClient` is only used by CLI commands that insert/patch
-the pass *class*), so a changed
-id just means post-cutover "Save to Google Wallet" links create a new
-object rather than updating the old one.
+the pass *class*), so nothing is lost if the id changes.
 
-## 4. Decisions needed
+## 4. Decisions (resolved 2026-09-16)
 
-**D1 — How do legacy serials map to members?** (blocks 3.1 and the
-Phase 2.2 export script)
+**D1 — Legacy serial mapping: none.** Legacy pass updates never worked
+(§3.1), so installed passes simply keep displaying until the member gets a
+new pass, which is the status quo. Consequence: the plan's Phase 2.2
+**pass-state migration (`auth_token` / `devices` / `registrations`) is
+dropped**, since it only existed to keep installed passes updating. Working
+pass updates for passes issued by the new stack (Phase 4.7 APNs) are still
+wanted.
 
-* **(A) Recommended: one legacy card per member becomes `member_id`.** The
-  export sets `members.member_id = str(card.serial_number.int)` and
-  `auth_token` = the signed token (3.2), choosing per user the card with
-  the most recent device registration, falling back to the most recent
-  card. No schema or route changes — `upsertMemberFromOrder` already
-  matches by email and preserves a pre-existing `member_id`. Cost: passes
-  installed from a *non-chosen* older card stop updating (still display).
-  Fits the plan's "simplicity over zero disruption" posture.
-* **(B) Alias table.** Additive `legacy_pass_serials(serial_number PK,
-  member_id FK, auth_token)`; routes resolve a serial via `members` then
-  the alias table; `registrations.serial_number` FK would need to be
-  relaxed (not additive — SQLite can't drop a FK in place) or registrations
-  rewritten to the canonical id. Every installed pass keeps updating, at the
-  cost of permanent extra lookup logic and a harder schema change.
+**D2 — QR signature key: reuse the legacy key.** `PASS_SIGNATURE_KEY` is set
+to the legacy `SECRET_KEY * 5` value, so existing QR codes keep verifying.
+It's still a separate secret from `SESSION_SIGNING_KEY`, which was the
+point of Phase 2.3.1's split. A rotation workflow is a tracked follow-up.
+To make old codes *useful* (not just signature-valid), the port needs the
+legacy card lookup (§3.3):
 
-**D2 — QR signature key.** (3.3)
+* The one-time Postgres export that already has to happen for the
+  `member_since` backfill also exports legacy cards —
+  `(serial_number uuid, user email, member_since, member_until)` — into an
+  additive read-only D1 table (e.g. `legacy_membership_cards`).
+* `/verify-pass/:serial?signature=` verifies with `PASS_SIGNATURE_KEY`,
+  then resolves the serial against `legacy_membership_cards` (and, once new
+  passes carry signed URLs, against `members`).
+* New passes should also switch from a bare-serial barcode to a signed
+  verify URL, using the same key.
 
-* **(A) Recommended: set `PASS_SIGNATURE_KEY` to the legacy
-  `SECRET_KEY * 5` bytes** (i.e. carry the value over for this one
-  purpose), and port `/verify-pass/:uuid?signature=` with the same HMAC.
-  Existing printed/emailed/Google QR codes keep verifying. Still decouples
-  it from session signing, which was the actual point of Phase 2.3.1's
-  split.
-* **(B) Fresh key, as the plan says today.** Accept that every existing QR
-  code fails verification until the member re-downloads their card.
-
-**D3 — Google object ids** (3.4): recommend accepting the change (no
-work), unless there's a reason to preserve Google pass continuity.
+**D3 — Google object ids: accept the change.** Google Wallet object updates
+don't exist today; adding them for new-stack passes is a tracked
+enhancement.
