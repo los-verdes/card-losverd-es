@@ -245,18 +245,30 @@ describe("pass cache (R2)", () => {
   });
 
   it("returns null on a cache miss", async () => {
-    const cached = await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-NOPE");
+    const cached = await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-NOPE", 1);
     expect(cached).toBeNull();
   });
 
   it("round-trips bytes written via putCachedPass", async () => {
     const bytes = new Uint8Array([80, 75, 3, 4]); // PK.. zip magic, arbitrary test payload
-    await putCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", bytes);
+    await putCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, bytes);
 
-    const cached = await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023");
+    const cached = await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000);
 
     expect(cached).not.toBeNull();
     expect(Array.from(cached!)).toEqual(Array.from(bytes));
+  });
+
+  it("treats a pass cached from an older member version as a miss", async () => {
+    await putCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, new Uint8Array([1]));
+
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 2000)).toBeNull();
+  });
+
+  it("treats a cached object without version metadata as a miss", async () => {
+    await env.ASSETS.put("cache/pkpass/pass.es.losverd.membership/LV-10023.pkpass", new Uint8Array([1]));
+
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000)).toBeNull();
   });
 
   it("invalidateCachedPass removes a cached entry", async () => {
@@ -264,13 +276,14 @@ describe("pass cache (R2)", () => {
       env.ASSETS,
       "pass.es.losverd.membership",
       "LV-10023",
+      1000,
       new Uint8Array([1]),
     );
 
     await invalidateCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023");
 
     expect(
-      await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023"),
+      await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000),
     ).toBeNull();
   });
 });

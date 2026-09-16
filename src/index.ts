@@ -36,6 +36,13 @@ export interface Env {
   // Secret -- BigCommerce app client secret; signs storefront customer JWTs
   // (Phase 2.3.3). Same no-placeholder convention as SESSION_SIGNING_KEY.
   BIGCOMMERCE_CLIENT_SECRET: string;
+  // APNs token auth for Wallet pass-update pushes (Phase 4.7): the Key ID and
+  // `.p8` private key of an APNs auth key from the Apple Developer portal.
+  // Optional -- pushes are skipped (with a warning) until both are set via
+  // `wrangler secret put`; no wrangler.toml placeholders, same convention as
+  // SESSION_SIGNING_KEY.
+  APNS_KEY_ID?: string;
+  APNS_PRIVATE_KEY_PEM?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

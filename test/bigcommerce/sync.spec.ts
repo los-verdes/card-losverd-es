@@ -769,3 +769,130 @@ describe("syncCustomersEtl / syncMinibcSubscriptionsEtl (stubs)", () => {
     );
   });
 });
+
+describe("pass-change detection and update pushes", () => {
+  const APNS_TEST_KEY_ID = "ABC123DEFG";
+
+  beforeEach(async () => {
+    env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
+    env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";
+    env.PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9";
+    const { exportPKCS8, generateKeyPair } = await import("jose");
+    const pair = await generateKeyPair("ES256", { extractable: true });
+    env.APNS_KEY_ID = APNS_TEST_KEY_ID;
+    env.APNS_PRIVATE_KEY_PEM = await exportPKCS8(pair.privateKey);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    env.APNS_KEY_ID = undefined;
+    env.APNS_PRIVATE_KEY_PEM = undefined;
+    await env.DB.exec("DELETE FROM registrations");
+    await env.DB.exec("DELETE FROM devices");
+    await env.DB.exec("DELETE FROM members");
+  });
+
+  const input = {
+    customerId: 42,
+    firstName: "Jane",
+    lastName: "Doe",
+    email: "jane.doe@example.com",
+    membershipTier: "standard",
+    orderDate: "2026-01-15",
+    expirationDate: "2099-01-15",
+  };
+
+  it("reports a new member as changed", async () => {
+    expect(await upsertMemberFromOrder(env, input)).toEqual({
+      memberId: "BC-42",
+      passChanged: true,
+    });
+  });
+
+  it("doesn't rewrite (or bump last_updated_at on) a member whose pass-visible fields are unchanged", async () => {
+    await upsertMemberFromOrder(env, input);
+    await env.DB.exec("UPDATE members SET last_updated_at = 123");
+
+    expect(await upsertMemberFromOrder(env, input)).toEqual({
+      memberId: "BC-42",
+      passChanged: false,
+    });
+    expect((await getMemberByEmail("jane.doe@example.com"))?.last_updated_at).toBe(123);
+  });
+
+  it.each<[string, Partial<typeof input>]>([
+    ["first name", { firstName: "Janet" }],
+    ["last name", { lastName: "Doe-Smith" }],
+    ["tier", { membershipTier: "cut-crew" }],
+    ["expiration (renewal)", { expirationDate: "2100-01-15" }],
+    ["member_since (older order)", { orderDate: "2020-01-15" }],
+  ])("reports a change to the %s and bumps last_updated_at", async (_label, change) => {
+    await upsertMemberFromOrder(env, input);
+    await env.DB.exec("UPDATE members SET last_updated_at = 123");
+
+    expect((await upsertMemberFromOrder(env, { ...input, ...change })).passChanged).toBe(true);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.last_updated_at).toBeGreaterThan(123);
+  });
+
+  it("reports a status change once a stored 'active' membership has lapsed", async () => {
+    await upsertMemberFromOrder(env, { ...input, expirationDate: "2020-01-15" });
+    await env.DB.exec("UPDATE members SET status = 'active'"); // stale status from an earlier sync
+
+    expect(
+      (await upsertMemberFromOrder(env, { ...input, expirationDate: "2020-01-15" })).passChanged,
+    ).toBe(true);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.status).toBe("expired");
+  });
+
+  async function registerDevice(memberId: string) {
+    await env.DB.prepare("INSERT INTO devices (device_library_identifier, push_token) VALUES ('device-1', 'push-1')").run();
+    await env.DB.prepare(
+      "INSERT INTO registrations (device_library_identifier, pass_type_identifier, serial_number) VALUES ('device-1', 'pass.es.losverd.card', ?)",
+    )
+      .bind(memberId)
+      .run();
+  }
+
+  function mockOrderAndApns(order: BigCommerceOrder) {
+    const apnsCalls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (req: RequestInfo | URL) => {
+      const url = typeof req === "string" ? req : req.toString();
+      if (url.startsWith("https://api.push.apple.com/")) {
+        apnsCalls.push(url);
+        return new Response(null, { status: 200 });
+      }
+      if (url.endsWith(`/orders/${order.id}/products`)) {
+        return new Response(JSON.stringify(makeProducts()), { status: 200 });
+      }
+      if (url.endsWith(`/orders/${order.id}`)) {
+        return new Response(JSON.stringify(order), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch() call in test: ${url}`);
+    });
+    return apnsCalls;
+  }
+
+  it("syncBigCommerceOrder pushes a pass update to registered devices when the pass changed", async () => {
+    await upsertMemberFromOrder(env, input);
+    await registerDevice("BC-42");
+    const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
+    const apnsCalls = mockOrderAndApns(renewal);
+
+    await syncBigCommerceOrder(env, "store123", renewal.id);
+
+    expect(apnsCalls).toEqual(["https://api.push.apple.com/3/device/push-1"]);
+  });
+
+  it("syncBigCommerceOrder doesn't push when a re-synced order changes nothing", async () => {
+    const order = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
+    mockOrderAndApns(order);
+    await syncBigCommerceOrder(env, "store123", order.id);
+    await registerDevice("BC-42");
+    vi.restoreAllMocks();
+    const apnsCalls = mockOrderAndApns(order);
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(apnsCalls).toEqual([]);
+  });
+});

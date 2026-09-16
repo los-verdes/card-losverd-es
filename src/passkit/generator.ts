@@ -74,7 +74,9 @@ export type PassAssetFiles = Record<string, Uint8Array>;
 
 async function sha1Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-1", bytes);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /** Builds `manifest.json`: `{ filename: sha1Hex }` for every file in the bundle, per Phase 4.6. */
@@ -225,26 +227,47 @@ function cacheKey(passTypeIdentifier: string, serialNumber: string): string {
   return `cache/pkpass/${passTypeIdentifier}/${serialNumber}.pkpass`;
 }
 
-/** Reads a previously-generated `.pkpass` from R2's Phase 3.3 cache, or `null` on a miss. */
+/**
+ * Cached passes are tagged with the `members.last_updated_at` they were
+ * generated from, and only served while that still matches. Any write path
+ * that bumps `last_updated_at` (BigCommerce sync, the legacy import SQL,
+ * future admin actions) therefore invalidates the cache implicitly -- there's
+ * no separate invalidation call to forget, including from raw SQL that
+ * can't reach R2. The next put overwrites the stale object in place.
+ */
+const LAST_UPDATED_AT_METADATA = "lastUpdatedAt";
+
+/**
+ * Reads a previously-generated `.pkpass` from R2's Phase 3.3 cache, or
+ * `null` on a miss or when it was generated from an older member version.
+ */
 export async function getCachedPass(
   bucket: R2Bucket,
   passTypeIdentifier: string,
   serialNumber: string,
+  lastUpdatedAt: number,
 ): Promise<Uint8Array | null> {
   const object = await bucket.get(cacheKey(passTypeIdentifier, serialNumber));
-  if (!object) return null;
+  if (
+    !object ||
+    object.customMetadata?.[LAST_UPDATED_AT_METADATA] !== String(lastUpdatedAt)
+  ) {
+    return null;
+  }
   return new Uint8Array(await object.arrayBuffer());
 }
 
-/** Writes a generated `.pkpass` to R2's Phase 3.3 cache. */
+/** Writes a generated `.pkpass` to R2's Phase 3.3 cache, tagged with its member version. */
 export async function putCachedPass(
   bucket: R2Bucket,
   passTypeIdentifier: string,
   serialNumber: string,
+  lastUpdatedAt: number,
   bytes: Uint8Array,
 ): Promise<void> {
   await bucket.put(cacheKey(passTypeIdentifier, serialNumber), bytes, {
     httpMetadata: { contentType: "application/vnd.apple.pkpass" },
+    customMetadata: { [LAST_UPDATED_AT_METADATA]: String(lastUpdatedAt) },
   });
 }
 

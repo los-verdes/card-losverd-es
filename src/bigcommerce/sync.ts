@@ -1,4 +1,5 @@
 import type { Env } from "../index";
+import { notifyPassUpdated } from "../passkit/updates";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
@@ -202,6 +203,18 @@ export function mergeMembershipState(
   };
 }
 
+export interface MemberUpsertResult {
+  memberId: string;
+  /**
+   * Whether anything shown on the member's pass changed. Unchanged rows
+   * aren't rewritten at all, so `last_updated_at` -- which drives Wallet's
+   * "passes updated since" polling and the R2 pass cache -- only moves on
+   * real changes, and a routine resync doesn't make every device re-download
+   * its pass.
+   */
+  passChanged: boolean;
+}
+
 /**
  * Idempotent upsert into `members` (see docs/bigcommerce-ingestion.md
  * section 2 for the full column-by-column mapping rationale).
@@ -216,19 +229,38 @@ export function mergeMembershipState(
 export async function upsertMemberFromOrder(
   env: Env,
   input: MemberUpsertInput,
-): Promise<void> {
+): Promise<MemberUpsertResult> {
   const email = input.email.toLowerCase();
   const now = Date.now();
 
   const existing = await env.DB.prepare(
-    "SELECT member_id, expiration_date, member_since FROM members WHERE email = ?",
+    `SELECT member_id, first_name, last_name, membership_tier, status, expiration_date, member_since
+     FROM members WHERE email = ?`,
   )
     .bind(email)
-    .first<{ member_id: string } & ExistingMembershipState>();
+    .first<
+      {
+        member_id: string;
+        first_name: string;
+        last_name: string;
+        membership_tier: string;
+        status: string;
+      } & ExistingMembershipState
+    >();
 
   const merged = mergeMembershipState(existing, input);
 
   if (existing) {
+    const unchanged =
+      existing.first_name === input.firstName &&
+      existing.last_name === input.lastName &&
+      existing.membership_tier === input.membershipTier &&
+      existing.status === merged.status &&
+      existing.expiration_date === merged.expirationDate &&
+      existing.member_since === merged.memberSince;
+    if (unchanged) {
+      return { memberId: existing.member_id, passChanged: false };
+    }
     await env.DB.prepare(
       `UPDATE members
        SET first_name = ?, last_name = ?, membership_tier = ?, status = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
@@ -245,7 +277,7 @@ export async function upsertMemberFromOrder(
         existing.member_id,
       )
       .run();
-    return;
+    return { memberId: existing.member_id, passChanged: true };
   }
 
   const memberId = `BC-${input.customerId}`;
@@ -289,6 +321,24 @@ export async function upsertMemberFromOrder(
       new Date(now).toISOString().slice(0, 10),
     )
     .run();
+  // A brand-new member has no installed passes yet; this is only `true` so
+  // the rare ON CONFLICT update above is never silently missed.
+  return { memberId, passChanged: true };
+}
+
+/** Upserts a membership order and pushes a pass update if the pass changed. */
+async function applyMembershipOrder(
+  env: Env,
+  order: BigCommerceOrder,
+  membershipTier: string,
+): Promise<void> {
+  const { memberId, passChanged } = await upsertMemberFromOrder(
+    env,
+    upsertInputFromOrder(order, membershipTier),
+  );
+  if (passChanged) {
+    await notifyPassUpdated(env, memberId);
+  }
 }
 
 function upsertInputFromOrder(
@@ -330,7 +380,7 @@ export async function syncBigCommerceOrder(
     return;
   }
 
-  await upsertMemberFromOrder(env, upsertInputFromOrder(order, membershipTier));
+  await applyMembershipOrder(env, order, membershipTier);
 }
 
 const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
@@ -418,10 +468,7 @@ export async function syncSubscriptionsEtl(
       const products = await client.getOrderProducts(order.id);
       const membershipTier = resolveMembershipTier(products);
       if (!membershipTier) continue;
-      await upsertMemberFromOrder(
-        env,
-        upsertInputFromOrder(order, membershipTier),
-      );
+      await applyMembershipOrder(env, order, membershipTier);
       ordersProcessed++;
     }
     page++;
