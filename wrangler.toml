@@ -19,6 +19,12 @@ fallthrough = true
 binding = "DB"
 database_name = "card-losverd-es-db"
 database_id = "REPLACE_WITH_TERRAFORM_OUTPUT_d1_database_id"
+# Wrangler defaults to looking for a top-level `migrations/` directory --
+# ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
+# d1 migrations apply` fails with "No migrations present at .../migrations"
+# -- this is why every Deploy workflow run has failed since the very first
+# merge to main.
+migrations_dir = "src/db/migrations"
 
 [[r2_buckets]]
 binding = "ASSETS"
