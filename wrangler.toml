@@ -24,6 +24,24 @@ database_id = "REPLACE_WITH_TERRAFORM_OUTPUT_d1_database_id"
 binding = "ASSETS"
 bucket_name = "card-losverd-es-assets"
 
+[vars]
+# BigCommerce store/app identifiers - not secret, safe to commit (see
+# docs/bigcommerce-ingestion.md).
+BIGCOMMERCE_STORE_HASH = "REPLACE_WITH_BIGCOMMERCE_STORE_HASH"
+BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
+# Placeholders only, so local dev/test envs have *something* bound (matches
+# the `REPLACE_WITH_TERRAFORM_OUTPUT_...` pattern above). Real values MUST
+# be set per-environment via `wrangler secret put` before deploying - see
+# docs/bigcommerce-ingestion.md sections 1 and 5.
+BIGCOMMERCE_ACCESS_TOKEN = "REPLACE_WITH_WRANGLER_SECRET"
+BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "REPLACE_WITH_WRANGLER_SECRET"
+
+# TODO(Phase 2.5.2): etl-sync queue producer/consumer config isn't set up
+# yet - see docs/bigcommerce-ingestion.md sections 3 and 5.
+# [[queues.producers]]
+# queue = "etl-sync"
+# binding = "ETL_SYNC_QUEUE"
+
 [env.preview]
 name = "card-losverd-es-preview"
 
