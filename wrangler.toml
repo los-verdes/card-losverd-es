@@ -18,7 +18,7 @@ fallthrough = true
 [[d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db"
-database_id = "REPLACE_WITH_TERRAFORM_OUTPUT_d1_database_id"
+database_id = "6ff0c181-2a0c-43ab-9c16-2c9d78827d6f"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
 # ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
 # d1 migrations apply` fails with "No migrations present at .../migrations"
