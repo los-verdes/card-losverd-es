@@ -1,4 +1,5 @@
 set shell := ["bash", "-c"]
+account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
 
 # Default task: list available commands
 default:
@@ -52,14 +53,28 @@ deploy-prod:
     npx wrangler deploy --env production
 
 # Terraform tasks (see terraform/README.md for required vars/env)
+local_tf_cmd := f"""
+AWS_ACCESS_KEY_ID='op://Los Verdes/lv-card-losverd-es-github-workflows/access_key_id' \\
+AWS_SECRET_ACCESS_KEY='op://Los Verdes/lv-card-losverd-es-github-workflows/secret_access_key' \\
+CLOUDFLARE_API_TOKEN='op://Los Verdes/lv-card-losverd-es-github-workflows/credential' \\
+TF_VAR_cloudflare_account_id='{{ account_id }}' \\
+op run -- terraform"""
+tf_subdir := "terraform"
+
+tf_cmd := if env_var_or_default("CI", "") != "" { "terraform" } else { local_tf_cmd }
+
+tf +CMD:
+   {{ tf_cmd }} -chdir="{{ justfile_directory() + "/" + tf_subdir }}" \
+      {{ CMD }}
+
 tf-init:
-    cd terraform && terraform init
+    just tf init
 
-tf-plan account_id:
-    cd terraform && terraform plan -var="cloudflare_account_id={{account_id}}"
+tf-plan:
+    just tf plan
 
-tf-apply account_id:
-    cd terraform && terraform apply -var="cloudflare_account_id={{account_id}}"
+tf-apply:
+    just tf apply
 
 # Phase 1.0.1 risk spike: validate the PKCS#7 detached signature's ASN.1
 # structure with `openssl smime -verify` (independent of this codebase's own
