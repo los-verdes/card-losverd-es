@@ -5,10 +5,10 @@ compatibility_flags = ["nodejs_compat", "enable_nodejs_inspector_module"]
 
 # Non-JS static assets bundled directly into the Worker via Wrangler's
 # esbuild-based bundler at build time (rather than fetched at request time or
-# read from R2). Added for the Phase 1.0.2 card-rendering spike
-# (src/spikes/card-rendering): the Bungee font Satori needs as a raw font
-# buffer, and the placeholder crest logo Satori needs as a base64 data URL
-# input. `.wasm` needs no entry here -- Wrangler resolves that to a
+# read from R2). `src/cardimage/render.ts` needs this for the raw Bungee
+# font buffer Satori requires; the `.png` glob also covers
+# `test/fixtures/sample-logo.png`, imported the same way by that module's
+# tests. `.wasm` needs no entry here -- Wrangler resolves that to a
 # WebAssembly.Module by default.
 [[rules]]
 type = "Data"

@@ -1,4 +1,5 @@
 import { SignJWT, importPKCS8 } from "jose";
+import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 
 /**
  * Google Wallet service-account credentials needed to sign a "Save to
@@ -123,25 +124,6 @@ function objectState(status: MemberWalletInput["status"]): GenericObjectState {
   }
 }
 
-function formatMemberSince(isoDate: string): string {
-  // e.g. "Jul 2021" -- matches passkit/generator.ts's equivalent field.
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(isoDate));
-}
-
-function formatExpirationDate(isoDate: string): string {
-  // e.g. "Feb 17, 2024" -- matches passkit/generator.ts's equivalent field.
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(isoDate));
-}
-
 /**
  * Builds the `GenericObject` payload for a real Los Verdes membership pass
  * (Phase 5.1). Pure function of its inputs, mirroring
@@ -164,14 +146,14 @@ export function buildGenericObject(
     textModulesData.push({
       id: "member_since",
       header: "Member Since",
-      body: formatMemberSince(member.memberSince),
+      body: formatMonthYear(member.memberSince),
     });
   }
   if (member.expirationDate) {
     textModulesData.push({
       id: "membership_expiry",
       header: "Good through",
-      body: formatExpirationDate(member.expirationDate),
+      body: formatShortDate(member.expirationDate),
     });
   }
 

@@ -1,17 +1,17 @@
-// Re-authored card layout, inspired by the old Python app's
-// `member_card/templates/card_image.html.j2` + `macros.html.j2` (`membership_card`
-// macro) and `member_card/static/scss/style.scss`. This is a re-implementation
-// against Satori's supported CSS subset (flexbox only -- no CSS grid, no
-// arbitrary selectors, no `calc()`/viewport units), not a port: the original
-// uses a 12-column `mdl-grid`, `calc(Npx + Nvh)` responsive font sizing, and a
-// tiled background-pattern image, none of which Satori can express directly.
+// Production card layout, promoted from the Phase 1.0.2 risk spike
+// (src/spikes/card-rendering/template.ts) -- re-authored against Satori's
+// supported CSS subset (flexbox only -- no CSS grid, no arbitrary
+// selectors, no `calc()`/viewport units), inspired by the old Python app's
+// `member_card/templates/card_image.html.j2` + `macros.html.j2`
+// (`membership_card` macro) rather than a direct port. See that spike's own
+// comments for the fuller rationale; this file only documents what changed
+// on promotion to production.
 //
-// Visual elements carried over: green card face with a darker green border and
-// rounded corners, a circular crest/logo badge in the top-left, a bold white
-// display-font title in the top-right, the member's name + tier + "good
-// through" date in the bottom-left, and (new for this spike, replacing the
-// pass-only QR code) a QR/barcode placeholder in the bottom-right so the card
-// image itself doubles as a scannable membership card.
+// What changed from the spike: real member fields (matching the D1
+// `members` schema shape used elsewhere, e.g. `passkit/generator.ts`)
+// instead of a loose pre-formatted-string shape, and the crest logo is
+// supplied by the caller rather than a bundled synthetic placeholder -- see
+// render.ts.
 
 export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
@@ -20,16 +20,18 @@ const BRIGHT_VERDE = '#00b140';
 const BORDER_VERDE = '#046a29';
 const WHITE = '#ffffff';
 
-export interface MembershipCardData {
-  memberName: string;
+export interface MembershipCardMember {
+  firstName: string;
+  lastName: string;
   membershipTier: string;
-  serialNumber: string;
-  /** Pre-formatted, e.g. "Good through Dec 31, 2026" -- mirrors `aux_info_text` in the old template. */
-  expirationLabel: string;
+  /** == the pass's serialNumber; shown under the QR code and encoded into it. */
+  memberId: string;
+  /** ISO8601 `YYYY-MM-DD`, or `null` for a membership with no expiry on record. */
+  expirationDate: string | null;
 }
 
 export interface CardImages {
-  /** `data:image/png;base64,...` placeholder crest logo. */
+  /** `data:image/png;base64,...` crest logo. */
   logoDataUrl: string;
   /** `data:image/svg+xml;base64,...` QR code. */
   qrDataUrl: string;
@@ -56,13 +58,21 @@ function textNode(text: string, style: Record<string, string | number>): SatoriE
   return { type: 'div', props: { style, children: text } };
 }
 
-export function buildCardTree(data: MembershipCardData, images: CardImages): SatoriElement {
+export function buildCardTree(
+  member: MembershipCardMember,
+  expirationLabel: string | null,
+  images: CardImages,
+): SatoriElement {
+  // The real crest (see render.ts) is already circular within its own
+  // square canvas, so a further borderRadius mask is a no-op visually, not
+  // a double-circle artifact -- kept anyway since a future logo swap isn't
+  // guaranteed to already be circular.
   const logo: SatoriElement = {
     type: 'img',
     props: {
       src: images.logoDataUrl,
-      width: 150,
-      height: 150,
+      width: 120,
+      height: 120,
       style: { borderRadius: 999 },
     },
   };
@@ -92,15 +102,21 @@ export function buildCardTree(data: MembershipCardData, images: CardImages): Sat
     },
   };
 
+  const memberInfoChildren: (SatoriElement | string)[] = [
+    textNode(`${member.firstName} ${member.lastName}`, { fontSize: 46, color: WHITE }),
+    textNode(member.membershipTier, { fontSize: 26, color: '#e7fbef', marginTop: 10 }),
+  ];
+  if (expirationLabel) {
+    memberInfoChildren.push(
+      textNode(expirationLabel, { fontSize: 20, color: '#d8f5e4', marginTop: 8 }),
+    );
+  }
+
   const memberInfoBlock: SatoriElement = {
     type: 'div',
     props: {
       style: { display: 'flex', flexDirection: 'column', maxWidth: 680 },
-      children: [
-        textNode(data.memberName, { fontSize: 46, color: WHITE }),
-        textNode(data.membershipTier, { fontSize: 26, color: '#e7fbef', marginTop: 10 }),
-        textNode(data.expirationLabel, { fontSize: 20, color: '#d8f5e4', marginTop: 8 }),
-      ],
+      children: memberInfoChildren,
     },
   };
 
@@ -117,7 +133,7 @@ export function buildCardTree(data: MembershipCardData, images: CardImages): Sat
       },
       children: [
         { type: 'img', props: { src: images.qrDataUrl, width: images.qrSize, height: images.qrSize } },
-        textNode(data.serialNumber, { fontSize: 14, color: BRIGHT_VERDE, marginTop: 8 }),
+        textNode(member.memberId, { fontSize: 14, color: BRIGHT_VERDE, marginTop: 8 }),
       ],
     },
   };
