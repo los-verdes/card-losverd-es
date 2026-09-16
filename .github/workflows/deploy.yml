@@ -28,12 +28,6 @@ jobs:
       - name: Apply D1 migrations
         run: just db-migrate-remote
         env:
-          # `just db-migrate-remote` is a plain `wrangler d1 migrations
-          # apply` -- it never touches Terraform or the S3/R2 state backend,
-          # so this step deliberately does NOT receive AWS_ACCESS_KEY_ID/
-          # AWS_SECRET_ACCESS_KEY (those are the R2 remote-state credentials,
-          # only needed by `just tf-*`, which CI doesn't run -- see
-          # terraform/README.md). No step in this workflow needs them.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
