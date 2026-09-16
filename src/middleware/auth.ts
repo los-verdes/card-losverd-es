@@ -11,19 +11,7 @@
  * for now.
  */
 
-/** Constant-time string comparison, used instead of `===` for the token check. */
-function timingSafeEqual(a: string, b: string): boolean {
-  const aBytes = new TextEncoder().encode(a);
-  const bBytes = new TextEncoder().encode(b);
-  if (aBytes.length !== bBytes.length) {
-    return false;
-  }
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) {
-    diff |= aBytes[i] ^ bBytes[i];
-  }
-  return diff === 0;
-}
+import { timingSafeEqual } from "../lib/timingSafeEqual";
 
 const AUTH_SCHEME_PREFIX = "ApplePass ";
 
