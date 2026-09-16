@@ -22,11 +22,21 @@ interface MemberRow {
   last_updated_at: number;
 }
 
+/**
+ * A `member_since_overrides` row (legacy import or set by hand) wins over
+ * the order-derived `members.member_since`; see migration 0005.
+ */
 async function getMember(
   env: Env,
   memberId: string,
 ): Promise<MemberRow | null> {
-  return env.DB.prepare("SELECT * FROM members WHERE member_id = ?")
+  return env.DB.prepare(
+    `SELECT m.member_id, m.first_name, m.last_name, m.membership_tier, m.status,
+            m.expiration_date, COALESCE(o.member_since, m.member_since) AS member_since,
+            m.auth_token, m.last_updated_at
+     FROM members m LEFT JOIN member_since_overrides o ON o.email = m.email
+     WHERE m.member_id = ?`,
+  )
     .bind(memberId)
     .first<MemberRow>();
 }

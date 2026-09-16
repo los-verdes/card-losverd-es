@@ -143,23 +143,24 @@ function literal(value: string | null): string {
 
 /**
  * Idempotent statements (safe to re-run any number of times):
- * 1. Upsert every exported row into the two legacy tables.
- * 2. Backfill `members.member_since` for rows that already exist, moving it
- *    earlier only -- the same never-regress rule the BigCommerce sync uses.
- *    Bumps `last_updated_at` on changed rows so issued passes refresh.
+ * 1. Upsert each legacy `member_since` into `member_since_overrides` as
+ *    `source = 'legacy_postgres'` -- never overwriting a `manual` override,
+ *    which always takes precedence over imported data.
+ * 2. Upsert every legacy card into `legacy_membership_cards`.
+ *
+ * `members` itself is never touched: overrides win at read time, and the
+ * table's triggers bump `last_updated_at` for affected members.
  *
  * No BEGIN/COMMIT: D1 rejects explicit transactions in executed SQL.
  */
-export function buildImportStatements(
-  data: LegacyExport,
-  nowMs: number,
-): string[] {
+export function buildImportStatements(data: LegacyExport): string[] {
   const statements: string[] = [];
 
   for (const row of data.member_since) {
     statements.push(
-      `INSERT INTO legacy_member_since (email, member_since) VALUES (${literal(row.email)}, ${literal(row.member_since)}) ` +
-        `ON CONFLICT(email) DO UPDATE SET member_since = excluded.member_since`,
+      `INSERT INTO member_since_overrides (email, member_since, source) VALUES (${literal(row.email)}, ${literal(row.member_since)}, 'legacy_postgres') ` +
+        `ON CONFLICT(email) DO UPDATE SET member_since = excluded.member_since, updated_at = unixepoch('subsec') * 1000 ` +
+        `WHERE member_since_overrides.source = 'legacy_postgres'`,
     );
   }
 
@@ -172,22 +173,14 @@ export function buildImportStatements(
     );
   }
 
-  statements.push(
-    `UPDATE members SET ` +
-      `member_since = (SELECT l.member_since FROM legacy_member_since l WHERE l.email = members.email), ` +
-      `last_updated_at = ${Math.trunc(nowMs)} ` +
-      `WHERE EXISTS (SELECT 1 FROM legacy_member_since l WHERE l.email = members.email ` +
-      `AND (members.member_since IS NULL OR l.member_since < members.member_since))`,
-  );
-
   return statements;
 }
 
-export function buildImportSql(data: LegacyExport, nowMs: number): string {
+export function buildImportSql(data: LegacyExport): string {
   return (
     `-- Generated from a legacy Postgres export taken at ${data.exported_at}.\n` +
     `-- ${data.member_since.length} member_since rows, ${data.membership_cards.length} membership cards.\n` +
-    buildImportStatements(data, nowMs)
+    buildImportStatements(data)
       .map((s) => `${s};`)
       .join("\n") +
     "\n"

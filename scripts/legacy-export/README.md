@@ -3,8 +3,10 @@
 One-time copy of the two pieces of legacy data that exist nowhere else
 (migration plan Phase 2.2, `docs/legacy-pass-compatibility.md`):
 
-* **`legacy_member_since`**: each legacy user's earliest membership order
-  date. For Squarespace-era members this is the only surviving record.
+* **`member_since_overrides`** (`source = 'legacy_postgres'`): each legacy
+  user's earliest membership order date. For Squarespace-era members this is
+  the only surviving record. Overrides win over the order-derived
+  `members.member_since` wherever a pass is rendered.
 * **`legacy_membership_cards`**: every legacy card, so QR codes already out
   in the world (`/verify-pass/{uuid}?signature=...`) can still be resolved.
 
@@ -53,19 +55,32 @@ npx wrangler d1 execute card-losverd-es-db --local --file .legacy-export/import.
 npx wrangler d1 execute card-losverd-es-db --remote --file .legacy-export/import.sql
 ```
 
-Besides filling the two legacy tables, the import moves `members.member_since`
-earlier for any **existing** `members` row whose legacy date is earlier.
-Members created by BigCommerce sync *after* the import don't pick up their
-legacy date until the sync reads `legacy_member_since` itself (tracked
-follow-up); until then, re-running the import after a full resync
-(`sync_subscriptions_etl` with `loadAll`) catches them up.
+The import only writes the two tables above; it never modifies `members`.
+Overrides are keyed by email and applied when a pass is read, so members
+created by BigCommerce sync after the import still pick up their legacy
+date. Re-running the import never overwrites a `manual` override.
 
 ## 4. Spot-check
 
 ```bash
 npx wrangler d1 execute card-losverd-es-db --remote --command \
-  "SELECT (SELECT COUNT(*) FROM legacy_member_since) AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM legacy_member_since) AS earliest"
+  "SELECT (SELECT COUNT(*) FROM member_since_overrides WHERE source = 'legacy_postgres') AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM member_since_overrides) AS earliest"
 ```
 
 Plan Phase 8.1 step 5 also asks for a spot-check of a few known early
 members' `member_since` values.
+
+## Setting a member's "member since" date by hand
+
+Any member's date can be set or corrected directly. A `manual` override
+always wins, including over a later re-import:
+
+```bash
+npx wrangler d1 execute card-losverd-es-db --remote --command \
+  "INSERT INTO member_since_overrides (email, member_since, source, note) VALUES ('jane@example.com', '2016-03-01', 'manual', 'founding member') ON CONFLICT(email) DO UPDATE SET member_since = excluded.member_since, source = 'manual', note = excluded.note, updated_at = unixepoch('subsec') * 1000"
+```
+
+Use the member's lower-cased email. Delete the row to fall back to the
+order-derived date. Triggers on the table bump the member's
+`last_updated_at`, so their pass is regenerated on its next fetch (no push is
+sent; an installed pass picks the change up on its next update).

@@ -30,8 +30,8 @@ function validExport(overrides: Record<string, unknown> = {}): Record<string, un
   };
 }
 
-async function runImport(data: LegacyExport, nowMs = 1_800_000_000_000) {
-  for (const statement of buildImportStatements(data, nowMs)) {
+async function runImport(data: LegacyExport) {
+  for (const statement of buildImportStatements(data)) {
     await env.DB.prepare(statement).run();
   }
 }
@@ -45,15 +45,21 @@ async function insertMember(memberId: string, email: string, memberSince: string
     .run();
 }
 
-async function memberRow(email: string) {
-  return env.DB.prepare("SELECT member_since, last_updated_at FROM members WHERE email = ?")
+async function lastUpdatedAt(email: string): Promise<number> {
+  return (await env.DB.prepare("SELECT last_updated_at FROM members WHERE email = ?")
     .bind(email)
-    .first<{ member_since: string | null; last_updated_at: number }>();
+    .first<{ last_updated_at: number }>())!.last_updated_at;
+}
+
+async function overrides() {
+  return (
+    await env.DB.prepare("SELECT email, member_since, source, note FROM member_since_overrides ORDER BY email").all()
+  ).results;
 }
 
 afterEach(async () => {
+  await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
-  await env.DB.exec("DELETE FROM legacy_member_since");
   await env.DB.exec("DELETE FROM legacy_membership_cards");
 });
 
@@ -122,13 +128,12 @@ describe("parseLegacyExport", () => {
 });
 
 describe("buildImportStatements (executed against D1)", () => {
-  it("loads both legacy tables, quoting apostrophes safely", async () => {
+  it("loads legacy dates as 'legacy_postgres' overrides and legacy cards, quoting apostrophes safely", async () => {
     await runImport(parseLegacyExport(validExport()));
 
-    const since = await env.DB.prepare("SELECT email, member_since FROM legacy_member_since ORDER BY email").all();
-    expect(since.results).toEqual([
-      { email: "early@example.com", member_since: "2018-03-01" },
-      { email: "o'brien@example.com", member_since: "2021-07-04" },
+    expect(await overrides()).toEqual([
+      { email: "early@example.com", member_since: "2018-03-01", source: "legacy_postgres", note: null },
+      { email: "o'brien@example.com", member_since: "2021-07-04", source: "legacy_postgres", note: null },
     ]);
     const card = await env.DB.prepare("SELECT * FROM legacy_membership_cards").first();
     expect(card).toEqual({
@@ -140,25 +145,24 @@ describe("buildImportStatements (executed against D1)", () => {
     });
   });
 
-  it("is idempotent, and a re-run with corrected data overwrites", async () => {
+  it("is idempotent, and a re-run with corrected data overwrites earlier imported rows", async () => {
     const data = parseLegacyExport(validExport());
     await runImport(data);
     await runImport(data);
     const counts = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM legacy_member_since) AS s, (SELECT COUNT(*) FROM legacy_membership_cards) AS c",
+      "SELECT (SELECT COUNT(*) FROM member_since_overrides) AS s, (SELECT COUNT(*) FROM legacy_membership_cards) AS c",
     ).first();
     expect(counts).toEqual({ s: 2, c: 1 });
 
-    const corrected = parseLegacyExport(
-      validExport({
-        member_since: [{ email: "early@example.com", member_since: "2017-01-01" }],
-        membership_cards: [{ serial_number: SERIAL, email: "new@example.com", full_name: "New Name" }],
-      }),
+    await runImport(
+      parseLegacyExport(
+        validExport({
+          member_since: [{ email: "early@example.com", member_since: "2017-01-01" }],
+          membership_cards: [{ serial_number: SERIAL, email: "new@example.com", full_name: "New Name" }],
+        }),
+      ),
     );
-    await runImport(corrected);
-    expect(
-      await env.DB.prepare("SELECT member_since FROM legacy_member_since WHERE email = 'early@example.com'").first(),
-    ).toEqual({ member_since: "2017-01-01" });
+    expect((await overrides())[0]).toMatchObject({ email: "early@example.com", member_since: "2017-01-01" });
     expect(await env.DB.prepare("SELECT email, full_name, member_until FROM legacy_membership_cards").first()).toEqual({
       email: "new@example.com",
       full_name: "New Name",
@@ -166,39 +170,89 @@ describe("buildImportStatements (executed against D1)", () => {
     });
   });
 
-  it("backfills existing members' member_since only when the legacy date is earlier or missing", async () => {
-    await insertMember("BC-1", "early@example.com", "2024-01-15"); // later than legacy -> moves earlier
-    await insertMember("BC-2", "o'brien@example.com", "2020-01-01"); // already earlier -> untouched
-    await insertMember("BC-3", "unrelated@example.com", null); // no legacy row -> untouched
-    const now = 1_800_000_000_000;
+  it("never overwrites a manual override", async () => {
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source, note) VALUES ('early@example.com', '2015-05-05', 'manual', 'founding member')",
+    ).run();
 
-    await runImport(parseLegacyExport(validExport()), now);
+    await runImport(parseLegacyExport(validExport()));
 
-    expect(await memberRow("early@example.com")).toEqual({ member_since: "2018-03-01", last_updated_at: now });
-    expect(await memberRow("o'brien@example.com")).toEqual({ member_since: "2020-01-01", last_updated_at: 1 });
-    expect(await memberRow("unrelated@example.com")).toEqual({ member_since: null, last_updated_at: 1 });
+    expect((await overrides())[0]).toEqual({
+      email: "early@example.com",
+      member_since: "2015-05-05",
+      source: "manual",
+      note: "founding member",
+    });
   });
 
-  it("fills a null members.member_since from the legacy date", async () => {
-    await insertMember("LV-1", "early@example.com", null);
+  it("doesn't modify members rows directly", async () => {
+    await insertMember("BC-1", "early@example.com", "2024-01-15");
+
     await runImport(parseLegacyExport(validExport()));
-    expect((await memberRow("early@example.com"))?.member_since).toBe("2018-03-01");
+
+    const member = await env.DB.prepare("SELECT member_since FROM members WHERE email = 'early@example.com'").first();
+    expect(member).toEqual({ member_since: "2024-01-15" });
   });
 
   it("handles an empty export", async () => {
     const empty = parseLegacyExport(validExport({ member_since: [], membership_cards: [] }));
-    expect(buildImportStatements(empty, 0)).toHaveLength(1);
-    await runImport(empty);
+    expect(buildImportStatements(empty)).toEqual([]);
+  });
+});
+
+describe("member_since_overrides triggers", () => {
+  it("bump the matching member's last_updated_at on insert, update, and delete", async () => {
+    await insertMember("BC-1", "early@example.com", null);
+    await insertMember("BC-2", "other@example.com", null);
+
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('early@example.com', '2018-03-01', 'manual')",
+    ).run();
+    const afterInsert = await lastUpdatedAt("early@example.com");
+    expect(afterInsert).toBeGreaterThan(1);
+    expect(Number.isInteger(afterInsert)).toBe(true);
+    expect(await lastUpdatedAt("other@example.com")).toBe(1);
+
+    await env.DB.exec("UPDATE members SET last_updated_at = 1");
+    await env.DB.prepare("UPDATE member_since_overrides SET member_since = '2017-01-01' WHERE email = 'early@example.com'").run();
+    expect(await lastUpdatedAt("early@example.com")).toBeGreaterThan(1);
+
+    await env.DB.exec("UPDATE members SET last_updated_at = 1");
+    await env.DB.prepare("DELETE FROM member_since_overrides WHERE email = 'early@example.com'").run();
+    expect(await lastUpdatedAt("early@example.com")).toBeGreaterThan(1);
+    expect(await lastUpdatedAt("other@example.com")).toBe(1);
+  });
+
+  it("bump both members when an override's email is changed", async () => {
+    await insertMember("BC-1", "old@example.com", null);
+    await insertMember("BC-2", "new@example.com", null);
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('old@example.com', '2018-03-01', 'manual')",
+    ).run();
+    await env.DB.exec("UPDATE members SET last_updated_at = 1");
+
+    await env.DB.prepare("UPDATE member_since_overrides SET email = 'new@example.com' WHERE email = 'old@example.com'").run();
+
+    expect(await lastUpdatedAt("old@example.com")).toBeGreaterThan(1);
+    expect(await lastUpdatedAt("new@example.com")).toBeGreaterThan(1);
+  });
+
+  it("reject an unknown source", async () => {
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('a@example.com', '2018-03-01', 'guess')",
+      ).run(),
+    ).rejects.toThrow(/CHECK constraint/);
   });
 });
 
 describe("buildImportSql", () => {
   it("renders a header comment and one terminated statement per line", () => {
-    const sql = buildImportSql(parseLegacyExport(validExport()), 0);
+    const sql = buildImportSql(parseLegacyExport(validExport()));
     const lines = sql.trimEnd().split("\n");
     expect(lines[0]).toBe("-- Generated from a legacy Postgres export taken at 2026-09-16T20:00:00Z.");
     expect(lines[1]).toBe("-- 2 member_since rows, 1 membership cards.");
-    expect(lines.slice(2)).toHaveLength(4);
+    expect(lines.slice(2)).toHaveLength(3);
     expect(lines.slice(2).every((l) => l.endsWith(";"))).toBe(true);
   });
 });

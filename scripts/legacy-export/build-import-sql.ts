@@ -15,7 +15,7 @@ if (!inputPath || !outputPath) {
 }
 
 const data = parseLegacyExport(JSON.parse(readFileSync(inputPath, "utf8")));
-writeFileSync(outputPath, buildImportSql(data, Date.now()));
+writeFileSync(outputPath, buildImportSql(data));
 console.log(
   `Wrote ${outputPath}: ${data.member_since.length} member_since rows, ` +
     `${data.membership_cards.length} membership cards (export taken ${data.exported_at}).`,
