@@ -21,6 +21,13 @@ export default defineConfig(async () => {
 		},
 		test: {
 			setupFiles: ["./test/setup/d1.ts"],
+			// Vitest's 5000ms default is too tight for the first test in any file
+			// that calls getTestCertChain() (src/spikes/pkcs7-signing/certs.ts):
+			// it generates two fresh 2048-bit RSA keys via node-forge, memoized
+			// only per test *file* (each file runs in its own isolated worker), so
+			// that cost is paid at least once per file and can exceed 5s on a
+			// loaded CI runner -- seen failing intermittently in test/passkit/signer.spec.ts.
+			testTimeout: 20000,
 			// Extends (not replaces) Vitest's own defaults, which don't cover
 			// `.claude/` -- without this, test files inside a background-agent
 			// worktree checked out under `.claude/worktrees/` (a separate,
