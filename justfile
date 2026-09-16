@@ -49,8 +49,13 @@ r2-init-local:
 deploy-preview:
     npx wrangler deploy --env preview
 
+# No `--env production`: that named environment doesn't exist in
+# wrangler.toml (Wrangler environments don't inherit top-level
+# vars/bindings, which silently shipped a Worker with none -- see
+# wrangler.toml's comment). Deploying unqualified uses the top-level config,
+# which has every binding.
 deploy-prod:
-    npx wrangler deploy --env production
+    npx wrangler deploy --env=""
 
 # Terraform tasks (see terraform/README.md for required vars/env)
 local_tf_cmd := f"""
