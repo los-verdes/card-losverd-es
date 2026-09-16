@@ -4,10 +4,12 @@
  * state/nonce/PKCE checks, ID token verification, and Apple's cross-site
  * `form_post` callback.
  *
- * Deliberately not yet integrated with this app's own session: a login
- * produces an Auth.js session cookie, which `requireAuth` (`lv_session`)
- * doesn't read. Linking to `users`/`oauth_identities` and that session
- * bridge are follow-ups.
+ * Auth.js's session is only a stepping stone to this app's own `lv_session`
+ * (the "bridge"): the `jwt` callback links the login to a `users` row and
+ * stashes its id in the Auth.js token, then `GET /login/complete`
+ * (src/auth/routes.ts) exchanges that for `lv_session` and clears the
+ * Auth.js cookie. `requireAuth` and the BigCommerce storefront login only
+ * ever deal with `lv_session`.
  *
  * Providers are only offered once their config is set (via `wrangler secret
  * put`), so an unconfigured provider can't start a login.
@@ -20,8 +22,12 @@ import type { Provider } from "@auth/core/providers";
 import type { Context } from "hono";
 import { SignJWT, importPKCS8 } from "jose";
 import type { Env } from "../index";
+import { linkOAuthUser } from "./oauth-link";
 
 const APPLE_CLIENT_SECRET_TTL_SECONDS = 5 * 60;
+
+/** Claim in the Auth.js token carrying the linked `users.id`. */
+export const LV_USER_ID_CLAIM = "lvUserId";
 
 /**
  * Apple has no static client secret: it's an ES256 JWT signed with the Sign
@@ -58,6 +64,18 @@ export function isVerifiedEmailProfile(
   );
 }
 
+/**
+ * The user's real name, if the provider gave one. Auth.js's Apple provider
+ * falls back to the email address as `name` (Apple only sends a name on a
+ * user's very first authorization), which isn't a name worth storing.
+ */
+export function providerFullName(user: {
+  name?: string | null;
+  email?: string | null;
+}): string | null {
+  return user.name && user.name !== user.email ? user.name : null;
+}
+
 export async function authConfig(
   c: Context<{ Bindings: Env }>,
 ): Promise<AuthConfig> {
@@ -90,6 +108,20 @@ export async function authConfig(
     providers,
     callbacks: {
       signIn: ({ profile }) => isVerifiedEmailProfile(profile),
+      // `account` is only present on the sign-in itself, so linking runs once
+      // per OAuth login rather than on every session read.
+      async jwt({ token, account, user }) {
+        if (account) {
+          const linked = await linkOAuthUser(env, {
+            provider: account.provider,
+            providerUserId: account.providerAccountId,
+            email: user.email!,
+            fullName: providerFullName(user),
+          });
+          token[LV_USER_ID_CLAIM] = linked.id;
+        }
+        return token;
+      },
     },
   };
 }

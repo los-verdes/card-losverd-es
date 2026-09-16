@@ -8,10 +8,12 @@ import {
   jwtVerify,
 } from "jose";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { appleClientSecret, isVerifiedEmailProfile } from "../../src/auth/authjs";
+import { appleClientSecret, isVerifiedEmailProfile, providerFullName } from "../../src/auth/authjs";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 
 const ORIGIN = "https://card.losverd.es";
+const SESSION_KEY = "test-session-signing-key-0123456789";
 let applePrivateKeyPem: string;
 let applePublicKey: Awaited<ReturnType<typeof generateKeyPair>>["publicKey"];
 
@@ -31,8 +33,10 @@ beforeEach(() => {
   env.APPLE_SIGNIN_PRIVATE_KEY_PEM = applePrivateKeyPem;
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  await env.DB.exec("DELETE FROM oauth_identities");
+  await env.DB.exec("DELETE FROM users");
 });
 
 /** Minimal cookie jar: collects Set-Cookie name=value pairs across responses. */
@@ -61,7 +65,7 @@ async function request(path: string, init: RequestInit = {}, jar?: CookieJar) {
   return res;
 }
 
-async function startSignIn(provider: string, jar: CookieJar) {
+async function startSignIn(provider: string, jar: CookieJar, callbackUrl = `${ORIGIN}/`) {
   const csrf = await request("/api/auth/csrf", {}, jar);
   const { csrfToken } = await csrf.json<{ csrfToken: string }>();
   return request(
@@ -69,7 +73,7 @@ async function startSignIn(provider: string, jar: CookieJar) {
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ csrfToken, callbackUrl: `${ORIGIN}/` }),
+      body: new URLSearchParams({ csrfToken, callbackUrl }),
     },
     jar,
   );
@@ -123,6 +127,18 @@ describe("isVerifiedEmailProfile", () => {
     ["no profile", undefined, false],
   ])("%s -> %s", (_label, profile, expected) => {
     expect(isVerifiedEmailProfile(profile)).toBe(expected);
+  });
+});
+
+describe("providerFullName", () => {
+  it("keeps a real name", () => {
+    expect(providerFullName({ name: "Jane Doe", email: "jane@example.com" })).toBe("Jane Doe");
+  });
+
+  it("drops Auth.js's email-as-name fallback (Apple without a name) and missing names", () => {
+    expect(providerFullName({ name: "jane@example.com", email: "jane@example.com" })).toBeNull();
+    expect(providerFullName({ name: null, email: "jane@example.com" })).toBeNull();
+    expect(providerFullName({ email: "jane@example.com" })).toBeNull();
   });
 });
 
@@ -190,7 +206,7 @@ describe("/api/auth (Auth.js)", () => {
   });
 
   describe("Google callback round trip", () => {
-    async function runGoogleLogin(claims: Record<string, unknown>) {
+    async function runGoogleLogin(claims: Record<string, unknown>, callbackUrl = `${ORIGIN}/`) {
       const idpKeys = await generateKeyPair("RS256", { extractable: true });
       const jwk = { ...(await exportJWK(idpKeys.publicKey)), kid: "google-test-key", alg: "RS256", use: "sig" };
       vi.spyOn(console, "error").mockImplementation(() => {});
@@ -223,7 +239,7 @@ describe("/api/auth (Auth.js)", () => {
       });
 
       const jar = new CookieJar();
-      const start = await startSignIn("google", jar);
+      const start = await startSignIn("google", jar, callbackUrl);
       const state = new URL(start.headers.get("Location")!).searchParams.get("state");
       const callback = await request(
         `/api/auth/callback/google?code=auth-code&state=${state}`,
@@ -250,6 +266,82 @@ describe("/api/auth (Auth.js)", () => {
       expect(callback.status).toBe(302);
       expect(callback.headers.get("Location")).toContain("error=AccessDenied");
       expect(jar.names()).not.toContain("__Secure-authjs.session-token");
+      expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first()).toEqual({ n: 0 });
+    });
+
+    describe("session bridge to lv_session", () => {
+      beforeEach(() => {
+        env.SESSION_SIGNING_KEY = SESSION_KEY;
+      });
+
+      function lvSessionToken(res: Response): string | undefined {
+        return res.headers
+          .getSetCookie()
+          .map((c) => c.match(new RegExp(`^${SESSION_COOKIE_NAME}=([^;]+)`))?.[1])
+          .find(Boolean);
+      }
+
+      it("GET /login sends the browser to Auth.js's sign-in page, returning to the bridge", async () => {
+        const res = await request("/login");
+        expect(res.status).toBe(302);
+        expect(res.headers.get("Location")).toBe("/api/auth/signin?callbackUrl=%2Flogin%2Fcomplete");
+      });
+
+      it("links a new user on sign-in, then exchanges the Auth.js session for lv_session", async () => {
+        const { callback, jar } = await runGoogleLogin({ email_verified: true, name: "Jane Doe" }, `${ORIGIN}/login/complete`);
+        expect(callback.headers.get("Location")).toBe(`${ORIGIN}/login/complete`);
+
+        const user = await env.DB.prepare("SELECT id, email, full_name FROM users").first<{
+          id: number;
+          email: string;
+          full_name: string;
+        }>();
+        expect(user).toMatchObject({ email: "jane@example.com", full_name: "Jane Doe" });
+        expect(
+          await env.DB.prepare("SELECT user_id, provider, provider_user_id FROM oauth_identities").first(),
+        ).toEqual({ user_id: user!.id, provider: "google", provider_user_id: "google-user-123" });
+
+        const complete = await request("/login/complete", {}, jar);
+
+        expect(complete.status).toBe(302);
+        expect(complete.headers.get("Location")).toBe("/");
+        const session = await verifySessionToken(SESSION_KEY, lvSessionToken(complete)!);
+        expect(session).toMatchObject({ userId: user!.id, isAdmin: false });
+        // The Auth.js session is cleared, leaving lv_session as the only live session.
+        expect(complete.headers.getSetCookie()).toContainEqual(
+          expect.stringMatching(/^__Secure-authjs\.session-token=;.*Max-Age=0/),
+        );
+      });
+
+      it("links to an existing user by email, preserving their admin flag", async () => {
+        await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (77, 'jane@example.com', 1)").run();
+
+        const { jar } = await runGoogleLogin({ email_verified: true }, `${ORIGIN}/login/complete`);
+        const complete = await request("/login/complete", {}, jar);
+
+        expect(await verifySessionToken(SESSION_KEY, lvSessionToken(complete)!)).toMatchObject({
+          userId: 77,
+          isAdmin: true,
+        });
+        expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first()).toEqual({ n: 1 });
+      });
+
+      it("redirects to /login without a valid Auth.js session", async () => {
+        const res = await request("/login/complete", { headers: { Cookie: "__Secure-authjs.session-token=forged" } });
+        expect(res.status).toBe(302);
+        expect(res.headers.get("Location")).toBe("/login");
+        expect(lvSessionToken(res)).toBeUndefined();
+      });
+
+      it("redirects to /login if the linked user was deleted before the bridge ran", async () => {
+        const { jar } = await runGoogleLogin({ email_verified: true }, `${ORIGIN}/login/complete`);
+        await env.DB.exec("DELETE FROM users");
+
+        const res = await request("/login/complete", {}, jar);
+
+        expect(res.headers.get("Location")).toBe("/login");
+        expect(lvSessionToken(res)).toBeUndefined();
+      });
     });
   });
 });
