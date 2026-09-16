@@ -107,29 +107,18 @@ times converges to the same row — the idempotency property the tests in
 
 Per Phase 2.5.4/2.5.5, the webhook route's only job is to validate and
 enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
-`ETL_SYNC_QUEUE`. Phase 2.5's `wrangler.toml` queue bindings
-(`[[queues.producers]]` / `[[queues.consumers]]`) aren't configured in
-this repo yet, so:
+`ETL_SYNC_QUEUE`. The `etl-sync` and `etl-sync-dlq` queues are provisioned by
+`terraform/queues.tf`, with their bindings in `wrangler.toml`:
 
 * `src/queues/etlSync.ts` defines the `EtlSyncMessage` discriminated union
   (verbatim from Phase 2.5.4) and `enqueueEtlSync(env, message)` — a thin
-  wrapper that calls `env.ETL_SYNC_QUEUE.send(message)` **if the binding
-  is present**, and otherwise `console.warn`s and no-ops. This keeps
-  `routes.ts`'s logic real and unit-testable today (inject a fake
-  `ETL_SYNC_QUEUE` in tests) without depending on Cloudflare Queues
-  infrastructure existing yet.
-  <br>**TODO (blocked on infra, not code):** once Phase 2.5.2's
-  `[[queues.producers]]`/`[[queues.consumers]]` blocks are added to
-  `wrangler.toml` and the `etl-sync` queue is created
-  (`wrangler queues create etl-sync`), `env.ETL_SYNC_QUEUE` starts
-  existing for real and the no-op branch simply stops being hit — no call
-  site changes needed.
+  wrapper around `env.ETL_SYNC_QUEUE.send(message)`.
 * `src/queues/etlSync.ts` also exports the `queue()` consumer entrypoint
   (`handleEtlSyncBatch`), which dispatches each message's `type` to the
   matching `sync.ts` function and acks/retries per-message exactly as
-  Phase 2.5.2 specifies. This isn't wired into `src/index.ts`'s default
-  export yet since there's no queue to trigger it — left ready for when
-  the binding lands.
+  Phase 2.5.2 specifies. `src/queues/index.ts` routes the Worker's single
+  `queue()` entrypoint to it by queue name, and acks + logs anything that
+  reaches `etl-sync-dlq`.
 
 ## 4. Scheduled full resync (`src/scheduled.ts`)
 
@@ -177,11 +166,9 @@ per the task's time-boxing allowance:
   validate the exact header format/casing BigCommerce sends in
   production. Verify against a real sandbox store during Phase 1 risk
   spikes or staging validation (Phase 8.2), before cutover.
-* **Actual Cloudflare Queues wiring.** `wrangler.toml` has no
-  `[[queues.producers]]`/`[[queues.consumers]]` blocks yet (Phase 2.5.2)
-  and no `etl-sync`/`etl-sync-dlq` queues exist in the Cloudflare account.
-  `enqueueEtlSync()` is written against the `env.ETL_SYNC_QUEUE` binding
-  shape so wiring it up later is additive config, not a code change.
+* **Cron triggers.** Queues are wired (Phase 2.5.2), but `wrangler.toml`
+  has no `[triggers] crons` yet: the scheduled jobs would run against
+  placeholder BigCommerce credentials until real secrets are set.
 * **`sync_customers_etl` and `sync_minibc_subscriptions_etl` full
   implementations** — stubbed with a clear high-level description each
   (§4); `sync_subscriptions_etl` is the one fully implemented, working

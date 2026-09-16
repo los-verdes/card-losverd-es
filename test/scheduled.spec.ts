@@ -37,9 +37,11 @@ function withMockQueue(): EtlSyncMessage[] {
 }
 
 describe("scheduled()", () => {
+  const realQueue = env.ETL_SYNC_QUEUE;
+
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
+    env.ETL_SYNC_QUEUE = realQueue;
   });
 
   const cases: [string, EtlSyncMessage][] = [

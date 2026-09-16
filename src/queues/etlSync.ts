@@ -19,28 +19,11 @@ export type EtlSyncMessage =
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" };
 
-/**
- * Enqueue a message onto the `etl-sync` queue.
- *
- * TODO(Phase 2.5.2): `wrangler.toml` doesn't declare the `etl-sync` queue
- * or its `ETL_SYNC_QUEUE` producer binding yet, and no such queue exists in
- * the Cloudflare account behind this Worker. Until that config lands, this
- * function logs and no-ops instead of throwing, so callers (the webhook
- * route, the scheduled handler) can be written and tested against the real
- * `env.ETL_SYNC_QUEUE.send()` call site today. Once the binding exists,
- * this starts actually enqueueing with no call-site changes required.
- */
+/** Enqueue a message onto the `etl-sync` queue (the single typed send site). */
 export async function enqueueEtlSync(
   env: Env,
   message: EtlSyncMessage,
 ): Promise<void> {
-  if (!env.ETL_SYNC_QUEUE) {
-    console.warn(
-      "enqueueEtlSync(): ETL_SYNC_QUEUE binding is not configured yet (see docs/bigcommerce-ingestion.md section 3/5) - dropping message",
-      message,
-    );
-    return;
-  }
   await env.ETL_SYNC_QUEUE.send(message);
 }
 
@@ -72,10 +55,7 @@ async function dispatchEtlSyncMessage(
 }
 
 /**
- * `etl-sync` queue consumer. Not wired into `src/index.ts`'s default
- * export's `queue()` handler dispatch table yet since there's no queue to
- * trigger it (see TODO on `enqueueEtlSync` above) - left ready for when
- * Phase 2.5.2's `[[queues.consumers]]` config lands.
+ * `etl-sync` queue consumer, routed from `src/queues/index.ts`.
  *
  * Handles ack/retry per-message (not letting one failure fail the whole
  * batch), per Phase 2.5.2's `etl-sync` consumer, whose concurrency is

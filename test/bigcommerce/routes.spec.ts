@@ -78,9 +78,11 @@ describe("signWebhookToken / verifyWebhookAuthorization", () => {
 });
 
 describe("POST /bigcommerce/order-webhook", () => {
+  const realQueue = env.ETL_SYNC_QUEUE;
+
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (env as { ETL_SYNC_QUEUE?: unknown }).ETL_SYNC_QUEUE;
+    env.ETL_SYNC_QUEUE = realQueue;
   });
 
   it("rejects an invalid JSON body", async () => {
@@ -189,21 +191,4 @@ describe("POST /bigcommerce/order-webhook", () => {
     expect(sent).toEqual([]);
   });
 
-  it("still returns 200 when ETL_SYNC_QUEUE isn't configured yet (Phase 2.5.2 not wired up)", async () => {
-    // No env.ETL_SYNC_QUEUE set here - matches this repo's current
-    // wrangler.toml, which has no queue binding declared yet.
-    const res = await SELF.fetch(
-      "https://example.com/bigcommerce/order-webhook",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: await validAuthHeader(),
-        },
-        body: JSON.stringify(webhookPayload()),
-      },
-    );
-
-    expect(res.status).toBe(200);
-  });
 });
