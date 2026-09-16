@@ -1,4 +1,6 @@
+import { authHandler, initAuthConfig } from "@hono/auth-js";
 import { Hono } from 'hono';
+import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
 import passkit from "./passkit/routes";
@@ -43,6 +45,21 @@ export interface Env {
   // SESSION_SIGNING_KEY.
   APNS_KEY_ID?: string;
   APNS_PRIVATE_KEY_PEM?: string;
+  // OAuth login via Auth.js (Phase 2.3.2, src/auth/authjs.ts). AUTH_SECRET
+  // encrypts Auth.js's own cookies (required; unset fails closed). Provider
+  // credentials are optional -- a provider is only offered once they're set.
+  // All secrets, set via `wrangler secret put` with no wrangler.toml
+  // placeholders, same convention as SESSION_SIGNING_KEY.
+  AUTH_SECRET: string;
+  AUTH_GOOGLE_ID?: string;
+  AUTH_GOOGLE_SECRET?: string;
+  // Sign in with Apple private key (`.p8`, PKCS#8 PEM) and its key ID.
+  APPLE_SIGNIN_KEY_ID?: string;
+  APPLE_SIGNIN_PRIVATE_KEY_PEM?: string;
+  // Not secret -- Sign in with Apple services ID (the OAuth client_id) and
+  // Apple developer team ID; real values in wrangler.toml `[vars]`.
+  AUTH_APPLE_ID: string;
+  APPLE_SIGNIN_TEAM_ID: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -52,6 +69,7 @@ app.route("/bigcommerce", bigcommerce);
 // Member login flows (Phase 2.3) -- mounted at the root since their paths
 // (e.g. /storefront/...) are fixed by what's registered with third parties.
 app.route("/", auth);
+app.use("/api/auth/*", initAuthConfig(authConfig), authHandler());
 
 // Apple PassKit Web Service API (Phase 4). Mounted at `/passkit` to match
 // the real `webServiceURL` value discovered in the legacy app's own passes
