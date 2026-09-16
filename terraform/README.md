@@ -4,26 +4,24 @@ Manages the durable Cloudflare resources this service depends on: the D1 databas
 
 ## Setup
 
-1. `export CLOUDFLARE_API_TOKEN=...` (a token scoped to D1 + R2 admin on the target account).
-2. `just tf-init`
-3. `just tf-plan <your account id>`
-4. `just tf-apply <your account id>`
-5. Copy the `d1_database_id` output into `wrangler.toml`'s `[[d1_databases]]` block.
+Local runs go through the `just tf` wrapper, which shells out via `op run` to pull credentials from 1Password (item `lv-card-losverd-es-github-workflows` in the `Los Verdes` vault) rather than requiring a manual `export` -- see the `justfile` at the repo root for the exact `op://` references. Requires the 1Password CLI (`op`) installed and signed in.
 
-(The `just tf-*` recipes are thin wrappers around `terraform init`/`plan`/`apply` run from `terraform/` -- see the `justfile` at the repo root.)
+1. `just tf-init`
+2. `just tf-plan`
+3. `just tf-apply`
+4. Copy the `d1_database_id` output into `wrangler.toml`'s `[[d1_databases]]` block (already done as of 2026-09-16 for the currently-provisioned resources -- only needed again if the D1 database is ever recreated).
+
+(`just tf <args>` is the thin wrapper `tf-init`/`tf-plan`/`tf-apply` all call -- it runs plain `terraform` in CI, where the workflow's own env already supplies credentials directly from GitHub Actions secrets rather than 1Password.)
 
 ## API token permissions
 
-The current token ("Los Verdes - card-verd-es - GitHub & Terraform API token") is shared between this Terraform config and `.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret. As provisioned (2026-09-14, expires **2027-09-17 -- renew before then**; see the Google Calendar reminder set for 2027-09-01), it has:
+`.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret and this Terraform config's `CLOUDFLARE_API_TOKEN` env var are the same token. As of 2026-09-16, this is a new account-wide token with deliberately broad ("ample") permissions, replacing an earlier, more narrowly-scoped one that was missing `Workers R2 Storage:Edit` (which blocked `terraform apply` on the R2 bucket resource until then).
 
-* Scope: **All accounts** (not narrowed to the single Los Verdes account -- broader than least-privilege; worth tightening once things stabilize).
-* Permissions: `Account Settings:Read`, `D1:Edit`, `Workers Scripts:Edit`.
-
-**Known gap:** it does *not* include `Workers R2 Storage:Edit`, which `r2_bucket.tf`'s `cloudflare_r2_bucket` resource needs to create/manage the R2 bucket -- a `terraform apply` that touches the R2 resource will fail permission checks until that's added to the token. Also missing (not needed yet, but will be at Phase 8 cutover): `Zone > Workers Routes:Edit` scoped to the `losverd.es` zone, for wiring up the `card.losverd.es` custom domain/route. See the migration plan's Execution Status section for the standing TODO on sorting these out.
+**This broad scope is intentional for now, not a final state.** Tightening every credential in this project (this token, the R2/S3 remote-state `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair below, and anything else) down to least-privilege is a tracked, must-do-before-considering-this-migration-done task -- see [issue #15](https://github.com/los-verdes/card-losverd-es/issues/15) (and the migration plan's Open Items).
 
 ## Remote state
 
-State is currently local-only (no backend configured). Worth deciding on a remote backend (Terraform Cloud, an R2-backed S3-compatible backend, or reusing the existing GCS backend from `digital-membership`) before this goes further than solo experimentation -- flagged here rather than decided, since it's a call worth making deliberately.
+State lives in Cloudflare R2, accessed through Terraform's `s3` backend (R2 is S3-API-compatible) -- see `_config.tf`. Credentials are a separate `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair (R2 API tokens, not real AWS credentials -- named that way only because the `s3` backend expects those env var names), scoped to just the state bucket (`los-verdes-terraform-state`, provisioned ad hoc outside this Terraform config, since Terraform can't very well manage the bucket holding its own state). Supplied via 1Password locally and via GitHub Actions secrets in CI, same pattern as the Cloudflare token above.
 
 ## DNS
 
