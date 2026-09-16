@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
 import passkit from "./passkit/routes";
 import { handleEtlSyncBatch, type EtlSyncMessage } from "./queues/etlSync";
@@ -32,12 +33,18 @@ export interface Env {
   // (or `.dev.vars` locally). An unset key fails closed -- session
   // middleware throws rather than signing with an empty key.
   SESSION_SIGNING_KEY: string;
+  // Secret -- BigCommerce app client secret; signs storefront customer JWTs
+  // (Phase 2.3.3). Same no-placeholder convention as SESSION_SIGNING_KEY.
+  BIGCOMMERCE_CLIENT_SECRET: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 app.route("/bigcommerce", bigcommerce);
+// Member login flows (Phase 2.3) -- mounted at the root since their paths
+// (e.g. /storefront/...) are fixed by what's registered with third parties.
+app.route("/", auth);
 
 // Apple PassKit Web Service API (Phase 4). Mounted at `/passkit` to match
 // the real `webServiceURL` value discovered in the legacy app's own passes
