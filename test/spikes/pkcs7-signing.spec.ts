@@ -2,6 +2,7 @@ import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { getTestCertChain } from '../../src/spikes/pkcs7-signing/certs';
 import { buildDummyAssetFiles, buildManifest, buildPassJson, sha1Hex } from '../../src/spikes/pkcs7-signing/pass';
+import { pkcs7SigningSpike } from '../../src/spikes/pkcs7-signing/route';
 import { signManifestDetached } from '../../src/spikes/pkcs7-signing/signer';
 
 describe('Phase 1.0.1 spike: PKCS#7 pass signing', () => {
@@ -53,8 +54,15 @@ describe('Phase 1.0.1 spike: PKCS#7 pass signing', () => {
     expect(signMs).toBeGreaterThan(0);
   });
 
-  it('round-trips end to end through the mounted Worker route', async () => {
+  it('is not reachable through the deployed Worker', async () => {
+    // Unauthenticated RSA signing on a public URL is a free CPU-billing
+    // target; the spike is reference code only.
     const res = await SELF.fetch('https://example.com/spikes/pkcs7-signing');
+    expect(res.status).toBe(404);
+  });
+
+  it('round-trips end to end through the spike route', async () => {
+    const res = await pkcs7SigningSpike.request('/');
     expect(res.status).toBe(200);
     const body = await res.json<{
       manifest: Record<string, string>;
