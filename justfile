@@ -68,6 +68,25 @@ deploy env="production":
 check-wrangler-envs:
     node scripts/check-wrangler-envs.mjs
 
+# Worker secrets: 1Password is the source of truth, since Cloudflare never
+# returns a secret's value. One item per environment in the "Los Verdes" vault,
+# `lv-card-losverd-es-worker-<env>`, with one field per secret labeled with its
+# exact name (the full list is in scripts/worker-secrets.mjs). Values are piped
+# straight through, never written to disk or passed as command-line arguments.
+op_vault := "Los Verdes"
+worker_secrets_item := "lv-card-losverd-es-worker-"
+
+# Rotating a secret = edit it in 1Password, then push just that one, e.g.
+# `just secrets-push staging AUTH_SECRET`. Uploads in a single deploy.
+# Push Worker secrets from 1Password (all with values, or only NAMES)
+secrets-push env *names:
+    payload="$(op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} {{ names }})" && printf '%s' "$payload" | npx wrangler secret bulk {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
+
+# Prints names, lengths, and line counts only -- never values.
+# Show which Worker secrets 1Password and Cloudflare each have
+secrets-status env:
+    cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
+
 # Terraform tasks (see terraform/README.md for required vars/env)
 local_tf_cmd := f"""
 AWS_ACCESS_KEY_ID='op://Los Verdes/lv-card-losverd-es-github-workflows/access_key_id' \\
