@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
+import emailCard from "./member/email-card";
 import verifyPass from "./member/verify-pass";
 import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
@@ -73,6 +74,21 @@ export interface Env {
   GOOGLE_WALLET_CLASS_SUFFIX: string;
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL?: string;
   GOOGLE_WALLET_PRIVATE_KEY_PEM?: string;
+  // Email card delivery (src/member/email-card.tsx). SENDGRID_API_KEY and
+  // TURNSTILE_SECRET_KEY are secrets, set via `wrangler secret put` with no
+  // wrangler.toml placeholders (same convention as SESSION_SIGNING_KEY).
+  // TURNSTILE_SITE_KEY isn't secret, but has no legacy value (the legacy
+  // form used reCAPTCHA): add it to wrangler.toml `[vars]` once a Turnstile
+  // widget exists for card.losverd.es. Until all three are set, /email-card
+  // fails closed with a "temporarily unavailable" page.
+  SENDGRID_API_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
+  TURNSTILE_SITE_KEY?: string;
+  // Not secret -- the legacy app's sender and SendGrid ASM unsubscribe group,
+  // in wrangler.toml `[vars]`. An empty group ID sends without one.
+  EMAIL_FROM_ADDRESS: string;
+  EMAIL_FROM_NAME: string;
+  SENDGRID_UNSUBSCRIBE_GROUP_ID: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -93,6 +109,7 @@ app.route("/passkit", passkit);
 // Membership card QR-code verification (the legacy `/verify-pass` URL is
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
+app.route("/email-card", emailCard);
 
 // Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
 // test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the

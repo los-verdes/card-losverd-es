@@ -74,6 +74,16 @@ APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
 AUTH_APPLE_ID = "es.losverd.card"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 
+# Email card delivery (src/member/email-card.tsx) - not secret, the legacy
+# app's real sender identity and SendGrid ASM unsubscribe group
+# (EMAIL_FROM_ADDRESS/EMAIL_FROM_NAME/SENDGRID_GROUP_ID in digital-membership's
+# settings.py). SENDGRID_API_KEY and TURNSTILE_SECRET_KEY are secrets with no
+# placeholder here; TURNSTILE_SITE_KEY still needs a real value (see
+# src/index.ts).
+EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
+EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
+SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
+
 # Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
 # terraform/queues.tf; bindings live here. src/index.ts's queue() handler
 # routes batches by queue name.
