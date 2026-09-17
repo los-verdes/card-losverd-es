@@ -1,10 +1,15 @@
 import { getAuthUser, initAuthConfig } from "@hono/auth-js";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
+import { csrf } from "hono/csrf";
 import type { Env } from "../index";
 import { LOGIN_PATH } from "../middleware/auth";
 import { LV_USER_ID_CLAIM, authConfig } from "./authjs";
-import { issueSessionToken, setSessionCookie } from "./session";
+import {
+  clearSessionCookie,
+  issueSessionToken,
+  setSessionCookie,
+} from "./session";
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -61,6 +66,16 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
     });
   }
   return c.redirect("/");
+});
+
+/**
+ * Phase 2.3.1: logout just clears `lv_session` (sessions are stateless, so
+ * there's nothing server-side to revoke). POST-only with an Origin check, so
+ * another site can't log a member out by embedding a link or form.
+ */
+auth.post("/logout", csrf(), (c) => {
+  clearSessionCookie(c);
+  return c.redirect("/", 303);
 });
 
 export default auth;
