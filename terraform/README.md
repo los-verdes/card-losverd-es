@@ -19,6 +19,8 @@ Local runs go through the `just tf` wrapper, which shells out via `op run` to pu
 
 **This broad scope is intentional for now, not a final state.** Tightening every credential in this project (this token, the R2/S3 remote-state `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair below, and anything else) down to least-privilege is a tracked, must-do-before-considering-this-migration-done task -- see [issue #15](https://github.com/los-verdes/card-losverd-es/issues/15) (and the migration plan's Open Items).
 
+The minimum this token needs, derived from what Terraform and the Deploy workflow actually call (not yet tested against a narrowed token; details and a safe swap procedure are on the issue): account-level **D1: Edit**, **Workers R2 Storage: Edit**, **Queues: Edit**, and **Workers Scripts: Edit**, scoped to the Los Verdes account only. Zone-level permissions are not needed until the Phase 8 DNS cutover.
+
 ## Remote state
 
 State lives in Cloudflare R2, accessed through Terraform's `s3` backend (R2 is S3-API-compatible) -- see `_config.tf`. Credentials are a separate `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair (R2 API tokens, not real AWS credentials -- named that way only because the `s3` backend expects those env var names), scoped to just the state bucket (`los-verdes-terraform-state`, provisioned ad hoc outside this Terraform config, since Terraform can't very well manage the bucket holding its own state). Supplied via 1Password locally and via GitHub Actions secrets in CI, same pattern as the Cloudflare token above.

@@ -72,6 +72,12 @@ flow, which is a Member Auth / admin-tooling concern, not order ingestion.
 
 ## 2. Idempotent upsert into `members`
 
+Every membership order is first recorded in the `membership_orders` history
+table (`src/bigcommerce/orders.ts`; see [`reporting.md`](reporting.md)), and
+then merged into the member's current state as described here. History goes
+first because it is idempotent: if a later step throws, the queue's retry
+rewrites the same row.
+
 `src/bigcommerce/sync.ts::upsertMemberFromOrder()` maps one BigCommerce
 order to one `members` row:
 
@@ -123,9 +129,15 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 ## 4. Scheduled full resync (`src/scheduled.ts`)
 
 Per Phase 2.5.3, a `scheduled()` handler maps each cron trigger to an
-`EtlSyncMessage` and enqueues it (same `enqueueEtlSync` helper, same
-"no-op until the queue exists" caveat). Three jobs, one implemented fully
-per the task's time-boxing allowance:
+`EtlSyncMessage` and enqueues it (same `enqueueEtlSync` helper). A fourth
+job, `run_slack_members_etl`, shares the queue but is not BigCommerce's
+concern; see [`reporting.md`](reporting.md). Of the three BigCommerce jobs,
+one is implemented fully:
+
+> **Known bug, [#57](https://github.com/los-verdes/card-losverd-es/issues/57):**
+> a full resync (`loadAll`) stops after 50 pages of 50 orders, far short of
+> the store's order count, yet still advances the watermark. Fix before the
+> first full `members` load.
 
 * **`sync_subscriptions_etl` — fully implemented** (`src/bigcommerce/sync.ts::syncSubscriptionsEtl`).
   Chosen as the one full example because it's the direct self-healing
@@ -142,21 +154,19 @@ per the task's time-boxing allowance:
   `GET /v2/customers`, and for any customer whose email matches an
   existing `members` row with no linkage yet, backfill/correct identity
   fields (mirrors `member_card/bigcommerce.py::customer_etl`'s
-  `map_customer_to_user_by_store_id`). Since D1's `members` table has no
-  `bigcommerce_id`/user-identity columns yet (those belong to the Member
-  Auth `users`/`oauth_identities` tables in Phase 2.3, not this table),
-  this job's real implementation is deferred until that schema lands —
-  today it would have nothing new to write that `sync_subscriptions_etl`
-  doesn't already cover for membership purposes.
+  `map_customer_to_user_by_store_id`). Still a stub. In the legacy app this
+  job is also what re-pointed a member at their current storefront email;
+  here that role belongs to `membership_orders.member_email`, and how it
+  gets updated after cutover is an open design point (see
+  [`reporting.md`](reporting.md), "Not built yet").
 * **`sync_minibc_subscriptions_etl` — stubbed.** High-level: call
   MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
   per `member_card/minibc.py`) for recurring-subscription state that
   doesn't flow through BigCommerce order webhooks at all, and reconcile
   `membership_tier`/`expiration_date` for members on a MiniBC recurring
-  plan. Deferred: no MiniBC API key/sandbox is available in this
-  environment to validate request/response shapes against, and MiniBC
-  orders are a smaller slice of total membership volume than direct
-  BigCommerce orders — lower priority for a first pass.
+  plan. Deferred until after cutover (Jeff, 2026-09-17): MiniBC is the
+  vendor that handles renewals, so it holds membership status that nothing
+  else records, but porting it is lower priority than the cutover itself.
 
 ## 5. What's deferred
 
