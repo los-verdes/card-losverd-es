@@ -65,6 +65,14 @@ export interface Env {
   // docs/legacy-pass-compatibility.md (D2). No wrangler.toml placeholder;
   // unset fails closed.
   PASS_SIGNATURE_KEY: string;
+  // Google Wallet (Phase 5, src/member/artifacts.ts). Issuer ID and class
+  // suffix are non-secret vars in wrangler.toml; the service account's
+  // `client_email` and `private_key` are secrets (no placeholders) -- the
+  // "Save to Google Wallet" link fails closed until both are set.
+  GOOGLE_WALLET_ISSUER_ID: string;
+  GOOGLE_WALLET_CLASS_SUFFIX: string;
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL?: string;
+  GOOGLE_WALLET_PRIVATE_KEY_PEM?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

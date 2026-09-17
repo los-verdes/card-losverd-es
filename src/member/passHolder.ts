@@ -1,4 +1,5 @@
 import type { Env } from "../index";
+import { isMembershipCurrent, type MemberRecord } from "./artifacts";
 
 export interface PassHolder {
   name: string | null;
@@ -44,12 +45,12 @@ export async function lookupPassHolder(
     "SELECT first_name, last_name, status, expiration_date FROM members WHERE email = ?",
   )
     .bind(email)
-    .first<{
-      first_name: string;
-      last_name: string;
-      status: string;
-      expiration_date: string | null;
-    }>();
+    .first<
+      Pick<
+        MemberRecord,
+        "first_name" | "last_name" | "status" | "expiration_date"
+      >
+    >();
   if (!member) {
     // A legacy card holder BigCommerce sync never created a row for (e.g. a
     // long-lapsed Squarespace-era member): all we know is that card's dates.
@@ -64,9 +65,6 @@ export async function lookupPassHolder(
   return {
     name: `${member.first_name} ${member.last_name}`.trim() || null,
     expirationDate: member.expiration_date,
-    active:
-      member.status !== "revoked" &&
-      member.expiration_date !== null &&
-      member.expiration_date >= today,
+    active: isMembershipCurrent(member, today),
   };
 }

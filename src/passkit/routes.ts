@@ -1,111 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../index";
-import { buildVerifyPassUrl } from "../lib/passSignature";
+import { getApplePassBundle, getMemberById } from "../member/artifacts";
 import { verifyPassAuthorization } from "../middleware/auth";
-import {
-  assemblePassBundle,
-  getCachedPass,
-  putCachedPass,
-  type MemberPassInput,
-  type PassKitConfig,
-} from "./generator";
-import type { PassSigningCredentials } from "./signer";
-
-interface MemberRow {
-  member_id: string;
-  first_name: string;
-  last_name: string;
-  membership_tier: string;
-  status: "active" | "expired" | "revoked";
-  expiration_date: string | null;
-  member_since: string | null;
-  auth_token: string;
-  last_updated_at: number;
-}
-
-/**
- * A `member_since_overrides` row (legacy import or set by hand) wins over
- * the order-derived `members.member_since`; see migration 0005.
- */
-async function getMember(
-  env: Env,
-  memberId: string,
-): Promise<MemberRow | null> {
-  return env.DB.prepare(
-    `SELECT m.member_id, m.first_name, m.last_name, m.membership_tier, m.status,
-            m.expiration_date, COALESCE(o.member_since, m.member_since) AS member_since,
-            m.auth_token, m.last_updated_at
-     FROM members m LEFT JOIN member_since_overrides o ON o.email = m.email
-     WHERE m.member_id = ?`,
-  )
-    .bind(memberId)
-    .first<MemberRow>();
-}
-
-async function toMemberPassInput(
-  env: Env,
-  row: MemberRow,
-): Promise<MemberPassInput> {
-  return {
-    memberId: row.member_id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    membershipTier: row.membership_tier,
-    status: row.status,
-    expirationDate: row.expiration_date,
-    memberSince: row.member_since,
-    authToken: row.auth_token,
-    verifyUrl: await buildVerifyPassUrl(
-      env.PUBLIC_BASE_URL,
-      env.PASS_SIGNATURE_KEY,
-      row.member_id,
-    ),
-  };
-}
-
-function passKitConfig(env: Env): PassKitConfig {
-  return {
-    passTypeIdentifier: env.PASSKIT_PASS_TYPE_IDENTIFIER,
-    teamIdentifier: env.PASSKIT_TEAM_IDENTIFIER,
-    organizationName: env.PASSKIT_ORGANIZATION_NAME,
-    webServiceURL: env.PASSKIT_WEB_SERVICE_URL,
-  };
-}
-
-function signingCredentials(env: Env): PassSigningCredentials {
-  return {
-    signingCertPem: env.APPLE_PASS_CERT_PEM,
-    signingKeyPem: env.APPLE_PASS_KEY_PEM,
-    wwdrCertPem: env.APPLE_WWDR_CERT_PEM,
-  };
-}
-
-// Matches Phase 3.1's R2 `templates/apple/` layout -- no strip.png or
-// thumbnail.png, confirmed against a real production pass while building
-// the Phase 4 content generator (see generator.ts / PR #10): it's a
-// `generic`-style pass, which doesn't render a strip image.
-const TEMPLATE_ASSET_FILES = [
-  "icon.png",
-  "icon@2x.png",
-  "logo.png",
-  "logo@2x.png",
-];
-
-async function loadTemplateAssets(
-  bucket: R2Bucket,
-): Promise<Record<string, Uint8Array>> {
-  const assets: Record<string, Uint8Array> = {};
-  for (const name of TEMPLATE_ASSET_FILES) {
-    const object = await bucket.get(`templates/apple/${name}`);
-    if (!object) {
-      throw new Error(
-        `Missing pass template asset in R2: templates/apple/${name} (see Phase 3.2's asset migration script)`,
-      );
-    }
-    assets[name] = new Uint8Array(await object.arrayBuffer());
-  }
-  return assets;
-}
 
 const passkit = new Hono<{ Bindings: Env }>();
 
@@ -120,7 +16,7 @@ passkit.post(
     const { deviceLibraryIdentifier, passTypeIdentifier, serialNumber } =
       c.req.param();
 
-    const member = await getMember(c.env, serialNumber);
+    const member = await getMemberById(c.env, serialNumber);
     if (
       !member ||
       !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
@@ -211,14 +107,13 @@ passkit.get(
 );
 
 /**
- * 4.3 Deliver Latest Pass Version. Serves from the Phase 3.3 R2 cache when
- * available; only pays the signing/ZIP cost (assemblePassBundle) on a
- * cache miss.
+ * 4.3 Deliver Latest Pass Version. `getApplePassBundle` serves from the
+ * Phase 3.3 R2 cache when available and only signs on a miss.
  */
 passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   const { serialNumber } = c.req.param();
 
-  const member = await getMember(c.env, serialNumber);
+  const member = await getMemberById(c.env, serialNumber);
   if (
     !member ||
     !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
@@ -234,29 +129,7 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
     }
   }
 
-  const passTypeIdentifier = c.env.PASSKIT_PASS_TYPE_IDENTIFIER;
-  let bundle = await getCachedPass(
-    c.env.ASSETS,
-    passTypeIdentifier,
-    serialNumber,
-    member.last_updated_at,
-  );
-  if (!bundle) {
-    const assets = await loadTemplateAssets(c.env.ASSETS);
-    bundle = await assemblePassBundle(
-      await toMemberPassInput(c.env, member),
-      passKitConfig(c.env),
-      assets,
-      signingCredentials(c.env),
-    );
-    await putCachedPass(
-      c.env.ASSETS,
-      passTypeIdentifier,
-      serialNumber,
-      member.last_updated_at,
-      bundle,
-    );
-  }
+  const bundle = await getApplePassBundle(c.env, member);
 
   // See sha1Hex in generator.ts for why this narrowing is needed.
   return new Response(bundle as Uint8Array<ArrayBuffer>, {
@@ -274,7 +147,7 @@ passkit.delete(
   async (c) => {
     const { deviceLibraryIdentifier, serialNumber } = c.req.param();
 
-    const member = await getMember(c.env, serialNumber);
+    const member = await getMemberById(c.env, serialNumber);
     if (
       !member ||
       !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
