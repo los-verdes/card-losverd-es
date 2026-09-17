@@ -7,13 +7,20 @@
 --     with no channel/test-mode filtering (that's what cards show today).
 --   * membership_cards: every card ever minted (one per membership period),
 --     since any of them may still be out in the world as a QR code.
+--   * membership_orders: every `annual_membership` row (BigCommerce *and*
+--     Squarespace), for D1's `membership_orders` history table. This is the
+--     only surviving record of Squarespace-era orders. `member_email` is the
+--     linked user's current email, which can differ from the order's own.
+--     Rows that can't be represented (no order id, date, or email) are
+--     counted in `membership_orders_total` but not exported, so the importer
+--     can report how many were left behind instead of hiding it.
 -- Legacy timestamps are naive UTC (`datetime.utcnow()`), so dates are taken
 -- as-is without timezone conversion.
 
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 
 SELECT json_build_object(
-    'format_version', 1,
+    'format_version', 2,
     'exported_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     'member_since', COALESCE((
         SELECT json_agg(
@@ -43,5 +50,33 @@ SELECT json_build_object(
         FROM membership_cards mc
         JOIN users u ON u.id = mc.user_id
         WHERE u.email IS NOT NULL
+    ), '[]'::json),
+    'membership_orders_total', (SELECT count(*) FROM annual_membership),
+    'membership_orders', COALESCE((
+        SELECT json_agg(
+            json_build_object(
+                'order_id', am.order_id,
+                'source', CASE WHEN right(am.order_id, 3) = '_bc' THEN 'bigcommerce' ELSE 'squarespace' END,
+                'order_number', am.order_number,
+                'channel_name', am.channel_name,
+                'order_email', lower(am.customer_email),
+                'member_email', lower(COALESCE(u.email, am.customer_email)),
+                'first_name', am.billing_address_first_name,
+                'last_name', am.billing_address_last_name,
+                'customer_id', CASE WHEN right(am.order_id, 3) = '_bc' THEN u.bigcommerce_id END,
+                'sku', am.sku,
+                'product_name', am.product_name,
+                'status', am.fulfillment_status,
+                'test_mode', COALESCE(am.test_mode, false),
+                'created_on', to_char(am.created_on, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+                'modified_on', to_char(am.modified_on, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+            )
+            ORDER BY am.created_on, am.order_id
+        )
+        FROM annual_membership am
+        LEFT JOIN users u ON u.id = am.user_id
+        WHERE am.order_id IS NOT NULL
+          AND am.created_on IS NOT NULL
+          AND am.customer_email IS NOT NULL
     ), '[]'::json)
 );

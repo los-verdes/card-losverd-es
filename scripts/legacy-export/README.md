@@ -1,7 +1,7 @@
 # Legacy Postgres export
 
-One-time copy of the two pieces of legacy data that exist nowhere else
-(migration plan Phase 2.2, `docs/legacy-pass-compatibility.md`):
+One-time copy of the legacy data that exists nowhere else (migration plan
+Phase 2.2, `docs/legacy-pass-compatibility.md`):
 
 * **`member_since_overrides`** (`source = 'legacy_postgres'`): each legacy
   user's earliest membership order date. For Squarespace-era members this is
@@ -9,6 +9,14 @@ One-time copy of the two pieces of legacy data that exist nowhere else
   `members.member_since` wherever a pass is rendered.
 * **`legacy_membership_cards`**: every legacy card, so QR codes already out
   in the world (`/verify-pass/{uuid}?signature=...`) can still be resolved.
+* **`membership_orders`** (`first_seen_via = 'legacy_postgres'`): every
+  membership order Postgres holds, Squarespace and BigCommerce alike. This
+  is the order history behind admin reporting ("who was a member on a given
+  date"), and the Squarespace-era rows survive nowhere else. BigCommerce
+  orders use the same key as the live sync (`{id}_bc`), so the two never
+  duplicate each other; for an order the sync already has, the import only
+  fills in `member_email` (the member's current address, which only Postgres
+  knows).
 
 This is closed historical data. Run it any time before Postgres is
 decommissioned (Phase 8.3); re-running it is safe. The export is
@@ -40,6 +48,8 @@ just legacy-import-sql .legacy-export/export.json .legacy-export/import.sql
 
 This validates every row strictly, and aborts on anything unexpected rather
 than skipping it. It prints row counts; sanity-check them against Postgres.
+It also warns if any `annual_membership` rows could not be exported (no
+order id, date, or email) -- look at those by hand before Postgres goes away.
 
 ## 3. Rehearse locally, then load into D1
 
@@ -55,7 +65,7 @@ npx wrangler d1 execute card-losverd-es-db-production --local --file .legacy-exp
 npx wrangler d1 execute card-losverd-es-db-production --remote --file .legacy-export/import.sql
 ```
 
-The import only writes the two tables above; it never modifies `members`.
+The import only writes the three tables above; it never modifies `members`.
 Overrides are keyed by email and applied when a pass is read, so members
 created by BigCommerce sync after the import still pick up their legacy
 date. Re-running the import never overwrites a `manual` override.
@@ -64,7 +74,7 @@ date. Re-running the import never overwrites a `manual` override.
 
 ```bash
 npx wrangler d1 execute card-losverd-es-db-production --remote --command \
-  "SELECT (SELECT COUNT(*) FROM member_since_overrides WHERE source = 'legacy_postgres') AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM member_since_overrides) AS earliest"
+  "SELECT (SELECT COUNT(*) FROM member_since_overrides WHERE source = 'legacy_postgres') AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM member_since_overrides) AS earliest, (SELECT COUNT(*) FROM membership_orders WHERE source = 'squarespace') AS squarespace_orders, (SELECT COUNT(*) FROM membership_orders WHERE source = 'bigcommerce') AS bigcommerce_orders, (SELECT MIN(created_on) FROM membership_orders) AS first_order"
 ```
 
 Plan Phase 8.1 step 5 also asks for a spot-check of a few known early
