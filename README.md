@@ -96,6 +96,17 @@ Use a different value per environment. Random values (`openssl rand -hex 32`) wo
 
 Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` breaks every QR code already issued ([#27](https://github.com/los-verdes/card-losverd-es/issues/27)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
+### Registering the BigCommerce order webhook
+
+BigCommerce doesn't sign webhooks, so each store's `store/order/*` webhook is registered with an `Authorization: bearer <token>` header the Worker recomputes from `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, the store hash, and `BIGCOMMERCE_CLIENT_ID`. Create or update it (and again after rotating the key) with:
+
+```bash
+just bigcommerce-ensure-webhook staging --dry-run   # show what would change
+just bigcommerce-ensure-webhook staging
+```
+
+It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es.jeff-hogan1.workers.dev`.
+
 | Secret | Needed for |
 | :--- | :--- |
 | `SESSION_SIGNING_KEY`, `AUTH_SECRET` | Any login at all |

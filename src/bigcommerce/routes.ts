@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { Env } from "../index";
-import { bytesToBase64 } from "../lib/base64";
 import { timingSafeEqual } from "../lib/timingSafeEqual";
 import { enqueueEtlSync } from "../queues/etlSync";
+import { signWebhookToken } from "./webhookToken";
 
 interface BigCommerceWebhookPayload {
   data: { type: string; id?: number | string };
@@ -10,43 +10,6 @@ interface BigCommerceWebhookPayload {
   producer: string;
   scope: string;
   store_id: string | number;
-}
-
-/**
- * Mirrors `member_card/bigcommerce.py::generate_webhook_token()`: BigCommerce
- * doesn't sign webhook payload bodies with a computable HMAC the way e.g.
- * Shopify does, so the existing app authenticates webhooks via a custom
- * shared-secret bearer token set once at webhook-subscription-creation time
- * (BigCommerce's `headers` field on `Webhooks.create()`), and re-derives the
- * same value on receipt to compare against. See
- * docs/bigcommerce-ingestion.md section 1 for the full rationale, including
- * why this uses a new dedicated `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` secret
- * rather than reusing another secret the way the old app's single
- * `SECRET_KEY` did.
- */
-export async function signWebhookToken(
-  signingKey: string,
-  storeHash: string,
-  clientId: string,
-): Promise<string> {
-  // Fail closed: an HMAC over an empty key is just as forgeable as one over a
-  // publicly known placeholder.
-  if (!signingKey) {
-    throw new Error("BIGCOMMERCE_WEBHOOK_SIGNING_KEY is not configured");
-  }
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(signingKey),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(`${storeHash}.${clientId}`),
-  );
-  return bytesToBase64(signature);
 }
 
 /**

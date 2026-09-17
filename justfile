@@ -87,6 +87,15 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# Uses the access token and webhook signing key from the environment's
+# 1Password item and the store/client ids from wrangler.toml; re-run it after
+# rotating BIGCOMMERCE_WEBHOOK_SIGNING_KEY. Flags: --dry-run; --origin URL
+# (default PUBLIC_BASE_URL); --cutover (production's card.losverd.es origin is
+# refused until then, since the legacy app's webhook lives there).
+# Create or update the store's order webhook, with the header the Worker checks
+bigcommerce-ensure-webhook env *flags:
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/bigcommerce-webhook.mjs {{ env }} {{ flags }}
+
 # Terraform tasks (see terraform/README.md for required vars/env)
 local_tf_cmd := f"""
 AWS_ACCESS_KEY_ID='op://Los Verdes/lv-card-losverd-es-github-workflows/access_key_id' \\
