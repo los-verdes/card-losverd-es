@@ -1,0 +1,382 @@
+/**
+ * Admin-only membership reports, replacing the legacy Google Data Studio
+ * report that read Cloud SQL directly (los-verdes/card-losverd-es#53).
+ * Server-rendered tables over `membership_orders`, each downloadable as CSV.
+ *
+ * Every response is `no-store`: these pages list members' names and emails.
+ */
+
+import { Hono } from "hono";
+import type { FC, PropsWithChildren } from "hono/jsx";
+import { toIsoSeconds } from "../bigcommerce/orders";
+import type { Env } from "../index";
+import { toCsv } from "../lib/csv";
+import { requireAdmin, type AuthEnv } from "../middleware/auth";
+import {
+  activeMemberships,
+  expiredMemberships,
+  listChannels,
+  ordersByMonth,
+  type MembershipOrderRow,
+  type ReportFilters,
+} from "./reportQueries";
+
+export const PAGE_SIZE = 100;
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const ORDER_CSV_COLUMNS = [
+  "order_id",
+  "first_name",
+  "last_name",
+  "order_email",
+  "member_email",
+  "created_on",
+  "expires_on",
+  "channel_name",
+  "source",
+  "status",
+] as const;
+
+class BadRequest extends Error {}
+
+/** A real calendar date in `YYYY-MM-DD` form, or null. */
+function parseDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+    ? value
+    : null;
+}
+
+interface ReportRequest {
+  /** `YYYY-MM-DD` as typed, or empty for "right now". */
+  asOfDate: string;
+  /** The instant the report is evaluated at. */
+  asOf: string;
+  filters: ReportFilters;
+  page: number;
+  csv: boolean;
+}
+
+/**
+ * A chosen date means the end of that day (UTC), so a membership bought that
+ * afternoon counts; no date means this very moment.
+ */
+function parseReportRequest(query: Record<string, string>, now: Date): ReportRequest {
+  const asOfDate = query.as_of ?? "";
+  if (asOfDate && !parseDate(asOfDate)) {
+    throw new BadRequest("as_of must be a date in YYYY-MM-DD form");
+  }
+  const page = query.page === undefined ? 1 : Number(query.page);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new BadRequest("page must be a positive whole number");
+  }
+  return {
+    asOfDate,
+    asOf: asOfDate ? `${asOfDate}T23:59:59Z` : toIsoSeconds(now),
+    filters: { search: query.q, channel: query.channel || undefined },
+    page,
+    csv: query.format === "csv",
+  };
+}
+
+/** The current report URL, filters kept, plus `changes` (a page number or format). */
+function withParams(
+  path: string,
+  req: ReportRequest,
+  changes: Record<string, string>,
+): string {
+  const params = new URLSearchParams();
+  const current: Record<string, string> = {
+    as_of: req.asOfDate,
+    q: req.filters.search?.trim() ?? "",
+    channel: req.filters.channel ?? "",
+    ...changes,
+  };
+  for (const [key, value] of Object.entries(current)) {
+    if (value) params.set(key, value);
+  }
+  return `${path}?${params.toString()}`;
+}
+
+const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid #ddd; white-space: nowrap";
+
+const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="robots" content="noindex" />
+      <title>{title} | Los Verdes Admin</title>
+    </head>
+    <body style="font-family: system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem">
+      <nav style="margin-bottom: 1rem">
+        <a href="/admin/reports">Reports</a>
+        {" · "}
+        <a href="/admin/reports/active">Active memberships</a>
+        {" · "}
+        <a href="/admin/reports/expired">Expired memberships</a>
+        {" · "}
+        <a href="/admin/reports/orders">Orders by month</a>
+        {" · "}
+        <a href="/">My card</a>
+      </nav>
+      <h1>{title}</h1>
+      {children}
+    </body>
+  </html>
+);
+
+const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> = ({
+  path,
+  req,
+  channels,
+}) => (
+  <form method="get" action={path} style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin: 1rem 0">
+    <label>
+      As of date (UTC; blank = now)
+      <br />
+      <input type="date" name="as_of" value={req.asOfDate} />
+    </label>
+    <label>
+      Name or email contains
+      <br />
+      <input type="search" name="q" value={req.filters.search ?? ""} />
+    </label>
+    <label>
+      Channel
+      <br />
+      <select name="channel">
+        <option value="">All</option>
+        {channels.map((channel) => (
+          <option value={channel} selected={channel === req.filters.channel}>
+            {channel}
+          </option>
+        ))}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+);
+
+const OrdersTable: FC<{ rows: MembershipOrderRow[] }> = ({ rows }) => (
+  <div style="overflow-x: auto">
+    <table style="border-collapse: collapse; font-size: 0.9rem">
+      <thead>
+        <tr>
+          {["Order", "Name", "Order email", "Member email", "Started", "Expires", "Channel", "Status"].map(
+            (heading) => (
+              <th style={cellStyle}>{heading}</th>
+            ),
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr>
+            <td style={cellStyle}>{row.order_id}</td>
+            <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+            <td style={cellStyle}>{row.order_email}</td>
+            <td style={cellStyle}>{row.member_email === row.order_email ? "" : row.member_email}</td>
+            <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
+            <td style={cellStyle}>{row.expires_on.slice(0, 10)}</td>
+            <td style={cellStyle}>{row.channel_name ?? row.source}</td>
+            <td style={cellStyle}>{row.status ?? ""}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+const Pager: FC<{ path: string; req: ReportRequest; total: number }> = ({ path, req, total }) => {
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  return (
+    <p>
+      Page {req.page} of {lastPage}
+      {req.page > 1 && (
+        <>
+          {" · "}
+          <a href={withParams(path, req, { page: String(req.page - 1) })}>Previous</a>
+        </>
+      )}
+      {req.page < lastPage && (
+        <>
+          {" · "}
+          <a href={withParams(path, req, { page: String(req.page + 1) })}>Next</a>
+        </>
+      )}
+      {" · "}
+      <a href={withParams(path, req, { format: "csv" })}>Download all {total} as CSV</a>
+    </p>
+  );
+};
+
+function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[]): Response {
+  const stamp = req.asOf.slice(0, 10);
+  return new Response(toCsv(ORDER_CSV_COLUMNS, rows), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${name}-${stamp}.csv"`,
+    },
+  });
+}
+
+const reports = new Hono<AuthEnv & { Bindings: Env }>();
+
+reports.use("*", requireAdmin);
+reports.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+});
+reports.onError((err, c) => {
+  if (err instanceof BadRequest) {
+    return c.text(`Bad Request: ${err.message}`, 400);
+  }
+  throw err;
+});
+
+reports.get("/", (c) =>
+  c.html(
+    <AdminPage title="Membership reports">
+      <ul>
+        <li>
+          <a href="/admin/reports/active">Active memberships</a>: every membership order in force today, or on
+          any past date.
+        </li>
+        <li>
+          <a href="/admin/reports/expired">Expired memberships</a>: members whose most recent membership has
+          lapsed.
+        </li>
+        <li>
+          <a href="/admin/reports/orders">Orders by month</a>: this year against last year.
+        </li>
+      </ul>
+    </AdminPage>,
+  ),
+);
+
+reports.get("/active", async (c) => {
+  const path = "/admin/reports/active";
+  const req = parseReportRequest(c.req.query(), new Date());
+  if (req.csv) {
+    const { rows } = await activeMemberships(c.env.DB, req.asOf, req.filters);
+    return csvResponse("active-memberships", req, rows);
+  }
+  const [result, channels] = await Promise.all([
+    activeMemberships(c.env.DB, req.asOf, req.filters, {
+      limit: PAGE_SIZE,
+      offset: (req.page - 1) * PAGE_SIZE,
+    }),
+    listChannels(c.env.DB),
+  ]);
+  return c.html(
+    <AdminPage title="Active memberships">
+      <p>Membership orders in force at the chosen moment. Cancelled, refunded, and test orders are left out.</p>
+      <FilterForm path={path} req={req} channels={channels} />
+      <p>
+        <strong>{result.totalMembers}</strong> members holding <strong>{result.totalOrders}</strong> orders, as of{" "}
+        {req.asOf}.
+      </p>
+      <OrdersTable rows={result.rows} />
+      <Pager path={path} req={req} total={result.totalOrders} />
+    </AdminPage>,
+  );
+});
+
+reports.get("/expired", async (c) => {
+  const path = "/admin/reports/expired";
+  const req = parseReportRequest(c.req.query(), new Date());
+  if (req.csv) {
+    const { rows } = await expiredMemberships(c.env.DB, req.asOf, req.filters);
+    return csvResponse("expired-memberships", req, rows);
+  }
+  const [result, channels] = await Promise.all([
+    expiredMemberships(c.env.DB, req.asOf, req.filters, {
+      limit: PAGE_SIZE,
+      offset: (req.page - 1) * PAGE_SIZE,
+    }),
+    listChannels(c.env.DB),
+  ]);
+  return c.html(
+    <AdminPage title="Expired memberships">
+      <p>
+        Members whose most recent membership had expired at the chosen moment, shown by that most recent order. A
+        member who renewed under a different email address is not listed.
+      </p>
+      <FilterForm path={path} req={req} channels={channels} />
+      <p>
+        <strong>{result.total}</strong> lapsed members, as of {req.asOf}.
+      </p>
+      <OrdersTable rows={result.rows} />
+      <Pager path={path} req={req} total={result.total} />
+    </AdminPage>,
+  );
+});
+
+reports.get("/orders", async (c) => {
+  const thisYear = new Date().getUTCFullYear();
+  const raw = c.req.query("year");
+  const year = raw === undefined || raw === "" ? thisYear : Number(raw);
+  if (!Number.isInteger(year) || year < 2000 || year > thisYear + 1) {
+    throw new BadRequest("year must be a four-digit year");
+  }
+  const months = await ordersByMonth(c.env.DB, year);
+  if (c.req.query("format") === "csv") {
+    return new Response(toCsv(["month", "orders", "previous_year_orders"], months), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="membership-orders-${year}.csv"`,
+      },
+    });
+  }
+  const total = months.reduce((sum, m) => sum + m.orders, 0);
+  const previousTotal = months.reduce((sum, m) => sum + m.previous_year_orders, 0);
+  return c.html(
+    <AdminPage title={`Membership orders, ${year}`}>
+      <p>
+        <a href={`/admin/reports/orders?year=${year - 1}`}>← {year - 1}</a>
+        {year < thisYear && (
+          <>
+            {" · "}
+            <a href={`/admin/reports/orders?year=${year + 1}`}>{year + 1} →</a>
+          </>
+        )}
+        {" · "}
+        <a href={`/admin/reports/orders?year=${year}&format=csv`}>Download as CSV</a>
+      </p>
+      <table style="border-collapse: collapse">
+        <thead>
+          <tr>
+            <th style={cellStyle}>Month (UTC)</th>
+            <th style={cellStyle}>{year}</th>
+            <th style={cellStyle}>{year - 1}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {months.map((m, i) => (
+            <tr>
+              <td style={cellStyle}>{MONTH_NAMES[i]}</td>
+              <td style={cellStyle}>{m.orders}</td>
+              <td style={cellStyle}>{m.previous_year_orders}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th style={cellStyle}>Total</th>
+            <th style={cellStyle}>{total}</th>
+            <th style={cellStyle}>{previousTotal}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </AdminPage>,
+  );
+});
+
+export default reports;
