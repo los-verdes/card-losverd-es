@@ -4,6 +4,7 @@ import {
   syncCustomersEtl,
   syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
+  type SubscriptionsEtlCursor,
 } from "../bigcommerce/sync";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 
@@ -15,7 +16,12 @@ import { runSlackMembersEtl } from "../slack/membersEtl";
  */
 export type EtlSyncMessage =
   | { type: "sync_bigcommerce_order"; orderId: string; storeHash: string }
-  | { type: "sync_subscriptions_etl"; loadAll?: boolean }
+  | {
+      type: "sync_subscriptions_etl";
+      loadAll?: boolean;
+      /** Set only on a resync chain's follow-up messages; without it, a new chain starts. */
+      cursor?: SubscriptionsEtlCursor;
+    }
   | { type: "sync_customers_etl" }
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" };
@@ -36,9 +42,22 @@ async function dispatchEtlSyncMessage(
     case "sync_bigcommerce_order":
       await syncBigCommerceOrder(env, message.storeHash, message.orderId);
       return;
-    case "sync_subscriptions_etl":
-      await syncSubscriptionsEtl(env, { loadAll: message.loadAll });
+    case "sync_subscriptions_etl": {
+      const { next } = await syncSubscriptionsEtl(env, {
+        loadAll: message.loadAll,
+        cursor: message.cursor,
+      });
+      // Only once the slice has succeeded: a failed slice is retried as a
+      // whole instead of the chain moving past it.
+      if (next) {
+        await enqueueEtlSync(env, {
+          type: "sync_subscriptions_etl",
+          loadAll: message.loadAll,
+          cursor: next,
+        });
+      }
       return;
+    }
     case "sync_customers_etl":
       await syncCustomersEtl(env);
       return;
