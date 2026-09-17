@@ -44,6 +44,13 @@ async function countMembers(): Promise<number> {
   return row?.count ?? 0;
 }
 
+/** New members get a random id (#66). */
+const MEMBER_ID_PATTERN = /^LV-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function memberIdFor(email: string): Promise<string> {
+  return (await getMemberByEmail(email))!.member_id;
+}
+
 async function clearMembershipTables() {
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
@@ -229,7 +236,6 @@ describe("deriveMembershipState", () => {
 
 describe("refreshMemberFromOrders", () => {
   const fallback = {
-    customerId: 42,
     firstName: "Fallback",
     lastName: "Name",
     membershipTier: "fallback-tier",
@@ -269,14 +275,12 @@ describe("refreshMemberFromOrders", () => {
     await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
     await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-01-15", lastName: "Doe-Smith" });
 
-    expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toEqual({
-      memberId: "BC-42",
-      passChanged: true,
-    });
+    const result = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+    expect(result).toEqual({ memberId: expect.stringMatching(MEMBER_ID_PATTERN), passChanged: true });
 
     const member = await getMemberByEmail("jane.doe@example.com");
     expect(member).toMatchObject({
-      member_id: "BC-42",
+      member_id: result?.memberId,
       first_name: "Jane",
       last_name: "Doe-Smith",
       membership_tier: "standard",
@@ -294,7 +298,7 @@ describe("refreshMemberFromOrders", () => {
     const first = await getMemberByEmail("jane.doe@example.com");
     const second = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
-    expect(second).toEqual({ memberId: "BC-42", passChanged: false });
+    expect(second).toEqual({ memberId: first?.member_id, passChanged: false });
     expect(await countMembers()).toBe(1);
     expect((await getMemberByEmail("jane.doe@example.com"))?.auth_token).toBe(first?.auth_token);
   });
@@ -303,7 +307,7 @@ describe("refreshMemberFromOrders", () => {
     await insertMember("LV-10023", "jane.doe@example.com", { expirationDate: "2026-06-01" });
     await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
 
-    await refreshMemberFromOrders(env, "jane.doe@example.com", { ...fallback, customerId: 999 });
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
     expect(await countMembers()).toBe(1);
     const member = await getMemberByEmail("jane.doe@example.com");
@@ -355,11 +359,11 @@ describe("refreshMemberFromOrders", () => {
     await setOrderStatus("1_bc", "Refunded");
 
     expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toEqual({
-      memberId: "BC-42",
+      memberId: before?.member_id,
       passChanged: true,
     });
     expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
-      member_id: "BC-42",
+      member_id: before?.member_id,
       auth_token: before?.auth_token,
       first_name: "Jane",
       membership_tier: "standard",
@@ -419,26 +423,33 @@ describe("refreshMemberFromOrders", () => {
     expect((await getMemberByEmail("jane.doe@example.com"))?.status).toBe("active");
   });
 
-  it("ON CONFLICT(member_id): takes over a BC-{customerId} row left under an old email", async () => {
-    // Same member_id the insert will generate (BC-42) but another email, so
-    // the email lookup misses and the INSERT hits the conflict.
-    await insertMember("BC-42", "old.address@example.com", {
-      status: "revoked",
-      expirationDate: "2099-06-01",
-      memberSince: "2018-03-01",
-    });
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
+  it("gives each new member their own id, even when their orders share a BigCommerce customer id", async () => {
+    // Guest checkouts all have customer_id 0, and a gifted order carries the
+    // buyer's; neither may make two people share a pass serial (#66).
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-02-15", email: "gift.recipient@example.com" });
 
-    expect((await refreshMemberFromOrders(env, "jane.doe@example.com", fallback))?.memberId).toBe("BC-42");
+    const buyer = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+    const recipient = await refreshMemberFromOrders(env, "gift.recipient@example.com", fallback);
+
+    expect(await countMembers()).toBe(2);
+    expect(buyer?.memberId).toEqual(expect.stringMatching(MEMBER_ID_PATTERN));
+    expect(recipient?.memberId).toEqual(expect.stringMatching(MEMBER_ID_PATTERN));
+    expect(recipient?.memberId).not.toBe(buyer?.memberId);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2099-01-15");
+  });
+
+  it("converges on one row when two refreshes of the same new member overlap", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    const results = await Promise.all([
+      refreshMemberFromOrders(env, "jane.doe@example.com", fallback),
+      refreshMemberFromOrders(env, "jane.doe@example.com", fallback),
+    ]);
 
     expect(await countMembers()).toBe(1);
-    expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
-      member_id: "BC-42",
-      auth_token: "pre-existing-token",
-      status: "active",
-      expiration_date: "2091-01-15",
-      member_since: "2090-01-15",
-    });
+    const memberId = await memberIdFor("jane.doe@example.com");
+    expect(results.map((r) => r?.memberId)).toEqual([memberId, memberId]);
   });
 });
 
@@ -571,7 +582,7 @@ describe("syncBigCommerceOrder", () => {
 
     const member = await getMemberByEmail("jane.doe@example.com");
     expect(member).not.toBeNull();
-    expect(member?.member_id).toBe("BC-42");
+    expect(member?.member_id).toEqual(expect.stringMatching(MEMBER_ID_PATTERN));
     expect(member?.membership_tier).toBe("standard");
     // order.date_created (2026-01-15) + 365 days
     expect(member?.expiration_date).toBe("2027-01-15");
@@ -962,7 +973,6 @@ describe("pass-change detection and update pushes", () => {
   });
 
   const fallback = {
-    customerId: 42,
     firstName: "Jane",
     lastName: "Doe",
     membershipTier: "standard",
@@ -975,7 +985,7 @@ describe("pass-change detection and update pushes", () => {
   it("reports a new member as changed", async () => {
     await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
 
-    expect(await refresh()).toEqual({ memberId: "BC-42", passChanged: true });
+    expect(await refresh()).toEqual({ memberId: expect.stringMatching(MEMBER_ID_PATTERN), passChanged: true });
   });
 
   it("doesn't rewrite (or bump last_updated_at on) a member whose pass-visible fields are unchanged", async () => {
@@ -983,7 +993,7 @@ describe("pass-change detection and update pushes", () => {
     await refresh();
     await env.DB.exec("UPDATE members SET last_updated_at = 123");
 
-    expect(await refresh()).toEqual({ memberId: "BC-42", passChanged: false });
+    expect(await refresh()).toEqual({ memberId: await memberIdFor("jane.doe@example.com"), passChanged: false });
     expect((await getMemberByEmail("jane.doe@example.com"))?.last_updated_at).toBe(123);
   });
 
@@ -1034,7 +1044,7 @@ describe("pass-change detection and update pushes", () => {
   it("syncBigCommerceOrder pushes a pass update to registered devices when the pass changed", async () => {
     await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
     await refresh();
-    await registerDevice("BC-42");
+    await registerDevice(await memberIdFor("jane.doe@example.com"));
     const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
     const apnsCalls = mockOrderAndApns(renewal);
 
@@ -1048,7 +1058,7 @@ describe("pass-change detection and update pushes", () => {
     const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
     mockOrderAndApns(renewal);
     await syncBigCommerceOrder(env, "store123", renewal.id);
-    await registerDevice("BC-42");
+    await registerDevice(await memberIdFor("jane.doe@example.com"));
     vi.restoreAllMocks();
     const apnsCalls = mockOrderAndApns({ ...renewal, status: "Refunded" });
 
@@ -1062,7 +1072,7 @@ describe("pass-change detection and update pushes", () => {
     const order = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
     mockOrderAndApns(order);
     await syncBigCommerceOrder(env, "store123", order.id);
-    await registerDevice("BC-42");
+    await registerDevice(await memberIdFor("jane.doe@example.com"));
     vi.restoreAllMocks();
     const apnsCalls = mockOrderAndApns(order);
 

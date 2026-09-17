@@ -97,7 +97,7 @@ deliver them chronologically.
 
 | `members` column | Source | Notes |
 | :--- | :--- | :--- |
-| `member_id` | `BC-{customer_id}` if inserting a brand-new row | Stable, deterministic, regenerable from BigCommerce alone — satisfies Phase 2.2's "resync can always repair drift." If a row is matched by email instead (see below), the **existing** `member_id` is preserved rather than overwritten: it's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so a later resync must never change it. |
+| `member_id` | A random `LV-{uuid}` if inserting a brand-new row | It's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so it must identify exactly one member and never change: a row matched by email keeps its **existing** `member_id`. Not derived from the BigCommerce customer id (#66): guest checkouts all have `customer_id` 0, and an order attributed to someone else carries the buyer's. Rows are always found by email, so the id never needs to be reproducible. |
 | `first_name` / `last_name` | Billing name on the member's latest counted order | Same field the Python `insert_order_as_membership()` uses. Falls back to the stored name (or, for a new row, the synced order's) when that order has none, e.g. a Squarespace-era row. |
 | `email` | `membership_orders.member_email` (lower-cased; the billing email unless re-pointed) | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
 | `membership_tier` | SKU of the member's latest counted order, via `MEMBERSHIP_SKU_TIER_MAP` | The Python app treats membership as effectively single-tier (`BIGCOMMERCE_MEMBERSHIP_SKUS`, default `LOSV-MEM-0001`); the D1 schema comment already anticipates more (`standard`, `los-pringles`, `cut-crew`), so this design introduces an explicit SKU→tier map (a plain object literal for now) rather than assuming one SKU. An order with no matching SKU is not a membership order and is skipped (ack'd, no D1 write) — mirrors the Python ETL's `ignored_line_items` filtering. Unknown SKUs in the history (Squarespace-era rows) fall back like the name. |
@@ -112,20 +112,15 @@ A member whose orders all stop counting (every one refunded, say) keeps their
 row -- and so their `member_id`, auth token, and device registrations, should
 they buy again -- with a `NULL` expiration, so their card is no longer
 current. No row is created for an email with no counted orders.
-**Upsert strategy:** look up the existing row by `email` first (the
-natural join key with any member row that predates this sync, e.g. one
-created before the member's BigCommerce customer id was known), falling back to `member_id = BC-{customerId}`
-if no email match exists yet. Update in place if found (preserving
-`member_id`, `auth_token`, `created_at`); otherwise insert a new row. This
-is two sequential D1 statements (`SELECT` then `UPDATE`/`INSERT`), not a
-single `INSERT ... ON CONFLICT`, specifically so the match-by-email path
-works — SQLite's `ON CONFLICT` only fires on a declared constraint (here,
-`member_id` or the `email` unique index individually), and we need
-"resolve to whichever row already exists, by either key" semantics that a
-single `ON CONFLICT` clause can't express cleanly across two different
-candidate keys. Running the same order through this path any number of
-times converges to the same row — the idempotency property the tests in
-§4 assert directly.
+
+**Upsert strategy:** members are keyed by `email`. Look up the existing row
+by email; update it in place if found (preserving `member_id`, `auth_token`,
+`created_at`), otherwise insert a new row with a random `member_id`. The
+insert carries `ON CONFLICT(email) DO UPDATE`, so if two syncs for the same
+new member overlap between the lookup and the insert, the row that got there
+first keeps its id and token and takes the same derived state. Running the
+same order through this path any number of times converges to the same row --
+the idempotency property the tests in §4 assert directly.
 
 ## 3. Integration with the `etl-sync` queue
 

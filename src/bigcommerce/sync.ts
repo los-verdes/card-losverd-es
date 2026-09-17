@@ -248,7 +248,6 @@ export function deriveMembershipState(
 
 /** Identity fields from the order being synced, used where the history doesn't say. */
 export interface MemberFallback {
-  customerId: number;
   firstName: string;
   lastName: string;
   membershipTier: string;
@@ -273,8 +272,7 @@ export interface MemberUpsertResult {
  *
  * Matches by `email` first (the natural join key with any member row that
  * predates this sync, whose `member_id` must be preserved). Falls back to
- * inserting a new row keyed by a deterministic `BC-{customerId}` id when no
- * match exists. Never touches `auth_token` or `created_at` on an update -
+ * inserting a new row with a random id when no match exists. Never touches `auth_token` or `created_at` on an update -
  * those represent Apple/Google Wallet pass state that sync code must never
  * regenerate.
  *
@@ -349,26 +347,29 @@ export async function refreshMemberFromOrders(
 
   if (state.expirationDate === null) return null;
 
-  const memberId = `BC-${fallback.customerId}`;
+  // Random rather than derived from BigCommerce: `member_id` is the pass
+  // serial and the Google Wallet object id, and a customer id doesn't identify
+  // one member (guest checkouts all have customer_id 0; a gifted order carries
+  // the buyer's). Rows are always found by email, so it never needs to be
+  // reproducible (#66).
+  const memberId = `LV-${crypto.randomUUID()}`;
   const authToken = crypto.randomUUID();
-  // ON CONFLICT is a safety net for a `BC-{customerId}` row that exists under
-  // another email (the customer changed their email address) or the TOCTOU
-  // gap between the SELECT above and this INSERT - etl-sync's queue
-  // concurrency is capped at 1 (Phase 2.5.1) to make the latter rare, not
-  // impossible. `state` was derived from this email's history, so it simply
-  // replaces what the row held.
-  await env.DB.prepare(
+  // ON CONFLICT(email) covers the gap between the SELECT above and this INSERT
+  // (etl-sync's queue concurrency of 1 makes it rare, not impossible): the row
+  // that got there first keeps its member_id and auth token, and takes this
+  // state, which was derived from the same email's history.
+  const inserted = await env.DB.prepare(
     `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(member_id) DO UPDATE SET
+     ON CONFLICT(email) DO UPDATE SET
        first_name = excluded.first_name,
        last_name = excluded.last_name,
-       email = excluded.email,
        membership_tier = excluded.membership_tier,
        status = excluded.status,
        expiration_date = excluded.expiration_date,
        member_since = excluded.member_since,
-       last_updated_at = excluded.last_updated_at`,
+       last_updated_at = excluded.last_updated_at
+     RETURNING member_id`,
   )
     .bind(
       memberId,
@@ -382,10 +383,10 @@ export async function refreshMemberFromOrders(
       authToken,
       now,
     )
-    .run();
+    .first<{ member_id: string }>();
   // A brand-new member has no installed passes yet; this is only `true` so
   // the rare ON CONFLICT update above is never silently missed.
-  return { memberId, passChanged: true };
+  return { memberId: inserted!.member_id, passChanged: true };
 }
 
 /**
@@ -406,7 +407,6 @@ async function applyMembershipOrder(
     membership.product,
   );
   const result = await refreshMemberFromOrders(env, memberEmail, {
-    customerId: order.customer_id,
     firstName: order.billing_address.first_name,
     lastName: order.billing_address.last_name,
     membershipTier: membership.tier,
