@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../index";
+import { bytesToBase64 } from "../lib/base64";
 import { timingSafeEqual } from "../lib/timingSafeEqual";
 import { enqueueEtlSync } from "../queues/etlSync";
 
@@ -9,14 +10,6 @@ interface BigCommerceWebhookPayload {
   producer: string;
   scope: string;
   store_id: string | number;
-}
-
-function bytesToBase64(bytes: ArrayBuffer): string {
-  let binary = "";
-  for (const byte of new Uint8Array(bytes)) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
 }
 
 /**

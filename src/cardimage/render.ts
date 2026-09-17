@@ -20,6 +20,7 @@ import YOGA_WASM from 'satori/yoga.wasm';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
 import RESVG_WASM from '@resvg/resvg-wasm/index_bg.wasm';
 import bungeeFontData from './assets/bungee-latin-400-normal.woff';
+import { bytesToBase64 } from '../lib/base64';
 import { formatShortDate } from '../lib/dateFormat';
 import { buildQrCodeImage } from './qr';
 import { buildCardTree, CARD_WIDTH, CARD_HEIGHT, type MembershipCardMember } from './template';
@@ -40,17 +41,6 @@ function ensureYogaInitialized(): Promise<void> {
     yogaInitPromise = initYoga(YOGA_WASM as unknown as WebAssembly.Module);
   }
   return yogaInitPromise;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  // Chunk to avoid blowing the call stack on `String.fromCharCode(...bytes)`
-  // for larger images.
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
 }
 
 /**

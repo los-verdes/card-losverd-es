@@ -40,6 +40,7 @@ import {
   buildGoogleWalletSaveUrl,
   getApplePassBundle,
   getMemberByEmail,
+  isGoogleWalletConfigured,
   isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
@@ -175,6 +176,8 @@ interface CardEmailProps {
   expirationDate: string;
   googleWalletUrl: string | null;
   submittedOn: string;
+  /** The site's public origin (`PUBLIC_BASE_URL`), no trailing slash. */
+  baseUrl: string;
 }
 
 const CardEmail: FC<CardEmailProps> = (props) => (
@@ -202,14 +205,15 @@ const CardEmail: FC<CardEmailProps> = (props) => (
         )}
       </ul>
       <p>
-        Visit online at <a href="https://card.losverd.es">card.losverd.es</a>
+        Visit online at{" "}
+        <a href={props.baseUrl}>{new URL(props.baseUrl).host}</a>
       </p>
       <p style="font-size: 0.8em; color: #393939">
         This Los Verdes digital membership card is intended for {props.name}. If
         you are not {props.name}, please feel free to delete this email or
         contact <a href="mailto:support@losverd.es">support@losverd.es</a> for
         assistance. This email was requested via a form submission made at
-        https://card.losverd.es/email-card at: {props.submittedOn}.
+        {props.baseUrl}/email-card at: {props.submittedOn}.
       </p>
     </body>
   </html>
@@ -235,11 +239,11 @@ function cardEmailText(props: CardEmailProps): string {
       ? [`- Google Wallet: ${props.googleWalletUrl}`]
       : []),
     "",
-    "Visit online at: https://card.losverd.es",
+    `Visit online at: ${props.baseUrl}`,
     "",
     `This Los Verdes digital membership card is intended for ${props.name}.`,
     `If you are not ${props.name}, please feel free to delete this email or contact support@losverd.es for assistance.`,
-    `This email was requested via a form submission made at https://card.losverd.es/email-card at: ${props.submittedOn}.`,
+    `This email was requested via a form submission made at ${props.baseUrl}/email-card at: ${props.submittedOn}.`,
   ].join("\n");
 }
 
@@ -248,10 +252,7 @@ async function googleWalletLink(
   env: Env,
   member: MemberRecord,
 ): Promise<string | null> {
-  if (
-    !env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL ||
-    !env.GOOGLE_WALLET_PRIVATE_KEY_PEM
-  ) {
+  if (!isGoogleWalletConfigured(env)) {
     return null;
   }
   try {
@@ -305,6 +306,7 @@ export async function deliverCardByEmail(
       expirationDate: member.expiration_date!,
       googleWalletUrl,
       submittedOn,
+      baseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ""),
     };
     await sendEmail(env.SENDGRID_API_KEY, {
       from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },

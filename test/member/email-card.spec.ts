@@ -234,6 +234,22 @@ describe("POST /email-card", () => {
       expect(sentMessages(fetchSpy)[0]).not.toHaveProperty("asm");
     });
 
+    it("links back to PUBLIC_BASE_URL rather than a hardcoded production origin", async () => {
+      env.PUBLIC_BASE_URL = "https://staging.example.test/";
+      const fetchSpy = mockUpstreams();
+
+      await submitEmail("jane@example.com");
+
+      const [text, html] = sentMessages(fetchSpy)[0].content as { value: string }[];
+      expect(text.value).toContain("Visit online at: https://staging.example.test\n");
+      expect(text.value).toContain("made at https://staging.example.test/email-card at:");
+      expect(html.value).toContain('<a href="https://staging.example.test">staging.example.test</a>');
+      expect(html.value).toContain("https://staging.example.test/email-card at:");
+      for (const part of [text.value, html.value]) {
+        expect(part).not.toContain("card.losverd.es");
+      }
+    });
+
     it("escapes member-provided text in the HTML body", async () => {
       await env.DB.exec("UPDATE members SET first_name = '<script>x</script>' WHERE member_id = 'BC-1'");
       const fetchSpy = mockUpstreams();
