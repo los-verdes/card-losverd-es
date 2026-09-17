@@ -33,3 +33,17 @@ local files that will never be committed.
 Use obviously synthetic values that keep the real format: `example.com`
 addresses, invented names, a 24-character hex string for a Squarespace order
 id, `1001_bc` for a BigCommerce order key.
+
+## Write in the project's collective voice
+
+This repository, its issues and its pull requests are read by whoever picks
+the project up next. Write them as project records, not as messages to a
+person:
+
+- Record a decision and its date -- "BigCommerce orders count only when paid
+  (decided 2026-09-17)" -- rather than who made it.
+- Don't name individuals in code comments, docs, commit messages, PR
+  descriptions, or issues, and don't address a reader as "you" there.
+- Use "we" for the project ("the rule we settled on"), or plain statements of
+  fact. Second person is fine in member-facing copy, where "your card" means
+  the reader's own membership.
