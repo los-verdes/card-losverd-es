@@ -49,14 +49,24 @@ Squarespace):
 
 ### What counts as a membership
 
-Reports leave out Squarespace test orders and any order whose status is
-`canceled`, `cancelled`, `refunded`, or `declined` (case-insensitive;
-`VOID_STATUSES` in `src/lib/membershipOrders.ts`). The legacy app only
-excluded Squarespace's `CANCELED`.
+Test orders never count. Otherwise the rule is per store, because the two
+don't mean the same things by their statuses (`src/lib/membershipOrders.ts`,
+decided with Jeff 2026-09-17):
 
-Membership cards use the same rule: the `members` sync derives each card from
-the member's counted orders, so a refunded or cancelled order doesn't yield a
-card (see [`bigcommerce-ingestion.md`](bigcommerce-ingestion.md) section 2).
+* **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,
+  `Awaiting Shipment`, `Completed`, or `Shipped`. An `Incomplete`,
+  `Pending` or `Awaiting Payment` order gets no card and no report row, and
+  neither does a `Refunded`, `Cancelled`, `Declined`, `Disputed` or
+  `Partially Refunded` one.
+* **Squarespace-era orders** are closed history with their own vocabulary
+  (`FULFILLED`, `PENDING`, `CANCELED`), where `PENDING` means paid but not
+  yet shipped, and many rows have no status at all. They keep the legacy
+  app's rule: everything counts except a cancelled order. Applying
+  BigCommerce's list to them would silently drop real historical members.
+
+Membership cards use the same rule as the reports: the `members` sync derives
+each card from the member's counted orders (see
+[`bigcommerce-ingestion.md`](bigcommerce-ingestion.md) section 2).
 
 ## The pages (`/admin/reports`)
 
