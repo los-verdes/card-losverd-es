@@ -279,7 +279,7 @@ describe("GET /admin/reports/slack", () => {
     expect(body).toContain("&lt;img src=x&gt;");
     expect(body).not.toContain("<img src=x>");
     expect(body).toContain("Slack users with no membership orders (1)");
-    expect(body).toContain('href="/admin/reports/slack?table=slack-without-orders&amp;format=csv">Download all 1 as CSV');
+    expect(body).toContain('href="/admin/reports/slack?table=users-without-orders&amp;format=csv">Download all 1 as CSV');
     expect(body).not.toContain("Showing the first");
   });
 
@@ -298,7 +298,7 @@ describe("GET /admin/reports/slack", () => {
     }
 
     const body = await (await get("/admin/reports/slack")).text();
-    const csv = await (await get("/admin/reports/slack?table=slack-without-orders&format=csv")).text();
+    const csv = await (await get("/admin/reports/slack?table=users-without-orders&format=csv")).text();
 
     expect(body).toContain(`Slack users with no membership orders (${PAGE_SIZE + 2})`);
     expect(body).toContain(`Showing the first ${PAGE_SIZE}.`);
@@ -309,10 +309,10 @@ describe("GET /admin/reports/slack", () => {
   });
 
   it("downloads one table as CSV, with that table's columns", async () => {
-    const res = await get("/admin/reports/slack?table=slack-without-orders&format=csv");
+    const res = await get("/admin/reports/slack?table=users-without-orders&format=csv");
 
     expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
-    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="slack-slack-without-orders-2026-06-01.csv"');
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="slack-users-without-orders-2026-06-01.csv"');
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect((await res.text()).split("\r\n").slice(0, 2)).toEqual(["email,slack_id,slack_name", "guest@example.com,U03GUEST,'=HYPERLINK(1)"]);
 

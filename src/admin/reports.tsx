@@ -67,7 +67,7 @@ const SLACK_TABLES: {
   { key: "current-in-slack", field: "currentInSlack", title: "Current members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
   { key: "current-not-in-slack", field: "currentNotInSlack", title: "Current members not in Slack", columns: MEMBER_COLUMNS },
   { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
-  { key: "slack-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS] },
+  { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS] },
 ];
 
 class BadRequest extends Error {}
