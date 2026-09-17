@@ -45,8 +45,7 @@ export const WORKER_SECRETS = [
   "GOOGLE_WALLET_PRIVATE_KEY_PEM",
   // Email card delivery
   "SENDGRID_API_KEY",
-  "TURNSTILE_SECRET_KEY",
-  "TURNSTILE_SITE_KEY",
+  "TURNSTILE_SECRET_KEY", // TURNSTILE_SITE_KEY is public: a plain var in wrangler.toml
   // Slack members sync
   "SLACK_BOT_TOKEN",
 ];
