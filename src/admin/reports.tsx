@@ -320,7 +320,7 @@ reports.get("/active", async (c) => {
   ]);
   return c.html(
     <AdminPage title="Active memberships">
-      <p>Membership orders in force at the chosen moment. Cancelled, refunded, and test orders are left out.</p>
+      <p>Membership orders in force at the chosen moment. Unpaid, cancelled, refunded, and test orders are left out.</p>
       <FilterForm path={path} req={req} channels={channels} />
       <p>
         <strong>{result.totalMembers}</strong> members holding <strong>{result.totalOrders}</strong> orders, as of{" "}
@@ -445,7 +445,7 @@ reports.get("/slack", async (c) => {
   return c.html(
     <AdminPage title="Slack cross-reference">
       <p>
-        Members matched to Slack accounts by email, as of {asOf}. Cancelled, refunded, and test orders are left out;
+        Members matched to Slack accounts by email, as of {asOf}. Unpaid, cancelled, refunded, and test orders are left out;
         so are deactivated Slack accounts, bots, and accounts without an email. A member who joined Slack under a
         different address shows as not in Slack.
       </p>

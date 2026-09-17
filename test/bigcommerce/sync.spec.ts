@@ -62,7 +62,7 @@ function makeOrder(
   return {
     id: 1001,
     customer_id: 42,
-    status: "Complete",
+    status: "Completed",
     date_created: "2026-01-15T00:00:00.000Z",
     date_modified: "2026-01-15T00:00:00.000Z",
     billing_address: {
@@ -337,6 +337,40 @@ describe("refreshMemberFromOrders", () => {
     const member = await getMemberByEmail("jane.doe@example.com");
     expect(member?.member_since).toBe("2090-01-15");
     expect(member?.expiration_date).toBe("2091-01-15");
+  });
+
+  // Jeff, 2026-09-17: an unpaid BigCommerce order gets no card.
+  it.each([
+    ["Awaiting Fulfillment", "2099-01-15"],
+    ["Awaiting Shipment", "2099-01-15"],
+    ["Completed", "2099-01-15"],
+    ["Shipped", "2099-01-15"],
+    ["Incomplete", null],
+    ["Pending", null],
+    ["Awaiting Payment", null],
+    ["Partially Refunded", null],
+    ["Disputed", null],
+  ])("a BigCommerce %s order gives an expiration of %s", async (status, expiration) => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15", status });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date ?? null).toBe(expiration);
+  });
+
+  // Squarespace-era history keeps the legacy rule: its PENDING means paid but
+  // unshipped, and many rows have no status at all.
+  it.each([
+    ["FULFILLED", "2099-01-15"],
+    ["PENDING", "2099-01-15"],
+    [null, "2099-01-15"],
+    ["CANCELED", null],
+  ])("a Squarespace-era %s order gives an expiration of %s", async (status, expiration) => {
+    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", status });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date ?? null).toBe(expiration);
   });
 
   it("rolls a synced renewal back once it is refunded", async () => {

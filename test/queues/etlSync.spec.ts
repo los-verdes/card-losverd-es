@@ -74,7 +74,7 @@ describe("handleEtlSyncBatch", () => {
     const order = {
       id: 4242,
       customer_id: 7,
-      status: "Complete",
+      status: "Completed",
       date_created: "2026-01-15T00:00:00.000Z",
       date_modified: "2026-01-15T00:00:00.000Z",
       billing_address: {
@@ -145,7 +145,7 @@ describe("handleEtlSyncBatch", () => {
             const orders = Array.from({ length: ORDERS_PAGE_SIZE }, (_, i) => ({
               id: i + 1,
               customer_id: 7,
-              status: "Complete",
+              status: "Completed",
               date_created: "2026-01-15T00:00:00.000Z",
               date_modified: "2026-01-15T00:00:00.000Z",
               billing_address: {
