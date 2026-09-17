@@ -17,4 +17,5 @@ jobs:
       - run: npm ci
       - run: just typecheck
       - run: just lint
+      - run: just check-wrangler-envs
       - run: just test-coverage

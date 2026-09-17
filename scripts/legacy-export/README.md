@@ -48,11 +48,11 @@ workflow does this on merge).
 
 ```bash
 # local rehearsal
-npx wrangler d1 migrations apply card-losverd-es-db --local
-npx wrangler d1 execute card-losverd-es-db --local --file .legacy-export/import.sql
+npx wrangler d1 migrations apply card-losverd-es-db-production --local
+npx wrangler d1 execute card-losverd-es-db-production --local --file .legacy-export/import.sql
 
 # real
-npx wrangler d1 execute card-losverd-es-db --remote --file .legacy-export/import.sql
+npx wrangler d1 execute card-losverd-es-db-production --remote --file .legacy-export/import.sql
 ```
 
 The import only writes the two tables above; it never modifies `members`.
@@ -63,7 +63,7 @@ date. Re-running the import never overwrites a `manual` override.
 ## 4. Spot-check
 
 ```bash
-npx wrangler d1 execute card-losverd-es-db --remote --command \
+npx wrangler d1 execute card-losverd-es-db-production --remote --command \
   "SELECT (SELECT COUNT(*) FROM member_since_overrides WHERE source = 'legacy_postgres') AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM member_since_overrides) AS earliest"
 ```
 
@@ -76,7 +76,7 @@ Any member's date can be set or corrected directly. A `manual` override
 always wins, including over a later re-import:
 
 ```bash
-npx wrangler d1 execute card-losverd-es-db --remote --command \
+npx wrangler d1 execute card-losverd-es-db-production --remote --command \
   "INSERT INTO member_since_overrides (email, member_since, source, note) VALUES ('jane@example.com', '2016-03-01', 'manual', 'founding member') ON CONFLICT(email) DO UPDATE SET member_since = excluded.member_since, source = 'manual', note = excluded.note, updated_at = unixepoch('subsec') * 1000"
 ```
 

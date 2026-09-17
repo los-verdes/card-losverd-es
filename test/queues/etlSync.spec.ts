@@ -24,7 +24,7 @@ function makeBatch(
   messages: Message<EtlSyncMessage>[],
 ): MessageBatch<EtlSyncMessage> {
   return {
-    queue: "etl-sync",
+    queue: "etl-sync-production",
     messages,
     ackAll: vi.fn(),
     retryAll: vi.fn(),
