@@ -28,12 +28,11 @@ import {
   renderCardImage,
   type MemberRecord,
 } from "./artifacts";
-import { Page } from "./layout";
+import { Page, SUPPORT_EMAIL } from "./layout";
 
 // The membership store the legacy no-membership page links to.
 export const MEMBERSHIP_STORE_URL =
   "https://store.losverdesatx.org/membership/";
-const SUPPORT_EMAIL = "merchteam@losverdesatx.org";
 
 type CurrentMember = MemberRecord & { expiration_date: string };
 
