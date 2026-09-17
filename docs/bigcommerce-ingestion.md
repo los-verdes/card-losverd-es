@@ -47,6 +47,12 @@ to Workers:
      webhook subscription recreated with the new token at cutover (Phase
      8) — it cannot be carried over from GCP's `SECRET_KEY` since that
      value is being retired entirely.
+   - **Registration:** `just bigcommerce-ensure-webhook <env>`
+     (`scripts/bigcommerce-webhook.mjs`, a port of the legacy
+     `ensure-order-webhook` command) creates or updates the store's
+     `store/order/*` webhook with the header. It computes the token with
+     the Worker's own `src/bigcommerce/webhookToken.ts` (Node imports the
+     TypeScript directly), so registration and verification can't drift.
    - Deferred: real verification against a live secret. There's no
      BigCommerce sandbox store or webhook subscription available in this
      environment, so `sync.spec.ts`/`routes.spec.ts` exercise the HMAC

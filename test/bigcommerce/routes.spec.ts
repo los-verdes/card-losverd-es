@@ -1,9 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  signWebhookToken,
-  verifyWebhookAuthorization,
-} from "../../src/bigcommerce/routes";
+import { verifyWebhookAuthorization } from "../../src/bigcommerce/routes";
+import { signWebhookToken } from "../../src/bigcommerce/webhookToken";
 import type { EtlSyncMessage } from "../../src/queues/etlSync";
 
 // The route validates the webhook's `producer` field against
@@ -38,6 +36,13 @@ async function validAuthHeader(): Promise<string> {
 const PURE_FN_TEST_STORE_HASH = "store123";
 
 describe("signWebhookToken / verifyWebhookAuthorization", () => {
+  it("matches an independently computed token (the value scripts/bigcommerce-webhook.mjs registers)", async () => {
+    // printf 'abc123store.synthetic-client-id' | openssl dgst -sha256 -hmac synthetic-key-123 -binary | base64
+    expect(await signWebhookToken("synthetic-key-123", "abc123store", "synthetic-client-id")).toBe(
+      "NoZNOiN8pfIT1m0ZpBPPzxhgS6BciLr4cOg1VxgsfK0=",
+    );
+  });
+
   it("verifies a token signed with the same key/store/client", async () => {
     const token = await signWebhookToken(
       "test-signing-key",
