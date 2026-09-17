@@ -87,10 +87,11 @@ export interface Env {
   // Email card delivery (src/member/email-card.tsx). SENDGRID_API_KEY and
   // TURNSTILE_SECRET_KEY are secrets, set via `wrangler secret put` with no
   // wrangler.toml placeholders (same convention as SESSION_SIGNING_KEY).
-  // TURNSTILE_SITE_KEY isn't secret, but has no legacy value (the legacy
-  // form used reCAPTCHA): add it to wrangler.toml `[vars]` once a Turnstile
-  // widget exists for card.losverd.es. Until all three are set, /email-card
-  // fails closed with a "temporarily unavailable" page.
+  // TURNSTILE_SITE_KEY isn't secret (it's rendered into the form), so it's a
+  // wrangler.toml `[vars]` entry -- one widget per environment, since a widget
+  // only answers for its own hostnames. Production's is still empty, awaiting
+  // a widget for card.losverd.es. Until all three are set, /email-card fails
+  // closed with a "temporarily unavailable" page.
   SENDGRID_API_KEY?: string;
   /**
    * Date (YYYY-MM-DD) from which a completed new order emails the member
