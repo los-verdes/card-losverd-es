@@ -46,6 +46,19 @@ export interface BigCommerceOrderProduct {
   name: string;
 }
 
+// BigCommerce's maximum `limit` for list endpoints
+// (https://docs.bigcommerce.com/developer/api-reference/rest/overview#pagination-and-limit).
+export const ORDERS_PAGE_SIZE = 250;
+
+// BigCommerce rate-limits each store on a 30-second window, shared by every
+// app on the store (150 requests on Standard/Plus plans:
+// https://docs.bigcommerce.com/developer/docs/overview/api-fundamentals/rate-limits).
+// One resync message can make ~250 requests, so a 429 waits out the window
+// (per the `X-Rate-Limit-Time-Reset-Ms` header) rather than failing the whole
+// slice back to the queue, whose retry would just hit the limit again.
+const MAX_RATE_LIMIT_WAITS = 5;
+const MAX_RATE_LIMIT_WAIT_MS = 30_000;
+
 function bcHeaders(accessToken: string): HeadersInit {
   return {
     "Content-Type": "application/json",
@@ -71,10 +84,25 @@ export class BigCommerceClient {
     return query ? `${base}?${query.toString()}` : base;
   }
 
+  /** GET, waiting out (a bounded number of) rate-limit 429s. */
+  private async get(path: string, query?: URLSearchParams): Promise<Response> {
+    for (let waits = 0; ; waits++) {
+      const res = await fetch(this.url(path, query), {
+        headers: bcHeaders(this.accessToken),
+      });
+      if (res.status !== 429 || waits >= MAX_RATE_LIMIT_WAITS) return res;
+      await res.body?.cancel();
+      const waitMs = Math.min(
+        Number(res.headers.get("X-Rate-Limit-Time-Reset-Ms")) ||
+          MAX_RATE_LIMIT_WAIT_MS,
+        MAX_RATE_LIMIT_WAIT_MS,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+
   async getOrder(orderId: number | string): Promise<BigCommerceOrder> {
-    const res = await fetch(this.url(`orders/${orderId}`), {
-      headers: bcHeaders(this.accessToken),
-    });
+    const res = await this.get(`orders/${orderId}`);
     if (!res.ok) {
       throw new Error(
         `BigCommerce getOrder(${orderId}) failed: ${res.status} ${await res.text()}`,
@@ -86,9 +114,7 @@ export class BigCommerceClient {
   async getOrderProducts(
     orderId: number | string,
   ): Promise<BigCommerceOrderProduct[]> {
-    const res = await fetch(this.url(`orders/${orderId}/products`), {
-      headers: bcHeaders(this.accessToken),
-    });
+    const res = await this.get(`orders/${orderId}/products`);
     if (res.status === 204) return [];
     if (!res.ok) {
       throw new Error(
@@ -98,24 +124,28 @@ export class BigCommerceClient {
     return res.json();
   }
 
-  /** One page of the v2 orders list, optionally filtered (e.g. `min_date_modified`). */
+  /**
+   * One page of the v2 orders list in ascending id order, starting at
+   * `minId`, optionally filtered (e.g. `min_date_modified`). An id cursor
+   * rather than page numbers: pages shift when orders are created or
+   * modified mid-resync, ids don't.
+   */
   async listOrdersPage(
-    page: number,
+    minId: number,
     params: Record<string, string> = {},
   ): Promise<BigCommerceOrder[]> {
     const query = new URLSearchParams({
-      page: String(page),
-      limit: "50",
+      min_id: String(minId),
+      sort: "id:asc",
+      limit: String(ORDERS_PAGE_SIZE),
       ...params,
     });
-    const res = await fetch(this.url("orders", query), {
-      headers: bcHeaders(this.accessToken),
-    });
-    // BigCommerce's v2 API returns 204 (not an empty array) once a page is past the end of results.
+    const res = await this.get("orders", query);
+    // BigCommerce's v2 API returns 204 (not an empty array) when nothing matches.
     if (res.status === 204) return [];
     if (!res.ok) {
       throw new Error(
-        `BigCommerce listOrders(page=${page}) failed: ${res.status} ${await res.text()}`,
+        `BigCommerce listOrders(min_id=${minId}) failed: ${res.status} ${await res.text()}`,
       );
     }
     return res.json();
@@ -405,9 +435,23 @@ const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
 // window in `member_card/bigcommerce.py`, so an order modified right at the
 // edge of the previous run's window is never silently missed.
 const DEFAULT_LOOKBACK_HOURS = 12;
-// Safety cap on page count for a first pass - BigCommerce's v2 orders list
-// has no explicit "last page" indicator besides an eventual 204/empty page.
-const MAX_PAGES = 50;
+// Per-message work bound. A message fetches one page (<= ORDERS_PAGE_SIZE
+// orders) and stops early once it has applied this many membership orders.
+// Each applied order costs up to 4 D1 queries (membership_orders upsert,
+// members SELECT, members UPDATE/INSERT, notifyPassUpdated's devices SELECT)
+// plus one DELETE per device APNs reports unregistered, so a message makes at
+// most ~150*4 + 2 watermark queries = ~602 D1 queries against D1's 1,000 per
+// Worker invocation (https://developers.cloudflare.com/d1/platform/limits/),
+// leaving ~400 for device DELETEs. Subrequests (1 list + <= 250 products calls
+// + D1 + APNs pushes + 1 queue send) stay far under Workers Paid's 10,000, and
+// ~250 BigCommerce requests fit easily in a queue consumer's 15-minute wall
+// time (https://developers.cloudflare.com/workers/platform/limits/), even
+// waiting out a few rate-limit windows.
+export const MAX_MEMBERSHIP_ORDERS_PER_MESSAGE = 150;
+// Safety backstop against a chain that never ends (>= 150 orders a message,
+// so ~75,000+ orders; the store has ~10,000). Hitting it logs an error and
+// ends the chain *without* advancing the watermark.
+export const MAX_CHAIN_MESSAGES = 500;
 
 async function getWatermark(env: Env, jobName: string): Promise<number | null> {
   const row = await env.DB.prepare(
@@ -418,6 +462,11 @@ async function getWatermark(env: Env, jobName: string): Promise<number | null> {
   return row?.last_run_at ?? null;
 }
 
+/**
+ * Only ever moves the watermark forward: an incremental chain can start (and
+ * finish) while a long `loadAll` chain is still in flight, and the older
+ * chain finishing last must not roll the watermark back.
+ */
 async function setWatermark(
   env: Env,
   jobName: string,
@@ -425,30 +474,66 @@ async function setWatermark(
 ): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(job_name) DO UPDATE SET last_run_at = excluded.last_run_at, updated_at = excluded.updated_at`,
+     ON CONFLICT(job_name) DO UPDATE SET
+       last_run_at = MAX(etl_sync_state.last_run_at, excluded.last_run_at),
+       updated_at = excluded.updated_at`,
   )
-    .bind(jobName, timestamp, timestamp)
+    .bind(jobName, timestamp, Date.now())
     .run();
+}
+
+/** Continuation state carried from one resync message to the next. */
+export interface SubscriptionsEtlCursor {
+  /** When the chain's first message started (epoch ms); the watermark once the chain completes. */
+  chainStartedAt: number;
+  /** The `min_date_modified` filter (epoch ms), fixed at chain start; absent for a `loadAll` chain. */
+  modifiedSince?: number;
+  /** Highest order id already processed; the next page starts after it. */
+  afterId: number;
+  /** Messages this chain has run so far, for the MAX_CHAIN_MESSAGES backstop. */
+  messages: number;
 }
 
 export interface SubscriptionsEtlOptions {
   /** Skip the modified-since filter entirely - a full historical resync (Phase 2.2's initial cache population). */
   loadAll?: boolean;
+  /** The previous message's continuation; absent starts a new chain. */
+  cursor?: SubscriptionsEtlCursor;
 }
 
 export interface SubscriptionsEtlResult {
   ordersProcessed: number;
+  /** Set when the chain isn't finished: enqueue a follow-up message carrying it. */
+  next?: SubscriptionsEtlCursor;
+}
+
+async function startSubscriptionsEtlChain(
+  env: Env,
+  loadAll: boolean | undefined,
+): Promise<SubscriptionsEtlCursor> {
+  const cursor = { chainStartedAt: Date.now(), afterId: 0, messages: 0 };
+  if (loadAll) return cursor;
+  const lookbackMs = DEFAULT_LOOKBACK_HOURS * 60 * 60 * 1000;
+  const watermark = await getWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME);
+  const since = watermark ?? cursor.chainStartedAt - lookbackMs;
+  return { ...cursor, modifiedSince: since - lookbackMs };
 }
 
 /**
  * Scheduled full/incremental resync (Phase 2.5.3's `sync_subscriptions_etl`
  * cron message) - the one fully-implemented example of the three scheduled
  * ETL jobs named in Phase 2.5.3 (see docs/bigcommerce-ingestion.md section
- * 4 for why this one and not the other two). Pages through BigCommerce's
- * v2 orders list, filtered to orders modified since the last successful
+ * 4 for why this one and not the other two). Walks BigCommerce's v2 orders
+ * list in id order, filtered to orders modified since the last successful
  * run (minus a trailing overlap window), and runs every returned order
  * through the same idempotent `upsertMemberFromOrder` path as the webhook
  * flow - repeated runs converge, they don't duplicate.
+ *
+ * One call does one bounded slice (see MAX_MEMBERSHIP_ORDERS_PER_MESSAGE) of
+ * a chain of queue messages: it returns `next` for the caller to enqueue, and
+ * only the chain's final slice sets the watermark, to the chain's start time
+ * (an order modified mid-chain behind the cursor is picked up by the next
+ * chain). A retried message redoes its whole slice, which is harmless.
  */
 export async function syncSubscriptionsEtl(
   env: Env,
@@ -458,41 +543,58 @@ export async function syncSubscriptionsEtl(
     env.BIGCOMMERCE_STORE_HASH,
     env.BIGCOMMERCE_ACCESS_TOKEN,
   );
-  const runStart = Date.now();
+  const cursor =
+    options.cursor ?? (await startSubscriptionsEtlChain(env, options.loadAll));
 
   const params: Record<string, string> = {};
-  if (!options.loadAll) {
-    const watermark = await getWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME);
-    const since =
-      watermark ?? runStart - DEFAULT_LOOKBACK_HOURS * 60 * 60 * 1000;
-    const overlapSince = since - DEFAULT_LOOKBACK_HOURS * 60 * 60 * 1000;
-    params.min_date_modified = new Date(overlapSince).toUTCString();
+  if (cursor.modifiedSince !== undefined) {
+    params.min_date_modified = new Date(cursor.modifiedSince).toUTCString();
   }
 
-  let page = 1;
+  // BigCommerce doesn't document whether `min_id` is inclusive, so ask for
+  // `afterId` itself and skip it below. Anything *below* it means the cursor
+  // was ignored - carrying on would end the chain early and advance the
+  // watermark past orders never seen.
+  const orders = await client.listOrdersPage(cursor.afterId, params);
+  if (orders.some((order) => order.id < cursor.afterId)) {
+    console.error(
+      `syncSubscriptionsEtl(): orders list ignored min_id=${cursor.afterId}; ending the chain WITHOUT advancing the watermark`,
+    );
+    return { ordersProcessed: 0 };
+  }
+
   let ordersProcessed = 0;
-  for (;;) {
-    if (page > MAX_PAGES) {
-      console.warn(
-        `syncSubscriptionsEtl(): hit MAX_PAGES=${MAX_PAGES} safety cap, stopping early`,
-      );
+  let afterId = cursor.afterId;
+  let sliceFull = false;
+  for (const order of orders) {
+    if (order.id <= cursor.afterId) continue;
+    if (ordersProcessed >= MAX_MEMBERSHIP_ORDERS_PER_MESSAGE) {
+      sliceFull = true;
       break;
     }
-    const orders = await client.listOrdersPage(page, params);
-    if (orders.length === 0) break;
-
-    for (const order of orders) {
-      const products = await client.getOrderProducts(order.id);
-      const membership = resolveMembership(products);
-      if (!membership) continue;
+    const products = await client.getOrderProducts(order.id);
+    const membership = resolveMembership(products);
+    if (membership) {
       await applyMembershipOrder(env, order, membership);
       ordersProcessed++;
     }
-    page++;
+    afterId = order.id;
   }
 
-  await setWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME, runStart);
-  return { ordersProcessed };
+  // A short page is the last one.
+  if (!sliceFull && orders.length < ORDERS_PAGE_SIZE) {
+    await setWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME, cursor.chainStartedAt);
+    return { ordersProcessed };
+  }
+
+  const next = { ...cursor, afterId, messages: cursor.messages + 1 };
+  if (next.messages >= MAX_CHAIN_MESSAGES) {
+    console.error(
+      `syncSubscriptionsEtl(): hit MAX_CHAIN_MESSAGES=${MAX_CHAIN_MESSAGES} safety cap at order id ${afterId}; ending the chain WITHOUT advancing the watermark`,
+    );
+    return { ordersProcessed };
+  }
+  return { ordersProcessed, next };
 }
 
 /**

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ORDERS_PAGE_SIZE } from "../../src/bigcommerce/sync";
 import {
   enqueueEtlSync,
   handleEtlSyncBatch,
@@ -115,26 +116,138 @@ describe("handleEtlSyncBatch", () => {
     expect(member).not.toBeNull();
   });
 
-  it("dispatches sync_subscriptions_etl and acks on success", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
-    );
+  describe("sync_subscriptions_etl", () => {
+    // Same fake-queue swap as enqueueEtlSync's tests: follow-up messages
+    // are captured instead of delivered to the local consumer.
+    const realQueue = env.ETL_SYNC_QUEUE;
+    let sent: EtlSyncMessage[];
 
-    const message = makeMessage({
-      type: "sync_subscriptions_etl",
-      loadAll: true,
+    beforeEach(() => {
+      sent = [];
+      (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
+        send: async (message: EtlSyncMessage) => {
+          sent.push(message);
+        },
+      } as unknown as Queue<EtlSyncMessage>;
     });
 
-    await handleEtlSyncBatch(makeBatch([message]), env);
+    afterEach(() => {
+      env.ETL_SYNC_QUEUE = realQueue;
+    });
 
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
+    /** A full page of synthetic merchandise orders, ids 1..250. */
+    function mockFullPageOfMerchandise(productsStatus = 200) {
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (url.includes("/orders?")) {
+            const orders = Array.from({ length: ORDERS_PAGE_SIZE }, (_, i) => ({
+              id: i + 1,
+              customer_id: 7,
+              status: "Complete",
+              date_created: "2026-01-15T00:00:00.000Z",
+              date_modified: "2026-01-15T00:00:00.000Z",
+              billing_address: {
+                first_name: "Pat",
+                last_name: "Lee",
+                email: "pat.lee@example.com",
+              },
+            }));
+            return new Response(JSON.stringify(orders), { status: 200 });
+          }
+          if (url.endsWith("/products")) {
+            return new Response(
+              JSON.stringify([
+                { id: 1, product_id: 200, sku: "NON-MEMBERSHIP-SKU", name: "T-Shirt" },
+              ]),
+              { status: productsStatus },
+            );
+          }
+          throw new Error(`Unexpected fetch() call in test: ${url}`);
+        },
+      );
+    }
+
+    it("acks a chain's last slice without enqueueing a follow-up", async () => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (url.includes("/orders?")) {
+            return new Response(null, { status: 204 });
+          }
+          throw new Error(`Unexpected fetch() call in test: ${url}`);
+        },
+      );
+
+      const message = makeMessage({
+        type: "sync_subscriptions_etl",
+        loadAll: true,
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(message.ack).toHaveBeenCalledOnce();
+      expect(message.retry).not.toHaveBeenCalled();
+      expect(sent).toEqual([]);
+    });
+
+    it("enqueues a follow-up carrying the continuation, then acks", async () => {
+      mockFullPageOfMerchandise();
+      const cursor = {
+        chainStartedAt: Date.UTC(2026, 8, 1),
+        modifiedSince: Date.UTC(2026, 7, 31),
+        afterId: 0,
+        messages: 4,
+      };
+      const message = makeMessage({ type: "sync_subscriptions_etl", cursor });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(sent).toEqual([
+        {
+          type: "sync_subscriptions_etl",
+          cursor: { ...cursor, afterId: ORDERS_PAGE_SIZE, messages: 5 },
+        },
+      ]);
+      expect(message.ack).toHaveBeenCalledOnce();
+    });
+
+    it("keeps loadAll on the follow-up of a new chain", async () => {
+      mockFullPageOfMerchandise();
+      const message = makeMessage({
+        type: "sync_subscriptions_etl",
+        loadAll: true,
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(sent).toEqual([
+        {
+          type: "sync_subscriptions_etl",
+          loadAll: true,
+          cursor: {
+            chainStartedAt: expect.any(Number),
+            afterId: ORDERS_PAGE_SIZE,
+            messages: 1,
+          },
+        },
+      ]);
+    });
+
+    it("retries a failed slice without enqueueing a follow-up", async () => {
+      mockFullPageOfMerchandise(500);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const message = makeMessage({
+        type: "sync_subscriptions_etl",
+        loadAll: true,
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(sent).toEqual([]);
+      expect(message.ack).not.toHaveBeenCalled();
+      expect(message.retry).toHaveBeenCalledOnce();
+    });
   });
 
   it("dispatches the sync_customers_etl / sync_minibc_subscriptions_etl stubs and acks", async () => {

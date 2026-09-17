@@ -2,6 +2,9 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BigCommerceClient,
+  MAX_CHAIN_MESSAGES,
+  MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
+  ORDERS_PAGE_SIZE,
   mergeMembershipState,
   syncBigCommerceOrder,
   syncCustomersEtl,
@@ -10,6 +13,7 @@ import {
   upsertMemberFromOrder,
   type BigCommerceOrder,
   type BigCommerceOrderProduct,
+  type SubscriptionsEtlCursor,
 } from "../../src/bigcommerce/sync";
 
 interface MemberRow {
@@ -482,7 +486,7 @@ describe("BigCommerceClient", () => {
     await expect(client.getOrderProducts(1)).rejects.toThrow(/403/);
   });
 
-  it("listOrdersPage returns [] on a 204 (past the last page)", async () => {
+  it("listOrdersPage returns [] on a 204 (nothing matches)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 204 }),
     );
@@ -496,7 +500,7 @@ describe("BigCommerceClient", () => {
     await expect(client.listOrdersPage(1)).rejects.toThrow(/502/);
   });
 
-  it("listOrdersPage defaults to no extra filter params when none are given", async () => {
+  it("listOrdersPage requests a max-size page by ascending id from min_id, with no extra filters by default", async () => {
     let requestedUrl = "";
     vi.spyOn(globalThis, "fetch").mockImplementation(
       async (input: RequestInfo | URL) => {
@@ -505,11 +509,62 @@ describe("BigCommerceClient", () => {
       },
     );
 
-    await client.listOrdersPage(3);
+    await client.listOrdersPage(3000);
 
     const params = new URL(requestedUrl).searchParams;
-    expect(params.get("page")).toBe("3");
+    expect(params.get("min_id")).toBe("3000");
+    expect(params.get("sort")).toBe("id:asc");
+    expect(params.get("limit")).toBe(String(ORDERS_PAGE_SIZE));
+    expect(params.get("page")).toBeNull();
     expect(params.get("min_date_modified")).toBeNull();
+  });
+
+  it("waits out a 429 for X-Rate-Limit-Time-Reset-Ms, then retries", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("slow down", {
+          status: 429,
+          headers: { "X-Rate-Limit-Time-Reset-Ms": "1" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(makeOrder()), { status: 200 }));
+
+    await expect(client.getOrder(1001)).resolves.toMatchObject({ id: 1001 });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits a full rate-limit window on a 429 without a reset header", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(null, { status: 429 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const result = client.getOrderProducts(1001);
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(result).resolves.toEqual([]);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up after repeated 429s and surfaces the error", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response("slow down", {
+          status: 429,
+          headers: { "X-Rate-Limit-Time-Reset-Ms": "1" },
+        }),
+    );
+
+    await expect(client.listOrdersPage(0)).rejects.toThrow(/429/);
+    expect(fetchSpy).toHaveBeenCalledTimes(6); // the first try + 5 waits
   });
 });
 
@@ -578,15 +633,79 @@ describe("syncSubscriptionsEtl", () => {
   beforeEach(() => {
     env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
     env.BIGCOMMERCE_STORE_HASH = "store123";
+    // notifyPassUpdated()'s "APNs not configured" warning, once per new member.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    await env.DB.exec("DELETE FROM membership_orders");
     await env.DB.exec("DELETE FROM members");
     await env.DB.exec("DELETE FROM etl_sync_state");
   });
 
-  it("pages through orders, upserts membership orders, and records a watermark", async () => {
+  async function readWatermark(): Promise<number | null> {
+    const row = await env.DB.prepare(
+      "SELECT last_run_at FROM etl_sync_state WHERE job_name = 'sync_subscriptions_etl'",
+    ).first<{ last_run_at: number }>();
+    return row?.last_run_at ?? null;
+  }
+
+  async function storeWatermark(lastRunAt: number): Promise<void> {
+    await env.DB.prepare(
+      "INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, ?)",
+    )
+      .bind("sync_subscriptions_etl", lastRunAt, lastRunAt)
+      .run();
+  }
+
+  const merchandise = () =>
+    makeProducts([{ sku: "NON-MEMBERSHIP-SKU", name: "T-Shirt" }]);
+
+  function ordersWithIds(firstId: number, count: number): BigCommerceOrder[] {
+    return Array.from({ length: count }, (_, i) => makeOrder({ id: firstId + i }));
+  }
+
+  /**
+   * Mocks the orders list (answered by `listOrders` from the request's query
+   * params; an empty answer is BigCommerce's 204) and each order's products,
+   * recording what was requested.
+   */
+  function mockOrdersApi(
+    listOrders: (params: URLSearchParams) => BigCommerceOrder[],
+    productsFor: (orderId: number) => BigCommerceOrderProduct[] = () =>
+      makeProducts(),
+  ) {
+    const requests = {
+      list: [] as URLSearchParams[],
+      productsForOrderIds: [] as number[],
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/orders?")) {
+          const params = new URL(url).searchParams;
+          requests.list.push(params);
+          const orders = listOrders(params);
+          return orders.length > 0
+            ? new Response(JSON.stringify(orders), { status: 200 })
+            : new Response(null, { status: 204 });
+        }
+        const productsMatch = url.match(/\/orders\/(\d+)\/products$/);
+        if (productsMatch) {
+          const orderId = Number(productsMatch[1]);
+          requests.productsForOrderIds.push(orderId);
+          return new Response(JSON.stringify(productsFor(orderId)), {
+            status: 200,
+          });
+        }
+        throw new Error(`Unexpected fetch() call in test: ${url}`);
+      },
+    );
+    return requests;
+  }
+
+  it("finishes a chain on a short page: upserts membership orders and sets the watermark to the chain's start", async () => {
     const orderA = makeOrder({ id: 1, customer_id: 1 });
     const orderB = makeOrder({
       id: 2,
@@ -597,63 +716,29 @@ describe("syncSubscriptionsEtl", () => {
         email: "bo.jones@example.com",
       },
     });
+    const requests = mockOrdersApi(() => [orderA, orderB]);
 
-    let pageRequests = 0;
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          pageRequests++;
-          if (pageRequests === 1) {
-            return new Response(JSON.stringify([orderA, orderB]), {
-              status: 200,
-            });
-          }
-          return new Response(null, { status: 204 });
-        }
-        if (
-          url.endsWith(`/orders/${orderA.id}/products`) ||
-          url.endsWith(`/orders/${orderB.id}/products`)
-        ) {
-          return new Response(JSON.stringify(makeProducts()), { status: 200 });
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
-    );
-
+    const before = Date.now();
     const result = await syncSubscriptionsEtl(env, { loadAll: true });
+    const after = Date.now();
 
-    expect(result.ordersProcessed).toBe(2);
+    expect(result).toEqual({ ordersProcessed: 2 });
     expect(await countMembers()).toBe(2);
     expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
     expect(await getMemberByEmail("bo.jones@example.com")).not.toBeNull();
+    // A new loadAll chain: from the first order id, no modified-since filter.
+    expect(requests.list).toHaveLength(1);
+    expect(requests.list[0].get("min_id")).toBe("0");
+    expect(requests.list[0].get("min_date_modified")).toBeNull();
 
-    const watermark = await env.DB.prepare(
-      "SELECT last_run_at FROM etl_sync_state WHERE job_name = 'sync_subscriptions_etl'",
-    ).first<{ last_run_at: number }>();
-    expect(watermark?.last_run_at).toBeGreaterThan(0);
+    const watermark = await readWatermark();
+    expect(watermark).toBeGreaterThanOrEqual(before);
+    expect(watermark).toBeLessThanOrEqual(after);
   });
 
   it("running the full resync twice is idempotent (no duplicate members)", async () => {
     const order = makeOrder();
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          // Page 1 always returns the one order; every later page (in either
-          // run) is empty, so each run terminates after processing it once.
-          const page = new URL(url).searchParams.get("page");
-          if (page === "1") {
-            return new Response(JSON.stringify([order]), { status: 200 });
-          }
-          return new Response(null, { status: 204 });
-        }
-        if (url.endsWith(`/orders/${order.id}/products`)) {
-          return new Response(JSON.stringify(makeProducts()), { status: 200 });
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
-    );
+    mockOrdersApi(() => [order]);
 
     await syncSubscriptionsEtl(env, { loadAll: true });
     await syncSubscriptionsEtl(env, { loadAll: true });
@@ -661,90 +746,169 @@ describe("syncSubscriptionsEtl", () => {
     expect(await countMembers()).toBe(1);
   });
 
-  it("stops at the MAX_PAGES safety cap instead of paging forever", async () => {
-    // Mirrors sync.ts's private MAX_PAGES=50: mock every page as non-empty
-    // (never returning the 204 that would otherwise end the loop) so the
-    // cap itself - not "ran out of orders" - is what stops the sync.
-    const MAX_PAGES = 50;
-    let pageRequests = 0;
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          pageRequests++;
-          return new Response(JSON.stringify([makeOrder({ id: pageRequests })]), {
-            status: 200,
-          });
-        }
-        if (url.includes("/products")) {
-          // Non-membership SKU: resolveMembershipTier() returns null, so no
-          // D1 write happens per page - keeps this test fast across 50 pages.
-          return new Response(
-            JSON.stringify(makeProducts([{ sku: "NON-MEMBERSHIP-SKU", name: "T-Shirt" }])),
-            { status: 200 },
-          );
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
+  it("returns a continuation, and leaves the watermark alone, after a full page", async () => {
+    const requests = mockOrdersApi(
+      () => ordersWithIds(1, ORDERS_PAGE_SIZE),
+      merchandise,
     );
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const result = await syncSubscriptionsEtl(env, { loadAll: true });
 
-    expect(pageRequests).toBe(MAX_PAGES);
-    expect(result.ordersProcessed).toBe(0);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`MAX_PAGES=${MAX_PAGES}`),
+    expect(result).toEqual({
+      ordersProcessed: 0,
+      next: {
+        chainStartedAt: expect.any(Number),
+        afterId: ORDERS_PAGE_SIZE,
+        messages: 1,
+      },
+    });
+    expect(result.next).not.toHaveProperty("modifiedSince");
+    expect(requests.productsForOrderIds).toHaveLength(ORDERS_PAGE_SIZE);
+    expect(await readWatermark()).toBeNull();
+  });
+
+  it("resumes from the cursor, skipping the boundary order min_id returns again, and completes the chain", async () => {
+    const olderWatermark = Date.UTC(2026, 7, 1);
+    await storeWatermark(olderWatermark);
+    const cursor: SubscriptionsEtlCursor = {
+      chainStartedAt: Date.UTC(2026, 8, 1),
+      afterId: 250,
+      messages: 1,
+    };
+    const requests = mockOrdersApi(() => [
+      makeOrder({ id: 250 }),
+      makeOrder({ id: 251 }),
+    ]);
+
+    const result = await syncSubscriptionsEtl(env, { loadAll: true, cursor });
+
+    expect(requests.list[0].get("min_id")).toBe("250");
+    expect(requests.productsForOrderIds).toEqual([251]);
+    expect(result).toEqual({ ordersProcessed: 1 });
+    expect(await readWatermark()).toBe(cursor.chainStartedAt);
+  });
+
+  it("completes a chain whose last page was exactly full on the next, empty, page", async () => {
+    const cursor: SubscriptionsEtlCursor = {
+      chainStartedAt: Date.UTC(2026, 8, 1),
+      afterId: 500,
+      messages: 2,
+    };
+    mockOrdersApi(() => []);
+
+    const result = await syncSubscriptionsEtl(env, { cursor });
+
+    expect(result).toEqual({ ordersProcessed: 0 });
+    expect(await readWatermark()).toBe(cursor.chainStartedAt);
+  });
+
+  it("never moves the watermark backwards (a later-started chain already finished)", async () => {
+    const newerWatermark = Date.UTC(2026, 8, 10);
+    await storeWatermark(newerWatermark);
+    mockOrdersApi(() => []);
+
+    await syncSubscriptionsEtl(env, {
+      cursor: { chainStartedAt: Date.UTC(2026, 8, 1), afterId: 0, messages: 3 },
+    });
+
+    expect(await readWatermark()).toBe(newerWatermark);
+  });
+
+  it(`ends a slice mid-page after MAX_MEMBERSHIP_ORDERS_PER_MESSAGE (${MAX_MEMBERSHIP_ORDERS_PER_MESSAGE}) membership orders`, async () => {
+    const requests = mockOrdersApi(() => ordersWithIds(1, ORDERS_PAGE_SIZE));
+
+    const result = await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(result.ordersProcessed).toBe(MAX_MEMBERSHIP_ORDERS_PER_MESSAGE);
+    expect(requests.productsForOrderIds).toHaveLength(
+      MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
     );
+    expect(result.next?.afterId).toBe(MAX_MEMBERSHIP_ORDERS_PER_MESSAGE);
+    expect(await readWatermark()).toBeNull();
   });
 
   it("uses a default lookback window for min_date_modified on a first incremental run (no watermark yet)", async () => {
-    let requestedUrl = "";
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          requestedUrl = url;
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
-    );
+    const requests = mockOrdersApi(() => []);
 
     // No `loadAll` -> the incremental path, and no prior etl_sync_state row
-    // for this job -> getWatermark()'s "no watermark yet" branch.
+    // for this job -> the "no watermark yet" branch.
     await syncSubscriptionsEtl(env);
 
-    expect(new URL(requestedUrl).searchParams.get("min_date_modified")).toBeTruthy();
+    expect(requests.list[0].get("min_date_modified")).toBeTruthy();
   });
 
-  it("uses the stored watermark (minus the overlap window) as min_date_modified on a later incremental run", async () => {
+  it("uses the stored watermark (minus the overlap window) as min_date_modified, and carries it in the continuation", async () => {
     const DEFAULT_LOOKBACK_HOURS_MS = 12 * 60 * 60 * 1000;
     const priorRun = Date.UTC(2026, 0, 1);
-    await env.DB.prepare(
-      "INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, ?)",
-    )
-      .bind("sync_subscriptions_etl", priorRun, priorRun)
-      .run();
-
-    let requestedUrl = "";
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        if (url.includes("/orders?")) {
-          requestedUrl = url;
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`Unexpected fetch() call in test: ${url}`);
-      },
+    await storeWatermark(priorRun);
+    const requests = mockOrdersApi(
+      () => ordersWithIds(1, ORDERS_PAGE_SIZE),
+      merchandise,
     );
 
-    await syncSubscriptionsEtl(env);
+    const result = await syncSubscriptionsEtl(env);
 
     const expectedOverlapSince = priorRun - DEFAULT_LOOKBACK_HOURS_MS;
-    expect(new URL(requestedUrl).searchParams.get("min_date_modified")).toBe(
+    expect(requests.list[0].get("min_date_modified")).toBe(
       new Date(expectedOverlapSince).toUTCString(),
     );
+    expect(result.next?.modifiedSince).toBe(expectedOverlapSince);
+  });
+
+  it("uses the chain's own min_date_modified on follow-up messages, not one recomputed from the watermark", async () => {
+    await storeWatermark(Date.UTC(2026, 5, 1));
+    const modifiedSince = Date.UTC(2026, 0, 1);
+    const requests = mockOrdersApi(() => []);
+
+    await syncSubscriptionsEtl(env, {
+      cursor: {
+        chainStartedAt: Date.UTC(2026, 8, 1),
+        modifiedSince,
+        afterId: 250,
+        messages: 1,
+      },
+    });
+
+    expect(requests.list[0].get("min_date_modified")).toBe(
+      new Date(modifiedSince).toUTCString(),
+    );
+  });
+
+  it(`stops at the MAX_CHAIN_MESSAGES (${MAX_CHAIN_MESSAGES}) safety cap: logs an error, no follow-up, no watermark`, async () => {
+    mockOrdersApi(() => ordersWithIds(1, ORDERS_PAGE_SIZE), merchandise);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await syncSubscriptionsEtl(env, {
+      loadAll: true,
+      cursor: {
+        chainStartedAt: Date.UTC(2026, 8, 1),
+        afterId: 0,
+        messages: MAX_CHAIN_MESSAGES - 1,
+      },
+    });
+
+    expect(result).toEqual({ ordersProcessed: 0 });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`MAX_CHAIN_MESSAGES=${MAX_CHAIN_MESSAGES}`),
+    );
+    expect(await readWatermark()).toBeNull();
+  });
+
+  it("ends the chain loudly, without a watermark, if the orders list ignores min_id", async () => {
+    const requests = mockOrdersApi(() => ordersWithIds(1, ORDERS_PAGE_SIZE));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await syncSubscriptionsEtl(env, {
+      loadAll: true,
+      cursor: { chainStartedAt: Date.UTC(2026, 8, 1), afterId: 500, messages: 2 },
+    });
+
+    expect(result).toEqual({ ordersProcessed: 0 });
+    expect(requests.productsForOrderIds).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("ignored min_id=500"),
+    );
+    expect(await readWatermark()).toBeNull();
   });
 });
 
