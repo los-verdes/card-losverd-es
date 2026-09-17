@@ -5,8 +5,9 @@ import {
   expiredMemberships,
   listChannels,
   ordersByMonth,
+  slackCrossReference,
 } from "../../src/admin/reportQueries";
-import { insertOrder } from "./fixtures";
+import { insertOrder, insertSlackUser } from "./fixtures";
 
 const AS_OF = "2026-06-01T12:00:00Z";
 
@@ -125,6 +126,69 @@ describe("ordersByMonth", () => {
     expect(months[6]).toEqual({ month: "07", orders: 0, previous_year_orders: 1 });
     expect(months[7]).toEqual({ month: "08", orders: 1, previous_year_orders: 0 });
     expect(months[8]).toEqual({ month: "09", orders: 0, previous_year_orders: 1 });
+  });
+});
+
+describe("slackCrossReference", () => {
+  beforeEach(async () => {
+    // Stored lowercased by the sync; mixed case here proves the join doesn't rely on it.
+    await insertSlackUser({ id: "U01RENEWER", email: "Renewer@Example.com", realName: "Rene Wer" });
+    await insertSlackUser({ id: "U02LAPSED", email: "lapsed@example.com" }); // no real name: falls back to the handle
+    await insertSlackUser({ id: "U03REFUND", email: "refunded@example.com", syncedAt: Date.UTC(2026, 5, 1, 6) });
+    await insertSlackUser({ id: "U04NEWBIE", email: "newbie@example.com", realName: "New Bee" });
+    await insertSlackUser({ id: "U05FUTURE", email: "future@example.com" });
+    // Matches only an order email, not the member it now belongs to.
+    await insertSlackUser({ id: "U06OLDADDR", email: "old.address@example.com" });
+    // Never counted as being in Slack.
+    await insertSlackUser({ id: "U07GONE", email: "steady@example.com", deleted: true });
+    await insertSlackUser({ id: "U08BOT", email: null, isBot: true });
+    await insertSlackUser({ id: "U09APP", email: "app@example.com", isAppUser: true });
+    await insertSlackUser({ id: "U10FLOW", email: "flow@example.com", isWorkflowBot: true });
+    await insertSlackUser({ id: "USLACKBOT", email: null, realName: "Slackbot" });
+  });
+
+  afterEach(async () => {
+    await env.DB.exec("DELETE FROM slack_users");
+  });
+
+  it("sorts members and Slack accounts into the four tables", async () => {
+    const result = await slackCrossReference(env.DB, AS_OF);
+
+    expect(result.currentInSlack).toEqual([
+      { email: "renewer@example.com", first_name: "Rene", last_name: "Wer", expires_on: "2027-05-20T00:00:00Z", slack_id: "U01RENEWER", slack_name: "Rene Wer" },
+    ]);
+    expect(result.currentNotInSlack).toEqual([
+      { email: "moved@example.com", first_name: "Test", last_name: "Member", expires_on: "2027-01-01T00:00:00Z", slack_id: null, slack_name: null },
+      { email: "steady@example.com", first_name: "Test", last_name: "Member", expires_on: "2026-09-09T00:00:00Z", slack_id: null, slack_name: null },
+    ]);
+    expect(result.lapsedInSlack).toEqual([
+      { email: "lapsed@example.com", first_name: "Lap", last_name: "Sed", expires_on: "2025-03-01T00:00:00Z", slack_id: "U02LAPSED", slack_name: "u02lapsed" },
+    ]);
+    // Void, test, and not-yet-placed orders don't count; nor does a bare order email.
+    expect(result.slackWithoutOrders).toEqual(
+      ["future", "newbie", "old.address", "refunded"].map((who) => expect.objectContaining({ email: `${who}@example.com`, expires_on: null })),
+    );
+    expect(result.slackWithoutOrders[1]).toMatchObject({ slack_id: "U04NEWBIE", slack_name: "New Bee", first_name: null });
+    expect(result.slackSyncedAt).toBe(Date.UTC(2026, 5, 1, 6));
+  });
+
+  it("answers for a past date against the same Slack accounts", async () => {
+    const result = await slackCrossReference(env.DB, "2024-06-01T00:00:00Z");
+
+    expect(result.currentInSlack.map((r) => r.email)).toEqual(["lapsed@example.com"]);
+    expect(result.currentNotInSlack.map((r) => r.email)).toEqual(["moved@example.com"]);
+    expect(result.lapsedInSlack).toEqual([]);
+    expect(result.slackWithoutOrders.map((r) => r.email)).toContain("renewer@example.com");
+  });
+
+  it("reports an unsynced workspace as nobody in Slack", async () => {
+    await env.DB.exec("DELETE FROM slack_users");
+
+    const result = await slackCrossReference(env.DB, AS_OF);
+
+    expect(result.slackSyncedAt).toBeNull();
+    expect(result.currentNotInSlack.map((r) => r.email)).toEqual(["moved@example.com", "renewer@example.com", "steady@example.com"]);
+    expect(result.currentInSlack.concat(result.lapsedInSlack, result.slackWithoutOrders)).toEqual([]);
   });
 });
 

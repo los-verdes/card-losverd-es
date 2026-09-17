@@ -189,6 +189,91 @@ export async function ordersByMonth(
   });
 }
 
+export interface SlackCrossReferenceRow {
+  [key: string]: string | null;
+  email: string;
+  /** Billing name on the member's latest-expiring order; null for Slack users with none. */
+  first_name: string | null;
+  last_name: string | null;
+  /** When that latest order expires (or expired). */
+  expires_on: string | null;
+  slack_id: string | null;
+  /** Slack's full name, falling back to the handle. */
+  slack_name: string | null;
+}
+
+export interface SlackCrossReference {
+  currentInSlack: SlackCrossReferenceRow[];
+  currentNotInSlack: SlackCrossReferenceRow[];
+  lapsedInSlack: SlackCrossReferenceRow[];
+  slackWithoutOrders: SlackCrossReferenceRow[];
+  /** Newest `slack_users.synced_at` (epoch ms), or null if the sync has never run. */
+  slackSyncedAt: number | null;
+}
+
+/**
+ * Membership orders cross-referenced with Slack accounts by lowercased email,
+ * as of `asOf`. "Current" and "lapsed" match the active and expired reports:
+ * a member is current if their latest-expiring membership order placed by
+ * `asOf` is still in force, and lapsed otherwise. Slack users "without
+ * orders" have no membership order (void and test orders don't count) placed
+ * by `asOf` under their email.
+ *
+ * Only live human accounts count as being in Slack: deactivated accounts
+ * (`deleted = 1`), bots and apps are ignored, as are accounts with no email,
+ * which can't be matched (Slackbot is one). Guests and pending invites count.
+ */
+export async function slackCrossReference(
+  db: D1Database,
+  asOf: string,
+): Promise<SlackCrossReference> {
+  // Bare-column rule again: names come from the latest-expiring order.
+  const ctes = `
+    WITH memberships AS (
+      SELECT lower(member_email) AS email, first_name, last_name, MAX(expires_on) AS expires_on
+      FROM membership_orders
+      WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP}
+      GROUP BY lower(member_email)
+    ),
+    slack AS (
+      SELECT slack_id, COALESCE(NULLIF(real_name, ''), name) AS slack_name, lower(email) AS email
+      FROM slack_users
+      WHERE deleted = 0 AND is_bot = 0 AND is_app_user = 0 AND is_workflow_bot = 0 AND email IS NOT NULL
+    )`;
+  const inSlack = `SELECT m.email, m.first_name, m.last_name, m.expires_on, s.slack_id, s.slack_name
+    FROM memberships m JOIN slack s ON s.email = m.email`;
+  const [currentIn, currentNotIn, lapsedIn, slackOnly, synced] = await db.batch<Record<string, unknown>>([
+    db.prepare(`${ctes} ${inSlack} WHERE m.expires_on > ?1 ORDER BY m.email, s.slack_id`).bind(asOf),
+    db
+      .prepare(
+        `${ctes} SELECT email, first_name, last_name, expires_on, NULL AS slack_id, NULL AS slack_name
+         FROM memberships m
+         WHERE expires_on > ?1 AND NOT EXISTS (SELECT 1 FROM slack s WHERE s.email = m.email)
+         ORDER BY email`,
+      )
+      .bind(asOf),
+    db.prepare(`${ctes} ${inSlack} WHERE m.expires_on <= ?1 ORDER BY m.expires_on DESC, m.email, s.slack_id`).bind(asOf),
+    db
+      .prepare(
+        `${ctes} SELECT email, NULL AS first_name, NULL AS last_name, NULL AS expires_on, slack_id, slack_name
+         FROM slack s
+         WHERE NOT EXISTS (SELECT 1 FROM memberships m WHERE m.email = s.email)
+         ORDER BY email, slack_id`,
+      )
+      .bind(asOf),
+    db.prepare("SELECT MAX(synced_at) AS synced_at FROM slack_users"),
+  ]);
+  const rows = (result: D1Result<Record<string, unknown>>) =>
+    result.results as unknown as SlackCrossReferenceRow[];
+  return {
+    currentInSlack: rows(currentIn),
+    currentNotInSlack: rows(currentNotIn),
+    lapsedInSlack: rows(lapsedIn),
+    slackWithoutOrders: rows(slackOnly),
+    slackSyncedAt: (synced.results[0] as { synced_at: number | null }).synced_at,
+  };
+}
+
 /** Distinct channels, for the filter dropdown. */
 export async function listChannels(db: D1Database): Promise<string[]> {
   const { results } = await db

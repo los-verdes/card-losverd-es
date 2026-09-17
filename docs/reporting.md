@@ -62,16 +62,28 @@ CSV cells that a spreadsheet would evaluate as formulas are neutralized
 | `/admin/reports/active` | Orders in force now, or at the end of any past date (`?as_of=YYYY-MM-DD`, UTC). Counts distinct members and orders. | Active Memberships |
 | `/admin/reports/expired` | Each lapsed member's most recent order, as of now or a past date. | Expired Memberships |
 | `/admin/reports/orders` | Orders per month for a year against the year before. | Membership Orders |
+| `/admin/reports/slack` | Four tables: current members in Slack, current members not in Slack, lapsed members in Slack, and Slack users with no membership orders. Current snapshot only; each table downloads separately (`?table=...&format=csv`). | Slack User Stuff |
 
-Common filters: `q` (matches either email or the billing name) and
-`channel`. SQL lives in `src/admin/reportQueries.ts`, shared by the HTML and
-CSV forms of each report so they cannot disagree.
+Common filters on the active and expired pages: `q` (matches either email
+or the billing name) and `channel`. SQL lives in
+`src/admin/reportQueries.ts`, shared by the HTML and CSV forms of each report
+so they cannot disagree.
+
+### Slack cross-reference
+
+Members are matched to `slack_users` on lowercased `member_email`, so a member
+who joined Slack under another address shows as not in Slack. "Current" and
+"lapsed" follow the active and expired pages: whether the member's
+latest-expiring order is still in force. Only live human accounts count as
+being in Slack: deactivated accounts (`deleted = 1`), bots, app and workflow
+users, and accounts without an email (such as Slackbot) are ignored. Guests
+and pending invites count. The page shows when the Slack sync last ran, since
+until it has run (`SLACK_BOT_TOKEN` set) every member shows as not in Slack.
 
 ### Not built yet
 
 | Legacy page | Plan |
 | :--- | :--- |
-| Slack User Stuff (members with and without Slack accounts, and the reverse) | Next. Join `membership_orders` to `slack_users` by email. Needs `SLACK_BOT_TOKEN` set and the Slack sync running. |
 | Membership Consolidations (orders whose member email differs; possible duplicates by billing name) | Next, together with a way for an admin to **re-point an order's `member_email`**. That is a required feature, not just a view: it is how a membership bought as a gift gets attributed to its recipient. Open design point: the recipient also needs a `members` row to get a card, and `members` is currently derived from the order's billing email alone. |
 | Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. For the analytics charts, use Cloudflare Web Analytics rather than rebuilding them. |
 | MiniBC Subscriptions | After cutover. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |

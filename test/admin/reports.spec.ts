@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAGE_SIZE } from "../../src/admin/reports";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
-import { insertOrder } from "./fixtures";
+import { insertOrder, insertSlackUser } from "./fixtures";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 describe("access control", () => {
-  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders"];
+  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack"];
 
   it.each(PATHS)("%s sends an anonymous visitor to log in", async (path) => {
     const res = await get(path, null);
@@ -243,5 +243,90 @@ describe("GET /admin/reports/orders", () => {
 
   it.each(["year=26", "year=1999", "year=2028", "year=soon"])("rejects %s", async (query) => {
     expect((await get(`/admin/reports/orders?${query}`)).status).toBe(400);
+  });
+});
+
+describe("GET /admin/reports/slack", () => {
+  beforeEach(async () => {
+    await insertOrder({ id: "1_bc", email: "joined@example.com", first: "Jo", last: "Ined", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "2_bc", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
+    // A sparse Squarespace-era member with no billing name, not in Slack.
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via)
+       VALUES ('5f00000000000000000000d4', 'squarespace', 'nameless@example.com', 'nameless@example.com',
+               '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres')`,
+    ).run();
+    await insertSlackUser({ id: "U01JOINED", email: "joined@example.com", realName: "Jo Ined" });
+    await insertSlackUser({ id: "U02LAPSED", email: "lapsed@example.com", realName: "<img src=x>" });
+    await insertSlackUser({ id: "U03GUEST", email: "guest@example.com", realName: "=HYPERLINK(1)" });
+    vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
+  });
+
+  afterEach(async () => {
+    await env.DB.exec("DELETE FROM slack_users");
+  });
+
+  it("shows all four tables, with counts, dates as days, and the last sync time", async () => {
+    const body = await (await get("/admin/reports/slack")).text();
+
+    expect(body).toContain("as of 2026-06-01T12:00:00Z");
+    expect(body).toContain("Slack accounts last synced 2026-06-01T00:00:00Z.");
+    expect(body).toContain("Current members in Slack (1)");
+    expect(body).toMatch(/joined@example\.com<\/td><td[^>]*>Jo<\/td><td[^>]*>Ined<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
+    expect(body).toContain("Current members not in Slack (1)");
+    expect(body).toMatch(/nameless@example\.com<\/td><td[^>]*><\/td><td[^>]*><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
+    expect(body).toContain("Lapsed members in Slack (1)");
+    expect(body).toContain("&lt;img src=x&gt;");
+    expect(body).not.toContain("<img src=x>");
+    expect(body).toContain("Slack users with no membership orders (1)");
+    expect(body).toContain('href="/admin/reports/slack?table=slack-without-orders&amp;format=csv">Download all 1 as CSV');
+    expect(body).not.toContain("Showing the first");
+  });
+
+  it("says when the Slack sync has never run", async () => {
+    await env.DB.exec("DELETE FROM slack_users");
+
+    const body = await (await get("/admin/reports/slack")).text();
+
+    expect(body).toContain("The Slack sync has not run yet");
+    expect(body).toContain("Current members not in Slack (2)");
+  });
+
+  it("shows only the first page of a long table, but downloads all of it", async () => {
+    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+      await insertSlackUser({ id: `UBULK${i}`, email: `bulk${i}@example.com` });
+    }
+
+    const body = await (await get("/admin/reports/slack")).text();
+    const csv = await (await get("/admin/reports/slack?table=slack-without-orders&format=csv")).text();
+
+    expect(body).toContain(`Slack users with no membership orders (${PAGE_SIZE + 2})`);
+    expect(body).toContain(`Showing the first ${PAGE_SIZE}.`);
+    expect(body.match(/<td[^>]*>UBULK\d+<\/td>/g)).toHaveLength(PAGE_SIZE);
+    expect(body).not.toContain("guest@example.com"); // sorts after every bulk address
+    expect(csv.trimEnd().split("\r\n")).toHaveLength(PAGE_SIZE + 3);
+    expect(csv).toContain("guest@example.com");
+  });
+
+  it("downloads one table as CSV, with that table's columns", async () => {
+    const res = await get("/admin/reports/slack?table=slack-without-orders&format=csv");
+
+    expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="slack-slack-without-orders-2026-06-01.csv"');
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect((await res.text()).split("\r\n").slice(0, 2)).toEqual(["email,slack_id,slack_name", "guest@example.com,U03GUEST,'=HYPERLINK(1)"]);
+
+    const current = await (await get("/admin/reports/slack?table=current-in-slack&format=csv")).text();
+    expect(current.split("\r\n").slice(0, 2)).toEqual([
+      "email,first_name,last_name,expires_on,slack_id,slack_name",
+      "joined@example.com,Jo,Ined,2027-01-10T00:00:00Z,U01JOINED,Jo Ined",
+    ]);
+  });
+
+  it.each(["format=csv", "format=csv&table=everyone"])("rejects %s", async (query) => {
+    const res = await get(`/admin/reports/slack?${query}`);
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("table must be one of current-in-slack");
   });
 });
