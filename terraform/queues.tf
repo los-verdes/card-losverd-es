@@ -9,13 +9,29 @@
 # to it until the card-image backfill is built.
 
 resource "cloudflare_queue" "etl_sync" {
+  for_each = local.environments
+
   account_id = var.cloudflare_account_id
-  queue_name = "etl-sync"
+  queue_name = "etl-sync-${each.key}"
 }
 
 # Messages that exhaust etl-sync's retries land here instead of being
 # silently dropped.
 resource "cloudflare_queue" "etl_sync_dlq" {
+  for_each = local.environments
+
   account_id = var.cloudflare_account_id
-  queue_name = "etl-sync-dlq"
+  queue_name = "etl-sync-dlq-${each.key}"
+}
+
+
+# TODO: drop these moved blocks after a TF apply
+moved {
+  from = cloudflare_queue.etl_sync
+  to   = cloudflare_queue.etl_sync["production"]
+}
+
+moved {
+  from = cloudflare_queue.etl_sync_dlq
+  to   = cloudflare_queue.etl_sync_dlq["production"]
 }

@@ -1,6 +1,6 @@
 # Terraform (Cloudflare resources)
 
-Manages the durable Cloudflare resources this service depends on: the D1 database and the R2 bucket. Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the existing `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
+Manages the durable Cloudflare resources this service depends on: the D1 database, R2 bucket, and queues, for both production and staging, each a fully separate set created via `for_each` over `local.environments` (`environments.tf`). The `staging` Worker points at the test BigCommerce store. Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the existing `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
 
 ## Setup
 
@@ -9,7 +9,7 @@ Local runs go through the `just tf` wrapper, which shells out via `op run` to pu
 1. `just tf-init`
 2. `just tf-plan`
 3. `just tf-apply`
-4. Copy the `d1_database_id` output into `wrangler.toml`'s `[[d1_databases]]` block (already done as of 2026-09-16 for the currently-provisioned resources -- only needed again if the D1 database is ever recreated).
+4. Copy the `d1_database_ids` output into `wrangler.toml`'s `[[d1_databases]]` block (already done as of 2026-09-16 for the currently-provisioned resources -- only needed again if the D1 database is ever recreated).
 
 (`just tf <args>` is the thin wrapper `tf-init`/`tf-plan`/`tf-apply` all call -- it runs plain `terraform` in CI, where the workflow's own env already supplies credentials directly from GitHub Actions secrets rather than 1Password.)
 
