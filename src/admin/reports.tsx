@@ -17,8 +17,10 @@ import {
   expiredMemberships,
   listChannels,
   ordersByMonth,
+  slackCrossReference,
   type MembershipOrderRow,
   type ReportFilters,
+  type SlackCrossReference,
 } from "./reportQueries";
 
 export const PAGE_SIZE = 100;
@@ -40,6 +42,33 @@ const ORDER_CSV_COLUMNS = [
   "source",
   "status",
 ] as const;
+
+const SLACK_COLUMN_HEADINGS = {
+  email: "Email",
+  first_name: "First name",
+  last_name: "Last name",
+  expires_on: "Membership expires",
+  slack_id: "Slack ID",
+  slack_name: "Slack name",
+};
+
+type SlackColumn = keyof typeof SLACK_COLUMN_HEADINGS;
+
+const MEMBER_COLUMNS: SlackColumn[] = ["email", "first_name", "last_name", "expires_on"];
+const SLACK_COLUMNS: SlackColumn[] = ["slack_id", "slack_name"];
+
+/** The Slack page's four tables; `key` names each one's CSV download. */
+const SLACK_TABLES: {
+  key: string;
+  field: Exclude<keyof SlackCrossReference, "slackSyncedAt">;
+  title: string;
+  columns: SlackColumn[];
+}[] = [
+  { key: "current-in-slack", field: "currentInSlack", title: "Current members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
+  { key: "current-not-in-slack", field: "currentNotInSlack", title: "Current members not in Slack", columns: MEMBER_COLUMNS },
+  { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
+  { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS] },
+];
 
 class BadRequest extends Error {}
 
@@ -123,6 +152,8 @@ const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }
         <a href="/admin/reports/expired">Expired memberships</a>
         {" · "}
         <a href="/admin/reports/orders">Orders by month</a>
+        {" · "}
+        <a href="/admin/reports/slack">Slack cross-reference</a>
         {" · "}
         <a href="/">My card</a>
       </nav>
@@ -256,6 +287,10 @@ reports.get("/", (c) =>
         <li>
           <a href="/admin/reports/orders">Orders by month</a>: this year against last year.
         </li>
+        <li>
+          <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
+          Slack accounts, and Slack users who never bought a membership.
+        </li>
       </ul>
     </AdminPage>,
   ),
@@ -375,6 +410,77 @@ reports.get("/orders", async (c) => {
           </tr>
         </tfoot>
       </table>
+    </AdminPage>,
+  );
+});
+
+/**
+ * Current snapshot only: Slack accounts have no history, so a past date would
+ * compare old memberships against today's workspace.
+ */
+reports.get("/slack", async (c) => {
+  const asOf = toIsoSeconds(new Date());
+  const format = c.req.query("format");
+  const csvTable = format === "csv" ? SLACK_TABLES.find((t) => t.key === c.req.query("table")) : undefined;
+  if (format === "csv" && !csvTable) {
+    throw new BadRequest(`table must be one of ${SLACK_TABLES.map((t) => t.key).join(", ")}`);
+  }
+  const result = await slackCrossReference(c.env.DB, asOf);
+  if (csvTable) {
+    return new Response(toCsv(csvTable.columns, result[csvTable.field]), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="slack-${csvTable.key}-${asOf.slice(0, 10)}.csv"`,
+      },
+    });
+  }
+  return c.html(
+    <AdminPage title="Slack cross-reference">
+      <p>
+        Members matched to Slack accounts by email, as of {asOf}. Cancelled, refunded, and test orders are left out;
+        so are deactivated Slack accounts, bots, and accounts without an email. A member who joined Slack under a
+        different address shows as not in Slack.
+      </p>
+      <p>
+        {result.slackSyncedAt === null
+          ? "The Slack sync has not run yet, so nobody shows as in Slack."
+          : `Slack accounts last synced ${toIsoSeconds(new Date(result.slackSyncedAt))}.`}
+      </p>
+      {SLACK_TABLES.map((table) => {
+        const rows = result[table.field];
+        return (
+          <section>
+            <h2>
+              {table.title} ({rows.length})
+            </h2>
+            <div style="overflow-x: auto">
+              <table style="border-collapse: collapse; font-size: 0.9rem">
+                <thead>
+                  <tr>
+                    {table.columns.map((column) => (
+                      <th style={cellStyle}>{SLACK_COLUMN_HEADINGS[column]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, PAGE_SIZE).map((row) => (
+                    <tr>
+                      {table.columns.map((column) => (
+                        // Dates shown as days; the CSV keeps the full timestamp.
+                        <td style={cellStyle}>{row[column]?.slice(0, column === "expires_on" ? 10 : undefined)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p>
+              {rows.length > PAGE_SIZE && `Showing the first ${PAGE_SIZE}. `}
+              <a href={`/admin/reports/slack?table=${table.key}&format=csv`}>Download all {rows.length} as CSV</a>
+            </p>
+          </section>
+        );
+      })}
     </AdminPage>,
   );
 });

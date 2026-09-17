@@ -39,3 +39,34 @@ export async function insertOrder(o: OrderFixture) {
     )
     .run();
 }
+
+export interface SlackUserFixture {
+  id: string;
+  email: string | null;
+  realName?: string;
+  deleted?: boolean;
+  isBot?: boolean;
+  isAppUser?: boolean;
+  isWorkflowBot?: boolean;
+  syncedAt?: number;
+}
+
+/** Inserts a synthetic `slack_users` row; the handle is the lowercased id. */
+export async function insertSlackUser(u: SlackUserFixture) {
+  await env.DB.prepare(
+    `INSERT INTO slack_users (slack_id, name, real_name, email, deleted, is_bot, is_app_user, is_workflow_bot, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      u.id,
+      u.id.toLowerCase(),
+      u.realName ?? "",
+      u.email,
+      u.deleted ? 1 : 0,
+      u.isBot ? 1 : 0,
+      u.isAppUser ? 1 : 0,
+      u.isWorkflowBot ? 1 : 0,
+      u.syncedAt ?? Date.UTC(2026, 5, 1),
+    )
+    .run();
+}
