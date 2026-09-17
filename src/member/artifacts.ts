@@ -83,11 +83,12 @@ function verifyUrl(env: Env, member: MemberRecord): Promise<string> {
   );
 }
 
-async function readTemplateAsset(env: Env, name: string): Promise<Uint8Array> {
-  const object = await env.ASSETS.get(`templates/apple/${name}`);
+/** Template images committed under assets/templates/ and synced to R2 on deploy. */
+async function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
+  const object = await env.ASSETS.get(key);
   if (!object) {
     throw new Error(
-      `Missing pass template asset in R2: templates/apple/${name} (see Phase 3.2's asset migration script)`,
+      `Missing template asset in R2: ${key} (committed under assets/; upload with \`just r2-upload-templates\`)`,
     );
   }
   return new Uint8Array(await object.arrayBuffer());
@@ -123,7 +124,7 @@ export async function getApplePassBundle(
 
   const assets: Record<string, Uint8Array> = {};
   for (const name of PASS_TEMPLATE_ASSETS) {
-    assets[name] = await readTemplateAsset(env, name);
+    assets[name] = await readTemplateAsset(env, `templates/apple/${name}`);
   }
   const bundle = await assemblePassBundle(
     {
@@ -160,7 +161,10 @@ export async function getApplePassBundle(
   return bundle;
 }
 
-/** The member's card image (PNG), using the pass's crest from R2 as the logo. */
+/**
+ * The member's card image (PNG). Uses a dedicated 256px crest rather than the
+ * pass icon, which at 58px is too small for the ~120px crest on the card.
+ */
 export async function renderCardImage(
   env: Env,
   member: MemberRecord,
@@ -174,7 +178,7 @@ export async function renderCardImage(
       verifyUrl: await verifyUrl(env, member),
       expirationDate: member.expiration_date,
     },
-    await readTemplateAsset(env, "icon@2x.png"),
+    await readTemplateAsset(env, "templates/card/crest.png"),
   );
 }
 

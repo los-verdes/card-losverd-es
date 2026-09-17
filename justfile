@@ -45,6 +45,13 @@ db-migrate-remote:
 r2-init-local:
     npx wrangler r2 bucket create card-losverd-es-assets || true
 
+# Upload the committed template images (assets/templates/**) to the R2 bucket
+# under the same keys (templates/**): the Apple pass icons/logos pass
+# generation reads, and the card image crest. Idempotent -- the Deploy
+# workflow runs it on every merge. Pass `--local` to target local dev R2.
+r2-upload-templates target="--remote":
+    cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets/$key" --file "$key" --content-type image/png {{target}}; done
+
 # Deploy to Cloudflare Workers. There's one environment -- production (see
 # wrangler.toml); CI normally does this on merge to main.
 deploy:

@@ -62,6 +62,14 @@ jobs:
           # terraform/README.md). No step in this workflow needs them.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      # Syncs the committed template images (assets/templates/**) into R2
+      # before the Worker that reads them deploys -- pass generation and the
+      # card image fail loudly if they're missing.
+      - name: Upload R2 template assets
+        run: just r2-upload-templates
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
