@@ -44,6 +44,8 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 
 Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
 
+**Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
+
 The `card.losverd.es` DNS record is deliberately not managed here yet -- that's the cutover step itself, not something a routine `terraform apply` should be able to trigger.
 
 ## What's here
