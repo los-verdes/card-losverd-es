@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
+import verifyPass from "./member/verify-pass";
 import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
@@ -55,6 +56,12 @@ export interface Env {
   // Apple developer team ID; real values in wrangler.toml `[vars]`.
   AUTH_APPLE_ID: string;
   APPLE_SIGNIN_TEAM_ID: string;
+  // Secret -- HMAC key for membership card QR-code signatures
+  // (src/lib/passSignature.ts). Deliberately the legacy app's key bytes
+  // (`SECRET_KEY * 5`), so existing QR codes keep verifying; see
+  // docs/legacy-pass-compatibility.md (D2). No wrangler.toml placeholder;
+  // unset fails closed.
+  PASS_SIGNATURE_KEY: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -71,6 +78,10 @@ app.use("/api/auth/*", initAuthConfig(authConfig), authHandler());
 // ("https://card.losverd.es/passkit") -- Apple appends `/v1/...` to
 // whatever `webServiceURL` a pass declares.
 app.route("/passkit", passkit);
+
+// Membership card QR-code verification (the legacy `/verify-pass` URL is
+// baked into existing cards' QR codes).
+app.route("/verify-pass", verifyPass);
 
 // Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
 // test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
