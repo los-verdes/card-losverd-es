@@ -1,6 +1,6 @@
 # Terraform (Cloudflare resources)
 
-Manages the durable Cloudflare resources this service depends on: the D1 database and the R2 bucket. Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the existing `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
+Manages the durable Cloudflare resources this service depends on: the D1 database, R2 bucket, and queues, for both production and staging (`staging.tf` -- a fully separate copy for the `staging` Worker, which points at the test BigCommerce store). Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the existing `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
 
 ## Setup
 
