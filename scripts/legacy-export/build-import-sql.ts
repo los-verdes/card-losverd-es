@@ -18,5 +18,13 @@ const data = parseLegacyExport(JSON.parse(readFileSync(inputPath, "utf8")));
 writeFileSync(outputPath, buildImportSql(data));
 console.log(
   `Wrote ${outputPath}: ${data.member_since.length} member_since rows, ` +
-    `${data.membership_cards.length} membership cards (export taken ${data.exported_at}).`,
+    `${data.membership_cards.length} membership cards, ` +
+    `${data.membership_orders.length} membership orders (export taken ${data.exported_at}).`,
 );
+const skipped = data.membership_orders_total - data.membership_orders.length;
+if (skipped > 0) {
+  console.warn(
+    `WARNING: ${skipped} of ${data.membership_orders_total} annual_membership rows were NOT exported ` +
+      `(no order id, created_on, or customer email). Inspect them in Postgres before it is decommissioned.`,
+  );
+}

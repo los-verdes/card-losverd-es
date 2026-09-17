@@ -1,5 +1,6 @@
 import type { Env } from "../index";
 import { notifyPassUpdated } from "../passkit/updates";
+import { recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
@@ -32,6 +33,10 @@ export interface BigCommerceOrder {
   date_created: string;
   date_modified: string;
   billing_address: BigCommerceAddress;
+  // Reporting-only fields (src/bigcommerce/orders.ts). Optional: nothing
+  // membership-critical depends on them.
+  cart_id?: string | null;
+  order_source?: string;
 }
 
 export interface BigCommerceOrderProduct {
@@ -117,12 +122,18 @@ export class BigCommerceClient {
   }
 }
 
-function resolveMembershipTier(
+interface MembershipLineItem {
+  tier: string;
+  product: BigCommerceOrderProduct;
+}
+
+/** The order's first membership line item, if it has one. */
+function resolveMembership(
   products: BigCommerceOrderProduct[],
-): string | null {
+): MembershipLineItem | null {
   for (const product of products) {
     const tier = MEMBERSHIP_SKU_TIER_MAP[product.sku];
-    if (tier) return tier;
+    if (tier) return { tier, product };
   }
   return null;
 }
@@ -230,7 +241,7 @@ export async function upsertMemberFromOrder(
   env: Env,
   input: MemberUpsertInput,
 ): Promise<MemberUpsertResult> {
-  const email = input.email.toLowerCase();
+  const email = input.email.trim().toLowerCase();
   const now = Date.now();
 
   const existing = await env.DB.prepare(
@@ -326,15 +337,21 @@ export async function upsertMemberFromOrder(
   return { memberId, passChanged: true };
 }
 
-/** Upserts a membership order and pushes a pass update if the pass changed. */
+/**
+ * Records the order in the `membership_orders` history, upserts the member's
+ * current state, and pushes a pass update if the pass changed. History goes
+ * first: it is idempotent, so if a later step throws, the queue's retry
+ * simply rewrites the same row.
+ */
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
-  membershipTier: string,
+  membership: MembershipLineItem,
 ): Promise<void> {
+  await recordMembershipOrder(env, order, membership.product);
   const { memberId, passChanged } = await upsertMemberFromOrder(
     env,
-    upsertInputFromOrder(order, membershipTier),
+    upsertInputFromOrder(order, membership.tier),
   );
   if (passChanged) {
     await notifyPassUpdated(env, memberId);
@@ -372,15 +389,15 @@ export async function syncBigCommerceOrder(
     client.getOrderProducts(orderId),
   ]);
 
-  const membershipTier = resolveMembershipTier(products);
-  if (!membershipTier) {
+  const membership = resolveMembership(products);
+  if (!membership) {
     console.info(
       `syncBigCommerceOrder(${orderId}): no membership SKU found in order line items, skipping`,
     );
     return;
   }
 
-  await applyMembershipOrder(env, order, membershipTier);
+  await applyMembershipOrder(env, order, membership);
 }
 
 const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
@@ -466,9 +483,9 @@ export async function syncSubscriptionsEtl(
 
     for (const order of orders) {
       const products = await client.getOrderProducts(order.id);
-      const membershipTier = resolveMembershipTier(products);
-      if (!membershipTier) continue;
-      await applyMembershipOrder(env, order, membershipTier);
+      const membership = resolveMembership(products);
+      if (!membership) continue;
+      await applyMembershipOrder(env, order, membership);
       ordersProcessed++;
     }
     page++;

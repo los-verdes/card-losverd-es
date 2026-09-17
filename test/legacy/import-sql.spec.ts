@@ -9,9 +9,49 @@ import {
 
 const SERIAL = "0cd5ad74-5fbc-40fd-9569-747fec277013";
 
+const SQUARESPACE_ORDER = {
+  order_id: "5f00000000000000000000a1",
+  source: "squarespace",
+  order_number: "1042",
+  channel_name: "web",
+  order_email: "o'brien@example.com",
+  member_email: "pat@example.com",
+  first_name: "Pat",
+  last_name: "O'Brien",
+  customer_id: null,
+  sku: "SQ0000001",
+  product_name: "Test Membership",
+  status: "FULFILLED",
+  test_mode: false,
+  created_on: "2021-05-04T12:00:00Z",
+  modified_on: "2021-05-05T01:02:03Z",
+};
+
+const BIGCOMMERCE_ORDER = {
+  order_id: "1001_bc",
+  source: "bigcommerce",
+  order_number: "1001_00000000-0000-4000-8000-000000000001",
+  channel_name: "bigcommerce_www",
+  order_email: "early@example.com",
+  member_email: "early@example.com",
+  first_name: "Early",
+  last_name: "Bird",
+  customer_id: 42,
+  sku: "LOSV-MEM-0001",
+  product_name: "Los Verdes Annual Membership",
+  status: "Completed",
+  test_mode: false,
+  created_on: "2023-03-10T08:30:00Z",
+  modified_on: null,
+};
+
+function orderExport(order: Record<string, unknown>): Record<string, unknown> {
+  return validExport({ membership_orders: [order], membership_orders_total: 1 });
+}
+
 function validExport(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    format_version: 1,
+    format_version: 2,
     exported_at: "2026-09-16T20:00:00Z",
     member_since: [
       { email: "early@example.com", member_since: "2018-03-01" },
@@ -26,6 +66,8 @@ function validExport(overrides: Record<string, unknown> = {}): Record<string, un
         member_until: "2022-07-04",
       },
     ],
+    membership_orders_total: 3,
+    membership_orders: [SQUARESPACE_ORDER, BIGCOMMERCE_ORDER],
     ...overrides,
   };
 }
@@ -61,6 +103,7 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM legacy_membership_cards");
+  await env.DB.exec("DELETE FROM membership_orders");
 });
 
 describe("parseLegacyExport", () => {
@@ -88,7 +131,8 @@ describe("parseLegacyExport", () => {
 
   it.each<[string, unknown, RegExp]>([
     ["non-object", [], /\$: expected a JSON object/],
-    ["unknown format_version", validExport({ format_version: 2 }), /format_version/],
+    ["unknown format_version", validExport({ format_version: 3 }), /format_version/],
+    ["a version 1 export, with a hint to re-export", validExport({ format_version: 1 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["missing exported_at", validExport({ exported_at: "" }), /exported_at/],
     ["free-text exported_at", validExport({ exported_at: "now\nDROP TABLE members" }), /exported_at/],
     ["member_since not an array", validExport({ member_since: {} }), /member_since: expected an array/],
@@ -122,6 +166,26 @@ describe("parseLegacyExport", () => {
     ],
     ["non-string full_name", validExport({ membership_cards: [{ serial_number: SERIAL, email: "a@example.com", full_name: 7 }] }), /full_name/],
     ["bad member_until", validExport({ membership_cards: [{ serial_number: SERIAL, email: "a@example.com", member_until: "2022-07-04T00:00:00" }] }), /member_until/],
+    ["orders not an array", validExport({ membership_orders: "none" }), /membership_orders: expected an array/],
+    ["order row not an object", orderExport([] as unknown as Record<string, unknown>), /membership_orders\[0\]: expected an object/],
+    ["order without an id", orderExport({ ...SQUARESPACE_ORDER, order_id: "" }), /membership_orders\[0\]\.order_id/],
+    ["unknown order source", orderExport({ ...SQUARESPACE_ORDER, source: "shopify" }), /bigcommerce or squarespace/],
+    ["upper-case order_email", orderExport({ ...SQUARESPACE_ORDER, order_email: "Pat@example.com" }), /order_email: expected a lower-cased/],
+    ["missing member_email", orderExport({ ...SQUARESPACE_ORDER, member_email: null }), /member_email/],
+    ["fractional customer_id", orderExport({ ...BIGCOMMERCE_ORDER, customer_id: 4.2 }), /customer_id: expected an integer/],
+    ["string customer_id", orderExport({ ...BIGCOMMERCE_ORDER, customer_id: "42" }), /customer_id/],
+    ["non-boolean test_mode", orderExport({ ...SQUARESPACE_ORDER, test_mode: "f" }), /test_mode: expected a boolean/],
+    ["date-only created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-06-26" }), /created_on: expected YYYY-MM-DDTHH:MM:SSZ/],
+    ["impossible created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-13-45T00:00:00Z" }), /created_on/],
+    ["bad modified_on", orderExport({ ...SQUARESPACE_ORDER, modified_on: "yesterday" }), /modified_on/],
+    [
+      "duplicate order id",
+      validExport({ membership_orders: [SQUARESPACE_ORDER, SQUARESPACE_ORDER] }),
+      /duplicate order 5f00000000000000000000a1/,
+    ],
+    ["missing orders total", validExport({ membership_orders_total: undefined }), /membership_orders_total/],
+    ["fractional orders total", validExport({ membership_orders_total: 2.5 }), /membership_orders_total/],
+    ["orders total smaller than the rows exported", validExport({ membership_orders_total: 1 }), /membership_orders_total/],
   ])("rejects %s", (_label, input, message) => {
     expect(() => parseLegacyExport(input)).toThrow(message);
   });
@@ -194,8 +258,82 @@ describe("buildImportStatements (executed against D1)", () => {
     expect(member).toEqual({ member_since: "2024-01-15" });
   });
 
+  it("loads Squarespace and BigCommerce orders into membership_orders, with a 365-day expiry", async () => {
+    await runImport(parseLegacyExport(validExport()));
+
+    const { results } = await env.DB.prepare("SELECT * FROM membership_orders ORDER BY created_on").all();
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({
+      order_id: "5f00000000000000000000a1",
+      source: "squarespace",
+      order_number: "1042",
+      order_email: "o'brien@example.com",
+      member_email: "pat@example.com",
+      last_name: "O'Brien",
+      customer_id: null,
+      status: "FULFILLED",
+      test_mode: 0,
+      created_on: "2021-05-04T12:00:00Z",
+      expires_on: "2022-05-04T12:00:00Z",
+      modified_on: "2021-05-05T01:02:03Z",
+      first_seen_via: "legacy_postgres",
+    });
+    expect(results[1]).toMatchObject({
+      order_id: "1001_bc",
+      source: "bigcommerce",
+      customer_id: 42,
+      modified_on: null,
+      // 2024 is a leap year, so 365 days lands a day "early".
+      expires_on: "2024-03-09T08:30:00Z",
+    });
+  });
+
+  it("treats missing optional order fields as null, and keeps the test-order flag", async () => {
+    await runImport(
+      parseLegacyExport(
+        orderExport({
+          order_id: "abc123",
+          source: "squarespace",
+          order_email: "a@example.com",
+          member_email: "a@example.com",
+          test_mode: true,
+          created_on: "2020-01-01T00:00:00Z",
+        }),
+      ),
+    );
+
+    expect(await env.DB.prepare("SELECT * FROM membership_orders").first()).toMatchObject({
+      order_number: null,
+      channel_name: null,
+      first_name: null,
+      sku: null,
+      status: null,
+      modified_on: null,
+      test_mode: 1,
+    });
+  });
+
+  it("for an order the BigCommerce sync already recorded, only fills in member_email", async () => {
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
+       VALUES ('1001_bc', 'bigcommerce', 'early@example.com', 'early@example.com', 'Refunded', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
+    ).run();
+
+    await runImport(
+      parseLegacyExport(orderExport({ ...BIGCOMMERCE_ORDER, member_email: "renamed@example.com" })),
+    );
+
+    expect(await env.DB.prepare("SELECT * FROM membership_orders").first()).toMatchObject({
+      member_email: "renamed@example.com",
+      status: "Refunded", // the sync's fresher status survives the older export
+      first_seen_via: "sync",
+    });
+  });
+
   it("handles an empty export", async () => {
-    const empty = parseLegacyExport(validExport({ member_since: [], membership_cards: [] }));
+    const empty = parseLegacyExport(
+      validExport({ member_since: [], membership_cards: [], membership_orders: [], membership_orders_total: 0 }),
+    );
     expect(buildImportStatements(empty)).toEqual([]);
   });
 });
@@ -251,8 +389,8 @@ describe("buildImportSql", () => {
     const sql = buildImportSql(parseLegacyExport(validExport()));
     const lines = sql.trimEnd().split("\n");
     expect(lines[0]).toBe("-- Generated from a legacy Postgres export taken at 2026-09-16T20:00:00Z.");
-    expect(lines[1]).toBe("-- 2 member_since rows, 1 membership cards.");
-    expect(lines.slice(2)).toHaveLength(3);
+    expect(lines[1]).toBe("-- 2 member_since rows, 1 membership cards, 2 of 3 membership orders.");
+    expect(lines.slice(2)).toHaveLength(5);
     expect(lines.slice(2).every((l) => l.endsWith(";"))).toBe(true);
   });
 });
