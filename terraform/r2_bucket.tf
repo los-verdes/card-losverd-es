@@ -3,11 +3,10 @@ resource "cloudflare_r2_bucket" "assets" {
 
   account_id = var.cloudflare_account_id
   name       = "card-losverd-es-assets-${each.key}"
-}
 
-
-# TODO: remove this after TF has been applied
-moved {
-  from = cloudflare_r2_bucket.assets
-  to   = cloudflare_r2_bucket.assets["production"]
+  # Same guard as the D1 database: a forced replacement must be a deliberate,
+  # separate change, not a side effect of an auto-approved Deploy.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
