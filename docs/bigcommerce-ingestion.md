@@ -134,22 +134,43 @@ job, `run_slack_members_etl`, shares the queue but is not BigCommerce's
 concern; see [`reporting.md`](reporting.md). Of the three BigCommerce jobs,
 one is implemented fully:
 
-> **Known bug, [#57](https://github.com/los-verdes/card-losverd-es/issues/57):**
-> a full resync (`loadAll`) stops after 50 pages of 50 orders, far short of
-> the store's order count, yet still advances the watermark. Fix before the
-> first full `members` load.
-
 * **`sync_subscriptions_etl` — fully implemented** (`src/bigcommerce/sync.ts::syncSubscriptionsEtl`).
   Chosen as the one full example because it's the direct self-healing
   counterpart to the webhook path and the one Phase 2.2 leans on hardest
-  ("a scheduled resync can always repair drift"): it pages through
-  `GET /v2/orders?min_date_modified=...` for a trailing window (mirrors
+  ("a scheduled resync can always repair drift"): it walks
+  `GET /v2/orders` for a trailing window (`min_date_modified`, mirroring
   `member_card/bigcommerce.py::bigcommerce_orders_etl`'s "last run time
   minus 12 hours" overlap window, using a D1-stored watermark in place of
-  Postgres's `table_metadata`), and runs every order through the exact
-  same `upsertMemberFromOrder()` path §2 describes. Concurrency is capped
-  at 1 by the `etl-sync` queue config (Phase 2.5.1) so this can never race
-  a webhook-triggered `sync_bigcommerce_order` on the same D1 rows.
+  Postgres's `table_metadata`), or the whole store with `loadAll`, and runs
+  every membership order through the exact same `upsertMemberFromOrder()`
+  path §2 describes. Concurrency is capped at 1 by the `etl-sync` queue
+  config (Phase 2.5.1) so this can never race a webhook-triggered
+  `sync_bigcommerce_order` on the same D1 rows.
+
+  **A run is a chain of queue messages** (#57), because the store has more
+  orders than one Worker invocation can process:
+  * Each message fetches one page of up to 250 orders in id order
+    (`min_id` + `sort=id:asc`; an id cursor, since page numbers shift when
+    orders change mid-run), and stops early after 150 membership orders to
+    stay well inside D1's per-invocation query limit (the arithmetic is in
+    the code comment on `MAX_MEMBERSHIP_ORDERS_PER_MESSAGE`).
+  * If there is more to do, it enqueues a follow-up message carrying a
+    `cursor`: the last order id processed, the `min_date_modified` filter
+    fixed at the chain's start, and the chain's start time. The follow-up is
+    sent only after the slice succeeds; a retried message redoes its slice,
+    which is harmless because every write is an idempotent upsert.
+  * Only the chain's last message (a short page) sets the watermark, to the
+    chain's start time, and the watermark never moves backwards (an
+    incremental chain can finish while a long `loadAll` chain is still
+    running). A chain that trips a safety backstop (500 messages, or
+    BigCommerce ignoring `min_id`) logs an error and ends *without* touching
+    the watermark.
+  * The BigCommerce client waits out `429` responses (up to 5 waits of at
+    most 30s, per `X-Rate-Limit-Time-Reset-Ms`): the store's rate limit is
+    shared by every app on it, and a queue retry would just hit it again.
+
+  Start a full historical resync by enqueuing
+  `{ "type": "sync_subscriptions_etl", "loadAll": true }`.
 * **`sync_customers_etl` — stubbed.** High-level: page through
   `GET /v2/customers`, and for any customer whose email matches an
   existing `members` row with no linkage yet, backfill/correct identity
