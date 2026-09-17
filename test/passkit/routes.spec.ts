@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { unzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
 
 const PASS_TYPE_ID = "pass.es.losverd.card";
@@ -51,6 +52,8 @@ beforeEach(() => {
   env.APPLE_PASS_CERT_PEM = chain.leafCertPem;
   env.APPLE_PASS_KEY_PEM = chain.leafPrivateKeyPem;
   env.APPLE_WWDR_CERT_PEM = chain.rootCertPem;
+  env.PUBLIC_BASE_URL = "https://card.losverd.es";
+  env.PASS_SIGNATURE_KEY = "test-pass-signature-key".repeat(5);
 });
 
 afterEach(async () => {
@@ -423,5 +426,29 @@ describe("member_since overrides on issued passes", () => {
     expect(passJson).toContain("Mar 2016");
     expect(passJson).not.toContain("Jul 2021");
     await env.DB.exec("DELETE FROM member_since_overrides");
+  });
+});
+
+describe("pass QR code", () => {
+  it("encodes a signed /verify-pass URL that the verification page accepts", async () => {
+    await seedTemplateAssets();
+    const { memberId, authToken } = await seedMember({ memberId: "LV-50001" });
+
+    const res = await SELF.fetch(`${BASE}/v1/passes/${PASS_TYPE_ID}/${memberId}`, {
+      headers: { authorization: `ApplePass ${authToken}` },
+    });
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const { barcode } = JSON.parse(new TextDecoder().decode(files["pass.json"]));
+
+    const verifyUrl = new URL(barcode.message);
+    expect(verifyUrl.origin + verifyUrl.pathname).toBe(`https://card.losverd.es/verify-pass/${memberId}`);
+
+    env.SESSION_SIGNING_KEY = "test-session-signing-key-0123456789";
+    const session = await issueSessionToken(env.SESSION_SIGNING_KEY, { userId: 1, isAdmin: false });
+    const verification = await SELF.fetch(`https://example.com${verifyUrl.pathname}${verifyUrl.search}`, {
+      headers: { Cookie: `${SESSION_COOKIE_NAME}=${session}` },
+    });
+    expect(verification.status).toBe(200);
+    expect(await verification.text()).toContain("MEMBERSHIP VALID");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signPassSerial, verifyPassSerialSignature } from "../../src/lib/passSignature";
+import { buildVerifyPassUrl, signPassSerial, verifyPassSerialSignature } from "../../src/lib/passSignature";
 
 // Cross-checked against the legacy Python implementation
 // (base64.urlsafe_b64encode(hmac.new(key, msg, sha256).digest())); see
@@ -35,5 +35,19 @@ describe("verifyPassSerialSignature", () => {
   it("rejects a genuine signature for a different serial", async () => {
     const other = await signPassSerial(LEGACY_KEY, "some-other-serial");
     expect(await verifyPassSerialSignature(LEGACY_KEY, LEGACY_MESSAGE, other)).toBe(false);
+  });
+});
+
+describe("buildVerifyPassUrl", () => {
+  it("builds /verify-pass/:serial with a signature that verifies after URL parsing", async () => {
+    const url = new URL(await buildVerifyPassUrl("https://card.losverd.es", LEGACY_KEY, LEGACY_MESSAGE));
+
+    expect(url.origin + url.pathname).toBe(`https://card.losverd.es/verify-pass/${LEGACY_MESSAGE}`);
+    expect(url.searchParams.get("signature")).toBe(LEGACY_SIGNATURE);
+  });
+
+  it("percent-encodes the serial path segment", async () => {
+    const url = await buildVerifyPassUrl("https://card.losverd.es", LEGACY_KEY, "a/b");
+    expect(url).toMatch(/^https:\/\/card\.losverd\.es\/verify-pass\/a%2Fb\?signature=/);
   });
 });

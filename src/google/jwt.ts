@@ -36,7 +36,7 @@ export interface GoogleWalletConfig {
 
 /** The subset of a `members` row (Phase 2.1) needed to build a Google Wallet object. */
 export interface MemberWalletInput {
-  memberId: string; // == the GenericObject id suffix and QR barcode value
+  memberId: string; // == the GenericObject id suffix and the QR code's alternate text
   firstName: string;
   lastName: string;
   membershipTier: string;
@@ -44,6 +44,8 @@ export interface MemberWalletInput {
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
   /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
   memberSince: string | null;
+  /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
+  verifyUrl: string;
 }
 
 interface LocalizedString {
@@ -98,7 +100,10 @@ function classId(config: GoogleWalletConfig): string {
   return `${config.issuerId}.${config.classSuffix}`;
 }
 
-function objectId(config: GoogleWalletConfig, member: MemberWalletInput): string {
+function objectId(
+  config: GoogleWalletConfig,
+  member: MemberWalletInput,
+): string {
   return `${config.issuerId}.${member.memberId}`;
 }
 
@@ -128,8 +133,8 @@ function objectState(status: MemberWalletInput["status"]): GenericObjectState {
  * Builds the `GenericObject` payload for a real Los Verdes membership pass
  * (Phase 5.1). Pure function of its inputs, mirroring
  * `passkit/generator.ts#buildPassJson`'s shape and conventions (conditional
- * member-since/expiry fields, QR barcode keyed on the bare member id -- see
- * that function's docstring for why a signed verify URL isn't used yet).
+ * member-since/expiry fields, QR code encoding the signed `/verify-pass` URL
+ * with the member id as its alternate text).
  */
 export function buildGenericObject(
   member: MemberWalletInput,
@@ -165,7 +170,7 @@ export function buildGenericObject(
     textModulesData,
     barcode: {
       type: "QR_CODE",
-      value: member.memberId,
+      value: member.verifyUrl,
       alternateText: member.memberId,
     },
     hexBackgroundColor: config.hexBackgroundColor,
@@ -206,7 +211,11 @@ export async function signSaveToWalletJwt(
   config: GoogleWalletConfig,
   credentials: GoogleWalletCredentials,
 ): Promise<string> {
-  const payload = buildSaveToWalletPayload(member, config, credentials.serviceAccountEmail);
+  const payload = buildSaveToWalletPayload(
+    member,
+    config,
+    credentials.serviceAccountEmail,
+  );
   const privateKey = await importPKCS8(credentials.privateKeyPem, "RS256");
 
   // `jose`'s JWTPayload type requires an index signature for arbitrary

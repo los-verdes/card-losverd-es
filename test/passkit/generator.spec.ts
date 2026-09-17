@@ -35,6 +35,7 @@ function makeMember(overrides: Partial<MemberPassInput> = {}): MemberPassInput {
     memberSince: "2021-07-15",
     expirationDate: "2024-02-17",
     authToken: "test-auth-token",
+    verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     ...overrides,
   };
 }
@@ -176,11 +177,13 @@ describe("buildPassJson", () => {
     });
   });
 
-  it("builds a QR barcode from the member id, iso-8859-1 encoded", () => {
-    const pass = parse(makeMember({ memberId: "LV-77777" }));
+  it("encodes the signed verify URL in the QR barcode, iso-8859-1 encoded", () => {
+    const pass = parse(
+      makeMember({ memberId: "LV-77777", verifyUrl: "https://card.losverd.es/verify-pass/LV-77777?signature=abc%3D" }),
+    );
     expect(pass.barcode).toEqual({
       format: "PKBarcodeFormatQR",
-      message: "LV-77777",
+      message: "https://card.losverd.es/verify-pass/LV-77777?signature=abc%3D",
       messageEncoding: "iso-8859-1",
       altText: "",
     });

@@ -51,3 +51,18 @@ export async function verifyPassSerialSignature(
   const expected = await signPassSerial(key, serial);
   return signature !== undefined && timingSafeEqual(expected, signature);
 }
+
+/**
+ * The URL a membership card's QR code encodes: `/verify-pass/:serial` with
+ * that serial's signature (src/member/verify-pass.tsx). `baseUrl` is the
+ * public origin, e.g. `https://card.losverd.es`.
+ */
+export async function buildVerifyPassUrl(
+  baseUrl: string,
+  key: string,
+  serial: string,
+): Promise<string> {
+  const url = new URL(`/verify-pass/${encodeURIComponent(serial)}`, baseUrl);
+  url.searchParams.set("signature", await signPassSerial(key, serial));
+  return url.toString();
+}

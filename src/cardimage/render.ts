@@ -69,7 +69,7 @@ export async function renderMembershipCardPng(
   await Promise.all([ensureResvgInitialized(), ensureYogaInitialized()]);
 
   const logoDataUrl = `data:image/png;base64,${bytesToBase64(logoPngBytes)}`;
-  const qr = buildQrCodeImage(member.memberId);
+  const qr = buildQrCodeImage(member.verifyUrl);
   const expirationLabel = member.expirationDate
     ? `Good through ${formatShortDate(member.expirationDate)}`
     : null;

@@ -13,6 +13,8 @@ export interface MemberPassInput {
   /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
   memberSince: string | null;
   authToken: string;
+  /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
+  verifyUrl: string;
 }
 
 /** Static, non-secret PassKit identifiers -- one set per deployment environment. */
@@ -110,12 +112,10 @@ export async function buildManifest(
  * function's), and its `backgroundColor` was a malformed
  * `"rgb((0, 177, 64)"` string rather than valid `"rgb(0, 177, 64)"`.
  *
- * The real example's barcode encoded a full HMAC-signed `/verify-pass/...`
- * URL (Phase 2.3.1's `PASS_SIGNATURE_KEY`), which needs a signing key this
- * pure function doesn't have. Using the bare serialNumber as the barcode
- * message instead, per this TODO's own suggestion -- once the route layer
- * (Phase 4.1-4.5) exists to compute the signed URL, thread a `verifyUrl`
- * through `MemberPassInput` the same way `authToken` is threaded today.
+ * Like the real example, the QR code encodes a signed `/verify-pass/...` URL
+ * -- computed by the caller (it needs `PASS_SIGNATURE_KEY`) and threaded in as
+ * `member.verifyUrl`, the same way `authToken` is. Unlike it, there's no
+ * legacy `Content: ` prefix on the message.
  */
 export function buildPassJson(
   member: MemberPassInput,
@@ -186,7 +186,7 @@ export function buildPassJson(
     },
     barcode: {
       format: "PKBarcodeFormatQR",
-      message: member.memberId,
+      message: member.verifyUrl,
       messageEncoding: "iso-8859-1",
       altText: "",
     },
