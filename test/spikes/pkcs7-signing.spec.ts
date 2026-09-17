@@ -49,7 +49,6 @@ describe('Phase 1.0.1 spike: PKCS#7 pass signing', () => {
 
     // Sanity data point for Phase 1.0.1 step 4 (CPU-time budget) -- printed
     // rather than asserted on, since exact timing is host-dependent.
-    // eslint-disable-next-line no-console
     console.log(`[pkcs7-signing spike] manifest sign() took ${signMs.toFixed(2)}ms`);
     expect(signMs).toBeGreaterThan(0);
   });
