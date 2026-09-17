@@ -67,6 +67,7 @@ Behind the routes:
 - **`etl-sync` queue** (`src/queues/`): one consumer at a time, five retries, then a dead-letter queue. Carries BigCommerce order syncs and the scheduled jobs below.
 - **Scheduled jobs** (`src/scheduled.ts`): BigCommerce order resync and the Slack members sync. **Not enabled yet**: `wrangler.toml` has no `[triggers]` until real BigCommerce credentials are in place.
 - **Apple pass updates** (`src/passkit/apns.ts`, `updates.ts`): when a sync changes something visible on a pass, registered devices get an APNs push.
+- **New-order card emails** (`src/email/newOrder.ts`): when an order webhook reports an order has reached `Completed`, the member is emailed their card, once. **Off until `CARD_EMAIL_NEW_ORDERS_SINCE` is set** to a date -- see [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md).
 
 ## Data (D1)
 
@@ -83,6 +84,7 @@ Schema lives in `src/db/migrations/` (applied automatically on deploy); `src/db/
 | `users`, `oauth_identities` | Login identities. `users.is_admin` gates `/admin`. |
 | `devices`, `registrations`, `pass_device_logs` | Apple PassKit device state. |
 | `etl_sync_state`, `rate_limit_counters` | Sync watermarks; rate limiting for `/email-card`. |
+| `card_emails` | One row per order already emailed a card, written before sending so a retry can't send twice. |
 
 ## Secrets
 

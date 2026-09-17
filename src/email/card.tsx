@@ -6,7 +6,9 @@
  * - `/email-card`, the no-login fallback a member requests themselves
  *   (src/member/email-card.tsx);
  * - an admin attributing an order to someone (src/admin/orders.tsx), as a
- *   one-time "here is your card" to the new member.
+ *   one-time "here is your card" to the new member;
+ * - a new membership order reaching BigCommerce's `Completed` status
+ *   (src/email/newOrder.ts), once per order.
  *
  * Nothing else may send it. Emailing cards must never be a side effect of a
  * backfill, a resync, the legacy import, or cutover -- that would mail
@@ -20,6 +22,8 @@ import {
   buildGoogleWalletSaveUrl,
   isGoogleWalletConfigured,
   getApplePassBundle,
+  getMemberByEmail,
+  isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
 } from "../member/artifacts";
@@ -32,7 +36,8 @@ export const APPLE_PASS_FILENAME = "los-verdes-membership-card.pkpass";
 /** Why this member is being emailed, which the email says in its footer. */
 export type CardEmailReason =
   | { kind: "request"; submittedOn: string }
-  | { kind: "attribution" };
+  | { kind: "attribution" }
+  | { kind: "new-order" };
 
 interface CardEmailProps {
   name: string;
@@ -50,10 +55,15 @@ function opening(reason: CardEmailReason): string {
     : "Your Los Verdes membership card is attached. Gracias!";
 }
 
+const FOOTERS = {
+  attribution: "You're receiving this because a Los Verdes admin attributed a membership to this address.",
+  "new-order": "You're receiving this because a Los Verdes membership was purchased for this address.",
+} as const;
+
 function footer(props: CardEmailProps): string {
   return props.reason.kind === "request"
     ? `This email was requested via a form submission made at ${props.baseUrl}/email-card at: ${props.reason.submittedOn}.`
-    : "You're receiving this because a Los Verdes admin attributed a membership to this address.";
+    : FOOTERS[props.reason.kind];
 }
 
 const CardEmail: FC<CardEmailProps> = (props) => (
@@ -187,4 +197,62 @@ export async function sendMembershipCardEmail(
       ? Number(env.SENDGRID_UNSUBSCRIBE_GROUP_ID)
       : undefined,
   });
+}
+
+/**
+ * The member a card email would go to: null when email isn't configured, the
+ * address has no member row, or that membership isn't current. Separate from
+ * sending so a caller can check eligibility *before* doing anything it can't
+ * undo, such as claiming an order's one send (src/email/newOrder.ts).
+ * Addresses are never logged -- Workers Logs keeps lines for 7 days.
+ */
+export async function findCardRecipient(
+  env: Env,
+  email: string,
+): Promise<(MemberRecord & { expiration_date: string }) | null> {
+  if (!env.SENDGRID_API_KEY) {
+    console.warn("Card email: SENDGRID_API_KEY not configured, not sending");
+    return null;
+  }
+  const member = await getMemberByEmail(env, email);
+  if (!member || !isMembershipCurrent(member)) {
+    return null;
+  }
+  // Non-null: isMembershipCurrent() requires an expiration date.
+  return { ...member, expiration_date: member.expiration_date! };
+}
+
+/**
+ * Emails `member` their card, logging rather than throwing on failure --
+ * callers are a `waitUntil` or a queue consumer that must not fail over an
+ * email. Returns whether a message was sent.
+ */
+export async function emailCardTo(
+  env: Env,
+  member: MemberRecord & { expiration_date: string },
+  reason: CardEmailReason,
+): Promise<boolean> {
+  try {
+    await sendMembershipCardEmail(env, member, reason);
+    console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
+    return true;
+  } catch (err) {
+    console.error("Card email failed", { reason: reason.kind, error: String(err) });
+    return false;
+  }
+}
+
+/** Looks the member up and emails them, if they're eligible. Never throws. */
+export async function emailMemberCard(
+  env: Env,
+  email: string,
+  reason: CardEmailReason,
+): Promise<boolean> {
+  try {
+    const member = await findCardRecipient(env, email);
+    return member ? await emailCardTo(env, member, reason) : false;
+  } catch (err) {
+    console.error("Card email failed", { reason: reason.kind, error: String(err) });
+    return false;
+  }
 }

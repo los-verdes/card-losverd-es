@@ -92,6 +92,11 @@ export interface Env {
   // widget exists for card.losverd.es. Until all three are set, /email-card
   // fails closed with a "temporarily unavailable" page.
   SENDGRID_API_KEY?: string;
+  /**
+   * Date (YYYY-MM-DD) from which a completed new order emails the member
+   * their card; empty means never (src/email/newOrder.ts).
+   */
+  CARD_EMAIL_NEW_ORDERS_SINCE?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the legacy app's sender and SendGrid ASM unsubscribe group,

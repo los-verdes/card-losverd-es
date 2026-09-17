@@ -1,6 +1,7 @@
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyPassUpdated } from "../passkit/updates";
+import { maybeEmailNewOrderCard } from "../email/newOrder";
 import { recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
@@ -400,7 +401,7 @@ async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   membership: MembershipLineItem,
-): Promise<void> {
+): Promise<string> {
   const memberEmail = await recordMembershipOrder(
     env,
     order,
@@ -414,6 +415,7 @@ async function applyMembershipOrder(
   if (result?.passChanged) {
     await notifyPassUpdated(env, result.memberId);
   }
+  return memberEmail;
 }
 
 /**
@@ -440,7 +442,10 @@ export async function syncBigCommerceOrder(
     return;
   }
 
-  await applyMembershipOrder(env, order, membership);
+  const memberEmail = await applyMembershipOrder(env, order, membership);
+  // Webhook path only -- the resyncs call applyMembershipOrder directly
+  // (src/email/newOrder.ts).
+  await maybeEmailNewOrderCard(env, order, memberEmail);
 }
 
 const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";

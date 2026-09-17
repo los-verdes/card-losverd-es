@@ -2,12 +2,12 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attributeOrder,
-  emailAttributedMember,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
 } from "../../src/admin/attribution";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
+import { emailMemberCard } from "../../src/email/card";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
 const ADMIN_ID = 1;
@@ -151,7 +151,7 @@ describe("attributeOrder", () => {
   });
 });
 
-describe("emailAttributedMember", () => {
+describe("emailMemberCard", () => {
   // The route only calls this for a member it just gave a card, so these are
   // the belt-and-braces checks: nothing is emailed without a current card.
   beforeEach(() => {
@@ -165,9 +165,18 @@ describe("emailAttributedMember", () => {
   it("sends nothing for an address with no member row", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await emailAttributedMember(env, "nobody@example.com");
+    await emailMemberCard(env, "nobody@example.com", { kind: "attribution" });
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("logs, rather than throwing, when the member lookup itself fails", async () => {
+    const broken = { ...env, DB: { prepare: () => { throw new Error("D1 unavailable"); } } } as unknown as typeof env;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(emailMemberCard(broken, "someone@example.com", { kind: "attribution" })).resolves.toBe(false);
+
+    expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("D1 unavailable") });
   });
 
   it("sends nothing for a member whose card isn't current", async () => {
@@ -175,7 +184,7 @@ describe("emailAttributedMember", () => {
     await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await emailAttributedMember(env, "lapsed@example.com");
+    await emailMemberCard(env, "lapsed@example.com", { kind: "attribution" });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
