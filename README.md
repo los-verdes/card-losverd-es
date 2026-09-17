@@ -100,6 +100,24 @@ Use a different value per environment. Random values (`openssl rand -hex 32`) wo
 
 Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` breaks every QR code already issued ([#27](https://github.com/los-verdes/card-losverd-es/issues/27)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
+### Creating the Google Wallet class
+
+A "Save to Google Wallet" link only works if the pass class it names already
+exists on Google's side; the Worker signs the pass object, not the class.
+Create it once per environment (and again if it changes):
+
+```bash
+just google-wallet-ensure-class staging --dry-run
+just google-wallet-ensure-class staging
+```
+
+It reads the service account credentials from the environment's 1Password
+item and the issuer id and class suffix from `wrangler.toml`. Each
+environment has its own class, so staging can't alter the one production
+passes are filed under -- `just check-wrangler-envs` fails if they ever
+match. Issuer accounts also start in demo mode, where only test accounts can
+save a pass; production access is granted in the Google Pay & Wallet Console.
+
 ### Registering the BigCommerce order webhook
 
 BigCommerce doesn't sign webhooks, so each store's `store/order/*` webhook is registered with an `Authorization: bearer <token>` header the Worker recomputes from `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, the store hash, and `BIGCOMMERCE_CLIENT_ID`. Create or update it (and again after rotating the key) with:
