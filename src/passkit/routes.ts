@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../index";
+import { buildVerifyPassUrl } from "../lib/passSignature";
 import { verifyPassAuthorization } from "../middleware/auth";
 import {
   assemblePassBundle,
@@ -41,7 +42,10 @@ async function getMember(
     .first<MemberRow>();
 }
 
-function toMemberPassInput(row: MemberRow): MemberPassInput {
+async function toMemberPassInput(
+  env: Env,
+  row: MemberRow,
+): Promise<MemberPassInput> {
   return {
     memberId: row.member_id,
     firstName: row.first_name,
@@ -51,6 +55,11 @@ function toMemberPassInput(row: MemberRow): MemberPassInput {
     expirationDate: row.expiration_date,
     memberSince: row.member_since,
     authToken: row.auth_token,
+    verifyUrl: await buildVerifyPassUrl(
+      env.PUBLIC_BASE_URL,
+      env.PASS_SIGNATURE_KEY,
+      row.member_id,
+    ),
   };
 }
 
@@ -235,7 +244,7 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   if (!bundle) {
     const assets = await loadTemplateAssets(c.env.ASSETS);
     bundle = await assemblePassBundle(
-      toMemberPassInput(member),
+      await toMemberPassInput(c.env, member),
       passKitConfig(c.env),
       assets,
       signingCredentials(c.env),

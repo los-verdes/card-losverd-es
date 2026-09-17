@@ -52,6 +52,8 @@ PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
 PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
 PASSKIT_ORGANIZATION_NAME = "Los Verdes"
 PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
+# Public origin for the signed /verify-pass URLs in membership card QR codes.
+PUBLIC_BASE_URL = "https://card.losverd.es"
 # Real Apple Pass Type ID cert/key + WWDR intermediate aren't available in
 # this environment yet (see the migration plan's Phase 0.2 credential
 # inventory) - placeholders only, per the same pattern as the BigCommerce

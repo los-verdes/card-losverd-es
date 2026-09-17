@@ -24,6 +24,9 @@ export interface Env {
   PASSKIT_TEAM_IDENTIFIER: string;
   PASSKIT_ORGANIZATION_NAME: string;
   PASSKIT_WEB_SERVICE_URL: string;
+  // Not secret -- this service's public origin (no trailing slash), used to
+  // build the signed /verify-pass URLs encoded in membership card QR codes.
+  PUBLIC_BASE_URL: string;
   // Secret -- real Apple-issued cert/key/WWDR chain, per Phase 0.2/4.6.
   APPLE_PASS_CERT_PEM: string;
   APPLE_PASS_KEY_PEM: string;

@@ -24,8 +24,10 @@ export interface MembershipCardMember {
   firstName: string;
   lastName: string;
   membershipTier: string;
-  /** == the pass's serialNumber; shown under the QR code and encoded into it. */
+  /** == the pass's serialNumber; shown under the QR code. */
   memberId: string;
+  /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
+  verifyUrl: string;
   /** ISO8601 `YYYY-MM-DD`, or `null` for a membership with no expiry on record. */
   expirationDate: string | null;
 }

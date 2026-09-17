@@ -27,6 +27,7 @@ function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInp
     status: "active",
     memberSince: "2021-07-15",
     expirationDate: "2024-02-17",
+    verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     ...overrides,
   };
 }
@@ -113,11 +114,14 @@ describe("buildGenericObject", () => {
     expect(object.textModulesData.some((m) => m.id === "membership_expiry")).toBe(false);
   });
 
-  it("builds a QR barcode from the bare member id", () => {
-    const object = buildGenericObject(makeMember({ memberId: "LV-77777" }), CONFIG);
+  it("encodes the signed verify URL in the QR code, with the member id as alternate text", () => {
+    const object = buildGenericObject(
+      makeMember({ memberId: "LV-77777", verifyUrl: "https://card.losverd.es/verify-pass/LV-77777?signature=abc%3D" }),
+      CONFIG,
+    );
     expect(object.barcode).toEqual({
       type: "QR_CODE",
-      value: "LV-77777",
+      value: "https://card.losverd.es/verify-pass/LV-77777?signature=abc%3D",
       alternateText: "LV-77777",
     });
   });
