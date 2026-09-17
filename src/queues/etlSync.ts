@@ -5,6 +5,7 @@ import {
   syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
 } from "../bigcommerce/sync";
+import { runSlackMembersEtl } from "../slack/membersEtl";
 
 /**
  * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
@@ -45,11 +46,7 @@ async function dispatchEtlSyncMessage(
       await syncMinibcSubscriptionsEtl(env);
       return;
     case "run_slack_members_etl":
-      // Slack member ETL is Slack-integration scope, not BigCommerce
-      // ingestion - out of scope for this design pass.
-      console.warn(
-        "run_slack_members_etl is out of scope for BigCommerce ingestion; no-op",
-      );
+      await runSlackMembersEtl(env);
       return;
   }
 }
