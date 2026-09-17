@@ -16,10 +16,13 @@ import { AdminPage, cellStyle } from "./layout";
 import { orderPath } from "./orders";
 import {
   activeMemberships,
+  consolidations,
   expiredMemberships,
   listChannels,
   ordersByMonth,
   slackCrossReference,
+  type AttributedOrderRow,
+  type DuplicateNameRow,
   type MembershipOrderRow,
   type ReportFilters,
   type SlackCrossReference,
@@ -71,6 +74,22 @@ const SLACK_TABLES: {
   { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
   { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS] },
 ];
+
+/** The consolidations page's two tables; `key` names each one's CSV download. */
+const CONSOLIDATION_TABLES = [
+  {
+    key: "attributed-orders",
+    title: "Orders attributed to another address",
+    columns: ["order_id", "first_name", "last_name", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
+    headings: ["Order", "First name", "Last name", "Order email", "Attributed to", "Started", "Changed (UTC)", "Changed by", "Note"],
+  },
+  {
+    key: "duplicate-names",
+    title: "Billing names under more than one address",
+    columns: ["name", "member_email", "orders", "latest_expires"],
+    headings: ["Name", "Attributed to", "Orders", "Latest expiry"],
+  },
+] as const;
 
 class BadRequest extends Error {}
 
@@ -232,6 +251,17 @@ function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[
   });
 }
 
+/** One consolidations cell: order ids link to their admin page, timestamps read as dates. */
+function consolidationCell(row: AttributedOrderRow | DuplicateNameRow, column: string) {
+  const value = row[column];
+  if (column === "order_id") return <a href={orderPath(String(value))}>{String(value)}</a>;
+  if (column === "attributed_at") {
+    return value === null ? "legacy import" : new Date(Number(value)).toISOString().slice(0, 16).replace("T", " ");
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
+  return value === null ? "" : String(value);
+}
+
 const reports = new Hono<AuthEnv & { Bindings: Env }>();
 
 reports.use("*", requireAdmin);
@@ -260,6 +290,10 @@ reports.get("/", (c) =>
         </li>
         <li>
           <a href="/admin/reports/orders">Orders by month</a>: this year against last year.
+        </li>
+        <li>
+          <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
+          names under several addresses.
         </li>
         <li>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
@@ -451,6 +485,75 @@ reports.get("/slack", async (c) => {
             <p>
               {rows.length > PAGE_SIZE && `Showing the first ${PAGE_SIZE}. `}
               <a href={`/admin/reports/slack?table=${table.key}&format=csv`}>Download all {rows.length} as CSV</a>
+            </p>
+          </section>
+        );
+      })}
+    </AdminPage>,
+  );
+});
+
+/**
+ * The legacy "Membership Consolidations" page: orders whose membership is
+ * attributed to another address (by an admin, #70, or by the legacy import,
+ * which knows each legacy user's current address), and billing names that
+ * appear under several addresses -- one person with two accounts, probably.
+ * Each order links to its admin page, where the attribution can be changed.
+ */
+reports.get("/consolidations", async (c) => {
+  const format = c.req.query("format");
+  const csvTable = format === "csv" ? CONSOLIDATION_TABLES.find((table) => table.key === c.req.query("table")) : undefined;
+  if (format === "csv" && !csvTable) {
+    throw new BadRequest(`table must be one of ${CONSOLIDATION_TABLES.map((table) => table.key).join(", ")}`);
+  }
+  const result = await consolidations(c.env.DB);
+  const rowsFor = (key: string): (AttributedOrderRow | DuplicateNameRow)[] =>
+    key === "attributed-orders" ? result.attributed : result.duplicateNames;
+  if (csvTable) {
+    return new Response(toCsv(csvTable.columns, rowsFor(csvTable.key)), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="consolidations-${csvTable.key}-${toIsoSeconds(new Date()).slice(0, 10)}.csv"`,
+      },
+    });
+  }
+  return c.html(
+    <AdminPage title="Consolidations">
+      <p>
+        Where a membership belongs to someone other than the address on its order, and where one billing name spans
+        several addresses. Cancelled, refunded, and test orders are left out of the name comparison. Follow an order
+        to change who it is attributed to.
+      </p>
+      {CONSOLIDATION_TABLES.map((table) => {
+        const rows = rowsFor(table.key);
+        return (
+          <section>
+            <h2>
+              {table.title} ({rows.length})
+            </h2>
+            <div style="overflow-x: auto">
+              <table style="border-collapse: collapse; font-size: 0.9rem">
+                <thead>
+                  <tr>
+                    {table.headings.map((heading) => (
+                      <th style={cellStyle}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, PAGE_SIZE).map((row) => (
+                    <tr>
+                      {table.columns.map((column) => (
+                        <td style={cellStyle}>{consolidationCell(row, column)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p>
+              {rows.length > PAGE_SIZE && `Showing the first ${PAGE_SIZE}. `}
+              <a href={`/admin/reports/consolidations?table=${table.key}&format=csv`}>Download all {rows.length} as CSV</a>
             </p>
           </section>
         );

@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activeMemberships,
+  consolidations,
   expiredMemberships,
   listChannels,
   ordersByMonth,
@@ -32,7 +33,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM users");
 });
 
 describe("activeMemberships", () => {
@@ -195,5 +198,70 @@ describe("slackCrossReference", () => {
 describe("listChannels", () => {
   it("lists distinct non-null channels alphabetically", async () => {
     expect(await listChannels(env.DB)).toEqual(["bigcommerce_iphone", "bigcommerce_www"]);
+  });
+});
+
+describe("consolidations", () => {
+  // These tests describe the whole table, so start from an empty one.
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM membership_orders");
+  });
+
+  it("lists orders attributed elsewhere, newest change first, and says which came from the legacy import", async () => {
+    await insertOrder({ id: "1_bc", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "2_bc", email: "moved.away@example.com", memberEmail: "moved.here@example.com", created: "2026-02-15T00:00:00Z" });
+    await insertOrder({ id: "3_bc", email: "plain@example.com", created: "2026-03-15T00:00:00Z" });
+    await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, 'boss@example.com', 1)").run();
+    await env.DB.prepare(
+      `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note, created_at)
+       VALUES ('1_bc', 'buyer@example.com', 'recipient@example.com', 9, 'gift', 1700000000000)`,
+    ).run();
+
+    const { attributed } = await consolidations(env.DB);
+
+    expect(attributed).toEqual([
+      expect.objectContaining({
+        order_id: "1_bc",
+        order_email: "buyer@example.com",
+        member_email: "recipient@example.com",
+        attributed_at: 1700000000000,
+        attributed_by: "boss@example.com",
+        note: "gift",
+      }),
+      expect.objectContaining({ order_id: "2_bc", attributed_at: null, attributed_by: null, note: null }),
+    ]);
+  });
+
+  it("reports only the latest change for an order", async () => {
+    await insertOrder({ id: "1_bc", email: "buyer@example.com", memberEmail: "second@example.com", created: "2026-01-15T00:00:00Z" });
+    for (const [to, at] of [["first@example.com", 1], ["second@example.com", 2]] as const) {
+      await env.DB.prepare(
+        `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, note, created_at) VALUES ('1_bc', 'buyer@example.com', ?, ?, ?)`,
+      )
+        .bind(to, `change ${at}`, at)
+        .run();
+    }
+
+    const { attributed } = await consolidations(env.DB);
+
+    expect(attributed).toHaveLength(1);
+    expect(attributed[0].note).toBe("change 2");
+  });
+
+  it("groups billing names that appear under more than one address, ignoring void and unnamed orders", async () => {
+    await insertOrder({ id: "1_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "2_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
+    await insertOrder({ id: "3_bc", email: "p.lee@example.com", first: "pat", last: " Lee ", created: "2024-01-15T00:00:00Z" });
+    await insertOrder({ id: "4_bc", email: "solo@example.com", first: "Solo", last: "Member", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "5_bc", email: "void@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "6_bc", email: "nameless@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "7_bc", email: "nameless2@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
+
+    const { duplicateNames } = await consolidations(env.DB);
+
+    expect(duplicateNames).toEqual([
+      { name: "pat lee", member_email: "p.lee@example.com", orders: 1, latest_expires: "2025-01-15T00:00:00Z" },
+      { name: "pat lee", member_email: "pat@example.com", orders: 2, latest_expires: "2027-01-15T00:00:00Z" },
+    ]);
   });
 });

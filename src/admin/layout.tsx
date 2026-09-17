@@ -24,6 +24,8 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
         {" · "}
         <a href="/admin/reports/slack">Slack cross-reference</a>
         {" · "}
+        <a href="/admin/reports/consolidations">Consolidations</a>
+        {" · "}
         <a href="/">My card</a>
       </nav>
       <h1>{title}</h1>

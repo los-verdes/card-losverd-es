@@ -30,12 +30,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.useRealTimers();
+  await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM users");
 });
 
 describe("access control", () => {
-  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack"];
+  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack", "/admin/reports/consolidations"];
 
   it.each(PATHS)("%s sends an anonymous visitor to log in", async (path) => {
     const res = await get(path, null);
@@ -328,5 +329,70 @@ describe("GET /admin/reports/slack", () => {
 
     expect(res.status).toBe(400);
     expect(await res.text()).toContain("table must be one of current-in-slack");
+  });
+});
+
+describe("GET /admin/reports/consolidations", () => {
+  beforeEach(async () => {
+    await insertOrder({ id: "10_bc", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "11_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "12_bc", email: "p.lee@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
+    await env.DB.prepare(
+      `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note, created_at)
+       VALUES ('10_bc', 'buyer@example.com', 'recipient@example.com', ?, 'gift', 1700000000000)`,
+    )
+      .bind(ADMIN_ID)
+      .run();
+  });
+
+  it("shows both tables, links each order to its admin page, and dates the change", async () => {
+    const body = await (await get("/admin/reports/consolidations")).text();
+
+    expect(body).toContain("Orders attributed to another address (1)");
+    expect(body).toContain('<a href="/admin/orders/10_bc">10_bc</a>');
+    expect(body).toContain("recipient@example.com");
+    expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
+    expect(body).toContain("admin@example.com");
+    expect(body).toContain("Billing names under more than one address (2)");
+    expect(body).toContain("pat lee");
+  });
+
+  it("marks an attribution the legacy import made, rather than an admin", async () => {
+    await env.DB.exec("DELETE FROM membership_order_attributions");
+
+    const body = await (await get("/admin/reports/consolidations")).text();
+
+    expect(body).toContain("legacy import");
+  });
+
+  it("downloads each table as CSV, and rejects an unknown table", async () => {
+    const attributed = await get("/admin/reports/consolidations?table=attributed-orders&format=csv");
+    expect(attributed.headers.get("Content-Disposition")).toContain('filename="consolidations-attributed-orders-');
+    const csv = await attributed.text();
+    expect(csv).toContain("order_id,first_name,last_name,order_email,member_email,created_on,attributed_at,attributed_by,note");
+    expect(csv).toContain("10_bc,Buy,Er,buyer@example.com,recipient@example.com");
+
+    const names = await get("/admin/reports/consolidations?table=duplicate-names&format=csv");
+    expect(await names.text()).toContain("pat lee,p.lee@example.com,1,");
+
+    const bad = await get("/admin/reports/consolidations?table=nope&format=csv");
+    expect(bad.status).toBe(400);
+    expect(await bad.text()).toContain("table must be one of attributed-orders, duplicate-names");
+  });
+
+  it("shows only the first page of a long table, with the full count in the CSV link", async () => {
+    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+      await insertOrder({ id: `dup-${i}_bc`, email: `dup${i}@example.com`, memberEmail: `moved${i}@example.com`, created: "2026-01-15T00:00:00Z" });
+    }
+
+    const body = await (await get("/admin/reports/consolidations")).text();
+
+    expect(body).toContain(`Orders attributed to another address (${PAGE_SIZE + 2})`);
+    expect(body).toContain(`Showing the first ${PAGE_SIZE}.`);
+    expect(body).toContain(`Download all ${PAGE_SIZE + 2} as CSV`);
+  });
+
+  it("is listed on the reports index", async () => {
+    expect(await (await get("/admin/reports")).text()).toContain('<a href="/admin/reports/consolidations">Consolidations</a>');
   });
 });
