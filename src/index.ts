@@ -10,7 +10,6 @@ import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
-import { pkcs7SigningSpike } from './spikes/pkcs7-signing/route';
 
 export interface Env {
   DB: D1Database;
@@ -119,11 +118,6 @@ app.route("/passkit", passkit);
 app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
 app.route("/", portal);
-
-// Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
-// test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
-// real pass-serving surface (that's Phase 4).
-app.route('/spikes/pkcs7-signing', pkcs7SigningSpike);
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
