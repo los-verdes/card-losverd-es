@@ -96,6 +96,11 @@ export interface Env {
   EMAIL_FROM_ADDRESS: string;
   EMAIL_FROM_NAME: string;
   SENDGRID_UNSUBSCRIBE_GROUP_ID: string;
+  // Secret -- Slack bot token (`xoxb-...`, scopes `users:read` and
+  // `users:read.email`) for the Slack members ETL (src/slack/membersEtl.ts).
+  // Optional -- the ETL is skipped (with a warning) until it's set via
+  // `wrangler secret put`; no wrangler.toml placeholder.
+  SLACK_BOT_TOKEN?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

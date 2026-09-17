@@ -153,7 +153,7 @@ describe("handleEtlSyncBatch", () => {
     expect(minibcMessage.ack).toHaveBeenCalledOnce();
   });
 
-  it("no-ops run_slack_members_etl (out of BigCommerce-ingestion scope) but still acks", async () => {
+  it("routes run_slack_members_etl to the Slack members ETL (skipped, but acked, with no bot token)", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const message = makeMessage({ type: "run_slack_members_etl" });
 
