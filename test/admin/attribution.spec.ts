@@ -170,6 +170,15 @@ describe("emailMemberCard", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("logs, rather than throwing, when the member lookup itself fails", async () => {
+    const broken = { ...env, DB: { prepare: () => { throw new Error("D1 unavailable"); } } } as unknown as typeof env;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(emailMemberCard(broken, "someone@example.com", { kind: "attribution" })).resolves.toBe(false);
+
+    expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("D1 unavailable") });
+  });
+
   it("sends nothing for a member whose card isn't current", async () => {
     await insertOrder({ id: "1_bc", email: "lapsed@example.com", created: "2020-01-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);

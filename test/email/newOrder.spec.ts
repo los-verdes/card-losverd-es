@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncBigCommerceOrder, syncSubscriptionsEtl, type BigCommerceOrder, type BigCommerceOrderProduct } from "../../src/bigcommerce/sync";
+import * as updates from "../../src/passkit/updates";
 import { maybeEmailNewOrderCard } from "../../src/email/newOrder";
 import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
@@ -160,8 +161,74 @@ describe("the guards against mailing existing members", () => {
     expect(sentTo(sendgrid)).toEqual([]);
     expect(info).toHaveBeenCalledWith("New-order card email: order predates CARD_EMAIL_NEW_ORDERS_SINCE, not sending", {
       orderId: old.id,
-      since: CUTOFF,
     });
+  });
+
+  // A var whose whole job is preventing a mass send must fail closed.
+  it.each(["10/01/2026", "1", "2026-13-45"])("sends nothing when the cutoff is %s, and says so", async (value) => {
+    env.CARD_EMAIL_NEW_ORDERS_SINCE = value;
+    const order = makeOrder();
+    const sendgrid = mockUpstreams([order]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(sentTo(sendgrid)).toEqual([]);
+    expect(await cardEmailRows()).toEqual([]);
+    expect(error).toHaveBeenCalledWith(
+      "New-order card email: CARD_EMAIL_NEW_ORDERS_SINCE is not a YYYY-MM-DD date, not sending",
+      { value },
+    );
+  });
+
+  // (The sync itself rejects such an order earlier, writing its history; this
+  // is about the email never being the thing that fails a message.)
+  it("sends nothing for an unreadable order date, without throwing", async () => {
+    const order = makeOrder({ date_created: "not a date" });
+    const sendgrid = mockUpstreams([order]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(maybeEmailNewOrderCard(env, order, "new.member@example.com")).resolves.toBe(false);
+
+    expect(sentTo(sendgrid)).toEqual([]);
+    expect(error).toHaveBeenCalledWith("New-order card email: could not read the order's creation date, not sending", {
+      orderId: order.id,
+      dateCreated: "not a date",
+    });
+  });
+
+  it("keeps the order's one chance when email isn't configured yet", async () => {
+    env.SENDGRID_API_KEY = undefined;
+    const order = makeOrder();
+    mockUpstreams([order]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await cardEmailRows()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith("Card email: SENDGRID_API_KEY not configured, not sending");
+
+    // Configured later, the same order still gets its email.
+    vi.restoreAllMocks();
+    env.SENDGRID_API_KEY = "SG.test-key";
+    const retry = mockUpstreams([order]);
+    await syncBigCommerceOrder(env, "store123", order.id);
+    expect(sentTo(retry)).toEqual(["new.member@example.com"]);
+  });
+
+  // The order synced, then something after the write threw and the queue
+  // redelivered: D1 already says Completed, and the email must still go.
+  it("still emails after a retry that follows a failure later in the sync", async () => {
+    const order = makeOrder();
+    const sendgrid = mockUpstreams([order]);
+    vi.spyOn(updates, "notifyPassUpdated").mockRejectedValueOnce(new Error("APNs blew up"));
+
+    await expect(syncBigCommerceOrder(env, "store123", order.id)).rejects.toThrow("APNs blew up");
+    expect(sentTo(sendgrid)).toEqual([]);
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(sentTo(sendgrid)).toEqual(["new.member@example.com"]);
   });
 
   // The backfill case: a full resync of completed orders must stay silent,
@@ -197,7 +264,7 @@ describe("the guards against mailing existing members", () => {
       .run();
     await env.DB.prepare("INSERT INTO card_emails (order_id, member_email) VALUES (?, ?)").bind("5001_bc", "new.member@example.com").run();
 
-    const sent = await maybeEmailNewOrderCard(env, order, null, "new.member@example.com");
+    const sent = await maybeEmailNewOrderCard(env, order, "new.member@example.com");
 
     expect(sent).toBe(false);
     expect(sentTo(sendgrid)).toEqual([]);

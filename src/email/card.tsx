@@ -200,28 +200,57 @@ export async function sendMembershipCardEmail(
 }
 
 /**
- * Emails `email` their card, if that address has a current membership.
- * Never throws -- callers are a `waitUntil` or a queue consumer that must
- * not fail over an email -- and returns whether a message was sent.
+ * The member a card email would go to: null when email isn't configured, the
+ * address has no member row, or that membership isn't current. Separate from
+ * sending so a caller can check eligibility *before* doing anything it can't
+ * undo, such as claiming an order's one send (src/email/newOrder.ts).
+ * Addresses are never logged -- Workers Logs keeps lines for 7 days.
  */
+export async function findCardRecipient(
+  env: Env,
+  email: string,
+): Promise<(MemberRecord & { expiration_date: string }) | null> {
+  if (!env.SENDGRID_API_KEY) {
+    console.warn("Card email: SENDGRID_API_KEY not configured, not sending");
+    return null;
+  }
+  const member = await getMemberByEmail(env, email);
+  if (!member || !isMembershipCurrent(member)) {
+    return null;
+  }
+  // Non-null: isMembershipCurrent() requires an expiration date.
+  return { ...member, expiration_date: member.expiration_date! };
+}
+
+/**
+ * Emails `member` their card, logging rather than throwing on failure --
+ * callers are a `waitUntil` or a queue consumer that must not fail over an
+ * email. Returns whether a message was sent.
+ */
+export async function emailCardTo(
+  env: Env,
+  member: MemberRecord & { expiration_date: string },
+  reason: CardEmailReason,
+): Promise<boolean> {
+  try {
+    await sendMembershipCardEmail(env, member, reason);
+    console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
+    return true;
+  } catch (err) {
+    console.error("Card email failed", { reason: reason.kind, error: String(err) });
+    return false;
+  }
+}
+
+/** Looks the member up and emails them, if they're eligible. Never throws. */
 export async function emailMemberCard(
   env: Env,
   email: string,
   reason: CardEmailReason,
 ): Promise<boolean> {
   try {
-    if (!env.SENDGRID_API_KEY) {
-      console.warn("Card email: SENDGRID_API_KEY not configured, not sending", { email, reason: reason.kind });
-      return false;
-    }
-    const member = await getMemberByEmail(env, email);
-    if (!member || !isMembershipCurrent(member)) {
-      return false;
-    }
-    // Non-null: isMembershipCurrent() requires an expiration date.
-    await sendMembershipCardEmail(env, { ...member, expiration_date: member.expiration_date! }, reason);
-    console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
-    return true;
+    const member = await findCardRecipient(env, email);
+    return member ? await emailCardTo(env, member, reason) : false;
   } catch (err) {
     console.error("Card email failed", { reason: reason.kind, error: String(err) });
     return false;
