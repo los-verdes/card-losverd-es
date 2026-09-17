@@ -42,7 +42,7 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 - **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.
 - **Manual "Run workflow" from any branch:** deploys that branch to **staging only**, to try a change against the test store before merging. Terraform is skipped for these runs, so unmerged infrastructure changes never apply.
 
-Secrets are per Worker: `wrangler secret put NAME` for production, `wrangler secret put NAME --env staging` for staging. Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
+Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
 
 The `card.losverd.es` DNS record is deliberately not managed here yet -- that's the cutover step itself, not something a routine `terraform apply` should be able to trigger.
 
@@ -82,7 +82,17 @@ Schema lives in `src/db/migrations/` (applied automatically on deploy); `src/db/
 
 ## Secrets
 
-Set per Worker with `wrangler secret put NAME` (add `--env staging` for staging). None have placeholders in `wrangler.toml`; features that need a missing secret fail closed or skip themselves with a logged warning.
+**1Password is the source of truth**, because Cloudflare never returns a secret's value: anything kept only in Cloudflare can't be recovered. Each environment has one item in the "Los Verdes" vault, `lv-card-losverd-es-worker-staging` / `lv-card-losverd-es-worker-production`, with one field per secret labeled with its exact name. Then:
+
+```bash
+just secrets-status staging              # what 1Password and Cloudflare each have (names, lengths, line counts; never values)
+just secrets-push staging                # push every secret the item has a value for, in one deploy
+just secrets-push staging AUTH_SECRET    # push only the named ones, e.g. after rotating
+```
+
+Use a different value per environment. Random values (`openssl rand -hex 32`) work for `AUTH_SECRET`, `SESSION_SIGNING_KEY`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, and staging's `PASS_SIGNATURE_KEY`. Check `secrets-status` line counts after pasting a PEM: it should span several lines. None have placeholders in `wrangler.toml`; features that need a missing secret fail closed or skip themselves with a logged warning.
+
+Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` breaks every QR code already issued ([#27](https://github.com/los-verdes/card-losverd-es/issues/27)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
 | Secret | Needed for |
 | :--- | :--- |
