@@ -24,32 +24,19 @@
 import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
-import { sendEmail } from "../email/sendgrid";
+import { sendMembershipCardEmail } from "../email/card";
 import {
   TURNSTILE_RESPONSE_FIELD,
   verifyTurnstileToken,
 } from "../email/turnstile";
 import type { Env } from "../index";
-import { formatShortDate } from "../lib/dateFormat";
 import {
   consumeRateLimit,
   purgeExpiredRateLimits,
   type RateLimitRule,
 } from "../lib/rateLimit";
-import {
-  buildGoogleWalletSaveUrl,
-  getApplePassBundle,
-  getMemberByEmail,
-  isGoogleWalletConfigured,
-  isMembershipCurrent,
-  renderCardImage,
-  type MemberRecord,
-} from "./artifacts";
+import { getMemberByEmail, isMembershipCurrent } from "./artifacts";
 import { Page } from "./layout";
-
-export const EMAIL_SUBJECT = "Los Verdes Membership Card Details";
-export const CARD_IMAGE_FILENAME = "los-verdes-membership-card.png";
-export const APPLE_PASS_FILENAME = "los-verdes-membership-card.pkpass";
 
 // Deliberately loose: a plausible `local@domain.tld` shape. Whether the
 // address is real is SendGrid's (and the membership roll's) problem.
@@ -170,102 +157,6 @@ const RequestReceived: FC = () => (
   </Page>
 );
 
-interface CardEmailProps {
-  name: string;
-  memberId: string;
-  expirationDate: string;
-  googleWalletUrl: string | null;
-  submittedOn: string;
-  /** The site's public origin (`PUBLIC_BASE_URL`), no trailing slash. */
-  baseUrl: string;
-}
-
-const CardEmail: FC<CardEmailProps> = (props) => (
-  <html lang="en">
-    <body style="font-family: system-ui, sans-serif">
-      <h1>{EMAIL_SUBJECT}</h1>
-      <p>Your requested membership card is attached. Gracias!</p>
-      <h2>Los Verdes Membership Card</h2>
-      <p>
-        {props.name}
-        <br />
-        Good through {formatShortDate(props.expirationDate)}
-        <br />
-        Member ID: {props.memberId}
-      </p>
-      <h2>Downloads</h2>
-      <ul>
-        <li>Image: {CARD_IMAGE_FILENAME} (attached)</li>
-        <li>Apple Wallet: {APPLE_PASS_FILENAME} (attached)</li>
-        {props.googleWalletUrl && (
-          <li>
-            Google Wallet:{" "}
-            <a href={props.googleWalletUrl}>Save to Google Wallet</a>
-          </li>
-        )}
-      </ul>
-      <p>
-        Visit online at{" "}
-        <a href={props.baseUrl}>{new URL(props.baseUrl).host}</a>
-      </p>
-      <p style="font-size: 0.8em; color: #393939">
-        This Los Verdes digital membership card is intended for {props.name}. If
-        you are not {props.name}, please feel free to delete this email or
-        contact <a href="mailto:support@losverd.es">support@losverd.es</a> for
-        assistance. This email was requested via a form submission made at
-        {props.baseUrl}/email-card at: {props.submittedOn}.
-      </p>
-    </body>
-  </html>
-);
-
-function cardEmailText(props: CardEmailProps): string {
-  return [
-    EMAIL_SUBJECT,
-    "",
-    "Your requested membership card is attached. Gracias!",
-    "",
-    "Los Verdes Membership Card",
-    "--------------------------",
-    props.name,
-    `Good through ${formatShortDate(props.expirationDate)}`,
-    `Member ID: ${props.memberId}`,
-    "",
-    "Downloads",
-    "---------",
-    `- Image: ${CARD_IMAGE_FILENAME} (attached)`,
-    `- Apple Wallet: ${APPLE_PASS_FILENAME} (attached)`,
-    ...(props.googleWalletUrl
-      ? [`- Google Wallet: ${props.googleWalletUrl}`]
-      : []),
-    "",
-    `Visit online at: ${props.baseUrl}`,
-    "",
-    `This Los Verdes digital membership card is intended for ${props.name}.`,
-    `If you are not ${props.name}, please feel free to delete this email or contact support@losverd.es for assistance.`,
-    `This email was requested via a form submission made at ${props.baseUrl}/email-card at: ${props.submittedOn}.`,
-  ].join("\n");
-}
-
-/** The Save to Google Wallet link, or null if it's unconfigured or fails. */
-async function googleWalletLink(
-  env: Env,
-  member: MemberRecord,
-): Promise<string | null> {
-  if (!isGoogleWalletConfigured(env)) {
-    return null;
-  }
-  try {
-    return await buildGoogleWalletSaveUrl(env, member);
-  } catch (err) {
-    console.error("Email card: Google Wallet link failed; sending without it", {
-      memberId: member.member_id,
-      error: String(err),
-    });
-    return null;
-  }
-}
-
 /**
  * Looks up `email` and, only for a current member, emails them their card.
  * Never throws: meant for `waitUntil`, with failures logged, not retried.
@@ -293,43 +184,9 @@ export async function deliverCardByEmail(
     if (!member || !isMembershipCurrent(member)) {
       return;
     }
-    // Sequential: rendering and signing are CPU-bound, so running them
-    // concurrently wouldn't finish sooner, and a failure in one would leave
-    // the others running on after this function returns.
-    const cardImage = await renderCardImage(env, member);
-    const applePass = await getApplePassBundle(env, member);
-    const googleWalletUrl = await googleWalletLink(env, member);
-    const props: CardEmailProps = {
-      name: `${member.first_name} ${member.last_name}`.trim(),
-      memberId: member.member_id,
-      // Non-null: isMembershipCurrent() requires an expiration date.
-      expirationDate: member.expiration_date!,
-      googleWalletUrl,
-      submittedOn,
-      baseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ""),
-    };
-    await sendEmail(env.SENDGRID_API_KEY, {
-      from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
-      to: { email: member.email, name: props.name },
-      subject: EMAIL_SUBJECT,
-      text: cardEmailText(props),
-      html: `<!doctype html>${await (<CardEmail {...props} />)}`,
-      attachments: [
-        {
-          filename: CARD_IMAGE_FILENAME,
-          type: "image/png",
-          content: cardImage,
-        },
-        {
-          filename: APPLE_PASS_FILENAME,
-          type: "application/vnd.apple.pkpass",
-          content: applePass,
-        },
-      ],
-      unsubscribeGroupId: env.SENDGRID_UNSUBSCRIBE_GROUP_ID
-        ? Number(env.SENDGRID_UNSUBSCRIBE_GROUP_ID)
-        : undefined,
-    });
+    // Non-null: isMembershipCurrent() requires an expiration date.
+    const current = { ...member, expiration_date: member.expiration_date! };
+    await sendMembershipCardEmail(env, current, { kind: "request", submittedOn });
     console.log("Email card sent", { memberId: member.member_id });
   } catch (err) {
     console.error("Email card delivery failed", { error: String(err) });

@@ -17,6 +17,7 @@ import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import {
   attributeOrder,
+  emailAttributedMember,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
@@ -160,7 +161,8 @@ orders.get("/:orderId", async (c) => {
       {done && (
         <section style="border: 1px solid #00B140; padding: 0.5rem 1rem; margin-bottom: 1rem">
           <p>
-            Attributed to <strong>{order.member_email}</strong> (previously {done.previous}). Their cards now:
+            Attributed to <strong>{order.member_email}</strong> (previously {done.previous}).
+            {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
           </p>
           <Footprint email={order.member_email} footprint={done.currentFootprint} />
           <Footprint email={done.previous} footprint={done.previousFootprint} />
@@ -176,6 +178,13 @@ orders.get("/:orderId", async (c) => {
           {review.note && <p>Note: {review.note}</p>}
           <input type="hidden" name="email" value={review.email} />
           <input type="hidden" name="note" value={review.note ?? ""} />
+          <p>
+            <label>
+              <input type="checkbox" name="email_card" checked />
+              {" Email them their card"}
+            </label>
+            {!order.counts && " (nothing will be sent: this order doesn't count as a membership)"}
+          </p>
           <button type="submit">Confirm</button> <a href={path}>Cancel</a>
         </form>
       ) : (
@@ -214,8 +223,15 @@ orders.post("/:orderId/member", csrf(), async (c) => {
   if ("error" in input) {
     return c.text(`Bad Request: ${input.error}`, 400);
   }
-  const { previousMemberEmail } = await attributeOrder(c.env, order, input.email, c.get("session").userId, input.note);
-  return c.redirect(`${orderPath(order.order_id)}?${new URLSearchParams({ attributed_from: previousMemberEmail })}`, 303);
+  const { previousMemberEmail, current } = await attributeOrder(c.env, order, input.email, c.get("session").userId, input.note);
+  // Only the new member, only when they have a card, only this once.
+  const emailing = form.email_card === "on" && current !== null;
+  if (emailing) {
+    c.executionCtx.waitUntil(emailAttributedMember(c.env, input.email));
+  }
+  const params = new URLSearchParams({ attributed_from: previousMemberEmail });
+  if (emailing) params.set("emailed", "1");
+  return c.redirect(`${orderPath(order.order_id)}?${params}`, 303);
 });
 
 export default orders;
