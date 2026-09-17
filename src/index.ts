@@ -4,6 +4,7 @@ import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
 import emailCard from "./member/email-card";
+import portal from "./member/portal";
 import verifyPass from "./member/verify-pass";
 import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
@@ -110,6 +111,7 @@ app.route("/passkit", passkit);
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
+app.route("/", portal);
 
 // Phase 1.0.1 risk spike -- see src/spikes/pkcs7-signing/route.ts and
 // test/spikes/pkcs7-signing.spec.ts. Throwaway/spike code, not part of the
