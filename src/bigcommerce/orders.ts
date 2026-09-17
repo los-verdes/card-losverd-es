@@ -36,15 +36,17 @@ export function bigCommerceOrderKey(orderId: number | string): string {
  * - `member_email`, which may have been re-pointed at the member's current
  *   address (by the legacy import today) and must survive a resync;
  * - `first_seen_via`, which records provenance.
+ *
+ * Returns the row's `member_email`: the member this order belongs to.
  */
 export async function recordMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   product: BigCommerceOrderProduct,
-): Promise<void> {
+): Promise<string> {
   const createdOn = new Date(order.date_created);
   const email = order.billing_address.email.trim().toLowerCase();
-  await env.DB.prepare(
+  const row = await env.DB.prepare(
     `INSERT INTO membership_orders (
        order_id, source, order_number, channel_name, order_email, member_email,
        first_name, last_name, customer_id, sku, product_name, status,
@@ -63,7 +65,8 @@ export async function recordMembershipOrder(
        created_on = excluded.created_on,
        expires_on = excluded.expires_on,
        modified_on = excluded.modified_on,
-       updated_at = unixepoch('subsec') * 1000`,
+       updated_at = unixepoch('subsec') * 1000
+     RETURNING member_email`,
   )
     .bind(
       bigCommerceOrderKey(order.id),
@@ -80,5 +83,6 @@ export async function recordMembershipOrder(
       toIsoSeconds(membershipExpiry(createdOn)),
       order.date_modified ? toIsoSeconds(new Date(order.date_modified)) : null,
     )
-    .run();
+    .first<{ member_email: string }>();
+  return row!.member_email;
 }

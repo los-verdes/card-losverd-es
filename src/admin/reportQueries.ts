@@ -8,15 +8,7 @@
  * what `idx_membership_orders_window` exists for.
  */
 
-/**
- * Orders that never counted as a membership: Squarespace test orders, and
- * orders the store voided. Statuses are stored verbatim from each store, so
- * this covers Squarespace's `CANCELED` (the only status the legacy app
- * excluded) plus BigCommerce's equivalents.
- */
-export const VOID_STATUSES = ["canceled", "cancelled", "refunded", "declined"];
-
-const COUNTS_AS_MEMBERSHIP = `test_mode = 0 AND (status IS NULL OR lower(status) NOT IN (${VOID_STATUSES.map((s) => `'${s}'`).join(", ")}))`;
+import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
 export interface ReportFilters {
   /** Matches anywhere in either email or the billing name; case-insensitive. */
