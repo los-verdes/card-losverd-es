@@ -4,12 +4,11 @@
 # Worker (`[env.staging]` in wrangler.toml) points at the test BigCommerce
 # store.
 #
-# `name_suffix` is inserted into every resource name, so production keeps the
-# names it already has (e.g. `card-losverd-es-db`) and staging's are
-# `card-losverd-es-staging-db`, `etl-sync-staging`, etc.
+# Recorded as a value-less map for the moment; this works with `for_each` and gives
+# us a location to implement env-specific overrides down the line if needed.
 locals {
   environments = {
-    production = { name_suffix = "" }
-    staging    = { name_suffix = "-staging" }
+    production = {}
+    staging    = {}
   }
 }
