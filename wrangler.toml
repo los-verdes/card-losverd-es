@@ -32,15 +32,13 @@ bucket_name = "card-losverd-es-assets"
 
 [vars]
 # BigCommerce store/app identifiers - not secret, safe to commit (see
-# docs/bigcommerce-ingestion.md).
+# docs/bigcommerce-ingestion.md). Still placeholders: set the real values.
+# BIGCOMMERCE_ACCESS_TOKEN and BIGCOMMERCE_WEBHOOK_SIGNING_KEY are secrets,
+# set via `wrangler secret put` -- deliberately with NO placeholder here:
+# `wrangler secret put` refuses a name already bound as a plain var, and a
+# public placeholder signing key would let anyone forge webhook signatures.
 BIGCOMMERCE_STORE_HASH = "REPLACE_WITH_BIGCOMMERCE_STORE_HASH"
 BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
-# Placeholders only, so local dev/test envs have *something* bound (matches
-# the `REPLACE_WITH_TERRAFORM_OUTPUT_...` pattern above). Real values MUST
-# be set per-environment via `wrangler secret put` before deploying - see
-# docs/bigcommerce-ingestion.md sections 1 and 5.
-BIGCOMMERCE_ACCESS_TOKEN = "REPLACE_WITH_WRANGLER_SECRET"
-BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "REPLACE_WITH_WRANGLER_SECRET"
 
 # Apple PassKit identifiers (Phase 4) - not secret, safe to commit (both are
 # embedded in every issued pass). These are the legacy app's real values
@@ -59,13 +57,9 @@ PUBLIC_BASE_URL = "https://card.losverd.es"
 # generic class must be created in the Google Pay & Wallet Console.
 GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
 GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_v1"
-# Real Apple Pass Type ID cert/key + WWDR intermediate aren't available in
-# this environment yet (see the migration plan's Phase 0.2 credential
-# inventory) - placeholders only, per the same pattern as the BigCommerce
-# secrets above.
-APPLE_PASS_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
-APPLE_PASS_KEY_PEM = "REPLACE_WITH_WRANGLER_SECRET"
-APPLE_WWDR_CERT_PEM = "REPLACE_WITH_WRANGLER_SECRET"
+# The Apple Pass Type ID cert/key + WWDR intermediate (APPLE_PASS_CERT_PEM,
+# APPLE_PASS_KEY_PEM, APPLE_WWDR_CERT_PEM) are secrets with no placeholder,
+# for the same reasons as the BigCommerce secrets above.
 
 # Sign in with Apple identifiers (Phase 2.3.2, src/auth/authjs.ts) - not
 # secret, the legacy app's real values. The key ID/private key and Google
