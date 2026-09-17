@@ -4,33 +4,9 @@ import { deleteCookie } from "hono/cookie";
 import type { Env } from "../index";
 import { LOGIN_PATH } from "../middleware/auth";
 import { LV_USER_ID_CLAIM, authConfig } from "./authjs";
-import {
-  upsertUserFromStorefrontCustomer,
-  verifyStorefrontCustomerJwt,
-} from "./bigcommerce-sso";
 import { issueSessionToken, setSessionCookie } from "./session";
 
 const auth = new Hono<{ Bindings: Env }>();
-
-/**
- * Phase 2.3.3: BigCommerce storefront -> member portal login handoff.
- * Mirrors the legacy `login_via_bigcommerce`.
- */
-auth.get("/storefront/:storeHash/members/:jwt/login", async (c) => {
-  const { storeHash, jwt } = c.req.param();
-  const customer = await verifyStorefrontCustomerJwt(c.env, storeHash, jwt);
-  if (!customer) {
-    return c.text("Unauthorized", 401);
-  }
-
-  const user = await upsertUserFromStorefrontCustomer(c.env, customer);
-  const token = await issueSessionToken(c.env.SESSION_SIGNING_KEY, {
-    userId: user.id,
-    isAdmin: user.is_admin === 1,
-  });
-  setSessionCookie(c, token);
-  return c.redirect("/");
-});
 
 /** Where Auth.js sends the browser after an OAuth sign-in completes. */
 export const LOGIN_COMPLETE_PATH = "/login/complete";

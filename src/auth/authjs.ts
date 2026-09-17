@@ -8,8 +8,8 @@
  * (the "bridge"): the `jwt` callback links the login to a `users` row and
  * stashes its id in the Auth.js token, then `GET /login/complete`
  * (src/auth/routes.ts) exchanges that for `lv_session` and clears the
- * Auth.js cookie. `requireAuth` and the BigCommerce storefront login only
- * ever deal with `lv_session`.
+ * Auth.js cookie. The rest of the app (`requireAuth`) only ever deals with
+ * `lv_session`.
  *
  * Providers are only offered once their config is set (via `wrangler secret
  * put`), so an unconfigured provider can't start a login.

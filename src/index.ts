@@ -33,9 +33,6 @@ export interface Env {
   // (or `.dev.vars` locally). An unset key fails closed -- session
   // middleware throws rather than signing with an empty key.
   SESSION_SIGNING_KEY: string;
-  // Secret -- BigCommerce app client secret; signs storefront customer JWTs
-  // (Phase 2.3.3). Same no-placeholder convention as SESSION_SIGNING_KEY.
-  BIGCOMMERCE_CLIENT_SECRET: string;
   // APNs token auth for Wallet pass-update pushes (Phase 4.7): the Key ID and
   // `.p8` private key of an APNs auth key from the Apple Developer portal.
   // Optional -- pushes are skipped (with a warning) until both are set via
@@ -64,8 +61,8 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 app.route("/bigcommerce", bigcommerce);
-// Member login flows (Phase 2.3) -- mounted at the root since their paths
-// (e.g. /storefront/...) are fixed by what's registered with third parties.
+// Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
+// /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);
 app.use("/api/auth/*", initAuthConfig(authConfig), authHandler());
 
