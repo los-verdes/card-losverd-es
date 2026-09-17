@@ -9,27 +9,12 @@
  */
 
 import { Hono } from "hono";
-import type { FC, PropsWithChildren } from "hono/jsx";
+import type { FC } from "hono/jsx";
 import { formatShortDate } from "../lib/dateFormat";
 import { verifyPassSerialSignature } from "../lib/passSignature";
 import { requireAuth, type AuthEnv } from "../middleware/auth";
+import { Page } from "./layout";
 import { lookupPassHolder, type PassHolder } from "./passHolder";
-
-const Page: FC<PropsWithChildren<{ title: string }>> = ({
-  title,
-  children,
-}) => (
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{title} | Los Verdes</title>
-    </head>
-    <body style="font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 28rem; padding: 0 1rem; text-align: center">
-      {children}
-    </body>
-  </html>
-);
 
 export const VerificationResult: FC<{ holder: PassHolder }> = ({ holder }) => (
   <Page title="Card Verification">

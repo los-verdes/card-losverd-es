@@ -54,6 +54,11 @@ PASSKIT_ORGANIZATION_NAME = "Los Verdes"
 PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
 # Public origin for the signed /verify-pass URLs in membership card QR codes.
 PUBLIC_BASE_URL = "https://card.losverd.es"
+# Google Wallet (Phase 5). The issuer ID is the legacy app's. The legacy
+# pass used a *loyalty* class; this stack issues *generic* objects, so this
+# generic class must be created in the Google Pay & Wallet Console.
+GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
+GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_v1"
 # Real Apple Pass Type ID cert/key + WWDR intermediate aren't available in
 # this environment yet (see the migration plan's Phase 0.2 credential
 # inventory) - placeholders only, per the same pattern as the BigCommerce
