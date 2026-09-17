@@ -275,3 +275,71 @@ export async function listChannels(db: D1Database): Promise<string[]> {
     .all<{ channel_name: string }>();
   return results.map((row) => row.channel_name);
 }
+
+export interface AttributedOrderRow {
+  [key: string]: string | number | null;
+  order_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  order_email: string;
+  member_email: string;
+  created_on: string;
+  /** Epoch ms of the latest admin attribution; null when the legacy import set `member_email`. */
+  attributed_at: number | null;
+  attributed_by: string | null;
+  note: string | null;
+}
+
+export interface DuplicateNameRow {
+  [key: string]: string | number | null;
+  name: string;
+  member_email: string;
+  orders: number;
+  latest_expires: string;
+}
+
+export interface Consolidations {
+  /** Orders whose membership is attributed to an address other than the one on the order. */
+  attributed: AttributedOrderRow[];
+  /** One row per (billing name, member email) where a name spans several addresses. */
+  duplicateNames: DuplicateNameRow[];
+}
+
+/**
+ * The two halves of the legacy "Membership Consolidations" report: orders
+ * attributed elsewhere (by an admin, #70, or by the legacy import, which
+ * carries each legacy user's current address), and billing names that appear
+ * under more than one member email -- the same person, probably, with two
+ * addresses.
+ */
+export async function consolidations(db: D1Database): Promise<Consolidations> {
+  // Each part trimmed as well as the whole, so "Pat" + " Lee " matches "Pat" + "Lee".
+  const fullName = "trim(COALESCE(trim(first_name), '') || ' ' || COALESCE(trim(last_name), ''))";
+  const [attributed, duplicateNames] = await db.batch<Record<string, unknown>>([
+    db.prepare(
+      `SELECT o.order_id, o.first_name, o.last_name, o.order_email, o.member_email, o.created_on,
+              a.created_at AS attributed_at, u.email AS attributed_by, a.note
+       FROM membership_orders o
+       LEFT JOIN membership_order_attributions a
+         ON a.id = (SELECT MAX(id) FROM membership_order_attributions x WHERE x.order_id = o.order_id)
+       LEFT JOIN users u ON u.id = a.admin_user_id
+       WHERE o.member_email <> o.order_email
+       ORDER BY COALESCE(a.created_at, 0) DESC, o.order_id`,
+    ),
+    db.prepare(
+      `WITH named AS (
+         SELECT lower(${fullName}) AS name, member_email, COUNT(*) AS orders, MAX(expires_on) AS latest_expires
+         FROM membership_orders
+         WHERE ${COUNTS_AS_MEMBERSHIP} AND ${fullName} <> ''
+         GROUP BY lower(${fullName}), member_email
+       )
+       SELECT name, member_email, orders, latest_expires FROM named
+       WHERE name IN (SELECT name FROM named GROUP BY name HAVING COUNT(*) > 1)
+       ORDER BY name, member_email`,
+    ),
+  ]);
+  return {
+    attributed: attributed.results as unknown as AttributedOrderRow[],
+    duplicateNames: duplicateNames.results as unknown as DuplicateNameRow[],
+  };
+}

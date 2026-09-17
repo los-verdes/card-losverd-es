@@ -70,12 +70,22 @@ CSV cells that a spreadsheet would evaluate as formulas are neutralized
 | `/admin/reports/active` | Orders in force now, or at the end of any past date (`?as_of=YYYY-MM-DD`, UTC). Counts distinct members and orders. | Active Memberships |
 | `/admin/reports/expired` | Each lapsed member's most recent order, as of now or a past date. | Expired Memberships |
 | `/admin/reports/orders` | Orders per month for a year against the year before. | Membership Orders |
+| `/admin/reports/consolidations` | Two tables: orders whose membership is attributed to another address (with who changed it, when, and why), and billing names appearing under several addresses. Each order links to its admin page. | Membership Consolidations |
 | `/admin/reports/slack` | Four tables: current members in Slack, current members not in Slack, lapsed members in Slack, and Slack users with no membership orders. Current snapshot only; each table downloads separately (`?table=...&format=csv`). | Slack User Stuff |
 
 Common filters on the active and expired pages: `q` (matches either email
 or the billing name) and `channel`. SQL lives in
 `src/admin/reportQueries.ts`, shared by the HTML and CSV forms of each report
 so they cannot disagree.
+
+### Consolidations
+
+The first table is every order whose `member_email` differs from its
+`order_email`, newest change first; an order the legacy import re-pointed
+shows "legacy import" rather than an admin and a date. The second groups
+counted orders by lower-cased, trimmed billing name, listing every name that
+appears under more than one `member_email` -- usually one person with two
+addresses, to be consolidated by attributing their orders to one of them.
 
 ### Slack cross-reference
 
@@ -92,7 +102,6 @@ until it has run (`SLACK_BOT_TOKEN` set) every member shows as not in Slack.
 
 | Legacy page | Plan |
 | :--- | :--- |
-| Membership Consolidations (orders whose member email differs; possible duplicates by billing name) | Next ([#70](https://github.com/los-verdes/card-losverd-es/issues/70)). The attribution action it links to is built (see above). |
 | Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. For the analytics charts, use Cloudflare Web Analytics rather than rebuilding them. |
 | MiniBC Subscriptions | After cutover. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |
 
