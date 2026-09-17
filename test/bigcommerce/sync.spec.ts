@@ -339,7 +339,7 @@ describe("refreshMemberFromOrders", () => {
     expect(member?.expiration_date).toBe("2091-01-15");
   });
 
-  // Jeff, 2026-09-17: an unpaid BigCommerce order gets no card.
+  // Decided 2026-09-17: an unpaid BigCommerce order gets no card.
   it.each([
     ["Awaiting Fulfillment", "2099-01-15"],
     ["Awaiting Shipment", "2099-01-15"],

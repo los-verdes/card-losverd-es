@@ -198,7 +198,7 @@ one is implemented fully:
   per `member_card/minibc.py`) for recurring-subscription state that
   doesn't flow through BigCommerce order webhooks at all, and reconcile
   `membership_tier`/`expiration_date` for members on a MiniBC recurring
-  plan. Deferred until after cutover (Jeff, 2026-09-17): MiniBC is the
+  plan. Deferred until after cutover (decided 2026-09-17): MiniBC is the
   vendor that handles renewals, so it holds membership status that nothing
   else records, but porting it is lower priority than the cutover itself.
 

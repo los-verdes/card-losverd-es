@@ -51,7 +51,7 @@ Squarespace):
 
 Test orders never count. Otherwise the rule is per store, because the two
 don't mean the same things by their statuses (`src/lib/membershipOrders.ts`,
-decided with Jeff 2026-09-17):
+decided 2026-09-17):
 
 * **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,
   `Awaiting Shipment`, `Completed`, or `Shipped`. An `Incomplete`,
@@ -130,7 +130,7 @@ enabled.
 
 ## Who is an admin
 
-For now, only Jeff. The eventual list is the Los Verdes board (the
+For now, only the maintainer's own account. The eventual list is the Los Verdes board (the
 "Starting XI") and the membership committee. Those names are published on the
 group's website, so the list may be derivable from there rather than
 maintained by hand; undecided.
