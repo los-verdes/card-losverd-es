@@ -15,6 +15,10 @@
  *
  * Bot protection is Cloudflare Turnstile (src/email/turnstile.ts), replacing
  * the legacy app's reCAPTCHA.
+ *
+ * Rate limited per client IP and per recipient address (`IP_RATE_LIMIT`,
+ * `RECIPIENT_RATE_LIMIT` below), without breaking the anti-enumeration
+ * guarantee.
  */
 
 import { Hono } from "hono";
@@ -27,6 +31,11 @@ import {
 } from "../email/turnstile";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
+import {
+  consumeRateLimit,
+  purgeExpiredRateLimits,
+  type RateLimitRule,
+} from "../lib/rateLimit";
 import {
   buildGoogleWalletSaveUrl,
   getApplePassBundle,
@@ -97,6 +106,38 @@ const RequestForm: FC<{
       async
       defer
     ></script>
+  </Page>
+);
+
+/**
+ * Per client IP, counted on every POST before the bot check (so a flood can't
+ * hammer Turnstile either). Exceeding it gets an explicit 429 -- that reveals
+ * nothing about membership, since it's about the client, not the address.
+ */
+export const IP_RATE_LIMIT: RateLimitRule = {
+  name: "email-card:ip",
+  limit: 5,
+  windowSeconds: 60 * 60,
+};
+
+/**
+ * Per recipient address, so a member's inbox can't be flooded. Counted for
+ * every well-formed, bot-checked submission -- member or not -- and enforced
+ * silently inside `waitUntil`, keeping the response identical either way.
+ */
+export const RECIPIENT_RATE_LIMIT: RateLimitRule = {
+  name: "email-card:recipient",
+  limit: 3,
+  windowSeconds: 24 * 60 * 60,
+};
+
+const TooManyRequests: FC = () => (
+  <Page title="Email My Card">
+    <h1>Too many requests</h1>
+    <p>
+      Please wait a while before trying again, or <a href="/login">log in</a> to
+      see your card.
+    </p>
   </Page>
 );
 
@@ -234,6 +275,19 @@ export async function deliverCardByEmail(
   submittedOn: string,
 ): Promise<void> {
   try {
+    await purgeExpiredRateLimits(
+      env.DB,
+      2 * RECIPIENT_RATE_LIMIT.windowSeconds,
+    );
+    const recipientLimit = await consumeRateLimit(
+      env.DB,
+      RECIPIENT_RATE_LIMIT,
+      email.toLowerCase(),
+    );
+    if (!recipientLimit.allowed) {
+      console.warn("Email card: recipient rate limit reached; not sending");
+      return;
+    }
     const member = await getMemberByEmail(env, email);
     if (!member || !isMembershipCurrent(member)) {
       return;
@@ -292,6 +346,15 @@ emailCard.get("/", (c) => {
 emailCard.post("/", csrf(), async (c) => {
   if (!isConfigured(c.env)) {
     return c.html(<Unavailable />, 503);
+  }
+  const ipLimit = await consumeRateLimit(
+    c.env.DB,
+    IP_RATE_LIMIT,
+    c.req.header("cf-connecting-ip") ?? "unknown",
+  );
+  if (!ipLimit.allowed) {
+    c.header("Retry-After", String(ipLimit.retryAfterSeconds));
+    return c.html(<TooManyRequests />, 429);
   }
   const siteKey = c.env.TURNSTILE_SITE_KEY!;
   const form = await c.req.parseBody();

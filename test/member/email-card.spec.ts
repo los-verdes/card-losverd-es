@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
 import worker from "../../src/index";
+import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
 import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
 import LOGO from "../fixtures/sample-logo.png";
 
@@ -45,6 +46,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await env.DB.exec("DELETE FROM members");
+  await env.DB.exec("DELETE FROM rate_limit_counters");
   const listed = await env.ASSETS.list();
   await env.ASSETS.delete(listed.objects.map((o) => o.key));
 });
@@ -90,7 +92,7 @@ async function request(init: RequestInit & { path?: string } = {}) {
   const res = await worker.fetch(new Request(`${ORIGIN}${init.path ?? "/email-card"}`, init), env, ctx);
   const body = await res.text();
   await waitOnExecutionContext(ctx);
-  return { status: res.status, body };
+  return { status: res.status, body, headers: res.headers };
 }
 
 function submit(fields: Record<string, string>, headers: Record<string, string> = {}) {
@@ -361,5 +363,50 @@ describe("POST /email-card", () => {
       expect(body).not.toContain("Check your email");
       expect(fetchSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("rate limiting", () => {
+  it("returns 429 once a client IP exceeds its hourly limit, before calling Turnstile", async () => {
+    const fetchSpy = mockUpstreams();
+    const ip = { "cf-connecting-ip": "198.51.100.23" };
+    for (let i = 0; i < IP_RATE_LIMIT.limit; i++) {
+      expect((await submit({ email: `nobody${i}@example.com`, "cf-turnstile-response": "t" }, ip)).status).toBe(200);
+    }
+    const turnstileCallsBefore = callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL).length;
+
+    const blocked = await submit({ email: "jane@example.com", "cf-turnstile-response": "t" }, ip);
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toContain("Too many requests");
+    expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL)).toHaveLength(turnstileCallsBefore);
+    expect(sentMessages(fetchSpy)).toHaveLength(0);
+
+    // A different client is unaffected.
+    expect((await submit({ email: "jane@example.com", "cf-turnstile-response": "t" }, { "cf-connecting-ip": "198.51.100.99" })).status).toBe(200);
+  });
+
+  it("silently stops emailing an address after its daily limit, with an unchanged response", async () => {
+    const fetchSpy = mockUpstreams();
+    const responses = [];
+    for (let i = 0; i < RECIPIENT_RATE_LIMIT.limit + 1; i++) {
+      // Distinct IPs, so only the recipient limit is in play.
+      responses.push(await submit({ email: "Jane@Example.com", "cf-turnstile-response": "t" }, { "cf-connecting-ip": `192.0.2.${i}` }));
+    }
+
+    expect(sentMessages(fetchSpy)).toHaveLength(RECIPIENT_RATE_LIMIT.limit);
+    expect(new Set(responses.map((r) => `${r.status}:${r.body}`)).size).toBe(1);
+  });
+
+  it("counts non-member addresses the same way, so the limit can't reveal membership", async () => {
+    mockUpstreams();
+    for (let i = 0; i < RECIPIENT_RATE_LIMIT.limit + 1; i++) {
+      await submit({ email: "stranger@example.com", "cf-turnstile-response": "t" }, { "cf-connecting-ip": `192.0.2.${i}` });
+    }
+    const counters = await env.DB.prepare(
+      "SELECT count FROM rate_limit_counters WHERE key LIKE 'email-card:recipient:%'",
+    ).all<{ count: number }>();
+    expect(counters.results).toEqual([{ count: RECIPIENT_RATE_LIMIT.limit + 1 }]);
   });
 });
