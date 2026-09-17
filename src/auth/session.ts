@@ -99,9 +99,10 @@ export function setSessionCookie(c: Context, token: string): void {
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    // Carried forward from the legacy app: required for the BigCommerce
-    // storefront top-level-navigation login handoff (Phase 2.3.3).
-    sameSite: "None",
+    // Lax: no flow needs this cookie on cross-site requests. (The legacy app
+    // used None for a BigCommerce storefront login handoff, since dropped.
+    // Apple's cross-site sign-in callback relies on Auth.js's own cookies.)
+    sameSite: "Lax",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   });
@@ -111,7 +112,7 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE_NAME, {
     httpOnly: true,
     secure: true,
-    sameSite: "None",
+    sameSite: "Lax",
     path: "/",
   });
 }

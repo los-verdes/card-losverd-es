@@ -112,7 +112,7 @@ describe("requireAuth", () => {
     const cookie = res.headers.get("Set-Cookie")!;
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/Secure/);
-    expect(cookie).toMatch(/SameSite=None/);
+    expect(cookie).toMatch(/SameSite=Lax/);
   });
 
   it("logs out (clears the cookie) when a renewing session's user no longer exists", async () => {
