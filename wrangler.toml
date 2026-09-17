@@ -3,6 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2026-09-15"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers Logs: keeps every invocation's console output and uncaught errors
+# for 7 days, searchable in the dashboard, rather than only while
+# `wrangler tail` is attached. Workers Paid includes 20M log events a month.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # Non-JS static assets bundled directly into the Worker via Wrangler's
 # esbuild-based bundler at build time (rather than fetched at request time or
 # read from R2). `src/cardimage/render.ts` needs this for the raw Bungee
