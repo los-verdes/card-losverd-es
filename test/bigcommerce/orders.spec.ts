@@ -111,7 +111,8 @@ describe("recordMembershipOrder", () => {
        VALUES ('2001_bc', 'bigcommerce', 'sam.rivera@example.com', 'sam.new@example.com', 'Awaiting Fulfillment', '2026-09-01T10:00:00Z', '2027-09-01T10:00:00Z', 'legacy_postgres')`,
     ).run();
 
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    // Returns the member the order belongs to, not its billing email.
+    expect(await recordMembershipOrder(env, ORDER, PRODUCT)).toBe("sam.new@example.com");
 
     const rows = await orderRows();
     expect(rows).toHaveLength(1);

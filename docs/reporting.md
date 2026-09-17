@@ -44,11 +44,12 @@ Squarespace):
 
 Reports leave out Squarespace test orders and any order whose status is
 `canceled`, `cancelled`, `refunded`, or `declined` (case-insensitive;
-`VOID_STATUSES` in `src/admin/reportQueries.ts`). The legacy app only
+`VOID_STATUSES` in `src/lib/membershipOrders.ts`). The legacy app only
 excluded Squarespace's `CANCELED`.
 
-Note this is a reporting rule only. The `members` sync does not currently
-look at order status, so a refunded order still yields an active card.
+Membership cards use the same rule: the `members` sync derives each card from
+the member's counted orders, so a refunded or cancelled order doesn't yield a
+card (see [`bigcommerce-ingestion.md`](bigcommerce-ingestion.md) section 2).
 
 ## The pages (`/admin/reports`)
 

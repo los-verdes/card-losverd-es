@@ -1,13 +1,9 @@
 import type { Env } from "../index";
+import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyPassUpdated } from "../passkit/updates";
 import { recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
-
-// Membership lasts one year from the order's creation date, mirroring
-// `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`) in
-// the Python app's `member_card/models/annual_membership.py`.
-const MEMBERSHIP_DURATION_DAYS = 365;
 
 // SKU -> membership tier. The Python app currently treats membership as
 // effectively single-tier (`BIGCOMMERCE_MEMBERSHIP_SKUS`, default
@@ -168,80 +164,94 @@ function resolveMembership(
   return null;
 }
 
-function computeExpirationDate(dateCreated: string): string {
-  const created = new Date(dateCreated);
-  const expiry = new Date(
-    created.getTime() + MEMBERSHIP_DURATION_DAYS * 24 * 60 * 60 * 1000,
-  );
-  return expiry.toISOString().slice(0, 10); // YYYY-MM-DD, matches the schema's ISO8601-date convention
-}
-
 function computeStatus(
-  expirationDate: string,
+  expirationDate: string | null,
   now: Date,
 ): "active" | "expired" {
-  return expirationDate >= now.toISOString().slice(0, 10)
+  return expirationDate !== null &&
+    expirationDate >= now.toISOString().slice(0, 10)
     ? "active"
     : "expired";
 }
 
-export interface MemberUpsertInput {
-  customerId: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  membershipTier: string;
-  /** `YYYY-MM-DD` of the membership order's creation - a `member_since` candidate. */
-  orderDate: string;
-  expirationDate: string;
+/** The `membership_orders` columns a member's card is derived from. */
+export interface CountedMembershipOrder {
+  created_on: string;
+  expires_on: string;
+  sku: string | null;
+  first_name: string | null;
+  last_name: string | null;
 }
 
-interface ExistingMembershipState {
-  expiration_date: string | null;
-  member_since: string | null;
-}
-
-interface MergedMembershipState {
+export interface MembershipState {
   status: "active" | "expired";
-  expirationDate: string;
-  memberSince: string;
+  /** `YYYY-MM-DD`; null when no order counts (e.g. every order was refunded). */
+  expirationDate: string | null;
+  memberSince: string | null;
+  /** From the latest counted order; null when it doesn't say (e.g. a Squarespace-era row). */
+  membershipTier: string | null;
+  firstName: string | null;
+  lastName: string | null;
 }
 
 /**
- * Merges one order's membership dates into whatever a `members` row
- * already holds, such that syncing orders in *any* sequence converges on
- * the same result (webhooks and the scheduled resync don't deliver orders
- * chronologically - e.g. an old order's status change re-fires its
- * webhook long after a renewal has synced):
+ * A member's card state, derived from every order of theirs that counts as a
+ * membership (`COUNTS_AS_MEMBERSHIP`: not refunded, cancelled, declined, or a
+ * test order). Deriving from the whole history, rather than merging one order
+ * at a time into the stored row, is what lets a refund take effect: a
+ * refunded renewal's expiration simply stops counting. It also makes the
+ * result independent of the order in which orders sync (webhooks and the
+ * scheduled resync don't deliver them chronologically):
  *
- * - `member_since` only ever moves earlier. This is also what protects the
- *   one-time Squarespace-era backfill (plan Phase 2.2) from being clobbered
- *   by a later BigCommerce order.
- * - `expiration_date` only ever moves later - an older order must not roll
- *   back a renewal. `status` is then derived from the merged expiration,
- *   mirroring the Python app's "any membership still active" semantics.
+ * - `member_since` is the earliest counted order (Squarespace-era orders from
+ *   the legacy import included); `member_since_overrides` still wins when a
+ *   pass is rendered.
+ * - `expiration_date` is the latest counted order's expiry, and `status` is
+ *   derived from it -- mirroring the Python app's "any membership still
+ *   active" semantics.
+ * - Name and tier come from the latest counted order.
  *
- * ISO `YYYY-MM-DD` strings sort chronologically, so plain string
- * comparison is correct here.
+ * ISO timestamps sort chronologically, so plain string comparison is correct.
  */
-export function mergeMembershipState(
-  existing: ExistingMembershipState | null,
-  input: Pick<MemberUpsertInput, "orderDate" | "expirationDate">,
+export function deriveMembershipState(
+  orders: CountedMembershipOrder[],
   now: Date = new Date(),
-): MergedMembershipState {
-  const memberSince =
-    existing?.member_since && existing.member_since < input.orderDate
-      ? existing.member_since
-      : input.orderDate;
-  const expirationDate =
-    existing?.expiration_date && existing.expiration_date > input.expirationDate
-      ? existing.expiration_date
-      : input.expirationDate;
+): MembershipState {
+  if (orders.length === 0) {
+    return {
+      status: "expired",
+      expirationDate: null,
+      memberSince: null,
+      membershipTier: null,
+      firstName: null,
+      lastName: null,
+    };
+  }
+  let earliest = orders[0];
+  let latest = orders[0];
+  let expiresOn = orders[0].expires_on;
+  for (const order of orders) {
+    if (order.created_on < earliest.created_on) earliest = order;
+    if (order.created_on > latest.created_on) latest = order;
+    if (order.expires_on > expiresOn) expiresOn = order.expires_on;
+  }
+  const expirationDate = expiresOn.slice(0, 10);
   return {
     status: computeStatus(expirationDate, now),
     expirationDate,
-    memberSince,
+    memberSince: earliest.created_on.slice(0, 10),
+    membershipTier: (latest.sku && MEMBERSHIP_SKU_TIER_MAP[latest.sku]) || null,
+    firstName: latest.first_name || null,
+    lastName: latest.last_name || null,
   };
+}
+
+/** Identity fields from the order being synced, used where the history doesn't say. */
+export interface MemberFallback {
+  customerId: number;
+  firstName: string;
+  lastName: string;
+  membershipTier: string;
 }
 
 export interface MemberUpsertResult {
@@ -257,48 +267,64 @@ export interface MemberUpsertResult {
 }
 
 /**
- * Idempotent upsert into `members` (see docs/bigcommerce-ingestion.md
- * section 2 for the full column-by-column mapping rationale).
+ * Re-derives one member's `members` row from their `membership_orders`
+ * history (see `deriveMembershipState`, and docs/bigcommerce-ingestion.md
+ * section 2 for the column-by-column mapping).
  *
  * Matches by `email` first (the natural join key with any member row that
- * predates this sync, whose `member_id` must be preserved). Falls back to inserting a new row
- * keyed by a deterministic `BC-{customerId}` id when no match exists. Never
- * touches `auth_token` or `created_at` on an update - those represent
- * Apple/Google Wallet pass state that only this table's *sync* code should
- * never regenerate.
+ * predates this sync, whose `member_id` must be preserved). Falls back to
+ * inserting a new row keyed by a deterministic `BC-{customerId}` id when no
+ * match exists. Never touches `auth_token` or `created_at` on an update -
+ * those represent Apple/Google Wallet pass state that sync code must never
+ * regenerate.
+ *
+ * A member whose orders all stop counting keeps their row (and so their
+ * `member_id`, auth token, and device registrations, should they buy again),
+ * with a null expiration so their card is no longer current. Returns null,
+ * creating nothing, for an email with no counted orders and no member row.
  */
-export async function upsertMemberFromOrder(
+export async function refreshMemberFromOrders(
   env: Env,
-  input: MemberUpsertInput,
-): Promise<MemberUpsertResult> {
-  const email = input.email.trim().toLowerCase();
+  memberEmail: string,
+  fallback: MemberFallback,
+): Promise<MemberUpsertResult | null> {
+  const email = memberEmail.trim().toLowerCase();
   const now = Date.now();
+
+  const { results: orders } = await env.DB.prepare(
+    `SELECT created_on, expires_on, sku, first_name, last_name
+     FROM membership_orders WHERE member_email = ? AND ${COUNTS_AS_MEMBERSHIP}`,
+  )
+    .bind(email)
+    .all<CountedMembershipOrder>();
+  const state = deriveMembershipState(orders);
 
   const existing = await env.DB.prepare(
     `SELECT member_id, first_name, last_name, membership_tier, status, expiration_date, member_since
      FROM members WHERE email = ?`,
   )
     .bind(email)
-    .first<
-      {
-        member_id: string;
-        first_name: string;
-        last_name: string;
-        membership_tier: string;
-        status: string;
-      } & ExistingMembershipState
-    >();
-
-  const merged = mergeMembershipState(existing, input);
+    .first<{
+      member_id: string;
+      first_name: string;
+      last_name: string;
+      membership_tier: string;
+      status: string;
+      expiration_date: string | null;
+      member_since: string | null;
+    }>();
 
   if (existing) {
+    const firstName = state.firstName ?? existing.first_name;
+    const lastName = state.lastName ?? existing.last_name;
+    const membershipTier = state.membershipTier ?? existing.membership_tier;
     const unchanged =
-      existing.first_name === input.firstName &&
-      existing.last_name === input.lastName &&
-      existing.membership_tier === input.membershipTier &&
-      existing.status === merged.status &&
-      existing.expiration_date === merged.expirationDate &&
-      existing.member_since === merged.memberSince;
+      existing.first_name === firstName &&
+      existing.last_name === lastName &&
+      existing.membership_tier === membershipTier &&
+      existing.status === state.status &&
+      existing.expiration_date === state.expirationDate &&
+      existing.member_since === state.memberSince;
     if (unchanged) {
       return { memberId: existing.member_id, passChanged: false };
     }
@@ -308,12 +334,12 @@ export async function upsertMemberFromOrder(
        WHERE member_id = ?`,
     )
       .bind(
-        input.firstName,
-        input.lastName,
-        input.membershipTier,
-        merged.status,
-        merged.expirationDate,
-        merged.memberSince,
+        firstName,
+        lastName,
+        membershipTier,
+        state.status,
+        state.expirationDate,
+        state.memberSince,
         now,
         existing.member_id,
       )
@@ -321,16 +347,16 @@ export async function upsertMemberFromOrder(
     return { memberId: existing.member_id, passChanged: true };
   }
 
-  const memberId = `BC-${input.customerId}`;
+  if (state.expirationDate === null) return null;
+
+  const memberId = `BC-${fallback.customerId}`;
   const authToken = crypto.randomUUID();
-  // ON CONFLICT is a safety net for the TOCTOU gap between the SELECT above
-  // and this INSERT (e.g. two overlapping syncs for the same customer) -
-  // etl-sync's queue concurrency is capped at 1 (Phase 2.5.1) specifically
-  // to make that rare, not to make it impossible. The date columns repeat
-  // mergeMembershipState()'s never-regress rules in SQL, since the
-  // conflicting row wasn't visible when `merged` was computed. (SQLite's
-  // multi-argument MIN()/MAX() return NULL if any argument is NULL, hence
-  // the COALESCEs.)
+  // ON CONFLICT is a safety net for a `BC-{customerId}` row that exists under
+  // another email (the customer changed their email address) or the TOCTOU
+  // gap between the SELECT above and this INSERT - etl-sync's queue
+  // concurrency is capped at 1 (Phase 2.5.1) to make the latter rare, not
+  // impossible. `state` was derived from this email's history, so it simply
+  // replaces what the row held.
   await env.DB.prepare(
     `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -339,27 +365,22 @@ export async function upsertMemberFromOrder(
        last_name = excluded.last_name,
        email = excluded.email,
        membership_tier = excluded.membership_tier,
-       expiration_date = MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date),
-       status = CASE
-         WHEN MAX(COALESCE(members.expiration_date, excluded.expiration_date), excluded.expiration_date) >= ?
-           THEN 'active'
-         ELSE 'expired'
-       END,
-       member_since = MIN(COALESCE(members.member_since, excluded.member_since), excluded.member_since),
+       status = excluded.status,
+       expiration_date = excluded.expiration_date,
+       member_since = excluded.member_since,
        last_updated_at = excluded.last_updated_at`,
   )
     .bind(
       memberId,
-      input.firstName,
-      input.lastName,
+      state.firstName ?? fallback.firstName,
+      state.lastName ?? fallback.lastName,
       email,
-      input.membershipTier,
-      merged.status,
-      merged.expirationDate,
-      merged.memberSince,
+      state.membershipTier ?? fallback.membershipTier,
+      state.status,
+      state.expirationDate,
+      state.memberSince,
       authToken,
       now,
-      new Date(now).toISOString().slice(0, 10),
     )
     .run();
   // A brand-new member has no installed passes yet; this is only `true` so
@@ -368,39 +389,31 @@ export async function upsertMemberFromOrder(
 }
 
 /**
- * Records the order in the `membership_orders` history, upserts the member's
- * current state, and pushes a pass update if the pass changed. History goes
- * first: it is idempotent, so if a later step throws, the queue's retry
- * simply rewrites the same row.
+ * Records the order in the `membership_orders` history, re-derives the
+ * member's current state from that history, and pushes a pass update if the
+ * pass changed. History goes first: it is idempotent, so if a later step
+ * throws, the queue's retry simply rewrites the same row. The member updated
+ * is the order's `member_email`, which can differ from its billing email.
  */
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   membership: MembershipLineItem,
 ): Promise<void> {
-  await recordMembershipOrder(env, order, membership.product);
-  const { memberId, passChanged } = await upsertMemberFromOrder(
+  const memberEmail = await recordMembershipOrder(
     env,
-    upsertInputFromOrder(order, membership.tier),
+    order,
+    membership.product,
   );
-  if (passChanged) {
-    await notifyPassUpdated(env, memberId);
-  }
-}
-
-function upsertInputFromOrder(
-  order: BigCommerceOrder,
-  membershipTier: string,
-): MemberUpsertInput {
-  return {
+  const result = await refreshMemberFromOrders(env, memberEmail, {
     customerId: order.customer_id,
     firstName: order.billing_address.first_name,
     lastName: order.billing_address.last_name,
-    email: order.billing_address.email,
-    membershipTier,
-    orderDate: new Date(order.date_created).toISOString().slice(0, 10),
-    expirationDate: computeExpirationDate(order.date_created),
-  };
+    membershipTier: membership.tier,
+  });
+  if (result?.passChanged) {
+    await notifyPassUpdated(env, result.memberId);
+  }
 }
 
 /**
@@ -437,19 +450,20 @@ const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
 const DEFAULT_LOOKBACK_HOURS = 12;
 // Per-message work bound. A message fetches one page (<= ORDERS_PAGE_SIZE
 // orders) and stops early once it has applied this many membership orders.
-// Each applied order costs up to 4 D1 queries (membership_orders upsert,
-// members SELECT, members UPDATE/INSERT, notifyPassUpdated's devices SELECT)
-// plus one DELETE per device APNs reports unregistered, so a message makes at
-// most ~150*4 + 2 watermark queries = ~602 D1 queries against D1's 1,000 per
-// Worker invocation (https://developers.cloudflare.com/d1/platform/limits/),
-// leaving ~400 for device DELETEs. Subrequests (1 list + <= 250 products calls
+// Each applied order costs up to 5 D1 queries (membership_orders upsert, the
+// member's counted-orders SELECT, members SELECT, members UPDATE/INSERT,
+// notifyPassUpdated's devices SELECT) plus one DELETE per device APNs reports
+// unregistered, so a message makes at most ~120*5 + 2 watermark queries =
+// ~602 D1 queries against D1's 1,000 per Worker invocation
+// (https://developers.cloudflare.com/d1/platform/limits/), leaving ~400 for
+// device DELETEs. Subrequests (1 list + <= 250 products calls
 // + D1 + APNs pushes + 1 queue send) stay far under Workers Paid's 10,000, and
 // ~250 BigCommerce requests fit easily in a queue consumer's 15-minute wall
 // time (https://developers.cloudflare.com/workers/platform/limits/), even
 // waiting out a few rate-limit windows.
-export const MAX_MEMBERSHIP_ORDERS_PER_MESSAGE = 150;
-// Safety backstop against a chain that never ends (>= 150 orders a message,
-// so ~75,000+ orders; the store has ~10,000). Hitting it logs an error and
+export const MAX_MEMBERSHIP_ORDERS_PER_MESSAGE = 120;
+// Safety backstop against a chain that never ends (>= 120 orders a message,
+// so ~60,000+ orders; the store has ~10,000). Hitting it logs an error and
 // ends the chain *without* advancing the watermark.
 export const MAX_CHAIN_MESSAGES = 500;
 
@@ -525,8 +539,8 @@ async function startSubscriptionsEtlChain(
  * ETL jobs named in Phase 2.5.3 (see docs/bigcommerce-ingestion.md section
  * 4 for why this one and not the other two). Walks BigCommerce's v2 orders
  * list in id order, filtered to orders modified since the last successful
- * run (minus a trailing overlap window), and runs every returned order
- * through the same idempotent `upsertMemberFromOrder` path as the webhook
+ * run (minus a trailing overlap window), and runs every membership order
+ * through the same idempotent `applyMembershipOrder` path as the webhook
  * flow - repeated runs converge, they don't duplicate.
  *
  * One call does one bounded slice (see MAX_MEMBERSHIP_ORDERS_PER_MESSAGE) of

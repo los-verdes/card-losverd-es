@@ -1,18 +1,20 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
 import {
   BigCommerceClient,
   MAX_CHAIN_MESSAGES,
   MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
   ORDERS_PAGE_SIZE,
-  mergeMembershipState,
+  deriveMembershipState,
+  refreshMemberFromOrders,
   syncBigCommerceOrder,
   syncCustomersEtl,
   syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
-  upsertMemberFromOrder,
   type BigCommerceOrder,
   type BigCommerceOrderProduct,
+  type CountedMembershipOrder,
   type SubscriptionsEtlCursor,
 } from "../../src/bigcommerce/sync";
 
@@ -23,7 +25,7 @@ interface MemberRow {
   email: string;
   membership_tier: string;
   status: string;
-  expiration_date: string;
+  expiration_date: string | null;
   member_since: string | null;
   auth_token: string;
   last_updated_at: number;
@@ -40,6 +42,11 @@ async function countMembers(): Promise<number> {
     "SELECT COUNT(*) as count FROM members",
   ).first<{ count: number }>();
   return row?.count ?? 0;
+}
+
+async function clearMembershipTables() {
+  await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM members");
 }
 
 function makeOrder(
@@ -100,361 +107,338 @@ function mockBigCommerceOrderFetch(
     });
 }
 
-describe("upsertMemberFromOrder", () => {
-  afterEach(async () => {
-    await env.DB.exec("DELETE FROM members");
-  });
+interface HistoryOrder {
+  orderId: string;
+  /** `YYYY-MM-DD`; the membership runs 365 days from it. */
+  createdOn: string;
+  email?: string;
+  status?: string | null;
+  testMode?: number;
+  source?: "bigcommerce" | "squarespace";
+  sku?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+}
 
-  it("inserts a new member on first sync", async () => {
-    await upsertMemberFromOrder(env, {
-      customerId: 42,
-      firstName: "Jane",
-      lastName: "Doe",
-      email: "jane.doe@example.com",
-      membershipTier: "standard",
-      expirationDate: "2027-01-15",
-      orderDate: "2026-01-15",
-    });
-
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member).not.toBeNull();
-    expect(member?.member_id).toBe("BC-42");
-    expect(member?.first_name).toBe("Jane");
-    expect(member?.membership_tier).toBe("standard");
-    expect(member?.status).toBe("active");
-    expect(member?.expiration_date).toBe("2027-01-15");
-    expect(member?.auth_token).toBeTruthy();
-  });
-
-  it("is idempotent: running the same upsert twice produces one row, unchanged auth_token", async () => {
-    const input = {
-      customerId: 42,
-      firstName: "Jane",
-      lastName: "Doe",
-      email: "jane.doe@example.com",
-      membershipTier: "standard",
-      expirationDate: "2027-01-15",
-      orderDate: "2026-01-15",
-    };
-
-    await upsertMemberFromOrder(env, input);
-    const firstPass = await getMemberByEmail("jane.doe@example.com");
-
-    await upsertMemberFromOrder(env, input);
-    const secondPass = await getMemberByEmail("jane.doe@example.com");
-
-    expect(await countMembers()).toBe(1);
-    expect(secondPass?.member_id).toBe(firstPass?.member_id);
-    expect(secondPass?.auth_token).toBe(firstPass?.auth_token);
-  });
-
-  it("updates existing fields (e.g. renewed expiration) without duplicating the row", async () => {
-    await upsertMemberFromOrder(env, {
-      customerId: 42,
-      firstName: "Jane",
-      lastName: "Doe",
-      email: "jane.doe@example.com",
-      membershipTier: "standard",
-      expirationDate: "2027-01-15",
-      orderDate: "2026-01-15",
-    });
-
-    await upsertMemberFromOrder(env, {
-      customerId: 42,
-      firstName: "Jane",
-      lastName: "Doe-Smith",
-      email: "jane.doe@example.com",
-      membershipTier: "standard",
-      expirationDate: "2028-01-15",
-      orderDate: "2027-01-15",
-    });
-
-    expect(await countMembers()).toBe(1);
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.last_name).toBe("Doe-Smith");
-    expect(member?.expiration_date).toBe("2028-01-15");
-  });
-
-  it("preserves an existing member_id and auth_token when matched by email", async () => {
-    const now = Date.now();
-    await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, auth_token, last_updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+/** A `membership_orders` row, as the sync or the legacy import would write it. */
+async function insertHistoryOrder(order: HistoryOrder) {
+  const createdOn = new Date(`${order.createdOn}T00:00:00Z`);
+  await env.DB.prepare(
+    `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name, sku, status, test_mode, created_on, expires_on, first_seen_via)
+     VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'sync')`,
+  )
+    .bind(
+      order.orderId,
+      order.source ?? "bigcommerce",
+      order.email ?? "jane.doe@example.com",
+      order.firstName === undefined ? "Jane" : order.firstName,
+      order.lastName === undefined ? "Doe" : order.lastName,
+      order.sku === undefined ? "LOSV-MEM-0001" : order.sku,
+      order.status === undefined ? "Completed" : order.status,
+      order.testMode ?? 0,
+      toIsoSeconds(createdOn),
+      toIsoSeconds(membershipExpiry(createdOn)),
     )
-      .bind(
-        "LV-10023",
-        "Jane",
-        "Doe",
-        "jane.doe@example.com",
-        "standard",
-        "active",
-        "2026-06-01",
-        "pre-migrated-token",
-        now,
-      )
-      .run();
+    .run();
+}
 
-    await upsertMemberFromOrder(env, {
-      customerId: 999, // a different BigCommerce customer_id than any pre-existing linkage would imply
+async function setOrderStatus(orderId: string, status: string) {
+  await env.DB.prepare("UPDATE membership_orders SET status = ? WHERE order_id = ?")
+    .bind(status, orderId)
+    .run();
+}
+
+describe("deriveMembershipState", () => {
+  const NOW = new Date("2026-09-16T12:00:00.000Z");
+
+  function counted(
+    createdOn: string,
+    overrides: Partial<CountedMembershipOrder> = {},
+  ): CountedMembershipOrder {
+    const created = new Date(`${createdOn}T00:00:00Z`);
+    return {
+      created_on: toIsoSeconds(created),
+      expires_on: toIsoSeconds(membershipExpiry(created)),
+      sku: "LOSV-MEM-0001",
+      first_name: "Jane",
+      last_name: "Doe",
+      ...overrides,
+    };
+  }
+
+  it("is expired, with no dates, tier, or name, when no order counts", () => {
+    expect(deriveMembershipState([], NOW)).toEqual({
+      status: "expired",
+      expirationDate: null,
+      memberSince: null,
+      membershipTier: null,
+      firstName: null,
+      lastName: null,
+    });
+  });
+
+  it("takes a single order's dates, tier, and billing name", () => {
+    expect(deriveMembershipState([counted("2026-01-15")], NOW)).toEqual({
+      status: "active",
+      expirationDate: "2027-01-15",
+      memberSince: "2026-01-15",
+      membershipTier: "standard",
       firstName: "Jane",
       lastName: "Doe",
-      email: "jane.doe@example.com",
-      membershipTier: "standard",
-      expirationDate: "2027-06-01",
-      orderDate: "2026-06-01",
     });
-
-    expect(await countMembers()).toBe(1);
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.member_id).toBe("LV-10023");
-    expect(member?.auth_token).toBe("pre-migrated-token");
-    expect(member?.expiration_date).toBe("2027-06-01");
   });
 
-  it("lower-cases email on insert so lookups are case-insensitive", async () => {
-    await upsertMemberFromOrder(env, {
-      customerId: 7,
-      firstName: "Al",
-      lastName: "Smith",
-      email: "Al.Smith@EXAMPLE.com",
-      membershipTier: "standard",
-      expirationDate: "2027-01-01",
-      orderDate: "2026-01-01",
-    });
+  it("uses the earliest order for member_since and the latest expiry, whatever order the rows come in", () => {
+    const state = deriveMembershipState(
+      [counted("2025-01-15"), counted("2016-03-01"), counted("2026-01-15"), counted("2020-06-01")],
+      NOW,
+    );
+    expect(state.memberSince).toBe("2016-03-01");
+    expect(state.expirationDate).toBe("2027-01-15");
+    expect(state.status).toBe("active");
+  });
 
-    const member = await getMemberByEmail("al.smith@example.com");
-    expect(member).not.toBeNull();
+  it("takes name and tier from the latest order", () => {
+    const state = deriveMembershipState(
+      [
+        counted("2026-01-15", { last_name: "Doe-Smith" }),
+        counted("2025-01-15", { first_name: "Janet" }),
+      ],
+      NOW,
+    );
+    expect(state.firstName).toBe("Jane");
+    expect(state.lastName).toBe("Doe-Smith");
+  });
+
+  it("is expired once even the latest order's year has passed", () => {
+    const state = deriveMembershipState([counted("2024-01-15"), counted("2025-01-15")], NOW);
+    expect(state.status).toBe("expired");
+    expect(state.expirationDate).toBe("2026-01-15");
+  });
+
+  it("leaves tier and name null when the latest order doesn't say (e.g. a Squarespace-era row)", () => {
+    const state = deriveMembershipState(
+      [counted("2016-03-01", { sku: null, first_name: null, last_name: "" }), counted("2015-03-01", { sku: "SQ-UNKNOWN" })],
+      NOW,
+    );
+    expect(state.membershipTier).toBeNull();
+    expect(state.firstName).toBeNull();
+    expect(state.lastName).toBeNull();
   });
 });
 
-describe("mergeMembershipState", () => {
-  const NOW = new Date("2026-09-16T12:00:00.000Z");
-  const input = { orderDate: "2026-01-15", expirationDate: "2027-01-15" };
+describe("refreshMemberFromOrders", () => {
+  const fallback = {
+    customerId: 42,
+    firstName: "Fallback",
+    lastName: "Name",
+    membershipTier: "fallback-tier",
+  };
 
-  it("takes the order's dates as-is when there's no existing row", () => {
-    expect(mergeMembershipState(null, input, NOW)).toEqual({
-      status: "active",
-      expirationDate: "2027-01-15",
-      memberSince: "2026-01-15",
-    });
-  });
-
-  it("fills a null member_since/expiration_date from the order", () => {
-    expect(
-      mergeMembershipState(
-        { expiration_date: null, member_since: null },
-        input,
-        NOW,
-      ),
-    ).toEqual({
-      status: "active",
-      expirationDate: "2027-01-15",
-      memberSince: "2026-01-15",
-    });
-  });
-
-  it("never moves member_since later (e.g. a Squarespace-era backfill)", () => {
-    const merged = mergeMembershipState(
-      {
-        expiration_date: "2027-01-15",
-        member_since: "2016-03-01",
-      },
-      input,
-      NOW,
-    );
-    expect(merged.memberSince).toBe("2016-03-01");
-  });
-
-  it("moves member_since earlier when an older order turns up", () => {
-    const merged = mergeMembershipState(
-      {
-        expiration_date: "2027-01-15",
-        member_since: "2026-06-01",
-      },
-      input,
-      NOW,
-    );
-    expect(merged.memberSince).toBe("2026-01-15");
-  });
-
-  it("never rolls expiration_date back for an older order, and keeps status active", () => {
-    const merged = mergeMembershipState(
-      {
-        expiration_date: "2027-06-01",
-        member_since: "2024-06-01",
-      },
-      { orderDate: "2024-06-01", expirationDate: "2025-06-01" },
-      NOW,
-    );
-    expect(merged.expirationDate).toBe("2027-06-01");
-    expect(merged.status).toBe("active");
-  });
-
-  it("re-activates an expired member when a renewal extends expiration_date", () => {
-    const merged = mergeMembershipState(
-      {
-        expiration_date: "2025-01-15",
-        member_since: "2024-01-15",
-      },
-      input,
-      NOW,
-    );
-    expect(merged.status).toBe("active");
-    expect(merged.expirationDate).toBe("2027-01-15");
-  });
-
-  it("marks a member expired when even the latest expiration_date has passed", () => {
-    const merged = mergeMembershipState(
-      {
-        expiration_date: "2025-01-15",
-        member_since: "2024-01-15",
-      },
-      { orderDate: "2024-01-15", expirationDate: "2025-01-15" },
-      NOW,
-    );
-    expect(merged.status).toBe("expired");
-  });
-
-});
-
-describe("upsertMemberFromOrder: never-regress rules", () => {
-  afterEach(async () => {
-    await env.DB.exec("DELETE FROM members");
-  });
+  afterEach(clearMembershipTables);
 
   async function insertMember(
     memberId: string,
     email: string,
-    fields: {
+    fields: Partial<{
+      firstName: string;
+      membershipTier: string;
       status: string;
-      expirationDate: string;
+      expirationDate: string | null;
       memberSince: string | null;
-    },
+    }> = {},
   ) {
     await env.DB.prepare(
       `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
-       VALUES (?, 'Jane', 'Doe', ?, 'standard', ?, ?, ?, 'token', ?)`,
+       VALUES (?, ?, 'Doe', ?, ?, ?, ?, ?, 'pre-existing-token', ?)`,
     )
       .bind(
         memberId,
+        fields.firstName ?? "Jane",
         email,
-        fields.status,
-        fields.expirationDate,
-        fields.memberSince,
+        fields.membershipTier ?? "standard",
+        fields.status ?? "active",
+        fields.expirationDate === undefined ? "2099-01-15" : fields.expirationDate,
+        fields.memberSince === undefined ? "2098-01-15" : fields.memberSince,
         Date.now(),
       )
       .run();
   }
 
-  const olderOrder = {
-    customerId: 42,
-    firstName: "Jane",
-    lastName: "Doe",
-    email: "jane.doe@example.com",
-    membershipTier: "standard",
-    orderDate: "2024-01-15",
-    expirationDate: "2025-01-15",
-  };
-  const renewalOrder = {
-    ...olderOrder,
-    orderDate: "2026-01-15",
-    expirationDate: "2027-01-15",
-  };
+  it("inserts a new member derived from their counted orders", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
+    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-01-15", lastName: "Doe-Smith" });
 
-  it("sets member_since from the order date on insert", async () => {
-    await upsertMemberFromOrder(env, renewalOrder);
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.member_since).toBe("2026-01-15");
-  });
-
-  it("preserves a backfilled Squarespace-era member_since on a later BigCommerce order", async () => {
-    await insertMember("LV-10023", "jane.doe@example.com", {
-      status: "expired",
-      expirationDate: "2019-03-01",
-      memberSince: "2018-03-01",
+    expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toEqual({
+      memberId: "BC-42",
+      passChanged: true,
     });
 
-    await upsertMemberFromOrder(env, renewalOrder);
-
     const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.member_since).toBe("2018-03-01");
-    expect(member?.expiration_date).toBe("2027-01-15");
-    expect(member?.status).toBe("active");
-  });
-
-  it("syncing an older order after a renewal doesn't roll back expiration_date or status", async () => {
-    await insertMember("LV-10023", "jane.doe@example.com", {
+    expect(member).toMatchObject({
+      member_id: "BC-42",
+      first_name: "Jane",
+      last_name: "Doe-Smith",
+      membership_tier: "standard",
       status: "active",
-      expirationDate: "2099-01-15",
-      memberSince: "2024-01-15",
+      expiration_date: "2099-01-15",
+      member_since: "2090-01-15",
     });
-
-    await upsertMemberFromOrder(env, olderOrder);
-
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.expiration_date).toBe("2099-01-15");
-    expect(member?.status).toBe("active");
-    expect(member?.member_since).toBe("2024-01-15");
+    expect(member?.auth_token).toBeTruthy();
   });
 
-  it("applies the same rules on the INSERT's ON CONFLICT(member_id) safety-net path", async () => {
-    // Same member_id the upsert will generate (BC-42) but a different
-    // email - so the email SELECT misses and the INSERT hits the conflict.
-    await insertMember("BC-42", "old.address@example.com", {
-      status: "active",
-      expirationDate: "2099-01-15",
-      memberSince: "2018-03-01",
-    });
+  it("is idempotent: one row, the same auth_token, and no change reported the second time", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
 
-    await upsertMemberFromOrder(env, olderOrder);
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+    const first = await getMemberByEmail("jane.doe@example.com");
+    const second = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    expect(second).toEqual({ memberId: "BC-42", passChanged: false });
+    expect(await countMembers()).toBe(1);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.auth_token).toBe(first?.auth_token);
+  });
+
+  it("preserves an existing member_id and auth_token when matched by email", async () => {
+    await insertMember("LV-10023", "jane.doe@example.com", { expirationDate: "2026-06-01" });
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", { ...fallback, customerId: 999 });
 
     expect(await countMembers()).toBe(1);
     const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.member_id).toBe("BC-42");
+    expect(member?.member_id).toBe("LV-10023");
+    expect(member?.auth_token).toBe("pre-existing-token");
     expect(member?.expiration_date).toBe("2099-01-15");
-    expect(member?.status).toBe("active");
-    expect(member?.member_since).toBe("2018-03-01");
   });
 
-  it("ON CONFLICT path: derives expired from the merged expiration and fills a null member_since", async () => {
+  it("lower-cases and trims the email it is given", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    await refreshMemberFromOrders(env, " Jane.Doe@EXAMPLE.com ", fallback);
+
+    expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
+  });
+
+  it("leaves out refunded, cancelled, declined, and test orders", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
+    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2080-01-15", status: "Declined" });
+    await insertHistoryOrder({ orderId: "3_bc", createdOn: "2095-01-15", status: "Refunded" });
+    await insertHistoryOrder({ orderId: "4_bc", createdOn: "2096-01-15", status: "Cancelled" });
+    await insertHistoryOrder({ orderId: "sq-5", createdOn: "2097-01-15", status: "CANCELED", source: "squarespace" });
+    await insertHistoryOrder({ orderId: "sq-6", createdOn: "2098-01-15", testMode: 1, source: "squarespace" });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    const member = await getMemberByEmail("jane.doe@example.com");
+    expect(member?.member_since).toBe("2090-01-15");
+    expect(member?.expiration_date).toBe("2091-01-15");
+  });
+
+  it("rolls a synced renewal back once it is refunded", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
+    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-01-15" });
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2099-01-15");
+
+    await setOrderStatus("2_bc", "Refunded");
+
+    expect((await refreshMemberFromOrders(env, "jane.doe@example.com", fallback))?.passChanged).toBe(true);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2098-01-15");
+  });
+
+  it("keeps a member whose every order stopped counting, with no current membership", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+    const before = await getMemberByEmail("jane.doe@example.com");
+
+    await setOrderStatus("1_bc", "Refunded");
+
+    expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toEqual({
+      memberId: "BC-42",
+      passChanged: true,
+    });
+    expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
+      member_id: "BC-42",
+      auth_token: before?.auth_token,
+      first_name: "Jane",
+      membership_tier: "standard",
+      status: "expired",
+      expiration_date: null,
+      member_since: null,
+    });
+  });
+
+  it("creates nothing for an email with no counted orders", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15", status: "Refunded" });
+
+    expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toBeNull();
+    expect(await countMembers()).toBe(0);
+  });
+
+  it("counts a Squarespace-era order toward member_since", async () => {
+    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2016-03-01", source: "squarespace", sku: null, firstName: null, lastName: null });
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    const member = await getMemberByEmail("jane.doe@example.com");
+    expect(member?.member_since).toBe("2016-03-01");
+    expect(member?.first_name).toBe("Jane");
+  });
+
+  it("keeps the stored name and tier when the latest order doesn't say", async () => {
+    await insertMember("LV-10023", "jane.doe@example.com", { firstName: "Janet", membershipTier: "cut-crew" });
+    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", sku: null, firstName: null, lastName: null });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    const member = await getMemberByEmail("jane.doe@example.com");
+    expect(member?.first_name).toBe("Janet");
+    expect(member?.membership_tier).toBe("cut-crew");
+  });
+
+  it("uses the synced order's name and tier for a new member when the history doesn't say", async () => {
+    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", sku: null, firstName: null, lastName: null });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
+      first_name: "Fallback",
+      last_name: "Name",
+      membership_tier: "fallback-tier",
+    });
+  });
+
+  it("re-derives a revoked member's status like any other (revocation isn't sticky)", async () => {
+    await insertMember("LV-10023", "jane.doe@example.com", { status: "revoked" });
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+
+    expect((await getMemberByEmail("jane.doe@example.com"))?.status).toBe("active");
+  });
+
+  it("ON CONFLICT(member_id): takes over a BC-{customerId} row left under an old email", async () => {
+    // Same member_id the insert will generate (BC-42) but another email, so
+    // the email lookup misses and the INSERT hits the conflict.
     await insertMember("BC-42", "old.address@example.com", {
+      status: "revoked",
+      expirationDate: "2099-06-01",
+      memberSince: "2018-03-01",
+    });
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
+
+    expect((await refreshMemberFromOrders(env, "jane.doe@example.com", fallback))?.memberId).toBe("BC-42");
+
+    expect(await countMembers()).toBe(1);
+    expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
+      member_id: "BC-42",
+      auth_token: "pre-existing-token",
       status: "active",
-      expirationDate: "2020-01-15",
-      memberSince: null,
+      expiration_date: "2091-01-15",
+      member_since: "2090-01-15",
     });
-
-    await upsertMemberFromOrder(env, olderOrder);
-
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.status).toBe("expired");
-    expect(member?.expiration_date).toBe("2025-01-15");
-    expect(member?.member_since).toBe("2024-01-15");
-  });
-
-  it("re-derives a revoked member's status from expiration like any other (revocation isn't sticky)", async () => {
-    await insertMember("LV-10023", "jane.doe@example.com", {
-      status: "revoked",
-      expirationDate: "2020-01-15",
-      memberSince: "2019-01-15",
-    });
-
-    await upsertMemberFromOrder(env, renewalOrder);
-
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.status).toBe("active");
-  });
-
-  it("ON CONFLICT path: re-derives a revoked member's status too", async () => {
-    await insertMember("BC-42", "old.address@example.com", {
-      status: "revoked",
-      expirationDate: "2020-01-15",
-      memberSince: null,
-    });
-
-    await upsertMemberFromOrder(env, renewalOrder);
-
-    const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.status).toBe("active");
   });
 });
 
@@ -575,7 +559,7 @@ describe("syncBigCommerceOrder", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await env.DB.exec("DELETE FROM members");
+    await clearMembershipTables();
   });
 
   it("fetches the order + products and upserts a members row", async () => {
@@ -626,6 +610,27 @@ describe("syncBigCommerceOrder", () => {
     expect(member?.status).toBe("expired");
     // 2020 is a leap year, so +365 days from Jan 1 lands on Dec 31, not Jan 1.
     expect(member?.expiration_date).toBe("2020-12-31");
+  });
+
+  it("doesn't create a member from an order that was refunded before it first synced", async () => {
+    const order = makeOrder({ status: "Refunded" });
+    mockBigCommerceOrderFetch(order, makeProducts());
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await countMembers()).toBe(0);
+  });
+
+  it("updates the member recorded on the order, even when that isn't the billing email", async () => {
+    // An order already attributed to someone else (e.g. by the legacy import).
+    await insertHistoryOrder({ orderId: "1001_bc", createdOn: "2098-01-15", email: "gift.recipient@example.com" });
+    const order = makeOrder({ date_created: "2098-01-15T00:00:00.000Z" });
+    mockBigCommerceOrderFetch(order, makeProducts());
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect((await getMemberByEmail("gift.recipient@example.com"))?.expiration_date).toBe("2099-01-15");
+    expect(await getMemberByEmail("jane.doe@example.com")).toBeNull();
   });
 });
 
@@ -953,59 +958,49 @@ describe("pass-change detection and update pushes", () => {
     env.APNS_PRIVATE_KEY_PEM = undefined;
     await env.DB.exec("DELETE FROM registrations");
     await env.DB.exec("DELETE FROM devices");
-    await env.DB.exec("DELETE FROM members");
+    await clearMembershipTables();
   });
 
-  const input = {
+  const fallback = {
     customerId: 42,
     firstName: "Jane",
     lastName: "Doe",
-    email: "jane.doe@example.com",
     membershipTier: "standard",
-    orderDate: "2026-01-15",
-    expirationDate: "2099-01-15",
   };
 
+  function refresh() {
+    return refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
+  }
+
   it("reports a new member as changed", async () => {
-    expect(await upsertMemberFromOrder(env, input)).toEqual({
-      memberId: "BC-42",
-      passChanged: true,
-    });
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+
+    expect(await refresh()).toEqual({ memberId: "BC-42", passChanged: true });
   });
 
   it("doesn't rewrite (or bump last_updated_at on) a member whose pass-visible fields are unchanged", async () => {
-    await upsertMemberFromOrder(env, input);
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await refresh();
     await env.DB.exec("UPDATE members SET last_updated_at = 123");
 
-    expect(await upsertMemberFromOrder(env, input)).toEqual({
-      memberId: "BC-42",
-      passChanged: false,
-    });
+    expect(await refresh()).toEqual({ memberId: "BC-42", passChanged: false });
     expect((await getMemberByEmail("jane.doe@example.com"))?.last_updated_at).toBe(123);
   });
 
-  it.each<[string, Partial<typeof input>]>([
-    ["first name", { firstName: "Janet" }],
-    ["last name", { lastName: "Doe-Smith" }],
-    ["tier", { membershipTier: "cut-crew" }],
-    ["expiration (renewal)", { expirationDate: "2100-01-15" }],
-    ["member_since (older order)", { orderDate: "2020-01-15" }],
-  ])("reports a change to the %s and bumps last_updated_at", async (_label, change) => {
-    await upsertMemberFromOrder(env, input);
-    await env.DB.exec("UPDATE members SET last_updated_at = 123");
+  it.each([
+    ["first name", "first_name = 'Janet'"],
+    ["last name", "last_name = 'Doe-Smith'"],
+    ["tier", "membership_tier = 'cut-crew'"],
+    ["expiration", "expiration_date = '2000-01-01'"],
+    ["member_since", "member_since = '2000-01-01'"],
+    ["status", "status = 'expired'"],
+  ])("reports a change when the stored %s differs from the history, and bumps last_updated_at", async (_label, staleField) => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await refresh();
+    await env.DB.exec(`UPDATE members SET ${staleField}, last_updated_at = 123`);
 
-    expect((await upsertMemberFromOrder(env, { ...input, ...change })).passChanged).toBe(true);
+    expect((await refresh())?.passChanged).toBe(true);
     expect((await getMemberByEmail("jane.doe@example.com"))?.last_updated_at).toBeGreaterThan(123);
-  });
-
-  it("reports a status change once a stored 'active' membership has lapsed", async () => {
-    await upsertMemberFromOrder(env, { ...input, expirationDate: "2020-01-15" });
-    await env.DB.exec("UPDATE members SET status = 'active'"); // stale status from an earlier sync
-
-    expect(
-      (await upsertMemberFromOrder(env, { ...input, expirationDate: "2020-01-15" })).passChanged,
-    ).toBe(true);
-    expect((await getMemberByEmail("jane.doe@example.com"))?.status).toBe("expired");
   });
 
   async function registerDevice(memberId: string) {
@@ -1037,7 +1032,8 @@ describe("pass-change detection and update pushes", () => {
   }
 
   it("syncBigCommerceOrder pushes a pass update to registered devices when the pass changed", async () => {
-    await upsertMemberFromOrder(env, input);
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
+    await refresh();
     await registerDevice("BC-42");
     const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
     const apnsCalls = mockOrderAndApns(renewal);
@@ -1045,6 +1041,21 @@ describe("pass-change detection and update pushes", () => {
     await syncBigCommerceOrder(env, "store123", renewal.id);
 
     expect(apnsCalls).toEqual(["https://api.push.apple.com/3/device/push-1"]);
+  });
+
+  it("syncBigCommerceOrder pushes when a refund shortens the membership", async () => {
+    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
+    const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
+    mockOrderAndApns(renewal);
+    await syncBigCommerceOrder(env, "store123", renewal.id);
+    await registerDevice("BC-42");
+    vi.restoreAllMocks();
+    const apnsCalls = mockOrderAndApns({ ...renewal, status: "Refunded" });
+
+    await syncBigCommerceOrder(env, "store123", renewal.id);
+
+    expect(apnsCalls).toEqual(["https://api.push.apple.com/3/device/push-1"]);
+    expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2098-01-15");
   });
 
   it("syncBigCommerceOrder doesn't push when a re-synced order changes nothing", async () => {

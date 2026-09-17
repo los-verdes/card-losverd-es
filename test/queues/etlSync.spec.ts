@@ -65,6 +65,7 @@ describe("handleEtlSyncBatch", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    await env.DB.exec("DELETE FROM membership_orders");
     await env.DB.exec("DELETE FROM members");
     await env.DB.exec("DELETE FROM etl_sync_state");
   });
