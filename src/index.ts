@@ -17,6 +17,8 @@ export interface Env {
   ASSETS: R2Bucket;
   BIGCOMMERCE_STORE_HASH: string;
   BIGCOMMERCE_CLIENT_ID: string;
+  // Secrets (`wrangler secret put`, no wrangler.toml placeholders). Webhook
+  // verification fails closed without the signing key.
   BIGCOMMERCE_ACCESS_TOKEN: string;
   BIGCOMMERCE_WEBHOOK_SIGNING_KEY: string;
   // etl-sync queue producer (Phase 2.5.2; terraform/queues.tf, wrangler.toml).
@@ -29,7 +31,8 @@ export interface Env {
   // Not secret -- this service's public origin (no trailing slash), used to
   // build the signed /verify-pass URLs encoded in membership card QR codes.
   PUBLIC_BASE_URL: string;
-  // Secret -- real Apple-issued cert/key/WWDR chain, per Phase 0.2/4.6.
+  // Secret -- real Apple-issued cert/key/WWDR chain, per Phase 0.2/4.6. No
+  // wrangler.toml placeholders; pass signing fails without them.
   APPLE_PASS_CERT_PEM: string;
   APPLE_PASS_KEY_PEM: string;
   APPLE_WWDR_CERT_PEM: string;

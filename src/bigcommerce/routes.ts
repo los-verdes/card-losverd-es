@@ -36,6 +36,11 @@ export async function signWebhookToken(
   storeHash: string,
   clientId: string,
 ): Promise<string> {
+  // Fail closed: an HMAC over an empty key is just as forgeable as one over a
+  // publicly known placeholder.
+  if (!signingKey) {
+    throw new Error("BIGCOMMERCE_WEBHOOK_SIGNING_KEY is not configured");
+  }
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(signingKey),

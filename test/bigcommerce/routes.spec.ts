@@ -1,5 +1,5 @@
 import { env, SELF } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   signWebhookToken,
   verifyWebhookAuthorization,
@@ -20,6 +20,11 @@ function webhookPayload(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+// Not in wrangler.toml (it's a secret), so tests supply their own.
+beforeEach(() => {
+  env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "test-webhook-signing-key";
+});
 
 async function validAuthHeader(): Promise<string> {
   const token = await signWebhookToken(
@@ -74,6 +79,24 @@ describe("signWebhookToken / verifyWebhookAuthorization", () => {
     expect(verifyWebhookAuthorization(`bearer ${token}extra`, token)).toBe(
       false,
     );
+  });
+});
+
+describe("missing BIGCOMMERCE_WEBHOOK_SIGNING_KEY", () => {
+  it("refuses to sign rather than using an empty (forgeable) key", async () => {
+    await expect(signWebhookToken("", "store123", "client")).rejects.toThrow(
+      /BIGCOMMERCE_WEBHOOK_SIGNING_KEY is not configured/,
+    );
+  });
+
+  it("makes the webhook fail closed", async () => {
+    env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "";
+    const res = await SELF.fetch("https://example.com/bigcommerce/order-webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "bearer anything" },
+      body: JSON.stringify(webhookPayload()),
+    });
+    expect(res.status).toBe(500);
   });
 });
 
