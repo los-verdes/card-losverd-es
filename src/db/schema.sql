@@ -201,3 +201,10 @@ CREATE TABLE IF NOT EXISTS membership_order_attributions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_membership_order_attributions_order ON membership_order_attributions(order_id);
+
+-- Card emails already sent for an order (see migrations/0010_card_emails.sql)
+CREATE TABLE IF NOT EXISTS card_emails (
+    order_id TEXT PRIMARY KEY REFERENCES membership_orders(order_id),
+    member_email TEXT NOT NULL,                -- lowercased; who it was sent to
+    sent_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);

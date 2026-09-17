@@ -1,7 +1,8 @@
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyPassUpdated } from "../passkit/updates";
-import { recordMembershipOrder } from "./orders";
+import { maybeEmailNewOrderCard } from "../email/newOrder";
+import { bigCommerceOrderKey, recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
@@ -400,7 +401,7 @@ async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   membership: MembershipLineItem,
-): Promise<void> {
+): Promise<string> {
   const memberEmail = await recordMembershipOrder(
     env,
     order,
@@ -414,6 +415,15 @@ async function applyMembershipOrder(
   if (result?.passChanged) {
     await notifyPassUpdated(env, result.memberId);
   }
+  return memberEmail;
+}
+
+/** The status D1 holds for an order, before this sync overwrites it. */
+async function storedOrderStatus(env: Env, orderId: number | string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT status FROM membership_orders WHERE order_id = ?")
+    .bind(bigCommerceOrderKey(orderId))
+    .first<{ status: string | null }>();
+  return row?.status ?? null;
 }
 
 /**
@@ -440,7 +450,11 @@ export async function syncBigCommerceOrder(
     return;
   }
 
-  await applyMembershipOrder(env, order, membership);
+  // Read before applying: the email only goes out as an order *becomes*
+  // Completed (src/email/newOrder.ts).
+  const previousStatus = await storedOrderStatus(env, order.id);
+  const memberEmail = await applyMembershipOrder(env, order, membership);
+  await maybeEmailNewOrderCard(env, order, previousStatus, memberEmail);
 }
 
 const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";

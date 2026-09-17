@@ -139,6 +139,26 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
   `queue()` entrypoint to it by queue name, and acks + logs anything that
   reaches `etl-sync-dlq`.
 
+### Card emails for new orders
+
+When the webhook path (and only the webhook path) sees an order **become**
+`Completed`, the member is emailed their card once
+(`src/email/newOrder.ts`). Emailing in bulk would be a disaster -- a
+backfill, resync, legacy import or cutover would mail hundreds of existing
+members -- so three guards each stop that on their own:
+
+1. only `syncBigCommerceOrder` calls it; the scheduled and `loadAll`
+   resyncs go straight to `applyMembershipOrder`, and the legacy import
+   writes D1 without running either;
+2. `CARD_EMAIL_NEW_ORDERS_SINCE`, a plain var that is **empty by default**,
+   switches sending on and limits it to orders created on or after that date;
+3. `card_emails` (migration 0010) records the order *before* the send, so a
+   webhook retry or duplicate delivery finds the row and stops.
+
+Removing any one of them fails a test. A send that fails is logged and not
+retried, keeping "at most one email per order"; that member can still use
+`/email-card`.
+
 ## 4. Scheduled full resync (`src/scheduled.ts`)
 
 Per Phase 2.5.3, a `scheduled()` handler maps each cron trigger to an

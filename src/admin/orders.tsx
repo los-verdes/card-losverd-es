@@ -15,9 +15,9 @@ import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
+import { emailMemberCard } from "../email/card";
 import {
   attributeOrder,
-  emailAttributedMember,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
@@ -227,7 +227,7 @@ orders.post("/:orderId/member", csrf(), async (c) => {
   // Only the new member, only when they have a card, only this once.
   const emailing = form.email_card === "on" && current !== null;
   if (emailing) {
-    c.executionCtx.waitUntil(emailAttributedMember(c.env, input.email));
+    c.executionCtx.waitUntil(emailMemberCard(c.env, input.email, { kind: "attribution" }));
   }
   const params = new URLSearchParams({ attributed_from: previousMemberEmail });
   if (emailing) params.set("emailed", "1");

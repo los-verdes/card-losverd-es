@@ -84,6 +84,9 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # src/index.ts).
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
+# Empty until we're ready for new orders to email their member a card, so a
+# backfill or resync can't mail existing members (src/email/newOrder.ts).
+CARD_EMAIL_NEW_ORDERS_SINCE = ""
 SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 
 # Queue names src/queues/index.ts routes batches by (they differ per
@@ -158,6 +161,7 @@ AUTH_APPLE_ID = "es.losverd.card"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
+CARD_EMAIL_NEW_ORDERS_SINCE = ""
 SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"

@@ -323,8 +323,9 @@ describe("emailing the new member their card", () => {
     await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
 
     expect(sentTo(sendgrid)).toEqual([]);
-    expect(warn).toHaveBeenCalledWith("Attribution: SENDGRID_API_KEY not configured, not emailing the card", {
+    expect(warn).toHaveBeenCalledWith("Card email: SENDGRID_API_KEY not configured, not sending", {
       email: "friend@example.com",
+      reason: "attribution",
     });
     expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
   });
@@ -335,7 +336,7 @@ describe("emailing the new member their card", () => {
 
     await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
 
-    expect(error).toHaveBeenCalledWith("Attribution: emailing the card failed", { error: expect.stringContaining("SendGrid") });
+    expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("SendGrid") });
     expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
   });
 });

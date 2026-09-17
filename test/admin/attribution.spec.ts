@@ -2,12 +2,12 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attributeOrder,
-  emailAttributedMember,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
 } from "../../src/admin/attribution";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
+import { emailMemberCard } from "../../src/email/card";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
 const ADMIN_ID = 1;
@@ -151,7 +151,7 @@ describe("attributeOrder", () => {
   });
 });
 
-describe("emailAttributedMember", () => {
+describe("emailMemberCard", () => {
   // The route only calls this for a member it just gave a card, so these are
   // the belt-and-braces checks: nothing is emailed without a current card.
   beforeEach(() => {
@@ -165,7 +165,7 @@ describe("emailAttributedMember", () => {
   it("sends nothing for an address with no member row", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await emailAttributedMember(env, "nobody@example.com");
+    await emailMemberCard(env, "nobody@example.com", { kind: "attribution" });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -175,7 +175,7 @@ describe("emailAttributedMember", () => {
     await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await emailAttributedMember(env, "lapsed@example.com");
+    await emailMemberCard(env, "lapsed@example.com", { kind: "attribution" });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });

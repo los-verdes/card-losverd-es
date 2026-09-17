@@ -6,7 +6,9 @@
  * - `/email-card`, the no-login fallback a member requests themselves
  *   (src/member/email-card.tsx);
  * - an admin attributing an order to someone (src/admin/orders.tsx), as a
- *   one-time "here is your card" to the new member.
+ *   one-time "here is your card" to the new member;
+ * - a new membership order reaching BigCommerce's `Completed` status
+ *   (src/email/newOrder.ts), once per order.
  *
  * Nothing else may send it. Emailing cards must never be a side effect of a
  * backfill, a resync, the legacy import, or cutover -- that would mail
@@ -20,6 +22,8 @@ import {
   buildGoogleWalletSaveUrl,
   isGoogleWalletConfigured,
   getApplePassBundle,
+  getMemberByEmail,
+  isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
 } from "../member/artifacts";
@@ -32,7 +36,8 @@ export const APPLE_PASS_FILENAME = "los-verdes-membership-card.pkpass";
 /** Why this member is being emailed, which the email says in its footer. */
 export type CardEmailReason =
   | { kind: "request"; submittedOn: string }
-  | { kind: "attribution" };
+  | { kind: "attribution" }
+  | { kind: "new-order" };
 
 interface CardEmailProps {
   name: string;
@@ -50,10 +55,15 @@ function opening(reason: CardEmailReason): string {
     : "Your Los Verdes membership card is attached. Gracias!";
 }
 
+const FOOTERS = {
+  attribution: "You're receiving this because a Los Verdes admin attributed a membership to this address.",
+  "new-order": "You're receiving this because a Los Verdes membership was purchased for this address.",
+} as const;
+
 function footer(props: CardEmailProps): string {
   return props.reason.kind === "request"
     ? `This email was requested via a form submission made at ${props.baseUrl}/email-card at: ${props.reason.submittedOn}.`
-    : "You're receiving this because a Los Verdes admin attributed a membership to this address.";
+    : FOOTERS[props.reason.kind];
 }
 
 const CardEmail: FC<CardEmailProps> = (props) => (
@@ -187,4 +197,33 @@ export async function sendMembershipCardEmail(
       ? Number(env.SENDGRID_UNSUBSCRIBE_GROUP_ID)
       : undefined,
   });
+}
+
+/**
+ * Emails `email` their card, if that address has a current membership.
+ * Never throws -- callers are a `waitUntil` or a queue consumer that must
+ * not fail over an email -- and returns whether a message was sent.
+ */
+export async function emailMemberCard(
+  env: Env,
+  email: string,
+  reason: CardEmailReason,
+): Promise<boolean> {
+  try {
+    if (!env.SENDGRID_API_KEY) {
+      console.warn("Card email: SENDGRID_API_KEY not configured, not sending", { email, reason: reason.kind });
+      return false;
+    }
+    const member = await getMemberByEmail(env, email);
+    if (!member || !isMembershipCurrent(member)) {
+      return false;
+    }
+    // Non-null: isMembershipCurrent() requires an expiration date.
+    await sendMembershipCardEmail(env, { ...member, expiration_date: member.expiration_date! }, reason);
+    console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
+    return true;
+  } catch (err) {
+    console.error("Card email failed", { reason: reason.kind, error: String(err) });
+    return false;
+  }
 }
