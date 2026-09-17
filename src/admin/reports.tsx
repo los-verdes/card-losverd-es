@@ -7,11 +7,13 @@
  */
 
 import { Hono } from "hono";
-import type { FC, PropsWithChildren } from "hono/jsx";
+import type { FC } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
+import { AdminPage, cellStyle } from "./layout";
+import { orderPath } from "./orders";
 import {
   activeMemberships,
   expiredMemberships,
@@ -133,36 +135,6 @@ function withParams(
   return `${path}?${params.toString()}`;
 }
 
-const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid #ddd; white-space: nowrap";
-
-const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <meta name="robots" content="noindex" />
-      <title>{title} | Los Verdes Admin</title>
-    </head>
-    <body style="font-family: system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem">
-      <nav style="margin-bottom: 1rem">
-        <a href="/admin/reports">Reports</a>
-        {" · "}
-        <a href="/admin/reports/active">Active memberships</a>
-        {" · "}
-        <a href="/admin/reports/expired">Expired memberships</a>
-        {" · "}
-        <a href="/admin/reports/orders">Orders by month</a>
-        {" · "}
-        <a href="/admin/reports/slack">Slack cross-reference</a>
-        {" · "}
-        <a href="/">My card</a>
-      </nav>
-      <h1>{title}</h1>
-      {children}
-    </body>
-  </html>
-);
-
 const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> = ({
   path,
   req,
@@ -210,7 +182,9 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[] }> = ({ rows }) => (
       <tbody>
         {rows.map((row) => (
           <tr>
-            <td style={cellStyle}>{row.order_id}</td>
+            <td style={cellStyle}>
+              <a href={orderPath(row.order_id)}>{row.order_id}</a>
+            </td>
             <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
             <td style={cellStyle}>{row.order_email}</td>
             <td style={cellStyle}>{row.member_email === row.order_email ? "" : row.member_email}</td>

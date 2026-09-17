@@ -38,7 +38,14 @@ Squarespace):
    legacy order, BigCommerce and Squarespace. It is the only surviving record
    of Squarespace-era orders, so it must run before the legacy database is
    decommissioned. For an order the sync already recorded, it only fills in
-   `member_email`.
+   `member_email`, and never for an order an admin has attributed.
+3. **Admins** attribute an order to someone other than its purchaser on
+   `/admin/orders/<order id>` (linked from every order id in the reports).
+   Entering an address first shows everywhere it already appears (member
+   card, orders, login, Slack) as a typo check; confirming updates
+   `member_email`, appends a row to `membership_order_attributions` (who,
+   when, from, to, note), and re-derives both people's cards. Attributing it
+   back to `order_email` undoes it; the history keeps both.
 
 ### What counts as a membership
 
@@ -85,7 +92,7 @@ until it has run (`SLACK_BOT_TOKEN` set) every member shows as not in Slack.
 
 | Legacy page | Plan |
 | :--- | :--- |
-| Membership Consolidations (orders whose member email differs; possible duplicates by billing name) | Next, together with a way for an admin to **re-point an order's `member_email`**. That is a required feature, not just a view: it is how a membership bought as a gift gets attributed to its recipient. Open design point: the recipient also needs a `members` row to get a card, and `members` is currently derived from the order's billing email alone. |
+| Membership Consolidations (orders whose member email differs; possible duplicates by billing name) | Next ([#70](https://github.com/los-verdes/card-losverd-es/issues/70)). The attribution action it links to is built (see above). |
 | Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. For the analytics charts, use Cloudflare Web Analytics rather than rebuilding them. |
 | MiniBC Subscriptions | After cutover. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |
 

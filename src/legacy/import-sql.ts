@@ -260,7 +260,8 @@ function expiresOn(createdOn: string): string {
  * 3. Upsert every legacy order into `membership_orders`. For an order the
  *    BigCommerce sync already recorded, the store's own fields are left
  *    alone (the sync's copy is fresher than a one-time export); only
- *    `member_email` -- which only Postgres knows -- is filled in.
+ *    `member_email` -- which only Postgres knows -- is filled in, unless an
+ *    admin has attributed the order since (`membership_order_attributions`).
  *
  * `members` itself is never touched: overrides win at read time, and the
  * table's triggers bump `last_updated_at` for affected members.
@@ -295,7 +296,9 @@ export function buildImportStatements(data: LegacyExport): string[] {
         `${literal(o.order_email)}, ${literal(o.member_email)}, ${literal(o.first_name)}, ${literal(o.last_name)}, ` +
         `${o.customer_id ?? "NULL"}, ${literal(o.sku)}, ${literal(o.product_name)}, ${literal(o.status)}, ${o.test_mode ? 1 : 0}, ` +
         `${literal(o.created_on)}, ${literal(expiresOn(o.created_on))}, ${literal(o.modified_on)}, 'legacy_postgres') ` +
-        `ON CONFLICT(order_id) DO UPDATE SET member_email = excluded.member_email, updated_at = unixepoch('subsec') * 1000`,
+        `ON CONFLICT(order_id) DO UPDATE SET member_email = excluded.member_email, updated_at = unixepoch('subsec') * 1000 ` +
+        // An admin's attribution (#70) wins over the export's.
+        `WHERE NOT EXISTS (SELECT 1 FROM membership_order_attributions a WHERE a.order_id = membership_orders.order_id)`,
     );
   }
 

@@ -188,3 +188,16 @@ CREATE TABLE IF NOT EXISTS membership_orders (
 CREATE INDEX IF NOT EXISTS idx_membership_orders_order_email ON membership_orders(order_email);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_member_email ON membership_orders(member_email);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_window ON membership_orders(created_on, expires_on);
+
+-- Admin attributions of membership orders (see migrations/0009_membership_order_attributions.sql)
+CREATE TABLE IF NOT EXISTS membership_order_attributions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id TEXT NOT NULL REFERENCES membership_orders(order_id),
+    previous_member_email TEXT NOT NULL,       -- lowercased
+    member_email TEXT NOT NULL,                -- lowercased; the new attribution
+    admin_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    note TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_membership_order_attributions_order ON membership_order_attributions(order_id);
