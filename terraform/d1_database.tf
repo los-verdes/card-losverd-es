@@ -7,12 +7,12 @@ resource "cloudflare_d1_database" "membership" {
   read_replication = {
     mode = "disabled"
   }
-}
 
-# Production's database predates `for_each`; re-address it in place rather than
-# recreating it (which would change the database_id wrangler.toml pins).
-# TODO: remove this after it has been applied
-moved {
-  from = cloudflare_d1_database.membership
-  to   = cloudflare_d1_database.membership["production"]
+  # Deploy runs `terraform apply -auto-approve`, so a change that forces
+  # replacement (e.g. a rename) would otherwise destroy the database and its
+  # data, and change the database_id wrangler.toml pins. Remove this
+  # deliberately, in its own PR, if a database really must be replaced.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

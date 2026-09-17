@@ -7,6 +7,9 @@
 #
 # `member-actions` (Phase 2.5.1) isn't provisioned yet -- nothing produces
 # to it until the card-image backfill is built.
+#
+# Unlike the D1 database and R2 bucket, these have no `prevent_destroy`:
+# they hold only in-flight messages, and renames update in place.
 
 resource "cloudflare_queue" "etl_sync" {
   for_each = local.environments
@@ -22,16 +25,4 @@ resource "cloudflare_queue" "etl_sync_dlq" {
 
   account_id = var.cloudflare_account_id
   queue_name = "etl-sync-dlq-${each.key}"
-}
-
-
-# TODO: drop these moved blocks after a TF apply
-moved {
-  from = cloudflare_queue.etl_sync
-  to   = cloudflare_queue.etl_sync["production"]
-}
-
-moved {
-  from = cloudflare_queue.etl_sync_dlq
-  to   = cloudflare_queue.etl_sync_dlq["production"]
 }
