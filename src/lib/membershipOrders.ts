@@ -10,7 +10,7 @@
  */
 
 /**
- * BigCommerce statuses that mean the membership was paid for (Jeff,
+ * BigCommerce statuses that mean the membership was paid for (decided
  * 2026-09-17). Everything else is excluded, including `Incomplete`,
  * `Pending` and `Awaiting Payment` -- an unpaid order gets no card -- along
  * with `Refunded`, `Cancelled`, `Declined`, `Disputed` and the rest.

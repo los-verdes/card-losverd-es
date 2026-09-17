@@ -45,7 +45,7 @@ function ensureYogaInitialized(): Promise<void> {
 
 /**
  * Renders a member's membership card as a PNG, matching the visual design
- * validated in the Phase 1.0.2 risk spike (a sample render was sent to Jeff
+ * validated in the Phase 1.0.2 risk spike (a sample render was reviewed
  * for sign-off -- see PR #4). `logoPngBytes` is the crest image bytes
  * (expected to be R2-sourced by the caller, not fetched here -- keeps this
  * function pure/testable without an R2 fixture per test, matching

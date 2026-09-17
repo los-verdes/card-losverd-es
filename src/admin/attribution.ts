@@ -162,7 +162,7 @@ export async function attributeOrder(
 
 /**
  * Emails the member their card after an admin attributed an order to them --
- * Jeff's "so folks never have to visit the site at all". Only ever called
+ * so members never have to visit the site at all. Only ever called
  * from that admin action, at most once per attribution, and only for a
  * current membership. Never throws: meant for `waitUntil`.
  */
