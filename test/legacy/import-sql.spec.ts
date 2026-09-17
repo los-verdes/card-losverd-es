@@ -103,6 +103,7 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM legacy_membership_cards");
+  await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
 });
 
@@ -327,6 +328,25 @@ describe("buildImportStatements (executed against D1)", () => {
       member_email: "renamed@example.com",
       status: "Refunded", // the sync's fresher status survives the older export
       first_seen_via: "sync",
+    });
+  });
+
+  it("never overwrites the member_email of an order an admin has attributed", async () => {
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
+       VALUES ('1001_bc', 'bigcommerce', 'early@example.com', 'gift.recipient@example.com', 'Completed', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email)
+       VALUES ('1001_bc', 'early@example.com', 'gift.recipient@example.com')`,
+    ).run();
+
+    await runImport(
+      parseLegacyExport(orderExport({ ...BIGCOMMERCE_ORDER, member_email: "renamed@example.com" })),
+    );
+
+    expect(await env.DB.prepare("SELECT member_email FROM membership_orders").first()).toEqual({
+      member_email: "gift.recipient@example.com",
     });
   });
 

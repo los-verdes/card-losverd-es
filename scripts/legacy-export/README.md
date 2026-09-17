@@ -16,7 +16,7 @@ Phase 2.2, `docs/legacy-pass-compatibility.md`):
   orders use the same key as the live sync (`{id}_bc`), so the two never
   duplicate each other; for an order the sync already has, the import only
   fills in `member_email` (the member's current address, which only Postgres
-  knows).
+  knows), and never for an order an admin has attributed since.
 
 This is closed historical data. Run it any time before Postgres is
 decommissioned (Phase 8.3); re-running it is safe. The export is

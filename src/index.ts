@@ -1,5 +1,6 @@
 import { authHandler, initAuthConfig } from "@hono/auth-js";
 import { Hono } from 'hono';
+import adminOrders from "./admin/orders";
 import adminReports from "./admin/reports";
 import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
@@ -126,6 +127,8 @@ app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
 // Admin-only membership reports (replaces the legacy Data Studio report).
 app.route("/admin/reports", adminReports);
+// Admin order page: attribute an order to someone other than its purchaser.
+app.route("/admin/orders", adminOrders);
 app.route("/", portal);
 
 // Anything a route didn't handle: logged in full, apology page for people.

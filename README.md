@@ -59,6 +59,7 @@ The `card.losverd.es` DNS record is deliberately not managed here yet -- that's 
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
+| `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
 | `/healthz` | Liveness check | Public |
 
 Behind the routes:
@@ -74,7 +75,8 @@ Schema lives in `src/db/migrations/` (applied automatically on deploy); `src/db/
 | Table | Holds |
 | :--- | :--- |
 | `members` | Each member's **current** state; what passes and cards render from. Written by the BigCommerce sync. |
-| `membership_orders` | **Every** membership order ever, one row each, including Squarespace-era orders imported from the legacy database. What reporting runs on. |
+| `membership_orders` | **Every** membership order ever, one row each, including Squarespace-era orders imported from the legacy database. What reporting runs on, and what cards are derived from (by `member_email`). |
+| `membership_order_attributions` | Audit trail of admins attributing orders to someone other than their purchaser. |
 | `member_since_overrides` | "Member since" dates that win over the order-derived one: legacy imports and manual corrections. |
 | `legacy_membership_cards` | Legacy card serials, so QR codes printed before the migration still verify. |
 | `slack_users` | Copy of the Slack workspace's user list, for cross-referencing members against Slack. |
