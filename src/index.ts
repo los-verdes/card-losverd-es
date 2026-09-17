@@ -4,6 +4,7 @@ import adminReports from "./admin/reports";
 import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
 import bigcommerce from "./bigcommerce/routes";
+import { handleServerError } from "./lib/serverError";
 import emailCard from "./member/email-card";
 import portal from "./member/portal";
 import verifyPass from "./member/verify-pass";
@@ -126,6 +127,9 @@ app.route("/email-card", emailCard);
 // Admin-only membership reports (replaces the legacy Data Studio report).
 app.route("/admin/reports", adminReports);
 app.route("/", portal);
+
+// Anything a route didn't handle: logged in full, apology page for people.
+app.onError(handleServerError);
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) =>

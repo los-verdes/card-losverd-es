@@ -7,6 +7,9 @@
 
 import type { FC, PropsWithChildren } from "hono/jsx";
 
+/** Where members are told to write when something's wrong (the legacy app's contact). */
+export const SUPPORT_EMAIL = "merchteam@losverdesatx.org";
+
 export const Page: FC<PropsWithChildren<{ title: string }>> = ({
   title,
   children,
