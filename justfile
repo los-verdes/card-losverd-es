@@ -33,29 +33,40 @@ format:
 
 # D1 database tasks
 db-init-local:
-    npx wrangler d1 execute card-losverd-es-db-local --local --file=./src/db/schema.sql
+    npx wrangler d1 execute DB --local --env="" --file=./src/db/schema.sql
 
 db-migrate-local:
-    npx wrangler d1 migrations apply card-losverd-es-db-local --local
+    npx wrangler d1 migrations apply DB --local --env=""
 
+# Apply D1 migrations to an environment's remote database (production or
+# staging); CI runs this on deploy.
 db-migrate-remote env="production":
-    npx wrangler d1 migrations apply card-losverd-es-db-{{ env }} --remote
+    npx wrangler d1 migrations apply DB --remote {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
 
 # Create R2 bucket locally for testing
 r2-init-local:
     npx wrangler r2 bucket create card-losverd-es-assets-local || true
 
-# Upload the committed template images (assets/templates/**) to the R2 bucket
-# under the same keys (templates/**): the Apple pass icons/logos pass
-# generation reads, and the card image crest. Idempotent -- the Deploy
-# workflow runs it on every merge. Pass `--local` to target local dev R2.
+# Upload the committed template images (assets/templates/**) to an
+# environment's R2 bucket (card-losverd-es-assets-<env>) under the same keys
+# (templates/**): the Apple pass icons/logos pass generation reads, and the
+# card image crest. Idempotent -- the Deploy workflow runs it on every deploy.
+# Pass `--local` as the target for local dev R2.
 r2-upload-templates env="production" target="--remote":
     cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets-{{ env }}/$key" --file "$key" --content-type image/png {{target}}; done
 
-# Deploy to Cloudflare Workers. There's one environment -- production (see
-# wrangler.toml); CI normally does this on merge to main.
-deploy:
-    npx wrangler deploy
+# Deploy to Cloudflare Workers: `just deploy` (production) or `just deploy
+# staging`. CI normally does this (see .github/workflows/deploy.yml). The
+# explicit `--env=""` targets the top-level (production) config and avoids
+# Wrangler's "multiple environments defined, no target specified" warning.
+deploy env="production":
+    npx wrangler deploy {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
+
+# Fail if an environment's var/binding names drift from production's, or if it
+# points at a production resource (named environments inherit neither). Runs
+# in CI.
+check-wrangler-envs:
+    node scripts/check-wrangler-envs.mjs
 
 # Terraform tasks (see terraform/README.md for required vars/env)
 local_tf_cmd := f"""

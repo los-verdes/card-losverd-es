@@ -17,9 +17,21 @@ afterEach(() => {
 });
 
 describe("handleQueueBatch", () => {
+  it("routes by this environment's configured queue names (e.g. staging's)", async () => {
+    const spy = vi.spyOn(etlSync, "handleEtlSyncBatch").mockResolvedValue();
+    const stagingEnv = { ...env, ETL_SYNC_QUEUE_NAME: "etl-sync-staging", ETL_SYNC_DLQ_NAME: "etl-sync-dlq-staging" };
+    const batch = makeBatch("etl-sync-staging", [makeMessage({ type: "sync_customers_etl" })]);
+
+    await handleQueueBatch(batch, stagingEnv);
+    expect(spy).toHaveBeenCalledWith(batch, stagingEnv);
+
+    // Production's names mean nothing to the staging Worker.
+    await expect(handleQueueBatch(makeBatch("etl-sync-production", []), stagingEnv)).rejects.toThrow(/No consumer registered/);
+  });
+
   it("routes etl-sync batches to the etl-sync consumer", async () => {
     const spy = vi.spyOn(etlSync, "handleEtlSyncBatch").mockResolvedValue();
-    const batch = makeBatch("etl-sync", [makeMessage({ type: "sync_customers_etl" })]);
+    const batch = makeBatch(env.ETL_SYNC_QUEUE_NAME, [makeMessage({ type: "sync_customers_etl" })]);
 
     await handleQueueBatch(batch, env);
 
@@ -30,7 +42,7 @@ describe("handleQueueBatch", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const message = makeMessage({ type: "sync_customers_etl" });
 
-    await handleQueueBatch(makeBatch("etl-sync-dlq", [message]), env);
+    await handleQueueBatch(makeBatch(env.ETL_SYNC_DLQ_NAME, [message]), env);
 
     expect(message.ack).toHaveBeenCalledOnce();
   });

@@ -21,19 +21,22 @@ export async function handleDeadLetterBatch(
   }
 }
 
-/** The Worker's single `queue()` entrypoint, routed by queue name. */
+/**
+ * The Worker's single `queue()` entrypoint, routed by queue name. Names come
+ * from vars because they differ per environment (queue names are
+ * account-wide, e.g. `etl-sync-production` vs. `etl-sync-staging`).
+ */
 export async function handleQueueBatch(
   batch: MessageBatch<unknown>,
   env: Env,
 ): Promise<void> {
-  switch (batch.queue) {
-    case "etl-sync":
-      return handleEtlSyncBatch(batch as MessageBatch<EtlSyncMessage>, env);
-    case "etl-sync-dlq":
-      return handleDeadLetterBatch(batch);
-    default:
-      // Throwing (rather than acking) leaves the batch to be retried, so
-      // messages aren't lost if a queue is bound before its handler ships.
-      throw new Error(`No consumer registered for queue "${batch.queue}"`);
+  if (batch.queue === env.ETL_SYNC_QUEUE_NAME) {
+    return handleEtlSyncBatch(batch as MessageBatch<EtlSyncMessage>, env);
   }
+  if (batch.queue === env.ETL_SYNC_DLQ_NAME) {
+    return handleDeadLetterBatch(batch);
+  }
+  // Throwing (rather than acking) leaves the batch to be retried, so
+  // messages aren't lost if a queue is bound before its handler ships.
+  throw new Error(`No consumer registered for queue "${batch.queue}"`);
 }

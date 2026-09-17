@@ -18,7 +18,7 @@ fallthrough = true
 [[d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-production"
-database_id = "6ff0c181-2a0c-43ab-9c16-2c9d78827d6f"
+database_id = "5fdb69dd-7bac-4770-a33e-1f58eadbf987"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
 # ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
 # d1 migrations apply` fails with "No migrations present at .../migrations"
@@ -32,12 +32,13 @@ bucket_name = "card-losverd-es-assets-production"
 
 [vars]
 # BigCommerce store/app identifiers - not secret, safe to commit (see
-# docs/bigcommerce-ingestion.md). Still placeholders: set the real values.
+# docs/bigcommerce-ingestion.md). The store hash is the production store
+# (legacy Settings' default); BIGCOMMERCE_CLIENT_ID is still a placeholder.
 # BIGCOMMERCE_ACCESS_TOKEN and BIGCOMMERCE_WEBHOOK_SIGNING_KEY are secrets,
 # set via `wrangler secret put` -- deliberately with NO placeholder here:
 # `wrangler secret put` refuses a name already bound as a plain var, and a
 # public placeholder signing key would let anyone forge webhook signatures.
-BIGCOMMERCE_STORE_HASH = "REPLACE_WITH_BIGCOMMERCE_STORE_HASH"
+BIGCOMMERCE_STORE_HASH = "3nco2w7eup"
 BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
 
 # Apple PassKit identifiers (Phase 4) - not secret, safe to commit (both are
@@ -78,33 +79,95 @@ EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 
+# Queue names src/queues/index.ts routes batches by (they differ per
+# environment -- queue names are account-wide).
+ETL_SYNC_QUEUE_NAME = "etl-sync-production"
+ETL_SYNC_DLQ_NAME = "etl-sync-dlq-production"
+
 # Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
 # terraform/queues.tf; bindings live here. src/index.ts's queue() handler
 # routes batches by queue name.
 [[queues.producers]]
-queue = "etl-sync"
+queue = "etl-sync-production"
 binding = "ETL_SYNC_QUEUE"
 
 # Concurrency 1: a webhook-triggered order sync and a scheduled full resync
 # never race each other's D1 writes, and BigCommerce rate limits aren't hit
 # by parallel syncs (Phase 2.5.1).
 [[queues.consumers]]
-queue = "etl-sync"
+queue = "etl-sync-production"
 max_batch_size = 1
 max_batch_timeout = 30
 max_retries = 5
 max_concurrency = 1
-dead_letter_queue = "etl-sync-dlq"
+dead_letter_queue = "etl-sync-dlq-production"
 
 [[queues.consumers]]
-queue = "etl-sync-dlq"
+queue = "etl-sync-dlq-production"
 max_batch_size = 10
 max_retries = 0
 
 # No [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts) would
 # call BigCommerce with placeholder credentials until real secrets are set.
 
-# No named Wrangler environments: this single Worker is production, even
-# before card.losverd.es points at it. Keep it that way -- named environments
-# don't inherit top-level vars/bindings at all, which once silently shipped a
-# Worker with none (see the migration plan's Handoff note).
+# =============================================================================
+# Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
+# queues (terraform/staging.tf), vars, and secrets, pointed at the test
+# BigCommerce store. Deploy with `just deploy staging`; set its secrets with
+# `wrangler secret put NAME --env staging`.
+#
+# Named environments do NOT inherit top-level vars or bindings (only settings
+# like `main`, `compatibility_*`, and `rules`) -- that once silently shipped a
+# Worker with no bindings at all (see the migration plan's Handoff note). So
+# everything below is spelled out in full, and `just check-wrangler-envs` (run
+# in CI) fails if staging's var/binding names drift from production's, or if
+# staging ever points at a production resource.
+# =============================================================================
+[env.staging]
+name = "card-losverd-es-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "card-losverd-es-db-staging"
+database_id = "de087994-608c-4839-828b-51f5d1077a26"
+migrations_dir = "src/db/migrations"
+
+[[env.staging.r2_buckets]]
+binding = "ASSETS"
+bucket_name = "card-losverd-es-assets-staging"
+
+[env.staging.vars]
+# The test BigCommerce store (legacy DevelopmentSettings' store hash).
+BIGCOMMERCE_STORE_HASH = "kouyh8feen"
+BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
+PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
+PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
+PASSKIT_ORGANIZATION_NAME = "Los Verdes"
+PASSKIT_WEB_SERVICE_URL = "https://card-losverd-es-staging.jeff-hogan1.workers.dev/passkit"
+PUBLIC_BASE_URL = "https://card-losverd-es-staging.jeff-hogan1.workers.dev"
+GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
+GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_v1"
+AUTH_APPLE_ID = "es.losverd.card"
+APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
+EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
+SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
+ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
+ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
+
+[[env.staging.queues.producers]]
+queue = "etl-sync-staging"
+binding = "ETL_SYNC_QUEUE"
+
+[[env.staging.queues.consumers]]
+queue = "etl-sync-staging"
+max_batch_size = 1
+max_batch_timeout = 30
+max_retries = 5
+max_concurrency = 1
+dead_letter_queue = "etl-sync-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "etl-sync-dlq-staging"
+max_batch_size = 10
+max_retries = 0

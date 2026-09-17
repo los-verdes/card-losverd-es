@@ -28,7 +28,21 @@ Infrastructure changes (Terraform) are a separate concern from app development a
 
 ## Infrastructure & deployment
 
-The D1 database and R2 bucket are real, Terraform-provisioned Cloudflare resources (see `terraform/README.md`). `.github/workflows/deploy.yml` runs on every push to `main`: `terraform apply`, then D1 migrations, then a Worker deploy — full GitOps, no manual deploy step. The `card.losverd.es` DNS record is deliberately not managed here yet — that's the cutover step itself, not something a routine `terraform apply` should be able to trigger. Until cutover, the live Worker is reachable at its `*.workers.dev` URL, not the real domain.
+There are two environments, each a separate Worker with its own D1 database, R2 bucket, queues (Terraform-provisioned via `for_each`, see `terraform/README.md`), vars, and secrets:
+
+| Environment | Worker | BigCommerce store | URL |
+| :--- | :--- | :--- | :--- |
+| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://card-losverd-es-staging.jeff-hogan1.workers.dev |
+| **production** | `card-losverd-es` (top-level `wrangler.toml`) | production store | https://card-losverd-es.jeff-hogan1.workers.dev (until `card.losverd.es` DNS cutover) |
+
+`.github/workflows/deploy.yml`:
+
+- **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.
+- **Manual "Run workflow" from any branch:** deploys that branch to **staging only**, to try a change against the test store before merging. Terraform is skipped for these runs, so unmerged infrastructure changes never apply.
+
+Secrets are per Worker: `wrangler secret put NAME` for production, `wrangler secret put NAME --env staging` for staging. Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
+
+The `card.losverd.es` DNS record is deliberately not managed here yet -- that's the cutover step itself, not something a routine `terraform apply` should be able to trigger.
 
 ## Status
 
@@ -37,7 +51,7 @@ Actively being built out, not yet cut over. On `main`:
 - BigCommerce order ingestion (webhook + scheduled resync) keeping D1's `members` table in sync
 - Apple Wallet passes: signing, `pass.json` content generation, and the full PassKit web service (device registration, pass delivery, unregistration, device error logging)
 - Google Wallet "Save to Wallet" JWT generation
-- CI/CD: typecheck/lint/test-coverage gate on every PR, Terraform + D1 migrations + Worker deploy run automatically on merge to `main`
+- CI/CD: typecheck/lint/test-coverage/environment-parity gate on every PR; Terraform, then staging, then production deploy automatically on merge to `main`; any branch can be deployed to staging on demand
 
 Card image generation (Satori + resvg) is built and under review, not yet merged.
 

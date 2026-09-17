@@ -1,8 +1,13 @@
 name: Deploy
 
+# Merges to main deploy staging, then production (staging first, so D1
+# migrations and the deploy itself are exercised there before production).
+# "Run workflow" from any branch deploys that branch to staging only, to try
+# a change against the test BigCommerce store before merging.
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy
@@ -12,27 +17,23 @@ concurrency:
 # "API token permissions" section for its current scope and the tracked
 # least-privilege follow-up (issue #15).
 jobs:
-  deploy:
+  terraform:
+    # Only for merged code: a manual staging deploy from an unmerged branch
+    # must never apply that branch's Terraform to shared infrastructure
+    # (which includes production's resources).
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment:
-      name: dev
-      # TODO: eventually pull this from a job step's output
-      url: https://card-losverd-es.jeff-hogan1.workers.dev
     steps:
       - uses: actions/checkout@v4
       - uses: extractions/setup-just@v2
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
-      # Provisions/reconciles the D1 database + R2 bucket before anything
-      # that depends on them runs (D1 migrations, Worker deploy) -- full
-      # GitOps: infra changes committed to terraform/ apply automatically on
-      # merge to main, same as app code changes deploy automatically.
-      # Bypasses the `tf-init`/`tf-apply` justfile shortcuts (which are
-      # tuned for interactive local use via 1Password) and calls the
-      # lower-level `tf` recipe directly so this step's exact behavior --
-      # non-interactive, auto-approved -- is visible right here rather than
-      # split across two files.
+      # Provisions/reconciles every environment's D1 database, R2 bucket, and
+      # queues before anything that depends on them runs -- full GitOps.
+      # Calls the lower-level `tf` recipe directly (not the 1Password-oriented
+      # `tf-init`/`tf-apply` shortcuts) so this step's non-interactive,
+      # auto-approved behavior is visible right here.
       - name: Terraform init
         run: just tf init -input=false
         env:
@@ -46,27 +47,35 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  staging:
+    needs: terraform
+    # Runs after terraform on push, and without it (terraform is skipped) on
+    # a manual run.
+    if: ${{ !cancelled() && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://card-losverd-es-staging.jeff-hogan1.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
+      # The steps below only need the Cloudflare token -- never the R2
+      # remote-state AWS_* credentials, which only Terraform uses.
       - name: Apply D1 migrations
-        run: just db-migrate-remote
+        run: just db-migrate-remote staging
         env:
-          # `just db-migrate-remote` is a plain `wrangler d1 migrations
-          # apply` -- it never touches Terraform or the S3/R2 state backend,
-          # so this step deliberately does NOT receive AWS_ACCESS_KEY_ID/
-          # AWS_SECRET_ACCESS_KEY (those are the R2 remote-state credentials,
-          # only needed by the Terraform steps above -- see
-          # terraform/README.md). No step in this workflow needs them.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       # Syncs the committed template images (assets/templates/**) into R2
-      # before the Worker that reads them deploys -- pass generation and the
-      # card image fail loudly if they're missing.
+      # before the Worker that reads them deploys.
       - name: Upload R2 template assets
-        run: just r2-upload-templates
+        run: just r2-upload-templates staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -75,6 +84,41 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          # Plain `wrangler deploy`: wrangler.toml defines no named
-          # environments, so there's nothing to target.
-          command: deploy
+          command: deploy --env staging
+
+  production:
+    needs: staging
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      # TODO: https://card.losverd.es once DNS is cut over (Phase 8).
+      url: https://card-losverd-es.jeff-hogan1.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - name: Apply D1 migrations
+        run: just db-migrate-remote production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Upload R2 template assets
+        run: just r2-upload-templates production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # `--env=""` explicitly targets the top-level (production) config.
+          # The action's own `environment` input can't express this (it drops
+          # an empty string), and omitting it makes Wrangler warn about
+          # multiple environments with no target.
+          command: deploy --env=""
