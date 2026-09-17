@@ -183,6 +183,20 @@ export async function renderCardImage(
 }
 
 /**
+ * Whether the Google Wallet service-account secrets are set. A type guard, so
+ * callers get both values as plain strings once it passes.
+ */
+export function isGoogleWalletConfigured(env: Env): env is Env & {
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: string;
+  GOOGLE_WALLET_PRIVATE_KEY_PEM: string;
+} {
+  return Boolean(
+    env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL &&
+      env.GOOGLE_WALLET_PRIVATE_KEY_PEM,
+  );
+}
+
+/**
  * A "Save to Google Wallet" link for the member. Throws if Google Wallet
  * isn't configured (`GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` /
  * `GOOGLE_WALLET_PRIVATE_KEY_PEM` secrets).
@@ -191,10 +205,7 @@ export async function buildGoogleWalletSaveUrl(
   env: Env,
   member: MemberRecord,
 ): Promise<string> {
-  if (
-    !env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL ||
-    !env.GOOGLE_WALLET_PRIVATE_KEY_PEM
-  ) {
+  if (!isGoogleWalletConfigured(env)) {
     throw new Error("Google Wallet credentials are not configured");
   }
   const config: GoogleWalletConfig = {

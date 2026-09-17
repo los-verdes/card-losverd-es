@@ -6,6 +6,8 @@
  * artifacts as attachments rather than a hosted dynamic template.
  */
 
+import { bytesToBase64 } from "../lib/base64";
+
 export const SENDGRID_SEND_URL = "https://api.sendgrid.com/v3/mail/send";
 
 export interface EmailAddress {
@@ -29,16 +31,6 @@ export interface EmailMessage {
   attachments?: EmailAttachment[];
   /** SendGrid ASM (unsubscribe) group ID; omitted when undefined. */
   unsubscribeGroupId?: number;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  // Chunked: `String.fromCharCode(...bytes)` overflows the call stack for
-  // attachment-sized arrays.
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
-  return btoa(binary);
 }
 
 export function buildMailSendBody(message: EmailMessage) {
