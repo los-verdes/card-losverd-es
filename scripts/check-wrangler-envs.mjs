@@ -35,6 +35,9 @@ function summarize(config) {
       ...config.queues.consumers.flatMap((q) => [q.queue, q.dead_letter_queue]),
     ].filter(Boolean),
     d1Ids: config.d1_databases.map((d) => d.database_id),
+    // Google Wallet passes an environment issues are filed under this class,
+    // so sharing one would let staging edit production members' passes.
+    walletClass: [`${config.vars.GOOGLE_WALLET_ISSUER_ID}.${config.vars.GOOGLE_WALLET_CLASS_SUFFIX}`],
   };
 }
 
@@ -69,7 +72,7 @@ for (const envName of envNames) {
   }
 
   if (env.name === production.name) problems.push(`${where}: reuses production's Worker name "${env.name}"`);
-  for (const key of ["d1", "buckets", "queues"]) {
+  for (const key of ["d1", "buckets", "queues", "walletClass"]) {
     const shared = env[key].filter((x) => production[key].includes(x));
     if (shared.length) problems.push(`${where}: shares production ${key}: ${shared.join(", ")}`);
   }

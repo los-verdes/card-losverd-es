@@ -87,6 +87,13 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# Google Wallet rejects a save link whose class does not exist yet, and
+# nothing else here creates it. Run once per environment, and again if the
+# class changes. Flags: --dry-run.
+# Create or update the environment's Google Wallet generic class
+google-wallet-ensure-class env *flags:
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/google-wallet-class.mjs {{ env }} {{ flags }}
+
 # Uses the access token and webhook signing key from the environment's
 # 1Password item and the store/client ids from wrangler.toml; re-run it after
 # rotating BIGCOMMERCE_WEBHOOK_SIGNING_KEY. Flags: --dry-run; --origin URL
