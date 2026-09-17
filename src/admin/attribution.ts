@@ -14,8 +14,10 @@ import {
   refreshMemberFromOrders,
   type MemberUpsertResult,
 } from "../bigcommerce/sync";
+import { sendMembershipCardEmail } from "../email/card";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
+import { getMemberByEmail, isMembershipCurrent } from "../member/artifacts";
 import { notifyPassUpdated } from "../passkit/updates";
 
 export interface AttributableOrder {
@@ -156,4 +158,28 @@ export async function attributeOrder(
     if (result?.passChanged) await notifyPassUpdated(env, result.memberId);
   }
   return { previousMemberEmail, previous, current };
+}
+
+/**
+ * Emails the member their card after an admin attributed an order to them --
+ * Jeff's "so folks never have to visit the site at all". Only ever called
+ * from that admin action, at most once per attribution, and only for a
+ * current membership. Never throws: meant for `waitUntil`.
+ */
+export async function emailAttributedMember(env: Env, email: string): Promise<void> {
+  try {
+    if (!env.SENDGRID_API_KEY) {
+      console.warn("Attribution: SENDGRID_API_KEY not configured, not emailing the card", { email });
+      return;
+    }
+    const member = await getMemberByEmail(env, email);
+    if (!member || !isMembershipCurrent(member)) {
+      return;
+    }
+    // Non-null: isMembershipCurrent() requires an expiration date.
+    await sendMembershipCardEmail(env, { ...member, expiration_date: member.expiration_date! }, { kind: "attribution" });
+    console.log("Attribution: card emailed", { memberId: member.member_id });
+  } catch (err) {
+    console.error("Attribution: emailing the card failed", { error: String(err) });
+  }
 }

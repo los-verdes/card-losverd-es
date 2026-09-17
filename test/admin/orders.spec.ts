@@ -1,6 +1,9 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
+import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
+import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import LOGO from "../fixtures/sample-logo.png";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import worker from "../../src/index";
 import { insertOrder } from "./fixtures";
@@ -17,7 +20,26 @@ async function request(path: string, init: RequestInit & { as?: number | null } 
     const token = await issueSessionToken(SESSION_KEY, { userId: as, isAdmin: as === ADMIN_ID });
     headers.set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
   }
-  return worker.fetch(new Request(`${ORIGIN}${path}`, { ...rest, headers, redirect: "manual" }), env, createExecutionContext());
+  const ctx = createExecutionContext();
+  const res = await worker.fetch(new Request(`${ORIGIN}${path}`, { ...rest, headers, redirect: "manual" }), env, ctx);
+  // Flushes the card email's waitUntil.
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
+/** Fakes SendGrid; any other outbound fetch fails the test. */
+function mockSendGrid(status = 202) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url === SENDGRID_SEND_URL) return new Response(null, { status });
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+}
+
+function sentTo(spy: ReturnType<typeof mockSendGrid>) {
+  return spy.mock.calls
+    .filter(([input]) => String(input) === SENDGRID_SEND_URL)
+    .map(([, init]) => JSON.parse(init!.body as string).personalizations[0].to[0].email);
 }
 
 function post(path: string, fields: Record<string, string>, options: { origin?: string | null; as?: number | null } = {}) {
@@ -109,6 +131,14 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain("1 order(s) attributed to this address (1 counting as memberships); 1 placed with it");
     expect(body).not.toContain("appear anywhere yet");
     expect(await memberEmailOf("1001_bc")).toBe("buyer@example.com");
+  });
+
+  it("says no card email will go out when the order does not count as a membership", async () => {
+    await insertOrder({ id: "4004_bc", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
+
+    const body = await (await request("/admin/orders/4004_bc?email=friend@example.com")).text();
+
+    expect(body).toContain("nothing will be sent");
   });
 
   it("warns when a reviewed address appears nowhere", async () => {
@@ -224,5 +254,88 @@ describe("POST /admin/orders/:orderId/member", () => {
 
   it("404s for an unknown order", async () => {
     expect((await post("/admin/orders/nope/member", { email: "friend@example.com" })).status).toBe(404);
+  });
+});
+
+describe("emailing the new member their card", () => {
+  // Everything the card image and Apple pass need, as in email-card.spec.ts.
+  beforeEach(async () => {
+    const chain = getTestCertChain();
+    env.SENDGRID_API_KEY = "SG.test-key";
+    env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631";
+    env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";
+    env.PASSKIT_TEAM_IDENTIFIER = "TEAMID1234";
+    env.APPLE_PASS_CERT_PEM = chain.leafCertPem;
+    env.APPLE_PASS_KEY_PEM = chain.leafPrivateKeyPem;
+    env.APPLE_WWDR_CERT_PEM = chain.rootCertPem;
+    env.PUBLIC_BASE_URL = ORIGIN;
+    env.PASS_SIGNATURE_KEY = "test-pass-signature-key".repeat(5);
+    for (const key of ["templates/apple/icon.png", "templates/apple/icon@2x.png", "templates/apple/logo.png", "templates/apple/logo@2x.png", "templates/card/crest.png"]) {
+      await env.ASSETS.put(key, new Uint8Array(LOGO));
+    }
+  });
+
+  afterEach(() => {
+    env.SENDGRID_API_KEY = undefined;
+  });
+
+  it("sends the card once, only to the new member", async () => {
+    const sendgrid = mockSendGrid();
+
+    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+
+    expect(sentTo(sendgrid)).toEqual(["friend@example.com"]);
+  });
+
+  it("says so on the page afterwards", async () => {
+    mockSendGrid();
+
+    const res = await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    const body = await (await request(res.headers.get("Location")!)).text();
+
+    expect(body).toContain("Their card is on its way by email.");
+  });
+
+  it("sends nothing when the box is unchecked", async () => {
+    const sendgrid = mockSendGrid();
+
+    const res = await post("/admin/orders/1001_bc/member", { email: "friend@example.com" });
+    const body = await (await request(res.headers.get("Location")!)).text();
+
+    expect(sentTo(sendgrid)).toEqual([]);
+    expect(body).not.toContain("on its way by email");
+  });
+
+  it("sends nothing when the order gives the new member no card", async () => {
+    await env.DB.exec("UPDATE membership_orders SET status = 'Refunded' WHERE order_id = '1001_bc'");
+    const sendgrid = mockSendGrid();
+
+    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+
+    expect(sentTo(sendgrid)).toEqual([]);
+  });
+
+  it("warns, and still attributes, when SendGrid isn't configured", async () => {
+    env.SENDGRID_API_KEY = undefined;
+    const sendgrid = mockSendGrid();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+
+    expect(sentTo(sendgrid)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith("Attribution: SENDGRID_API_KEY not configured, not emailing the card", {
+      email: "friend@example.com",
+    });
+    expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
+  });
+
+  it("logs, and still attributes, when SendGrid rejects the message", async () => {
+    mockSendGrid(500);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+
+    expect(error).toHaveBeenCalledWith("Attribution: emailing the card failed", { error: expect.stringContaining("SendGrid") });
+    expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
   });
 });

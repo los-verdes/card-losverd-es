@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attributeOrder,
+  emailAttributedMember,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
@@ -147,5 +148,35 @@ describe("attributeOrder", () => {
     expect(result.previous).toBeNull();
     expect(result.current?.passChanged).toBe(false);
     expect(await member("buyer@example.com")).toBeNull();
+  });
+});
+
+describe("emailAttributedMember", () => {
+  // The route only calls this for a member it just gave a card, so these are
+  // the belt-and-braces checks: nothing is emailed without a current card.
+  beforeEach(() => {
+    env.SENDGRID_API_KEY = "SG.test-key";
+  });
+
+  afterEach(() => {
+    env.SENDGRID_API_KEY = undefined;
+  });
+
+  it("sends nothing for an address with no member row", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await emailAttributedMember(env, "nobody@example.com");
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing for a member whose card isn't current", async () => {
+    await insertOrder({ id: "1_bc", email: "lapsed@example.com", created: "2020-01-15T00:00:00Z" });
+    await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await emailAttributedMember(env, "lapsed@example.com");
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
