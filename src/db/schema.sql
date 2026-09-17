@@ -121,3 +121,13 @@ CREATE TABLE IF NOT EXISTS legacy_membership_cards (
 );
 
 CREATE INDEX IF NOT EXISTS idx_legacy_membership_cards_email ON legacy_membership_cards(email);
+
+-- Rate limit counters (see migrations/0006_rate_limits.sql)
+CREATE TABLE IF NOT EXISTS rate_limit_counters (
+    key TEXT NOT NULL,
+    window_start INTEGER NOT NULL,            -- Unix epoch seconds at the start of the window
+    count INTEGER NOT NULL,
+    PRIMARY KEY (key, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_counters_window ON rate_limit_counters(window_start);
