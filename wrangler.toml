@@ -17,7 +17,7 @@ fallthrough = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "card-losverd-es-db"
+database_name = "card-losverd-es-db-production"
 database_id = "6ff0c181-2a0c-43ab-9c16-2c9d78827d6f"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
 # ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
@@ -28,7 +28,7 @@ migrations_dir = "src/db/migrations"
 
 [[r2_buckets]]
 binding = "ASSETS"
-bucket_name = "card-losverd-es-assets"
+bucket_name = "card-losverd-es-assets-production"
 
 [vars]
 # BigCommerce store/app identifiers - not secret, safe to commit (see
