@@ -22,7 +22,7 @@ beforeEach(() => {
 afterEach(async () => {
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
-  await env.ASSETS.delete("templates/apple/icon@2x.png");
+  await env.ASSETS.delete("templates/card/crest.png");
 });
 
 async function insertMember(memberId = "BC-1", email = "jane@example.com") {
@@ -75,12 +75,12 @@ describe("renderCardImage", () => {
   it("fails loudly when the crest isn't in R2", async () => {
     await insertMember();
     const member = (await getMemberById(env, "BC-1"))!;
-    await expect(renderCardImage(env, member)).rejects.toThrow(/templates\/apple\/icon@2x\.png/);
+    await expect(renderCardImage(env, member)).rejects.toThrow(/templates\/card\/crest\.png.*just r2-upload-templates/);
   });
 
   it("renders a PNG using the R2 crest", async () => {
     await insertMember();
-    await env.ASSETS.put("templates/apple/icon@2x.png", new Uint8Array(LOGO));
+    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
     const png = await renderCardImage(env, (await getMemberById(env, "BC-1"))!);
     expect(Array.from(png.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
