@@ -343,3 +343,39 @@ export async function consolidations(db: D1Database): Promise<Consolidations> {
     duplicateNames: duplicateNames.results as unknown as DuplicateNameRow[],
   };
 }
+
+export interface MissingOrderRow {
+  /** Present so `toCsv` accepts these rows, as with the other report types. */
+  [key: string]: string | number | null;
+  order_id: string;
+  member_email: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: string | null;
+  created_on: string;
+  expires_on: string;
+  missing_since: number;
+  /** Whether it still counts -- see COUNTS_AS_MEMBERSHIP on the NULL case. */
+  counts: number | null;
+}
+
+/**
+ * Orders BigCommerce has stopped returning (los-verdes/card-losverd-es#105),
+ * oldest sighting first, so the ones that have gone unreviewed longest are at
+ * the top.
+ *
+ * These still confer membership. The flag exists so a person can decide,
+ * rather than a 404 deciding for them.
+ */
+export async function missingOrders(db: D1Database): Promise<MissingOrderRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT order_id, member_email, first_name, last_name, status, created_on, expires_on,
+              missing_since, (${COUNTS_AS_MEMBERSHIP}) AS counts
+         FROM membership_orders
+        WHERE missing_since IS NOT NULL
+        ORDER BY missing_since, order_id`,
+    )
+    .all<MissingOrderRow>();
+  return results;
+}

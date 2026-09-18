@@ -37,7 +37,7 @@ afterEach(async () => {
 });
 
 describe("access control", () => {
-  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack", "/admin/reports/consolidations"];
+  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack", "/admin/reports/consolidations", "/admin/reports/missing"];
 
   it.each(PATHS)("%s sends an anonymous visitor to log in", async (path) => {
     const res = await get(path, null);
@@ -404,5 +404,46 @@ describe("branding", () => {
 
     expect(html).toContain('<link rel="stylesheet" href="/assets/app.css"');
     expect(html).toContain('<body class="admin">');
+  });
+});
+
+describe("missing from BigCommerce", () => {
+  async function flag(orderId: string, missingSince: number) {
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = ? WHERE order_id = ?")
+      .bind(missingSince, orderId)
+      .run();
+  }
+
+  it("says so plainly when nothing is missing", async () => {
+    expect(await (await get("/admin/reports/missing")).text()).toContain("No orders are missing");
+  });
+
+  it("lists a missing order and states that it still counts", async () => {
+    // The page has one job beyond listing: not reading as though something
+    // has already been taken away from the member.
+    await insertOrder({ id: "20_bc", email: "gone@example.com", first: "Gone", last: "Order", created: "2026-02-01T00:00:00Z" });
+    await flag("20_bc", Date.UTC(2026, 8, 17));
+
+    const body = await (await get("/admin/reports/missing")).text();
+
+    expect(body).toContain("20_bc");
+    expect(body).toContain("gone@example.com");
+    expect(body).toContain("still count");
+    expect(body).toContain("2026-09-17");
+    expect(body).toContain("counts, to 2027-02-01");
+  });
+
+  it("downloads as CSV", async () => {
+    await insertOrder({ id: "21_bc", email: "gone2@example.com", created: "2026-02-01T00:00:00Z" });
+    await flag("21_bc", Date.UTC(2026, 8, 17));
+
+    const res = await get("/admin/reports/missing?format=csv");
+
+    expect(res.headers.get("Content-Disposition")).toContain('filename="missing-orders-');
+    expect(await res.text()).toContain("21_bc,gone2@example.com");
+  });
+
+  it("is listed on the reports index", async () => {
+    expect(await (await get("/admin/reports")).text()).toContain('<a href="/admin/reports/missing">Missing from BigCommerce</a>');
   });
 });

@@ -65,6 +65,9 @@ export async function recordMembershipOrder(
        created_on = excluded.created_on,
        expires_on = excluded.expires_on,
        modified_on = excluded.modified_on,
+       -- BigCommerce returned it, so whatever made it look missing is over
+       -- (#105). A transient 404 therefore heals itself on the next sync.
+       missing_since = NULL,
        updated_at = unixepoch('subsec') * 1000
      RETURNING member_email`,
   )

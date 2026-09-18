@@ -57,6 +57,20 @@ describe("helpers", () => {
 });
 
 describe("recordMembershipOrder", () => {
+  it("clears the missing flag when the store returns the order again", async () => {
+    // A 404 during a BigCommerce incident shouldn't leave a permanent mark;
+    // the next successful sync is evidence the order is fine (#105).
+    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = 1000 WHERE order_id = ?")
+      .bind(bigCommerceOrderKey(ORDER.id))
+      .run();
+
+    await recordMembershipOrder(env, ORDER, PRODUCT);
+
+    const [row] = await orderRows();
+    expect(row.missing_since).toBeNull();
+  });
+
   it("stores the order with legacy-compatible identifiers and a lowercased email", async () => {
     await recordMembershipOrder(env, ORDER, PRODUCT);
 

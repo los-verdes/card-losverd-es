@@ -182,12 +182,16 @@ CREATE TABLE IF NOT EXISTS membership_orders (
     expires_on TEXT NOT NULL,                  -- created_on + 365 days, stored so date-window queries can use an index
     modified_on TEXT,
     first_seen_via TEXT NOT NULL CHECK (first_seen_via IN ('sync', 'legacy_postgres')),
+    -- When BigCommerce stopped returning this order (see migrations/0011).
+    -- Flags it for a person; does not stop it counting as a membership.
+    missing_since INTEGER,
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
 CREATE INDEX IF NOT EXISTS idx_membership_orders_order_email ON membership_orders(order_email);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_member_email ON membership_orders(member_email);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_window ON membership_orders(created_on, expires_on);
+CREATE INDEX IF NOT EXISTS idx_membership_orders_missing ON membership_orders(missing_since);
 
 -- Admin attributions of membership orders (see migrations/0009_membership_order_attributions.sql)
 CREATE TABLE IF NOT EXISTS membership_order_attributions (
