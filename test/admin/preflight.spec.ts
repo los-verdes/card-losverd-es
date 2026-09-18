@@ -320,7 +320,7 @@ describe("Google Wallet", () => {
     remote.classStatus = 404;
     const result = find(await check(), "Wallet class");
     expect(result.status).toBe("fail");
-    expect(result.detail).toContain("--insert");
+    expect(result.detail).toContain("google-wallet-ensure-class");
   });
 
   it("points at the detailed checker for anything else Google says", async () => {
