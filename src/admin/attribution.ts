@@ -29,8 +29,15 @@ export interface AttributableOrder {
   status: string | null;
   created_on: string;
   expires_on: string;
-  /** Whether the order counts as a membership (not voided or a test order). */
-  counts: number;
+  /**
+   * Whether the order counts as a membership (not voided or a test order).
+   *
+   * SQLite's 0/1 -- or **NULL**, for a row whose status is NULL, because
+   * `lower(NULL) IN (...)` is NULL rather than false. That is the right
+   * answer (a statusless BigCommerce order does not count) and it reads
+   * correctly as falsy, but it is not 0: compare truthily, never `=== 0`.
+   */
+  counts: number | null;
   /** When BigCommerce stopped returning this order, if it has (#105). */
   missing_since: number | null;
 }

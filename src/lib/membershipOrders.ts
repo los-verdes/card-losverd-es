@@ -35,7 +35,25 @@ export const VOID_LEGACY_STATUSES = ["canceled", "cancelled", "refunded", "decli
 
 const list = (values: string[]) => values.map((value) => `'${value}'`).join(", ");
 
-/** SQL condition on a `membership_orders` row: does this order count? */
+/**
+ * SQL condition on a `membership_orders` row: does this order count?
+ *
+ * **Three-valued, and the third value matters.** For a `bigcommerce` row with
+ * a NULL status this evaluates to NULL, not 0, because `lower(NULL) IN (...)`
+ * is NULL. Legacy imports produce exactly such rows in quantity
+ * (los-verdes/card-losverd-es#89), so this is not a hypothetical.
+ *
+ * As written -- a `WHERE` clause, or a selected column read for truthiness --
+ * that is correct and needs no thought: NULL is not true, so the order does
+ * not count. Two ways of using it are not safe, and both fail silently on
+ * precisely those rows:
+ *
+ * - `NOT (COUNTS_AS_MEMBERSHIP)` to find non-counting rows. `NOT NULL` is
+ *   NULL, so statusless orders match neither the condition nor its negation.
+ *   Use `COALESCE((COUNTS_AS_MEMBERSHIP), 0) = 0`.
+ * - Comparing a selected `counts` column with `=== 0` in TypeScript. D1
+ *   hands NULL back as `null`. Compare truthily.
+ */
 export const COUNTS_AS_MEMBERSHIP = `test_mode = 0 AND (CASE source
     WHEN 'bigcommerce' THEN lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)})
     ELSE (status IS NULL OR lower(status) NOT IN (${list(VOID_LEGACY_STATUSES)}))
