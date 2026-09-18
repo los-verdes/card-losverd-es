@@ -48,6 +48,19 @@ Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wr
 
 The `card.losverd.es` DNS record is deliberately not managed here yet -- that's the cutover step itself, not something a routine `terraform apply` should be able to trigger.
 
+## Keeping dependencies current
+
+Twenty-one direct dependencies, and the intent is that keeping them current stays a few minutes a month rather than a standing chore. Dependabot (`.github/dependabot.yml`) does the watching; the design is about keeping the number of pull requests low rather than the number of updates high.
+
+- **One grouped PR a week** for every minor and patch update across all dependencies. Most weeks this is the only one, and reviewing it means reading a changelog rather than a diff.
+- **A second grouped PR** for GitHub Actions, which also gets us told when an action finally ships a release that drops Node 20 -- the deprecation warning every workflow run currently carries, which nothing in this repository can fix.
+- **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group.
+- **Nothing auto-merges.** CI passing is not the same as someone having decided the change is wanted, and these land code nobody has read.
+
+When a bump breaks something, close the PR rather than leaving it open: Dependabot will not re-raise the same version, but it will offer the next one. That is exactly the behaviour wanted for `satori`, which is [pinned at 0.32.0](https://github.com/los-verdes/card-losverd-es/issues/8) because of a Workers runtime incompatibility rather than anything in its API -- a Dependabot PR turns "someone should check whether this is fixed yet" into a CI run that answers it.
+
+Two pairings to keep in mind when reviewing, because the tests will tell you but the changelog won't: `wrangler` and `@cloudflare/vitest-plugin` both carry a workerd, and `@cloudflare/workers-types` should match the `compatibility_date` in `wrangler.toml`.
+
 ## What's here
 
 | Path | What it is | Auth |
