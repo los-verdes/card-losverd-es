@@ -361,7 +361,7 @@ async function googleWalletChecks(env: Env): Promise<CheckGroup> {
     if (res.status === 404)
       return fail(
         "Wallet class",
-        `${classId} does not exist. Create it with \`just google-wallet-check <env> --insert\`.`,
+        `${classId} does not exist. Create it with \`just google-wallet-ensure-class <env>\`.`,
       );
     return fail("Wallet class", `Google answered ${res.status}. Run \`just google-wallet-check\` for the detail.`);
   });
@@ -444,13 +444,11 @@ function deliveryChecks(env: Env): CheckGroup {
  */
 async function legacyImportChecks(env: Env): Promise<CheckGroup> {
   const result = await attempt("Imported orders that count for nothing", async () => {
-    // `NOT (COUNTS_AS_MEMBERSHIP)` would be wrong here, and wrong in the one
-    // way that matters: the rule evaluates to NULL rather than false for a
-    // row with no status, because `lower(NULL) IN (...)` is NULL -- and `NOT
-    // NULL` is NULL, not true. As a WHERE clause that is harmless (NULL is
-    // not true, so the order doesn't count, which is correct). Negated, it
-    // would skip exactly the statusless orders this check exists to find.
-    const doesNotCount = `COALESCE((${COUNTS_AS_MEMBERSHIP}), 0) = 0`;
+    // Safe to negate because the shared rule is two-valued (#107). It was
+    // not always: while it could return NULL, this read `COALESCE(..., 0) =
+    // 0` to avoid `NOT` silently skipping the statusless orders that are the
+    // whole point of this check.
+    const doesNotCount = `NOT (${COUNTS_AS_MEMBERSHIP})`;
     const row = await env.DB.prepare(
       `SELECT COUNT(*) AS imported,
               SUM(CASE WHEN ${doesNotCount} THEN 1 ELSE 0 END) AS discarded,
