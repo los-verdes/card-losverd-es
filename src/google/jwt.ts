@@ -50,6 +50,36 @@ export const GOOGLE_WALLET_BRANDING = {
   hexBackgroundColor: "#00B140",
 } as const;
 
+/**
+ * Path the pass logo is served from (`src/assets.ts`). Google fetches this
+ * itself, so it is resolved against the environment's public origin.
+ */
+export const LOGO_ASSET_PATH = "/assets/crest.png";
+
+/**
+ * The whole config for an environment, from the three things that differ
+ * between them.
+ *
+ * Exported and used by `scripts/google-wallet-check.ts` as well as the Worker,
+ * because assembling it in two places is how the checker came to validate an
+ * object with no logo while the Worker was issuing one correctly: adding a
+ * required field to `GoogleWalletConfig` left the second copy behind, and
+ * Google reported only "URL cannot be empty" (2026-09-18).
+ */
+export function googleWalletConfig(env: {
+  issuerId: string;
+  classSuffix: string;
+  baseUrl: string;
+}): GoogleWalletConfig {
+  return {
+    issuerId: env.issuerId,
+    classSuffix: env.classSuffix,
+    origins: [env.baseUrl],
+    ...GOOGLE_WALLET_BRANDING,
+    logoUri: new URL(LOGO_ASSET_PATH, env.baseUrl).toString(),
+  };
+}
+
 /** The subset of a `members` row (Phase 2.1) needed to build a Google Wallet object. */
 export interface MemberWalletInput {
   memberId: string; // == the GenericObject id suffix and the QR code's alternate text

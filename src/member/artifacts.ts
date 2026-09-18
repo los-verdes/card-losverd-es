@@ -9,10 +9,9 @@
 
 import { renderMembershipCardPng } from "../cardimage/render";
 import {
-  GOOGLE_WALLET_BRANDING,
   buildSaveToWalletUrl,
+  googleWalletConfig,
   signSaveToWalletJwt,
-  type GoogleWalletConfig,
 } from "../google/jwt";
 import type { Env } from "../index";
 import { buildVerifyPassUrl } from "../lib/passSignature";
@@ -210,13 +209,11 @@ export async function buildGoogleWalletSaveUrl(
   if (!isGoogleWalletConfigured(env)) {
     throw new Error("Google Wallet credentials are not configured");
   }
-  const config: GoogleWalletConfig = {
+  const config = googleWalletConfig({
     issuerId: env.GOOGLE_WALLET_ISSUER_ID,
     classSuffix: env.GOOGLE_WALLET_CLASS_SUFFIX,
-    origins: [env.PUBLIC_BASE_URL],
-    ...GOOGLE_WALLET_BRANDING,
-    logoUri: new URL("/assets/crest.png", env.PUBLIC_BASE_URL).toString(),
-  };
+    baseUrl: env.PUBLIC_BASE_URL,
+  });
   const jwt = await signSaveToWalletJwt(
     {
       memberId: member.member_id,

@@ -1,6 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PUBLIC_ASSETS } from "../src/assets";
+import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 
 const CREST_KEY = "templates/card/crest.png";
@@ -70,5 +71,22 @@ describe("GET /assets/:name", () => {
 
   it("lists only the crest, which is what the Wallet logo points at", () => {
     expect(PUBLIC_ASSETS).toEqual({ "crest.png": CREST_KEY });
+  });
+
+  it("actually serves the URL the Google Wallet object tells Google to fetch", async () => {
+    // These are assembled in different modules, and when they drifted apart
+    // Google reported only "URL cannot be empty" (2026-09-18). Following the
+    // real URL is the check that would have caught it.
+    const { logoUri } = googleWalletConfig({
+      issuerId: "3388000000022222222",
+      classSuffix: "los_verdes_member_v1",
+      baseUrl: "https://card.losverd.es",
+    });
+
+    expect(logoUri).not.toBe("");
+    const res = await get(new URL(logoUri).pathname);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
   });
 });
