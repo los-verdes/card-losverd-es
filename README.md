@@ -142,6 +142,8 @@ It reads the access token and signing key from the environment's 1Password item 
 | `SENDGRID_API_KEY`, `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var) |
 | `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
 
+For the `*_PEM` secrets, paste the file's own text. 1Password's password fields strip the line breaks, which is harmless -- both parsers used here (`node-forge` for pass signing, `jose` for JWT keys) discard whitespace before decoding the base64. A value carrying literal `\n` escapes, as copied out of a Google service-account JSON file, is *not* harmless: it fails at runtime with an opaque ASN.1 error, so `secrets-push` refuses it (along with a value that isn't PEM at all, one that's truncated, and a passphrase-protected key, which `node-forge` can't read).
+
 ### Making someone an admin
 
 Admin is a flag in D1, checked on every admin request. The person logs in once so their `users` row exists, then:

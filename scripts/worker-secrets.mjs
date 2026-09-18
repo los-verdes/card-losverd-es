@@ -76,6 +76,44 @@ function secretsFromItem(item) {
   return secrets;
 }
 
+/** Secrets whose value has to be a PEM-encoded certificate or key. */
+const PEM_SECRETS = WORKER_SECRETS.filter((name) => name.endsWith("_PEM"));
+
+/**
+ * Why `value` can't be used as a PEM secret, or null if it can.
+ *
+ * 1Password's password fields strip line breaks, which is harmless: both
+ * parsers this project uses -- `node-forge` for pass signing
+ * (src/passkit/signer.ts) and `jose` wherever a JWT is signed -- throw away
+ * whitespace before decoding the base64, so a PEM that has lost its newlines
+ * still parses exactly like a well-formed one.
+ *
+ * What does not work is a value carrying literal `\n` escapes, which is the
+ * shape you get by copying `private_key` straight out of a Google
+ * service-account JSON file. Those two characters survive into the base64 and
+ * the decode fails at runtime, a long way from the paste that caused it:
+ * `node-forge` reports "Invalid PEM formatted message" and `jose` reports
+ * "asn1 encoding routines::too long". Catching it here means it never reaches
+ * a Worker.
+ */
+function pemProblem(name, value) {
+  if (!PEM_SECRETS.includes(name)) return null;
+  if (value.includes("\\n")) {
+    return 'contains literal "\\n" escapes rather than line breaks, and will fail to parse. Copy the file\'s own text (1Password strips the line breaks, which is fine), not a JSON string containing it.';
+  }
+  const begin = value.match(/-----BEGIN ([A-Z0-9 ]+)-----/);
+  if (!begin) {
+    return 'has no "-----BEGIN ...-----" marker, so it isn\'t PEM. Expected the contents of a .pem or .p8 file (a .cer is DER: convert it with `openssl x509 -inform DER -in cert.cer -out cert.pem`).';
+  }
+  if (!value.includes(`-----END ${begin[1]}-----`)) {
+    return `opens "${begin[1]}" but has no matching "-----END ${begin[1]}-----", so the value looks truncated.`;
+  }
+  if (begin[1] === "ENCRYPTED PRIVATE KEY") {
+    return "is passphrase-protected, which node-forge can't read. Strip the passphrase first: `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-nocrypt.pem`.";
+  }
+  return null;
+}
+
 const [env, ...rest] = process.argv.slice(2);
 if (!ENVIRONMENTS.includes(env)) fail(`first argument must be one of: ${ENVIRONMENTS.join(", ")}`);
 
@@ -107,7 +145,10 @@ if (rest[0] === "--status") {
   for (const name of WORKER_SECRETS) {
     const value = secrets.get(name);
     const inOnePassword = value ? `${value.length} chars, ${value.split("\n").length} line(s)` : "missing";
-    console.log(`  ${name.padEnd(36)} 1Password: ${inOnePassword.padEnd(24)} Cloudflare: ${cloudflare.has(name) ? "set" : "missing"}`);
+    const problem = value ? pemProblem(name, value) : null;
+    console.log(
+      `  ${name.padEnd(36)} 1Password: ${inOnePassword.padEnd(24)} Cloudflare: ${cloudflare.has(name) ? "set" : "missing"}${problem ? `   !! ${problem}` : ""}`,
+    );
   }
   const unexpected = [...cloudflare].filter((name) => !WORKER_SECRETS.includes(name));
   if (unexpected.length) console.log(`  Set in Cloudflare but not a known Worker secret: ${unexpected.join(", ")}`);
@@ -118,6 +159,8 @@ const requested = rest.length ? rest : [...secrets.keys()];
 for (const name of requested) {
   if (!WORKER_SECRETS.includes(name)) fail(`"${name}" isn't a Worker secret name`);
   if (!secrets.has(name)) fail(`"${name}" has no value in 1Password item "${item.title}"`);
+  const problem = pemProblem(name, secrets.get(name));
+  if (problem) fail(`"${name}" in 1Password item "${item.title}": ${problem}`);
 }
 if (!requested.length) fail(`1Password item "${item.title}" has no secret values yet`);
 
