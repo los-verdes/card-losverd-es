@@ -109,6 +109,13 @@ button {
   text-align: left;
 }
 
+/* The admins' way through to their own pages. Set apart from the member's
+   actions above it, and smaller, because it is an aside on someone's card. */
+.admin-link {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}
+
 .muted {
   margin: 0.25rem 0 0;
   color: var(--muted);
