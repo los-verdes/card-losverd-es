@@ -37,7 +37,7 @@ function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInp
  * shapes `jose` expects -- the same "no real credentials available in this
  * environment yet, so test against a generated key pair" pattern
  * `test/passkit/signer.spec.ts` uses for PKCS#7 (see
- * `src/spikes/pkcs7-signing/certs.ts`). A real Google Wallet service
+ * `test/fixtures/certChain.ts`). A real Google Wallet service
  * account's PEM is PKCS#8, exactly what `exportPKCS8` produces here, so
  * `signSaveToWalletJwt` needs no change once real credentials land.
  */

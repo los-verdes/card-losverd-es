@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { unzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 
 const PASS_TYPE_ID = "pass.es.losverd.card";
 const BASE = "https://example.com/passkit";

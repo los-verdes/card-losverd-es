@@ -1,15 +1,19 @@
 import forge from 'node-forge';
 
 /**
- * Phase 1.0.1 risk-spike support code.
+ * A throwaway certificate chain for tests.
  *
- * There is no real Apple Pass Type ID certificate / WWDR chain available in
- * this environment, so this module generates a throwaway, self-signed
- * root CA + leaf certificate chain using node-forge. The point of this spike
- * is validating that the PKCS#7 ASN.1 structure this Worker produces is
- * well-formed -- NOT that it chains to Apple's real WWDR root. See the PR
- * description for what real-cert-chain validation still needs to happen (by
- * a human, with real Apple Developer credentials) before Phase 4.6.
+ * Apple pass signing needs a Pass Type ID certificate and Apple's WWDR
+ * intermediate. Tests can't use the real ones -- they're Worker secrets, and
+ * a repository is the wrong place for a signing key -- so this generates a
+ * self-signed root CA and leaf in their place. `signManifestDetached()` takes
+ * any valid PEM triple, so the code path under test is the production one;
+ * what isn't tested here is that the chain is trusted by Apple, which only a
+ * real device install can show.
+ *
+ * Generation is memoized, but only within a test file: each file runs in its
+ * own isolated worker, so the cost is paid once per file. That is why
+ * vitest.config.ts raises testTimeout above the 5000ms default.
  */
 export interface TestCertChain {
   rootCertPem: string;
@@ -22,7 +26,7 @@ let cached: TestCertChain | undefined;
 function commonAttrs(commonName: string): forge.pki.CertificateField[] {
   return [
     { name: 'commonName', value: commonName },
-    { name: 'organizationName', value: 'Los Verdes (spike/test only -- not a real org cert)' },
+    { name: 'organizationName', value: 'Los Verdes (test only -- not a real org cert)' },
   ];
 }
 
@@ -31,7 +35,7 @@ function commonAttrs(commonName: string): forge.pki.CertificateField[] {
  * Memoized because a real deployment loads its Apple-issued cert chain once
  * from Worker secrets rather than regenerating it per request -- Phase 4.6's
  * actual per-request hot path is only the PKCS#7 *signing* step (see
- * signer.ts), not certificate generation.
+ * src/passkit/signer.ts), not certificate generation.
  */
 export function getTestCertChain(): TestCertChain {
   if (cached) {
@@ -45,7 +49,7 @@ export function getTestCertChain(): TestCertChain {
   rootCert.validity.notBefore = new Date();
   rootCert.validity.notAfter = new Date();
   rootCert.validity.notAfter.setFullYear(rootCert.validity.notBefore.getFullYear() + 1);
-  const rootAttrs = commonAttrs('PKCS7 Spike Test Root CA');
+  const rootAttrs = commonAttrs('Test Root CA (not a real certificate authority)');
   rootCert.setSubject(rootAttrs);
   rootCert.setIssuer(rootAttrs);
   rootCert.setExtensions([
@@ -61,7 +65,7 @@ export function getTestCertChain(): TestCertChain {
   leafCert.validity.notBefore = new Date();
   leafCert.validity.notAfter = new Date();
   leafCert.validity.notAfter.setFullYear(leafCert.validity.notBefore.getFullYear() + 1);
-  leafCert.setSubject(commonAttrs('PKCS7 Spike Test Leaf (stand-in for a Pass Type ID cert)'));
+  leafCert.setSubject(commonAttrs('Test Leaf (stand-in for a Pass Type ID cert)'));
   leafCert.setIssuer(rootAttrs);
   leafCert.setExtensions([
     { name: 'basicConstraints', cA: false, critical: true },

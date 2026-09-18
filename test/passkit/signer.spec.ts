@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import { signManifestDetached } from "../../src/passkit/signer";
 
 function testCredentials() {
