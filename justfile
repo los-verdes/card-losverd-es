@@ -96,6 +96,28 @@ secrets-status env:
 google-wallet-check env *flags:
     npx esbuild scripts/google-wallet-check.ts --bundle --platform=node --format=esm --packages=external --outfile=.google-wallet-check.mjs
     op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node .google-wallet-check.mjs {{ env }} {{ flags }}; status=$?; rm -f .google-wallet-check.mjs; exit $status
+# Apple Pass Type ID certificate. Apple issues these for one year, so this
+# comes round annually; the steps are few but easy to get subtly wrong, and a
+# mismatched key or WWDR generation yields passes iOS rejects in silence. Run
+# `apple-pass-cert-csr`, do the one manual step it prints in Apple's console,
+# then `apple-pass-cert-install` -- which checks the download against the key
+# and the chain, stores all three PEMs in 1Password, reads them back to
+# confirm, pushes them, and deletes the local copies.
+# Generate a private key and CSR for a new Apple pass certificate
+apple-pass-cert-csr dir=".apple-pass-cert":
+    node scripts/apple-pass-cert.mjs csr --dir {{ dir }}
+
+# Install the .cer Apple returned: verify it, store it, push it
+apple-pass-cert-install env cer dir=".apple-pass-cert":
+    node scripts/apple-pass-cert.mjs install {{ cer }} --dir {{ dir }} --env {{ env }}
+    op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APPLE_PASS_CERT_PEM[password]=$(cat {{ dir }}/pass-cert.pem)" "APPLE_PASS_KEY_PEM[password]=$(cat {{ dir }}/pass-key.pem)" "APPLE_WWDR_CERT_PEM[password]=$(cat {{ dir }}/wwdr.pem)" > /dev/null
+    just apple-pass-cert-check {{ env }}
+    just secrets-push {{ env }} APPLE_PASS_CERT_PEM APPLE_PASS_KEY_PEM APPLE_WWDR_CERT_PEM
+    rm -rf {{ dir }}
+
+# Report what pass certificate an environment has and how long it has left
+apple-pass-cert-check env:
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/apple-pass-cert.mjs check --env {{ env }}
 
 # Google Wallet rejects a save link whose class does not exist yet, and
 # nothing else here creates it. Run once per environment, and again if the
