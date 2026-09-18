@@ -27,6 +27,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import forge from "node-forge";
 import { unstable_readConfig } from "wrangler";
+import { opFieldOrNull, readOpItemFromStdin } from "./lib/opItem.ts";
 
 const DEFAULT_DIR = ".apple-pass-cert";
 // Overridable only to test the install path against a stand-in for Apple.
@@ -259,27 +260,14 @@ async function commandInstall(cerPath, dir, env) {
 
 // --- check -------------------------------------------------------------
 
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function itemField(item, label) {
-  return item.fields?.find((field) => field.label === label)?.value ?? null;
-}
-
 async function commandCheck(env) {
-  let item;
-  try {
-    item = JSON.parse(await readStdin());
-  } catch {
-    return fail("expected the 1Password item as JSON on stdin (did `op item get` fail?)");
-  }
+  const item = await readOpItemFromStdin(fail);
 
-  const certPem = itemField(item, "APPLE_PASS_CERT_PEM");
-  const wwdrPem = itemField(item, "APPLE_WWDR_CERT_PEM");
-  const keyPem = itemField(item, "APPLE_PASS_KEY_PEM");
+  // Read tolerantly: this command reports what an environment holds, so a
+  // missing WWDR or key is a finding to print rather than a reason to stop.
+  const certPem = opFieldOrNull(item, "APPLE_PASS_CERT_PEM");
+  const wwdrPem = opFieldOrNull(item, "APPLE_WWDR_CERT_PEM");
+  const keyPem = opFieldOrNull(item, "APPLE_PASS_KEY_PEM");
   if (!certPem) fail(`1Password item "${item.title}" has no APPLE_PASS_CERT_PEM`);
 
   const { passTypeId } = passIdentifiers(env);

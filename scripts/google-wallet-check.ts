@@ -32,6 +32,7 @@ import {
   type GenericObject,
   type MemberWalletInput,
 } from "../src/google/jwt";
+import { opField, readOpItemFromStdin, type OpItem } from "./lib/opItem";
 
 const ENVIRONMENTS = ["production", "staging"];
 /**
@@ -74,21 +75,9 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-async function readItem(): Promise<{ title?: string; fields?: { label: string; value: string }[] }> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    return fail("expected the 1Password item as JSON on stdin (did `op item get` fail?)");
-  }
-}
-
-function fieldValue(item: Awaited<ReturnType<typeof readItem>>, label: string): string {
-  const value = item.fields?.find((field) => field.label === label)?.value;
-  if (!value) fail(`1Password item "${item.title}" has no ${label}`);
-  return value;
-}
+/** Thin wrappers so the shared helpers report failures under this tool's name. */
+const readItem = () => readOpItemFromStdin(fail);
+const fieldValue = (item: OpItem, label: string) => opField(item, label, fail);
 
 /**
  * A short-lived access token for the Wallet API. The exchange lives in

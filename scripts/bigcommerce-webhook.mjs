@@ -17,6 +17,7 @@
 
 import { unstable_readConfig } from "wrangler";
 import { signWebhookToken } from "../src/bigcommerce/webhookToken.ts";
+import { opField, readOpItemFromStdin } from "./lib/opItem.ts";
 
 const ENVIRONMENTS = ["production", "staging"];
 const SCOPE = "store/order/*";
@@ -46,21 +47,9 @@ function parseArgs(argv) {
   return options;
 }
 
-async function readItem() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    fail("expected the 1Password item as JSON on stdin (did `op item get` fail?)");
-  }
-}
-
-function fieldValue(item, label) {
-  const value = item.fields?.find((field) => field.label === label)?.value;
-  if (!value) fail(`1Password item "${item.title}" has no ${label}`);
-  return value;
-}
+/** Thin wrappers so the shared helpers report failures under this tool's name. */
+const readItem = () => readOpItemFromStdin(fail);
+const fieldValue = (item, label) => opField(item, label, fail);
 
 async function bigcommerce(method, url, accessToken, body) {
   const res = await fetch(url, {
