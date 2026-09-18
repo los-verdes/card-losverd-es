@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAGE_SIZE } from "../../src/admin/reports";

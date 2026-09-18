@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { env } from "cloudflare:test";
 import { decodeJwt, exportPKCS8, generateKeyPair } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
