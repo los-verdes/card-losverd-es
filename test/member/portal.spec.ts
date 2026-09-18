@@ -8,6 +8,7 @@ import worker from "../../src/index";
 import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../src/member/portal";
 import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
+import { fakeGoogleWallet } from "../google/fake";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const USER_ID = 7;
@@ -230,6 +231,10 @@ describe("GET /passes/google", () => {
     const { privateKey } = await generateKeyPair("RS256", { extractable: true });
     env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
     env.GOOGLE_WALLET_PRIVATE_KEY_PEM = await exportPKCS8(privateKey);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return fakeGoogleWallet(url);
+    });
 
     const res = await get("/passes/google");
 

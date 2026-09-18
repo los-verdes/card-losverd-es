@@ -8,10 +8,13 @@
  */
 
 import { renderMembershipCardPng } from "../cardimage/render";
+import { upsertGenericObject } from "../google/api";
 import {
+  buildGenericObject,
   buildSaveToWalletUrl,
+  buildSkinnySaveToWalletPayload,
   googleWalletConfig,
-  signSaveToWalletJwt,
+  signSaveToWalletPayload,
 } from "../google/jwt";
 import type { Env } from "../index";
 import { buildVerifyPassUrl } from "../lib/passSignature";
@@ -214,7 +217,11 @@ export async function buildGoogleWalletSaveUrl(
     classSuffix: env.GOOGLE_WALLET_CLASS_SUFFIX,
     baseUrl: env.PUBLIC_BASE_URL,
   });
-  const jwt = await signSaveToWalletJwt(
+  const credentials = {
+    serviceAccountEmail: env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
+    privateKeyPem: env.GOOGLE_WALLET_PRIVATE_KEY_PEM,
+  };
+  const object = buildGenericObject(
     {
       memberId: member.member_id,
       firstName: member.first_name,
@@ -226,10 +233,18 @@ export async function buildGoogleWalletSaveUrl(
       verifyUrl: await verifyUrl(env, member),
     },
     config,
-    {
-      serviceAccountEmail: env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
-      privateKeyPem: env.GOOGLE_WALLET_PRIVATE_KEY_PEM,
-    },
+  );
+  // Write the object through the API, then link to it by id: a link
+  // carrying the whole object is longer than Google's safe length (#96).
+  // This also refreshes Google's copy whenever a link is built.
+  await upsertGenericObject(credentials, object);
+  const jwt = await signSaveToWalletPayload(
+    buildSkinnySaveToWalletPayload(
+      object.id,
+      config,
+      credentials.serviceAccountEmail,
+    ),
+    credentials,
   );
   return buildSaveToWalletUrl(jwt);
 }

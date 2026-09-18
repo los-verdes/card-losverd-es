@@ -8,6 +8,7 @@ import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
 import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
+import { fakeGoogleWallet } from "../google/fake";
 
 const ORIGIN = "https://card.losverd.es";
 const GOOGLE_SAVE_PREFIX = "https://pay.google.com/gp/v/save/";
@@ -75,7 +76,7 @@ function mockUpstreams({ turnstileSuccess = true, sendGridStatus = 202 }: MockOp
     if (url === SENDGRID_SEND_URL) {
       return new Response(sendGridStatus === 202 ? null : "SendGrid is down", { status: sendGridStatus });
     }
-    throw new Error(`unexpected fetch: ${url}`);
+    return fakeGoogleWallet(url);
   });
 }
 

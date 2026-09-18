@@ -25,8 +25,9 @@ import { unstable_readConfig } from "wrangler";
 import {
   buildGenericObject,
   buildSaveToWalletUrl,
+  buildSkinnySaveToWalletPayload,
   googleWalletConfig,
-  signSaveToWalletJwt,
+  signSaveToWalletPayload,
   type GenericObject,
   type MemberWalletInput,
 } from "../src/google/jwt";
@@ -212,10 +213,16 @@ report(
 // can't catch this: the REST API never sees the envelope, only the save link
 // does, and it answers every envelope problem with the same generic error.
 // (`typ: "savetogooglewallet"` with no `iat` failed that way for a day, #96.)
-const saveJwt = await signSaveToWalletJwt(SAMPLE_MEMBER, config, {
-  serviceAccountEmail: fieldValue(item, "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL"),
-  privateKeyPem: fieldValue(item, "GOOGLE_WALLET_PRIVATE_KEY_PEM"),
-});
+// The Worker issues the "skinny" form -- the object is written through the
+// API first (src/google/api.ts) and the link carries only its id -- so that
+// is what is validated and measured here.
+const saveJwt = await signSaveToWalletPayload(
+  buildSkinnySaveToWalletPayload(object.id, config, fieldValue(item, "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")),
+  {
+    serviceAccountEmail: fieldValue(item, "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL"),
+    privateKeyPem: fieldValue(item, "GOOGLE_WALLET_PRIVATE_KEY_PEM"),
+  },
+);
 const claims = decodeJwt(saveJwt) as Record<string, unknown>;
 const envelopeProblems: string[] = [];
 if (claims.typ !== "savetowallet") envelopeProblems.push(`typ is ${JSON.stringify(claims.typ)}, must be "savetowallet"`);
@@ -236,16 +243,14 @@ report(
     : envelopeProblems.join("; "),
 );
 
-// 4. Is the link short enough to survive every browser? A real member's link
-// is longer than this synthetic one (a signed /verify-pass URL in the QR
-// code), so the margin matters. The remedy is a "skinny" JWT: insert the
-// object through the REST API first and reference only its id in the link.
+// 4. Is the link short enough to survive every browser? A skinny link is a
+// fixed size, so this only regresses if the envelope grows.
 report(
   "save link length",
   saveUrl.length <= SAFE_SAVE_LINK_LENGTH,
   saveUrl.length <= SAFE_SAVE_LINK_LENGTH
     ? `${saveUrl.length} characters, within Google's ${SAFE_SAVE_LINK_LENGTH}-character safe length`
-    : `${saveUrl.length} characters, over Google's ${SAFE_SAVE_LINK_LENGTH}-character safe length -- browsers may truncate it; insert objects via the API and reference ids instead`,
+    : `${saveUrl.length} characters, over Google's ${SAFE_SAVE_LINK_LENGTH}-character safe length -- browsers may truncate it`,
 );
 
 // 3. An existing member's object, if asked for. Read-only.

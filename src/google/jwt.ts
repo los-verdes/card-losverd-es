@@ -151,7 +151,8 @@ export interface SaveToWalletPayload {
   iat: number;
   origins: string[];
   payload: {
-    genericObjects: GenericObject[];
+    /** Whole objects, or -- the "skinny" form -- just the ids of objects already written via the API. */
+    genericObjects: (GenericObject | { id: string })[];
   };
 }
 
@@ -265,30 +266,58 @@ export function buildSaveToWalletPayload(
 }
 
 /**
- * Signs the Phase 5.2 "Save to Google Wallet" JWT with RS256, using Web
- * Crypto via `jose` (per the migration plan's Phase 5.2 -- no Google API
- * client library needed). `credentials.privateKeyPem` is expected to be the
- * service account JSON's `private_key` field verbatim (PKCS#8 PEM), which
- * is exactly what Google issues and what `jose#importPKCS8` expects.
+ * The "skinny" save payload: the same envelope around only an object id.
+ * For a pass that has already been written through the REST API
+ * (`src/google/api.ts`), this is all the link needs, and it stays far under
+ * Google's 1,800-character safe length for a save link, which a link that
+ * carries the whole object does not (#96).
  */
-export async function signSaveToWalletJwt(
-  member: MemberWalletInput,
+export function buildSkinnySaveToWalletPayload(
+  objectId: string,
   config: GoogleWalletConfig,
+  serviceAccountEmail: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): SaveToWalletPayload {
+  return {
+    iss: serviceAccountEmail,
+    aud: "google",
+    typ: "savetowallet",
+    iat: nowSeconds,
+    origins: config.origins,
+    payload: { genericObjects: [{ id: objectId }] },
+  };
+}
+
+/**
+ * Signs a "Save to Google Wallet" payload with RS256, using Web Crypto via
+ * `jose` (per the migration plan's Phase 5.2 -- no Google API client library
+ * needed). `credentials.privateKeyPem` is expected to be the service account
+ * JSON's `private_key` field verbatim (PKCS#8 PEM), which is exactly what
+ * Google issues and what `jose#importPKCS8` expects.
+ */
+export async function signSaveToWalletPayload(
+  payload: SaveToWalletPayload,
   credentials: GoogleWalletCredentials,
 ): Promise<string> {
-  const payload = buildSaveToWalletPayload(
-    member,
-    config,
-    credentials.serviceAccountEmail,
-  );
   const privateKey = await importPKCS8(credentials.privateKeyPem, "RS256");
-
   // `jose`'s JWTPayload type requires an index signature for arbitrary
   // claims; SaveToWalletPayload is deliberately typed narrowly above for
   // callers building the payload, so widen it just for the signing call.
   return new SignJWT(payload as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .sign(privateKey);
+}
+
+/** Signs the full-object save JWT for `member` (see `buildSaveToWalletPayload`). */
+export async function signSaveToWalletJwt(
+  member: MemberWalletInput,
+  config: GoogleWalletConfig,
+  credentials: GoogleWalletCredentials,
+): Promise<string> {
+  return signSaveToWalletPayload(
+    buildSaveToWalletPayload(member, config, credentials.serviceAccountEmail),
+    credentials,
+  );
 }
 
 /** Builds the "Save to Google Wallet" link (Phase 5.2, step 3) from a signed JWT. */
