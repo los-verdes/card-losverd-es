@@ -11,6 +11,7 @@ const LEGACY_SERIAL = "0cd5ad74-5fbc-40fd-9569-747fec277013";
 
 beforeEach(() => {
   env.PASS_SIGNATURE_KEY = PASS_KEY;
+  env.PASS_SIGNATURE_KEY_PREVIOUS = undefined;
   env.SESSION_SIGNING_KEY = SESSION_KEY;
 });
 
@@ -196,5 +197,43 @@ describe("GET /verify-pass/:serial", () => {
     env.PASS_SIGNATURE_KEY = "";
     const res = await verify(LEGACY_SERIAL, "anything");
     expect(res.status).toBe(500);
+  });
+
+  describe("while PASS_SIGNATURE_KEY is being rotated", () => {
+    const RETIRED_KEY = PASS_KEY;
+    const NEW_KEY = "test-rotated-signature-key".repeat(5);
+
+    beforeEach(async () => {
+      env.PASS_SIGNATURE_KEY = NEW_KEY;
+      env.PASS_SIGNATURE_KEY_PREVIOUS = RETIRED_KEY;
+      await insertLegacyCard("jane@example.com", "2099-01-01");
+    });
+
+    it("still verifies a card signed with the retired key", async () => {
+      const warnings: unknown[] = [];
+      const warn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args.join(" "));
+      try {
+        const res = await verify(LEGACY_SERIAL, await signPassSerial(RETIRED_KEY, LEGACY_SERIAL));
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain("MEMBERSHIP VALID");
+      } finally {
+        console.warn = warn;
+      }
+      // The signal that says when the rotation can be finished.
+      expect(warnings.join("\n")).toContain("PASS_SIGNATURE_KEY_PREVIOUS");
+      expect(warnings.join("\n")).not.toContain(LEGACY_SERIAL);
+    });
+
+    it("verifies a card signed with the new key", async () => {
+      const res = await verify(LEGACY_SERIAL, await signPassSerial(NEW_KEY, LEGACY_SERIAL));
+      expect(res.status).toBe(200);
+    });
+
+    it("rejects the retired key once the rotation is finished", async () => {
+      env.PASS_SIGNATURE_KEY_PREVIOUS = undefined;
+      const res = await verify(LEGACY_SERIAL, await signPassSerial(RETIRED_KEY, LEGACY_SERIAL));
+      expect(res.status).toBe(403);
+    });
   });
 });

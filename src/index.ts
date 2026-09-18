@@ -77,6 +77,9 @@ export interface Env {
   // docs/legacy-pass-compatibility.md (D2). No wrangler.toml placeholder;
   // unset fails closed.
   PASS_SIGNATURE_KEY: string;
+  // Set only while rotating PASS_SIGNATURE_KEY: also accepted at
+  // /verify-pass, never used to sign (docs/pass-signature-rotation.md).
+  PASS_SIGNATURE_KEY_PREVIOUS?: string;
   // Google Wallet (Phase 5, src/member/artifacts.ts). Issuer ID and class
   // suffix are non-secret vars in wrangler.toml; the service account's
   // `client_email` and `private_key` are secrets (no placeholders) -- the

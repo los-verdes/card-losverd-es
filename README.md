@@ -99,7 +99,7 @@ just secrets-push staging AUTH_SECRET    # push only the named ones, e.g. after 
 
 Use a different value per environment. Random values (`openssl rand -hex 32`) work for `AUTH_SECRET`, `SESSION_SIGNING_KEY`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, and staging's `PASS_SIGNATURE_KEY`. Check `secrets-status` line counts after pasting a PEM: it should span several lines. None have placeholders in `wrangler.toml`; features that need a missing secret fail closed or skip themselves with a logged warning.
 
-Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` breaks every QR code already issued ([#27](https://github.com/los-verdes/card-losverd-es/issues/27)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
+Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` would break every QR code already issued, so it rotates through an overlap window ([`docs/pass-signature-rotation.md`](docs/pass-signature-rotation.md)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
 ### Creating the Google Wallet class
 

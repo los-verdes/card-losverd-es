@@ -116,7 +116,7 @@ wanted.
 **D2 — QR signature key: reuse the legacy key.** `PASS_SIGNATURE_KEY` is set
 to the legacy `SECRET_KEY * 5` value, so existing QR codes keep verifying.
 It's still a separate secret from `SESSION_SIGNING_KEY`, which was the
-point of Phase 2.3.1's split. A rotation workflow is a tracked follow-up.
+point of Phase 2.3.1's split. Rotation goes through an overlap window; see `docs/pass-signature-rotation.md`.
 To make old codes *useful* (not just signature-valid), the port needs the
 legacy card lookup (§3.3):
 

@@ -38,6 +38,7 @@ export const WORKER_SECRETS = [
   "APPLE_PASS_KEY_PEM",
   "APPLE_WWDR_CERT_PEM",
   "PASS_SIGNATURE_KEY",
+  "PASS_SIGNATURE_KEY_PREVIOUS",
   "APNS_KEY_ID",
   "APNS_PRIVATE_KEY_PEM",
   // Google Wallet
@@ -76,6 +77,9 @@ function secretsFromItem(item) {
   }
   return secrets;
 }
+
+/** Secrets that are absent in normal operation, so `--status` shouldn't call them missing. */
+const OPTIONAL_SECRETS = ["PASS_SIGNATURE_KEY_PREVIOUS"];
 
 /** Secrets whose value has to be a PEM-encoded certificate or key. */
 const PEM_SECRETS = WORKER_SECRETS.filter((name) => name.endsWith("_PEM"));
@@ -158,7 +162,8 @@ if (rest[0] === "--status") {
   console.log(`Worker secrets for ${env} (1Password item "${item.title}"):`);
   for (const name of WORKER_SECRETS) {
     const value = secrets.get(name);
-    const inOnePassword = value ? `${value.length} chars, ${value.split("\n").length} line(s)` : "missing";
+    const absent = OPTIONAL_SECRETS.includes(name) ? "not set (optional)" : "missing";
+    const inOnePassword = value ? `${value.length} chars, ${value.split("\n").length} line(s)` : absent;
     const problem = value ? pemProblem(name, value) : null;
     console.log(
       `  ${name.padEnd(36)} 1Password: ${inOnePassword.padEnd(24)} Cloudflare: ${cloudflare.has(name) ? "set" : "missing"}${problem ? `   !! ${problem}` : ""}`,
@@ -178,7 +183,9 @@ for (const name of requested) {
 }
 if (!requested.length) fail(`1Password item "${item.title}" has no secret values yet`);
 
-const missing = WORKER_SECRETS.filter((name) => !secrets.has(name));
+const missing = WORKER_SECRETS.filter(
+  (name) => !secrets.has(name) && !OPTIONAL_SECRETS.includes(name),
+);
 console.error(`Pushing ${requested.length} secret(s) to ${env}: ${requested.join(", ")}`);
 if (missing.length && !rest.length) console.error(`Not in 1Password yet (skipped): ${missing.join(", ")}`);
 process.stdout.write(JSON.stringify(Object.fromEntries(requested.map((name) => [name, secrets.get(name)]))));
