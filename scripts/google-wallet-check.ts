@@ -20,16 +20,24 @@
  * Reads the environment's 1Password Worker secrets item as JSON on stdin, the
  * same way the other scripts here do.
  */
-import { SignJWT, importPKCS8 } from "jose";
+import { SignJWT, decodeJwt, importPKCS8 } from "jose";
 import { unstable_readConfig } from "wrangler";
 import {
   buildGenericObject,
+  buildSaveToWalletUrl,
   googleWalletConfig,
+  signSaveToWalletJwt,
   type GenericObject,
   type MemberWalletInput,
 } from "../src/google/jwt";
 
 const ENVIRONMENTS = ["production", "staging"];
+/**
+ * "The safe length of an encoded JWT is 1800 characters"
+ * (https://developers.google.com/wallet/generic/web): longer save links can
+ * be truncated by browsers, which shows as the generic save failure.
+ */
+const SAFE_SAVE_LINK_LENGTH = 1800;
 const SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 const TOKEN_URL = process.env.GOOGLE_OAUTH_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 const WALLET_API = process.env.GOOGLE_WALLET_API ?? "https://walletobjects.googleapis.com/walletobjects/v1";
@@ -197,6 +205,47 @@ report(
   missing.length === 0
     ? REQUIRED_OBJECT_FIELDS.join(", ")
     : `missing ${missing.join(", ")} -- Google documents these as required, and a missing one is one cause of the generic "Something went wrong"`,
+);
+
+// 3. Does the save link's JWT envelope match Google's JWT reference
+// (https://developers.google.com/wallet/reference/rest/v1/Jwt)? `--insert`
+// can't catch this: the REST API never sees the envelope, only the save link
+// does, and it answers every envelope problem with the same generic error.
+// (`typ: "savetogooglewallet"` with no `iat` failed that way for a day, #96.)
+const saveJwt = await signSaveToWalletJwt(SAMPLE_MEMBER, config, {
+  serviceAccountEmail: fieldValue(item, "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL"),
+  privateKeyPem: fieldValue(item, "GOOGLE_WALLET_PRIVATE_KEY_PEM"),
+});
+const claims = decodeJwt(saveJwt) as Record<string, unknown>;
+const envelopeProblems: string[] = [];
+if (claims.typ !== "savetowallet") envelopeProblems.push(`typ is ${JSON.stringify(claims.typ)}, must be "savetowallet"`);
+if (claims.aud !== "google") envelopeProblems.push(`aud is ${JSON.stringify(claims.aud)}, must be "google"`);
+if (claims.iss !== fieldValue(item, "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")) envelopeProblems.push("iss is not the service account email");
+if (!Number.isInteger(claims.iat)) envelopeProblems.push("iat (issued-at, epoch seconds) is missing");
+if (!Array.isArray(claims.origins) || !claims.origins.includes(config.origins[0])) {
+  envelopeProblems.push(`origins does not include ${config.origins[0]}`);
+}
+const embedded = (claims.payload as { genericObjects?: GenericObject[] } | undefined)?.genericObjects;
+if (embedded?.[0]?.id !== object.id) envelopeProblems.push("payload.genericObjects[0] is not the object above");
+const saveUrl = buildSaveToWalletUrl(saveJwt);
+report(
+  "save link JWT envelope",
+  envelopeProblems.length === 0,
+  envelopeProblems.length === 0
+    ? "typ, aud, iss, iat, origins and payload as Google documents them"
+    : envelopeProblems.join("; "),
+);
+
+// 4. Is the link short enough to survive every browser? A real member's link
+// is longer than this synthetic one (a signed /verify-pass URL in the QR
+// code), so the margin matters. The remedy is a "skinny" JWT: insert the
+// object through the REST API first and reference only its id in the link.
+report(
+  "save link length",
+  saveUrl.length <= SAFE_SAVE_LINK_LENGTH,
+  saveUrl.length <= SAFE_SAVE_LINK_LENGTH
+    ? `${saveUrl.length} characters, within Google's ${SAFE_SAVE_LINK_LENGTH}-character safe length`
+    : `${saveUrl.length} characters, over Google's ${SAFE_SAVE_LINK_LENGTH}-character safe length -- browsers may truncate it; insert objects via the API and reference ids instead`,
 );
 
 // 3. An existing member's object, if asked for. Read-only.

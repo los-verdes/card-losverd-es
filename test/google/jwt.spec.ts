@@ -191,9 +191,19 @@ describe("buildSaveToWalletPayload", () => {
 
     expect(payload.iss).toBe("service-account@project.iam.gserviceaccount.com");
     expect(payload.aud).toBe("google");
-    expect(payload.typ).toBe("savetogooglewallet");
+    expect(payload.typ).toBe("savetowallet");
     expect(payload.origins).toEqual(["https://card.losverd.es"]);
     expect(payload.payload.genericObjects).toEqual([buildGenericObject(makeMember(), CONFIG)]);
+  });
+
+  it("carries an issued-at claim in seconds, which Google requires", () => {
+    const before = Math.floor(Date.now() / 1000);
+    const payload = buildSaveToWalletPayload(makeMember(), CONFIG, "sa@project.iam.gserviceaccount.com");
+
+    expect(Number.isInteger(payload.iat)).toBe(true);
+    expect(payload.iat).toBeGreaterThanOrEqual(before);
+    expect(payload.iat).toBeLessThanOrEqual(before + 5);
+    expect(buildSaveToWalletPayload(makeMember(), CONFIG, "sa@project.iam.gserviceaccount.com", 1234567890).iat).toBe(1234567890);
   });
 });
 
@@ -212,7 +222,8 @@ describe("signSaveToWalletJwt", () => {
     expect(protectedHeader.typ).toBe("JWT");
     expect(payload.iss).toBe("service-account@project.iam.gserviceaccount.com");
     expect(payload.aud).toBe("google");
-    expect(payload.typ).toBe("savetogooglewallet");
+    expect(payload.typ).toBe("savetowallet");
+    expect(typeof payload.iat).toBe("number");
     expect(payload.origins).toEqual(["https://card.losverd.es"]);
     expect((payload.payload as { genericObjects: unknown[] }).genericObjects).toHaveLength(1);
   });

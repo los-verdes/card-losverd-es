@@ -136,11 +136,19 @@ export interface GenericObject {
   };
 }
 
-/** The "Save to Google Wallet" JWT payload shape specified in Phase 5.2. */
+/**
+ * The "Save to Google Wallet" JWT claims, per Google's JWT reference
+ * (https://developers.google.com/wallet/reference/rest/v1/Jwt). `typ` is
+ * exactly `savetowallet` and `iat` is required: with `savetogooglewallet` and
+ * no `iat`, the REST API still accepted the object, but every save link
+ * failed with Google's generic "Something went wrong" (found 2026-09-18, #96).
+ */
 export interface SaveToWalletPayload {
   iss: string;
   aud: "google";
-  typ: "savetogooglewallet";
+  typ: "savetowallet";
+  /** Issued-at, seconds since the epoch. */
+  iat: number;
   origins: string[];
   payload: {
     genericObjects: GenericObject[];
@@ -242,11 +250,13 @@ export function buildSaveToWalletPayload(
   member: MemberWalletInput,
   config: GoogleWalletConfig,
   serviceAccountEmail: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
 ): SaveToWalletPayload {
   return {
     iss: serviceAccountEmail,
     aud: "google",
-    typ: "savetogooglewallet",
+    typ: "savetowallet",
+    iat: nowSeconds,
     origins: config.origins,
     payload: {
       genericObjects: [buildGenericObject(member, config)],
