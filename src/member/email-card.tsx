@@ -36,7 +36,7 @@ import {
   type RateLimitRule,
 } from "../lib/rateLimit";
 import { getMemberByEmail, isMembershipCurrent } from "./artifacts";
-import { Page } from "./layout";
+import { Page, SUPPORT_EMAIL } from "./layout";
 
 // Deliberately loose: a plausible `local@domain.tld` shape. Whether the
 // address is real is SendGrid's (and the membership roll's) problem.
@@ -149,10 +149,13 @@ const RequestReceived: FC = () => (
     <p>
       Nothing arrived? Check your spam folder and make sure you used the address
       your membership was purchased with, or contact{" "}
-      <a href="mailto:support@losverd.es">support@losverd.es</a>.
+      <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
     </p>
     <p>
       <a href="/email-card">Send again</a>
+    </p>
+    <p>
+      <a href="/">Back to the start</a>
     </p>
   </Page>
 );

@@ -18,6 +18,7 @@
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
+import { SUPPORT_EMAIL } from "../member/layout";
 import {
   buildGoogleWalletSaveUrl,
   isGoogleWalletConfigured,
@@ -97,7 +98,7 @@ const CardEmail: FC<CardEmailProps> = (props) => (
       <p style="font-size: 0.8em; color: #393939">
         This Los Verdes digital membership card is intended for {props.name}. If
         you are not {props.name}, please feel free to delete this email or
-        contact <a href="mailto:support@losverd.es">support@losverd.es</a> for
+        contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for
         assistance. {footer(props)}
       </p>
     </body>
@@ -127,7 +128,7 @@ function cardEmailText(props: CardEmailProps): string {
     `Visit online at: ${props.baseUrl}`,
     "",
     `This Los Verdes digital membership card is intended for ${props.name}.`,
-    `If you are not ${props.name}, please feel free to delete this email or contact support@losverd.es for assistance.`,
+    `If you are not ${props.name}, please feel free to delete this email or contact ${SUPPORT_EMAIL} for assistance.`,
     footer(props),
   ].join("\n");
 }

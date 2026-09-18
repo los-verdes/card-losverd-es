@@ -158,9 +158,33 @@ describe("POST /email-card", () => {
       expect((await submitEmail("jane@example.com")).body).toContain("Check your email");
       expect(sentMessages(fetchSpy)).toHaveLength(0);
     });
+
+    it("offers a way onward, and sends nobody to a losverd.es address", async () => {
+      mockUpstreams();
+
+      const { body } = await submitEmail("jane@example.com");
+
+      expect(body).toContain('href="/"');
+      expect(body).toContain("merchteam@losverdesatx.org");
+      // Visitors are not directed to write to anything on this domain
+      // (decided 2026-09-17); it remains the sending identity only.
+      expect(body).not.toMatch(/mailto:[^"]*losverd\.es/);
+    });
   });
 
   describe("email contents", () => {
+    it("points a wrong recipient at the merch team, not a losverd.es address", async () => {
+      const fetchSpy = mockUpstreams();
+
+      await submitEmail("jane@example.com");
+
+      const [text, html] = sentMessages(fetchSpy)[0].content as { value: string }[];
+      for (const { value } of [text, html]) {
+        expect(value).toContain("merchteam@losverdesatx.org");
+        expect(value).not.toContain("support@losverd.es");
+      }
+    });
+
     it("sends the card image and Apple pass as attachments, without a Google link when unconfigured", async () => {
       const fetchSpy = mockUpstreams();
 
