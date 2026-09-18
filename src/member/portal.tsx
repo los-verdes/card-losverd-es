@@ -99,6 +99,39 @@ const LogoutButton: FC = () => (
   </form>
 );
 
+/** Where the admin pages start; their own nav links the rest. */
+export const ADMIN_HOME = "/admin/reports";
+
+/**
+ * Whether this user is an admin, read from D1 rather than taken from the
+ * session cookie's `isAdmin` claim.
+ *
+ * The claim is only refreshed on sliding renewal, which can be thirty days
+ * apart, so trusting it would leave someone just granted admin with no way in
+ * for a month, and someone just demoted following a link to a 403.
+ * `requireAdmin` reads D1 for the same reason; this keeps the link and the
+ * door in agreement.
+ */
+export async function isCurrentAdmin(env: Env, userId: number): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ is_admin: number }>();
+  return row?.is_admin === 1;
+}
+
+/**
+ * A way through to the admin pages for the people who have them, kept
+ * deliberately quiet: a plain line rather than another bordered action, since
+ * this page belongs to the member's own card and the admin tools are an
+ * aside. Shown on the no-membership page too -- an admin who has never bought
+ * a membership never reaches the card page at all, and would otherwise have
+ * to know the URL.
+ */
+const AdminLink: FC = () => (
+  <p class="admin-link">
+    <a href={ADMIN_HOME}>Admin: membership reports and orders</a>
+  </p>
+);
 
 /**
  * Every order on record for this member, counting or not. An order that does
@@ -142,7 +175,8 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
 export const MemberCard: FC<{
   member: CurrentMember;
   orders: MemberOrder[];
-}> = ({ member, orders }) => (
+  isAdmin: boolean;
+}> = ({ member, orders, isAdmin }) => (
   <Page title="Membership Card">
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
@@ -168,11 +202,15 @@ export const MemberCard: FC<{
       Email me my card
     </a>
     <MembershipHistory orders={orders} email={member.email} />
+    {isAdmin && <AdminLink />}
     <LogoutButton />
   </Page>
 );
 
-export const NoActiveMembership: FC<{ email: string }> = ({ email }) => (
+export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
+  email,
+  isAdmin,
+}) => (
   <Page title="No Membership Found">
     <h1>No Active Membership Found</h1>
     <p>
@@ -194,6 +232,7 @@ export const NoActiveMembership: FC<{ email: string }> = ({ email }) => (
       Otherwise, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>{" "}
       for help.
     </p>
+    {isAdmin && <AdminLink />}
     <LogoutButton />
   </Page>
 );
@@ -202,12 +241,11 @@ const portal = new Hono<PortalEnv>();
 
 portal.get("/", requireCurrentMember, async (c) => {
   const member = c.get("member");
-  return c.html(
-    <MemberCard
-      member={member}
-      orders={await getMemberOrderHistory(c.env, member.email)}
-    />,
-  );
+  const [orders, isAdmin] = await Promise.all([
+    getMemberOrderHistory(c.env, member.email),
+    isCurrentAdmin(c.env, c.get("session").userId),
+  ]);
+  return c.html(<MemberCard member={member} orders={orders} isAdmin={isAdmin} />);
 });
 
 portal.get("/card.png", requireCurrentMember, async (c) => {
@@ -256,13 +294,17 @@ portal.get("/passes/google", requireCurrentMember, async (c) => {
 });
 
 portal.get(NO_ACTIVE_MEMBERSHIP_PATH, requireAuth, async (c) => {
-  const user = await c.env.DB.prepare("SELECT email FROM users WHERE id = ?")
+  const user = await c.env.DB.prepare(
+    "SELECT email, is_admin FROM users WHERE id = ?",
+  )
     .bind(c.get("session").userId)
-    .first<{ email: string }>();
+    .first<{ email: string; is_admin: number }>();
   if (!user) {
     return c.redirect(LOGIN_PATH);
   }
-  return c.html(<NoActiveMembership email={user.email} />);
+  return c.html(
+    <NoActiveMembership email={user.email} isAdmin={user.is_admin === 1} />,
+  );
 });
 
 export default portal;

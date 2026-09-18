@@ -163,6 +163,57 @@ describe("access control", () => {
   });
 });
 
+describe("the admin breadcrumb", () => {
+  const ADMIN_LINK = /<a href="\/admin\/reports">Admin/;
+
+  async function makeAdmin(id = USER_ID) {
+    await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").bind(id).run();
+  }
+
+  it("is absent for an ordinary member", async () => {
+    await seedCurrentMember();
+
+    expect(await (await get("/")).text()).not.toMatch(ADMIN_LINK);
+  });
+
+  it("appears on the card page for an admin", async () => {
+    await seedCurrentMember();
+    await makeAdmin();
+
+    expect(await (await get("/")).text()).toMatch(ADMIN_LINK);
+  });
+
+  it("follows the database rather than the session cookie", async () => {
+    // Every cookie this helper issues claims isAdmin: false, which is exactly
+    // the state of a session predating the promotion -- and those renew at
+    // most every thirty days. Reading `users` is what stops a newly granted
+    // admin waiting a month for a way in.
+    await seedCurrentMember();
+    expect(await (await get("/")).text()).not.toMatch(ADMIN_LINK);
+
+    await makeAdmin();
+
+    expect(await (await get("/")).text()).toMatch(ADMIN_LINK);
+  });
+
+  it("is offered to an admin who has no membership at all", async () => {
+    // Someone on the board who never bought a membership never reaches the
+    // card page, so this is the only place they would find the admin pages.
+    await insertUser();
+    await makeAdmin();
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toMatch(ADMIN_LINK);
+  });
+
+  it("is absent on the no-membership page for an ordinary user", async () => {
+    await insertUser();
+
+    expect(await (await get("/no-active-membership")).text()).not.toMatch(ADMIN_LINK);
+  });
+});
+
 describe("GET /", () => {
   it("shows the member's card, wallet links, and a logout button", async () => {
     await seedCurrentMember();
