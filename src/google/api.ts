@@ -16,17 +16,19 @@
  * `scripts/google-wallet-check.ts` does the same from Node.
  */
 
-import { SignJWT, importPKCS8 } from "jose";
 import type { GenericObject, GoogleWalletCredentials } from "./jwt";
+import { fetchServiceAccountToken } from "./serviceAccountToken";
 
-export const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
+// Re-exported because callers and tests have always reached for it here, and
+// because it reads oddly to import a URL from one module and the function
+// that posts to it from another.
+export { GOOGLE_OAUTH_TOKEN_URL } from "./serviceAccountToken";
+
 export const GOOGLE_WALLET_API =
   "https://walletobjects.googleapis.com/walletobjects/v1";
-const SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 
 /** Google issues hour-long tokens; reuse one for most of that within an isolate. */
 const TOKEN_MAX_AGE_SECONDS = 50 * 60;
-const ASSERTION_LIFETIME_SECONDS = 5 * 60;
 
 let cachedToken: {
   serviceAccountEmail: string;
@@ -55,36 +57,17 @@ export async function getGoogleWalletAccessToken(
   ) {
     return cachedToken.token;
   }
-  const assertion = await new SignJWT({ scope: SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(credentials.serviceAccountEmail)
-    .setAudience(GOOGLE_OAUTH_TOKEN_URL)
-    .setIssuedAt(nowSeconds)
-    .setExpirationTime(nowSeconds + ASSERTION_LIFETIME_SECONDS)
-    .sign(await importPKCS8(credentials.privateKeyPem, "RS256"));
-  const res = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(
-      `Google Wallet token exchange failed: ${res.status} ${(await res.text()).slice(0, 200)}`,
-    );
-  }
-  const body = await res.json<{ access_token?: string }>();
-  if (!body.access_token) {
-    throw new Error("Google Wallet token exchange returned no access_token");
-  }
+  const token = await fetchServiceAccountToken(
+    credentials.serviceAccountEmail,
+    credentials.privateKeyPem,
+    nowSeconds,
+  );
   cachedToken = {
     serviceAccountEmail: credentials.serviceAccountEmail,
-    token: body.access_token,
+    token,
     issuedAt: nowSeconds,
   };
-  return body.access_token;
+  return token;
 }
 
 /**
