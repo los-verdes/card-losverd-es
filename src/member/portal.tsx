@@ -14,6 +14,11 @@ import type { Session } from "../auth/session";
 import type { Env } from "../index";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import {
+  displayOrderNumber,
+  getMemberOrderHistory,
+  type MemberOrder,
+} from "./orderHistory";
+import {
   LOGIN_PATH,
   NO_ACTIVE_MEMBERSHIP_PATH,
   requireActiveMembership,
@@ -97,7 +102,54 @@ const LogoutButton: FC = () => (
 const linkStyle =
   "display: block; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid #00B140; border-radius: 0.5rem; color: inherit; text-decoration: none";
 
-export const MemberCard: FC<{ member: CurrentMember }> = ({ member }) => (
+const historyItemStyle =
+  "margin: 0.75rem 0; padding: 0.75rem; border: 1px solid #d8e8dd; border-radius: 0.5rem; text-align: left";
+
+const mutedStyle = "margin: 0.25rem 0 0; color: #555; font-size: 0.9rem";
+
+/**
+ * Every order on record for this member, counting or not. An order that does
+ * not count says so: a refunded or cancelled one is the usual explanation for
+ * a membership that has expired, and leaving it out would make the card's
+ * dates look arbitrary.
+ */
+export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = ({
+  orders,
+  email,
+}) => (
+  <section style="margin-top: 2rem">
+    <h2 style="font-size: 1.1rem">Membership history</h2>
+    {orders.length === 0 ? (
+      <p style={mutedStyle}>
+        No membership orders are on record for <strong>{email}</strong>.
+      </p>
+    ) : (
+      orders.map((order) => (
+        <div style={historyItemStyle}>
+          <p style="margin: 0">
+            <strong>Order #{displayOrderNumber(order.order_id)}</strong>
+            {order.product_name ? ` — ${order.product_name}` : ""}
+          </p>
+          <p style={mutedStyle}>
+            {formatShortDate(order.created_on.slice(0, 10))} to{" "}
+            {formatShortDate(order.expires_on.slice(0, 10))}
+            {order.status ? ` · ${order.status}` : ""}
+          </p>
+          {!order.counts && (
+            <p style={mutedStyle}>
+              This order doesn't count towards membership.
+            </p>
+          )}
+        </div>
+      ))
+    )}
+  </section>
+);
+
+export const MemberCard: FC<{
+  member: CurrentMember;
+  orders: MemberOrder[];
+}> = ({ member, orders }) => (
   <Page title="Membership Card">
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
@@ -122,6 +174,7 @@ export const MemberCard: FC<{ member: CurrentMember }> = ({ member }) => (
     <a href="/email-card" style={linkStyle}>
       Email me my card
     </a>
+    <MembershipHistory orders={orders} email={member.email} />
     <LogoutButton />
   </Page>
 );
@@ -154,9 +207,15 @@ export const NoActiveMembership: FC<{ email: string }> = ({ email }) => (
 
 const portal = new Hono<PortalEnv>();
 
-portal.get("/", requireCurrentMember, (c) =>
-  c.html(<MemberCard member={c.get("member")} />),
-);
+portal.get("/", requireCurrentMember, async (c) => {
+  const member = c.get("member");
+  return c.html(
+    <MemberCard
+      member={member}
+      orders={await getMemberOrderHistory(c.env, member.email)}
+    />,
+  );
+});
 
 portal.get("/card.png", requireCurrentMember, async (c) => {
   const png = await renderCardImage(c.env, c.get("member"));

@@ -32,6 +32,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
   const { objects } = await env.ASSETS.list();
@@ -96,6 +97,33 @@ async function seedTemplateAssets() {
   // The card image's crest is moving to its own R2 key (PR #44); seed both
   // so the /card.png test passes before and after that change.
   await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
+}
+
+async function insertOrder(fields: {
+  orderId: string;
+  memberEmail?: string;
+  productName?: string | null;
+  status?: string | null;
+  createdOn?: string;
+  expiresOn?: string;
+  source?: string;
+}) {
+  await env.DB.prepare(
+    `INSERT INTO membership_orders (order_id, source, order_email, member_email, product_name, status,
+                                    created_on, expires_on, first_seen_via)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sync')`,
+  )
+    .bind(
+      fields.orderId,
+      fields.source ?? "bigcommerce",
+      fields.memberEmail ?? "jane@example.com",
+      fields.memberEmail ?? "jane@example.com",
+      fields.productName === undefined ? "Los Verdes Membership" : fields.productName,
+      fields.status === undefined ? "Completed" : fields.status,
+      fields.createdOn ?? "2024-03-04",
+      fields.expiresOn ?? "2025-03-04",
+    )
+    .run();
 }
 
 describe("access control", () => {
@@ -190,6 +218,96 @@ describe("GET /", () => {
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain("&amp; Co");
+  });
+});
+
+describe("GET / membership history", () => {
+  it("lists the member's orders, newest first, with what a receipt would show", async () => {
+    await seedCurrentMember();
+    await insertOrder({ orderId: "104_bc", createdOn: "2023-04-04", expiresOn: "2024-04-03" });
+    await insertOrder({
+      orderId: "106_bc",
+      createdOn: "2026-09-18",
+      expiresOn: "2027-09-18",
+      productName: "Los Verdes Membership 2026",
+    });
+
+    const body = await (await get("/")).text();
+
+    expect(body).toContain("Membership history");
+    expect(body).toContain("Order #106");
+    expect(body).toContain("Los Verdes Membership 2026");
+    expect(body).toContain("Order #104");
+    // Newest first, and the source suffix is not shown to the member.
+    expect(body.indexOf("Order #106")).toBeLessThan(body.indexOf("Order #104"));
+    expect(body).not.toContain("104_bc");
+  });
+
+  it("says when an order doesn't count, which is what explains a lapsed card", async () => {
+    await seedCurrentMember();
+    await insertOrder({ orderId: "105_bc", status: "Refunded" });
+
+    const body = await (await get("/")).text();
+
+    expect(body).toContain("Order #105");
+    expect(body).toContain("count towards membership");
+  });
+
+  it("marks nothing when every order counts", async () => {
+    await seedCurrentMember();
+    await insertOrder({ orderId: "104_bc" });
+
+    const body = await (await get("/")).text();
+
+    expect(body).not.toContain("count towards membership");
+  });
+
+  it("shows a gifted order on the recipient's history, not the purchaser's", async () => {
+    await seedCurrentMember();
+    // Attribution moves member_email only; the order was paid for by someone else.
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, product_name, status,
+                                      created_on, expires_on, first_seen_via)
+       VALUES ('200_bc', 'bigcommerce', 'buyer@example.com', 'jane@example.com', 'Gift Membership', 'Completed',
+               '2026-01-05', '2027-01-05', 'sync')`,
+    ).run();
+    await insertOrder({ orderId: "201_bc", memberEmail: "buyer@example.com" });
+
+    const body = await (await get("/")).text();
+
+    expect(body).toContain("Order #200");
+    expect(body).toContain("Gift Membership");
+    expect(body).not.toContain("Order #201");
+  });
+
+  it("copes with a Squarespace-era order that has no product name or status", async () => {
+    // Many imported rows have neither, and a blank status still counts for
+    // that era (src/lib/membershipOrders.ts).
+    await seedCurrentMember();
+    await insertOrder({
+      orderId: "0cd5ad745fbc40fd95697470",
+      source: "squarespace",
+      productName: null,
+      status: null,
+      createdOn: "2019-06-01",
+      expiresOn: "2020-05-31",
+    });
+
+    const body = await (await get("/")).text();
+
+    expect(body).toContain("Order #0cd5ad745fbc40fd95697470");
+    expect(body).toContain("Jun 1, 2019");
+    expect(body).not.toContain("count towards membership");
+    expect(body).not.toContain("null");
+  });
+
+  it("tells a member with no orders on record, naming the address it looked under", async () => {
+    await seedCurrentMember();
+
+    const body = await (await get("/")).text();
+
+    expect(body).toContain("No membership orders are on record for");
+    expect(body).toContain("jane@example.com");
   });
 });
 
