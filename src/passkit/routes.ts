@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../index";
 import { getApplePassBundle, getMemberById } from "../member/artifacts";
+import { consumeRateLimit, type RateLimitRule } from "../lib/rateLimit";
 import { verifyPassAuthorization } from "../middleware/auth";
 
 const passkit = new Hono<{ Bindings: Env }>();
@@ -166,8 +167,37 @@ passkit.delete(
 );
 
 /**
+ * Per caller, because this endpoint cannot be authenticated and writes to the
+ * database. A real device logs when something is broken, in bursts of a few
+ * messages; twenty requests an hour is far above that and far below anything
+ * that costs us.
+ */
+export const LOG_RATE_LIMIT: RateLimitRule = {
+  name: "passkit-log:ip",
+  limit: 20,
+  windowSeconds: 60 * 60,
+};
+
+/** Apple sends a handful; anything beyond this is not a device reporting a fault. */
+export const MAX_LOG_ENTRIES = 20;
+
+/** Long enough for a stack trace, short enough that a row cannot be a payload. */
+export const MAX_LOG_MESSAGE_LENGTH = 2_000;
+
+/**
  * 4.5 Device Error Logging. No auth per Apple's spec -- devices send these
  * precisely when something (including auth) is already broken.
+ *
+ * Which makes it the one endpoint here that anyone at all can write to the
+ * database through, so what it accepts is bounded on every axis: how often a
+ * caller may post, how many entries one post may carry, and how long each may
+ * be. Without those, a single request could write until D1 refused it, and
+ * repeat; the table has no expiry, and every entry also costs a line in
+ * Workers Logs.
+ *
+ * The response is 200 regardless, short of malformed JSON. A device that has
+ * just failed to do something is not helped by being told its complaint was
+ * rejected, and Apple would only retry.
  */
 passkit.post("/v1/log", async (c) => {
   let body: { logs?: unknown };
@@ -177,15 +207,36 @@ passkit.post("/v1/log", async (c) => {
     return c.text("Bad Request: invalid JSON body", 400);
   }
 
-  const logs = Array.isArray(body.logs) ? body.logs : [];
-  for (const message of logs) {
-    const text = String(message);
+  const limit = await consumeRateLimit(
+    c.env.DB,
+    LOG_RATE_LIMIT,
+    c.req.header("cf-connecting-ip") ?? "unknown",
+  );
+  if (!limit.allowed) {
+    console.warn("PassKit device log: rate limit reached, dropping");
+    return c.text("OK", 200);
+  }
+
+  const submitted = Array.isArray(body.logs) ? body.logs : [];
+  const kept = submitted.slice(0, MAX_LOG_ENTRIES);
+  if (submitted.length > kept.length) {
+    console.warn("PassKit device log: entries beyond the cap were dropped", {
+      submitted: submitted.length,
+      kept: kept.length,
+    });
+  }
+
+  const statements = kept.map((message) => {
+    const text = String(message).slice(0, MAX_LOG_MESSAGE_LENGTH);
     console.error("PassKit device log", { message: text });
-    await c.env.DB.prepare(
+    return c.env.DB.prepare(
       "INSERT INTO pass_device_logs (log_level, message) VALUES ('error', ?)",
-    )
-      .bind(text)
-      .run();
+    ).bind(text);
+  });
+  // One round trip rather than one per entry, which also keeps a single
+  // request well clear of D1's per-invocation query limit.
+  if (statements.length > 0) {
+    await c.env.DB.batch(statements);
   }
 
   return c.text("OK", 200);
