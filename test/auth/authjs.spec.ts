@@ -153,6 +153,23 @@ describe("/api/auth (Auth.js)", () => {
     expect(await none.json()).toEqual({});
   });
 
+  it("keeps Google working when the Apple key is unusable", async () => {
+    // A .p8 mangled on its way into the secret store: well-formed PEM
+    // markers, contents that can't be decoded. This once 500'd every route
+    // under /api/auth, so nobody could log in by any means.
+    env.APPLE_SIGNIN_PRIVATE_KEY_PEM =
+      "-----BEGIN PRIVATE KEY-----not base64 at all-----END PRIVATE KEY-----";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await request("/api/auth/providers");
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(await res.json())).toEqual(["google"]);
+    expect(errors).toHaveBeenCalled();
+    // The key itself must not reach the logs.
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("BEGIN PRIVATE KEY");
+  });
+
   it("fails closed without AUTH_SECRET", async () => {
     env.AUTH_SECRET = "";
     vi.spyOn(console, "error").mockImplementation(() => {});

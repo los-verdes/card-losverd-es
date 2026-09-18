@@ -90,12 +90,25 @@ export async function authConfig(
     );
   }
   if (env.APPLE_SIGNIN_KEY_ID && env.APPLE_SIGNIN_PRIVATE_KEY_PEM) {
-    providers.push(
-      Apple({
-        clientId: env.AUTH_APPLE_ID,
-        clientSecret: await appleClientSecret(env),
-      }),
-    );
+    // Unlike Google's static secret, Apple's is minted here, so a malformed
+    // key throws while the config is being assembled. Left uncaught that took
+    // down every route under /api/auth -- including Google sign-in, and
+    // including the page that would have explained itself -- so one unusable
+    // optional credential locked everyone out (seen on staging 2026-09-17).
+    // Offering one working provider beats offering none.
+    try {
+      providers.push(
+        Apple({
+          clientId: env.AUTH_APPLE_ID,
+          clientSecret: await appleClientSecret(env),
+        }),
+      );
+    } catch (error) {
+      console.error(
+        "authConfig(): Sign in with Apple unavailable -- APPLE_SIGNIN_PRIVATE_KEY_PEM could not sign a client secret",
+        error,
+      );
+    }
   }
 
   return {
