@@ -176,6 +176,14 @@ To see what an environment currently has, and how long is left on it:
 just apple-pass-cert-check staging
 ```
 
+### Verifying a host for Sign in with Apple
+
+Sign in with Apple only works from hosts registered against the environment's Services ID, and Apple will not accept a host until it has proved we control it. Until then the authorize endpoint answers `invalid_client`, which says nothing about the domain.
+
+In the Apple Developer console, on the Services ID's Sign in with Apple configuration, add the domain and its return URL (`https://<host>/api/auth/callback/apple`) and download the domain-association file. Paste its contents into `APPLE_DOMAIN_ASSOCIATION` for that environment in `wrangler.toml`, deploy, then press Verify. The Worker serves it at `/.well-known/apple-developer-domain-association.txt` as plain text with no redirect, which is what Apple requires.
+
+The contents are public by design, so this is a plain var rather than a Worker secret. Apple only checks once, when Verify is pressed, so the value can be cleared afterwards -- but leaving it costs nothing and makes verifying the next host a config change. `card.losverd.es` was verified years ago by the legacy deployment and stays verified.
+
 ### Registering the BigCommerce order webhook
 
 BigCommerce doesn't sign webhooks, so each store's `store/order/*` webhook is registered with an `Authorization: bearer <token>` header the Worker recomputes from `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, the store hash, and `BIGCOMMERCE_CLIENT_ID`. Create or update it (and again after rotating the key) with:

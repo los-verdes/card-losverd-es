@@ -75,6 +75,12 @@ GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_v1"
 # SESSION_SIGNING_KEY in src/index.ts): set via `wrangler secret put`.
 AUTH_APPLE_ID = "es.losverd.card"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+# Apple verifies a host before Sign in with Apple works from it, by fetching
+# /.well-known/apple-developer-domain-association.txt and comparing it with a
+# file it generates per Services ID. Public by design, so a var. Empty here:
+# card.losverd.es was verified years ago by the legacy deployment, and stays
+# verified. Needed only if a new host is registered against this Services ID.
+APPLE_DOMAIN_ASSOCIATION = ""
 
 # Email card delivery (src/member/email-card.tsx) - not secret, the legacy
 # app's real sender identity and SendGrid ASM unsubscribe group
@@ -165,6 +171,10 @@ GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
 GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_staging_v1"
 AUTH_APPLE_ID = "dev.workers.jeff-hogan1.card-losverd-es-staging"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+# Paste the file Apple generates for the staging Services ID here, deploy,
+# then press Verify in the Apple console. It can stay afterwards -- Apple
+# only checks once, but leaving it makes re-verifying a config change.
+APPLE_DOMAIN_ASSOCIATION = ""
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
 # Staging's own Turnstile widget, bound to the workers.dev hostname above.

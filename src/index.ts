@@ -14,6 +14,7 @@ import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
+import wellKnown from "./wellKnown";
 
 export interface Env {
   DB: D1Database;
@@ -71,6 +72,10 @@ export interface Env {
   // Apple developer team ID; real values in wrangler.toml `[vars]`.
   AUTH_APPLE_ID: string;
   APPLE_SIGNIN_TEAM_ID: string;
+  // Not secret -- Apple fetches this from a public URL to verify we control
+  // this environment's host before Sign in with Apple will work from it
+  // (src/wellKnown.ts). Empty until a host needs verifying.
+  APPLE_DOMAIN_ASSOCIATION?: string;
   // Secret -- HMAC key for membership card QR-code signatures
   // (src/lib/passSignature.ts). Deliberately the legacy app's key bytes
   // (`SECRET_KEY * 5`), so existing QR codes keep verifying; see
@@ -121,6 +126,9 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
+// Apple fetches this to verify the host for Sign in with Apple. Mounted
+// ahead of the auth and portal routes: it must answer 200 with no redirect.
+app.route("/.well-known", wellKnown);
 app.route("/bigcommerce", bigcommerce);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
