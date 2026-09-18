@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { createExecutionContext, env } from "cloudflare:test";
 import { unzipSync } from "fflate";
 import { Hono } from "hono";

@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import { linkOAuthUser } from "../../src/auth/oauth-link";

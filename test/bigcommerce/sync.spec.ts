@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";

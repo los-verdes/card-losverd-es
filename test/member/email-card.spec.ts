@@ -1,3 +1,4 @@
+import "../setup/d1";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { strFromU8, unzipSync } from "fflate";
 import { exportPKCS8, generateKeyPair } from "jose";

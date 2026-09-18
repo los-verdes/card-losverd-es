@@ -20,7 +20,12 @@ export default defineConfig(async () => {
 			__D1_MIGRATIONS__: JSON.stringify(migrations),
 		},
 		test: {
-			setupFiles: ["./test/setup/d1.ts"],
+			// Applying the D1 migrations costs a flat ~3s the first time a test
+			// file touches D1 (Miniflare provisioning the database -- the same
+			// whether one migration is applied or ten), so it is opt-in rather
+			// than a global setupFile: the 24 spec files that need a database
+			// `import "../setup/d1"`, and the 16 that don't no longer pay for one.
+			//
 			// Vitest's 5000ms default is too tight for the first test in any file
 			// that calls getTestCertChain() (test/fixtures/certChain.ts):
 			// it generates two fresh 2048-bit RSA keys via node-forge, memoized
