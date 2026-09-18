@@ -18,14 +18,8 @@ export interface MemberOrder {
   status: string | null;
   created_on: string;
   expires_on: string;
-  /**
-   * D1 returns SQLite's 0/1 for the shared counting rule -- or **NULL**, for
-   * a row whose status is NULL, because `lower(NULL) IN (...)` is NULL rather
-   * than false. That is the right answer (a statusless BigCommerce order does
-   * not count) and it reads correctly as falsy, but it is not 0: compare
-   * truthily, never `=== 0`.
-   */
-  counts: number | null;
+  /** D1 returns SQLite's 0/1 for the shared counting rule. */
+  counts: number;
 }
 
 /**
