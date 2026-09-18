@@ -157,7 +157,7 @@ describe("buildGoogleWalletSaveUrl", () => {
     expect(object.id).toBe("3388000000022031577.BC-1");
     expect(object.classId).toBe("3388000000022031577.los_verdes_member_v1");
     const qr = new URL(object.barcode.value);
-    expect(await verifyPassSerialSignature(PASS_KEY, "BC-1", qr.searchParams.get("signature")!)).toBe(true);
+    expect(await verifyPassSerialSignature({ current: PASS_KEY }, "BC-1", qr.searchParams.get("signature")!)).toBe("current");
   });
 
   it("fails, so callers fall back, when Google rejects the object", async () => {

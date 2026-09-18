@@ -11,7 +11,10 @@
 import { Hono } from "hono";
 import type { FC } from "hono/jsx";
 import { formatShortDate } from "../lib/dateFormat";
-import { verifyPassSerialSignature } from "../lib/passSignature";
+import {
+  passSignatureKeys,
+  verifyPassSerialSignature,
+} from "../lib/passSignature";
 import { requireAuth, type AuthEnv } from "../middleware/auth";
 import { Page } from "./layout";
 import { lookupPassHolder, type PassHolder } from "./passHolder";
@@ -36,12 +39,21 @@ const verifyPass = new Hono<AuthEnv>();
 
 verifyPass.get("/:serial", requireAuth, async (c) => {
   const serial = c.req.param("serial");
-  const signatureValid = await verifyPassSerialSignature(
-    c.env.PASS_SIGNATURE_KEY,
+  const keyUsed = await verifyPassSerialSignature(
+    passSignatureKeys(c.env),
     serial,
     c.req.query("signature"),
   );
-  if (!signatureValid) {
+  if (keyUsed === "previous") {
+    // How a rotation ends: retire PASS_SIGNATURE_KEY_PREVIOUS once these stop
+    // appearing, meaning every card still being scanned carries a signature
+    // from the current key. No serial is logged -- a count over time is the
+    // whole signal, and a serial identifies a member.
+    console.warn(
+      "/verify-pass: scanned card was signed with PASS_SIGNATURE_KEY_PREVIOUS",
+    );
+  }
+  if (!keyUsed) {
     return c.html(
       <Page title="Card Verification">
         <h1>Unable to verify signature!</h1>
