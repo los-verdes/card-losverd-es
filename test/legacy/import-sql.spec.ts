@@ -124,6 +124,14 @@ describe("parseLegacyExport", () => {
     });
   });
 
+  it("accepts a real leap day, so the strictness isn't over-strict", () => {
+    const parsed = parseLegacyExport(
+      validExport({ member_since: [{ email: "a@example.com", member_since: "2020-02-29" }] }),
+    );
+
+    expect(parsed.member_since[0].member_since).toBe("2020-02-29");
+  });
+
   it("treats missing optional card fields as null", () => {
     const parsed = parseLegacyExport(
       validExport({ membership_cards: [{ serial_number: SERIAL, email: "a@example.com" }] }),
@@ -179,6 +187,12 @@ describe("parseLegacyExport", () => {
     ["non-boolean test_mode", orderExport({ ...SQUARESPACE_ORDER, test_mode: "f" }), /test_mode: expected a boolean/],
     ["date-only created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-06-26" }), /created_on: expected YYYY-MM-DDTHH:MM:SSZ/],
     ["impossible created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-13-45T00:00:00Z" }), /created_on/],
+    // Date.parse accepts these and silently rolls them forward -- 30 February
+    // becomes 2 March -- so a shaped-but-unreal date would otherwise import
+    // and move the membership's expiry with it.
+    ["rolled-over created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-02-30T00:00:00Z" }), /created_on/],
+    ["rolled-over member_since", validExport({ member_since: [{ email: "a@example.com", member_since: "2021-02-30" }] }), /YYYY-MM-DD/],
+    ["29 February in a common year", validExport({ member_since: [{ email: "a@example.com", member_since: "2021-02-29" }] }), /YYYY-MM-DD/],
     ["bad modified_on", orderExport({ ...SQUARESPACE_ORDER, modified_on: "yesterday" }), /modified_on/],
     [
       "duplicate order id",
