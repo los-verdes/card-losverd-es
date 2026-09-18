@@ -81,6 +81,34 @@ export function isMembershipCurrent(
   );
 }
 
+/**
+ * The status a pass should carry, which is not always the one stored.
+ *
+ * `members.status` only moves when a sync touches the row, so a membership
+ * that lapsed with no order activity keeps saying `active` indefinitely. The
+ * access checks never trusted it (see `isMembershipCurrent`), but the passes
+ * did: the Apple pass's status field and the Google object's `state` both
+ * came straight from the column, so a rebuilt pass could show "active" for a
+ * membership that had expired months earlier.
+ *
+ * Revocation is a stored decision and is left alone; the rest is derived from
+ * the expiry date, which is what every other reader already does.
+ *
+ * Note the limit of this: a pass already on a device or cached in R2 is not
+ * rebuilt just because a date passed. It fixes what a pass says when it *is*
+ * rebuilt -- on a renewal, an attribution, a re-download -- rather than
+ * reaching out to correct one already issued.
+ */
+export function effectiveStatus(
+  member: Pick<MemberRecord, "status" | "expiration_date">,
+  today: string = new Date().toISOString().slice(0, 10),
+): MemberRecord["status"] {
+  if (member.status === "revoked") {
+    return "revoked";
+  }
+  return isMembershipCurrent(member, today) ? "active" : "expired";
+}
+
 function verifyUrl(env: Env, member: MemberRecord): Promise<string> {
   return buildVerifyPassUrl(
     env.PUBLIC_BASE_URL,
@@ -138,7 +166,7 @@ export async function getApplePassBundle(
       firstName: member.first_name,
       lastName: member.last_name,
       membershipTier: member.membership_tier,
-      status: member.status,
+      status: effectiveStatus(member),
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
       authToken: member.auth_token,
@@ -232,7 +260,7 @@ async function googleWalletObjectFor(
       firstName: member.first_name,
       lastName: member.last_name,
       membershipTier: member.membership_tier,
-      status: member.status,
+      status: effectiveStatus(member),
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
       verifyUrl: await verifyUrl(env, member),

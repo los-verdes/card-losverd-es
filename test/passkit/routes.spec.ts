@@ -1,6 +1,6 @@
 import "../setup/d1";
 import { env, SELF } from "cloudflare:test";
-import { unzipSync } from "fflate";
+import { strFromU8, unzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { getTestCertChain } from "../fixtures/certChain";
@@ -12,6 +12,7 @@ interface SeedMemberOptions {
   memberId?: string;
   authToken?: string;
   status?: "active" | "expired" | "revoked";
+  expirationDate?: string;
   lastUpdatedAt?: number;
 }
 
@@ -29,7 +30,7 @@ async function seedMember(options: SeedMemberOptions = {}) {
       `${memberId.toLowerCase()}@example.com`,
       "standard",
       options.status ?? "active",
-      "2027-01-15",
+      options.expirationDate ?? "2027-01-15",
       "2021-07-15",
       authToken,
       options.lastUpdatedAt ?? Date.now(),
@@ -270,6 +271,30 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
     });
 
     expect(res.status).toBe(200);
+  });
+
+  it("marks a lapsed membership expired even when nothing has synced since", async () => {
+    // members.status only moves when a sync touches the row, so a membership
+    // that lapsed quietly still reads "active" there. The pass Apple fetches
+    // should not repeat that.
+    await seedTemplateAssets();
+    const { memberId, authToken } = await seedMember({
+      memberId: "LV-30007",
+      status: "active",
+      expirationDate: "2020-01-15",
+    });
+
+    const res = await SELF.fetch(path(memberId), {
+      headers: { authorization: `ApplePass ${authToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const pass = JSON.parse(strFromU8(files["pass.json"]));
+    const statusField = pass.generic.backFields.find(
+      (field: { key: string }) => field.key === "status",
+    );
+    expect(statusField?.value).toBe("Expired");
   });
 
   it("returns a signed .pkpass bundle on a cache miss, and caches it", async () => {

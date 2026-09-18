@@ -7,6 +7,7 @@ import {
   buildGoogleWalletSaveUrl,
   getMemberByEmail,
   getMemberById,
+  effectiveStatus,
   isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
@@ -73,6 +74,23 @@ describe("isMembershipCurrent", () => {
 
   it("defaults to today", () => {
     expect(isMembershipCurrent({ status: "active", expiration_date: "2099-01-01" })).toBe(true);
+  });
+});
+
+describe("effectiveStatus", () => {
+  it.each<[string, Pick<MemberRecord, "status" | "expiration_date">, string]>([
+    ["current", { status: "active", expiration_date: "2026-09-16" }, "active"],
+    // The case this exists for: nothing has synced since the date passed.
+    ["lapsed while still stored as active", { status: "active", expiration_date: "2026-09-15" }, "expired"],
+    ["renewed but still stored as expired", { status: "expired", expiration_date: "2027-01-01" }, "active"],
+    ["revoked, whatever the date says", { status: "revoked", expiration_date: "2099-01-01" }, "revoked"],
+    ["no expiration on record", { status: "active", expiration_date: null }, "expired"],
+  ])("%s -> %s", (_label, member, expected) => {
+    expect(effectiveStatus(member, "2026-09-16")).toBe(expected);
+  });
+
+  it("defaults to today", () => {
+    expect(effectiveStatus({ status: "active", expiration_date: "2099-01-01" })).toBe("active");
   });
 });
 
