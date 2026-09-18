@@ -22,6 +22,9 @@ crash.*.log
 # this repo's history.
 .claude/
 .legacy-import-bundle.mjs
+# Apple pass certificate working directory: holds a private key until it is
+# stored in 1Password and pushed. Never commit.
+.apple-pass-cert/
 # Legacy Postgres export + generated import SQL contain member PII -- never commit.
 .legacy-export/
 # esbuild output for the Google Wallet checker (see the justfile recipe).

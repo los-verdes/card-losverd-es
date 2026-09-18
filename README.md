@@ -136,6 +136,45 @@ It builds the object with the Worker's own builder, so what it checks is what
 members get. `--insert` is the authoritative check and the only way to get a
 specific error out of Google, but it writes one synthetic object to the issuer
 account, which cannot afterwards be deleted -- inert, since nobody holds it.
+### Renewing the Apple pass certificate
+
+Apple issues a Pass Type ID certificate for one year. When it lapses, signing
+new `.pkpass` bundles stops working -- passes already installed keep working,
+but nobody new can add one. Two of the ways to get this wrong produce a pass
+that iOS refuses to add with no explanation whatsoever: a private key that does
+not match the certificate, and a WWDR intermediate from a different generation
+than the one that signed it. So the tooling checks both rather than trusting
+the process.
+
+Start by generating a key and a signing request:
+
+```bash
+just apple-pass-cert-csr
+```
+
+That prints the one step that cannot be automated -- Apple's console has no API
+for these certificates, so the request has to be uploaded by hand and the `.cer`
+downloaded. **Renew against the existing pass type identifier**; a new one would
+orphan every pass already in a member's wallet.
+
+Then hand the download back:
+
+```bash
+just apple-pass-cert-install staging ~/Downloads/pass.cer
+```
+
+which refuses to go on unless the certificate is for this project's pass type
+and team, matches the key that requested it, and verifies against the WWDR
+intermediate it names. If all three hold, it stores the certificate, key and
+intermediate in the environment's 1Password item, reads them back to confirm,
+pushes them to the Worker, and deletes the local copies -- the private key is
+on disk only in between, under `.apple-pass-cert/` (gitignored).
+
+To see what an environment currently has, and how long is left on it:
+
+```bash
+just apple-pass-cert-check staging
+```
 
 ### Registering the BigCommerce order webhook
 
