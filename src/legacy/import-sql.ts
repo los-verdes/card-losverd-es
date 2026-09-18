@@ -101,12 +101,29 @@ function requireEmail(
   return email;
 }
 
-/** A real `YYYY-MM-DDTHH:MM:SSZ` instant (so not, say, month 13). */
+/**
+ * Whether a parsed date is the one that was written, rather than one the
+ * parser invented.
+ *
+ * `Date.parse` is not strict about ISO dates: it rejects month 13, but
+ * quietly rolls `2021-02-30` over to 2 March and `2021-04-31` to 1 May. So
+ * the parsed value is re-serialised and compared with the input -- only a
+ * real date survives that round trip. It matters here beyond tidiness:
+ * `created_on` is what `expiresOn()` adds a year to, so a date that rolls
+ * over moves a membership's expiry by however many days it rolled.
+ */
+function isRealInstant(value: string, serialise: (d: Date) => string): boolean {
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && serialise(parsed) === value;
+}
+
+/** A real `YYYY-MM-DDTHH:MM:SSZ` instant (so not month 13, nor 30 February). */
 function checkTimestamp(value: string | null, path: string): void {
   if (value === null) return;
-  if (!ISO_SECONDS.test(value) || Number.isNaN(Date.parse(value))) {
-    fail(path, "expected YYYY-MM-DDTHH:MM:SSZ");
-  }
+  const ok =
+    ISO_SECONDS.test(value) &&
+    isRealInstant(value, (d) => d.toISOString().replace(/\.\d{3}Z$/, "Z"));
+  if (!ok) fail(path, "expected YYYY-MM-DDTHH:MM:SSZ");
 }
 
 function parseMembershipOrder(
@@ -147,9 +164,12 @@ function parseMembershipOrder(
   return order;
 }
 
+/** A real `YYYY-MM-DD` date, on the same terms as `checkTimestamp`. */
 function checkDate(value: string | null, path: string): void {
-  if (value !== null && !ISO_DATE.test(value))
-    fail(path, "expected YYYY-MM-DD");
+  if (value === null) return;
+  const ok =
+    ISO_DATE.test(value) && isRealInstant(value, (d) => d.toISOString().slice(0, 10));
+  if (!ok) fail(path, "expected YYYY-MM-DD");
 }
 
 function requireArray(obj: Record<string, unknown>, key: string): unknown[] {
