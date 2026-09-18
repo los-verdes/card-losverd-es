@@ -15,11 +15,10 @@
 //
 // Prints what it would do, then does it. Never prints the key or the token.
 
-import { SignJWT, importPKCS8 } from "jose";
+import { fetchServiceAccountToken } from "../src/google/serviceAccountToken.ts";
 import { unstable_readConfig } from "wrangler";
 
 const ENVIRONMENTS = ["production", "staging"];
-const SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 // Overridable only to test against a local stub.
 const TOKEN_URL = process.env.GOOGLE_OAUTH_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 const WALLET_API = process.env.GOOGLE_WALLET_API ?? "https://walletobjects.googleapis.com/walletobjects/v1";
@@ -45,25 +44,17 @@ function fieldValue(item, label) {
   return value;
 }
 
-/** A short-lived access token for the Wallet API, via the service account. */
+/**
+ * A short-lived access token for the Wallet API. The exchange itself lives in
+ * `src/google/serviceAccountToken.ts`, shared with the Worker and the check
+ * tool so the scope and assertion lifetime cannot drift between them.
+ */
 async function accessToken(email, privateKeyPem) {
-  const now = Math.floor(Date.now() / 1000);
-  const assertion = await new SignJWT({ scope: SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(email)
-    .setAudience(TOKEN_URL)
-    .setIssuedAt(now)
-    .setExpirationTime(now + 300)
-    .sign(await importPKCS8(privateKeyPem, "RS256"));
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
-  });
-  if (!res.ok) fail(`token request failed: ${res.status} ${await res.text()}`);
-  const { access_token: token } = await res.json();
-  if (!token) fail("token response had no access_token");
-  return token;
+  try {
+    return await fetchServiceAccountToken(email, privateKeyPem, undefined, TOKEN_URL);
+  } catch (error) {
+    fail(String(error instanceof Error ? error.message : error));
+  }
 }
 
 async function wallet(method, path, token, body) {

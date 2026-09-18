@@ -20,7 +20,8 @@
  * Reads the environment's 1Password Worker secrets item as JSON on stdin, the
  * same way the other scripts here do.
  */
-import { SignJWT, decodeJwt, importPKCS8 } from "jose";
+import { decodeJwt } from "jose";
+import { fetchServiceAccountToken } from "../src/google/serviceAccountToken";
 import { unstable_readConfig } from "wrangler";
 import {
   buildGenericObject,
@@ -39,7 +40,6 @@ const ENVIRONMENTS = ["production", "staging"];
  * be truncated by browsers, which shows as the generic save failure.
  */
 const SAFE_SAVE_LINK_LENGTH = 1800;
-const SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 const TOKEN_URL = process.env.GOOGLE_OAUTH_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 const WALLET_API = process.env.GOOGLE_WALLET_API ?? "https://walletobjects.googleapis.com/walletobjects/v1";
 
@@ -90,29 +90,19 @@ function fieldValue(item: Awaited<ReturnType<typeof readItem>>, label: string): 
   return value;
 }
 
+/**
+ * A short-lived access token for the Wallet API. The exchange lives in
+ * `src/google/serviceAccountToken.ts`, shared with the Worker and the
+ * ensure-class tool; a failure here is reported as a check result rather than
+ * thrown, since "the service account cannot get a token" is one of the
+ * answers this tool exists to give.
+ */
 async function accessToken(email: string, privateKeyPem: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const assertion = await new SignJWT({ scope: SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(email)
-    .setAudience(TOKEN_URL)
-    .setIssuedAt(now)
-    .setExpirationTime(now + 300)
-    .sign(await importPKCS8(privateKeyPem, "RS256"));
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-  });
-  if (!res.ok) {
-    fail(`the service account could not get a token: ${res.status} ${await res.text()}`);
+  try {
+    return await fetchServiceAccountToken(email, privateKeyPem, undefined, TOKEN_URL);
+  } catch (error) {
+    fail(`the service account could not get a token: ${error instanceof Error ? error.message : error}`);
   }
-  const { access_token: token } = (await res.json()) as { access_token?: string };
-  if (!token) fail("the token response had no access_token");
-  return token;
 }
 
 interface WalletResult {
