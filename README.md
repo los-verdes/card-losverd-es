@@ -60,6 +60,7 @@ The `card.losverd.es` DNS record is deliberately not managed here yet -- that's 
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
+| `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |
 | `/assets/:name` | Public images, allow-listed; Google Wallet fetches the pass logo from here (`src/assets.ts`) | Public |
 | `/healthz` | Liveness check | Public |
 
@@ -213,6 +214,18 @@ npx wrangler d1 execute DB --remote --env="" --command \
 ```
 
 `--env=""` is production; use `--env staging` for staging. Set it back to `0` to revoke; it takes effect immediately.
+
+Worth doing early on a new environment rather than last: the readiness page below is admin-gated, and it is most useful while an environment is still being set up.
+
+### Checking whether an environment is ready
+
+`/admin/preflight` reports what the deployed Worker can see of its own environment: whether `PUBLIC_BASE_URL` matches the host serving it, whether the D1 migrations ran and the R2 template images are uploaded, whether the Apple pass certificate matches its key and its bundled WWDR intermediate and how long it has left, whether the Google Wallet class exists, whether BigCommerce accepts the access token and has an order webhook pointing here carrying the token this Worker verifies, and which of the optional integrations are configured.
+
+It exists because the problems worth finding are invisible from outside. A private key stored with literal `\n` escapes, a template image never uploaded, a Wallet class that was never created — each shows up only as a generic error page, or the provider's own generic failure, some time after the deploy that caused it. The code that can tell the difference is the code that parses the credential, which runs in the Worker.
+
+Two properties it keeps: it never reports a secret's value (presence, shape, expiry and already-public identifiers only), and it never writes anything — a check that created the Wallet class it was looking for would report success for a state it had just manufactured.
+
+The steps no code can take — installing a pass on a real iPhone, saving one on Android, comparing the admin reports against the legacy report — are listed on the same page, so there is one list to work down instead of a separate runbook to keep current.
 
 ## Status
 
