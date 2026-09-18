@@ -155,7 +155,7 @@ bucket_name = "card-losverd-es-assets-staging"
 [env.staging.vars]
 # The test BigCommerce store (legacy DevelopmentSettings' store hash).
 BIGCOMMERCE_STORE_HASH = "kouyh8feen"
-BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
+BIGCOMMERCE_CLIENT_ID = "g1vpjmv5bbedb6in9nzenavswbi18f9"
 PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
 PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
 PASSKIT_ORGANIZATION_NAME = "Los Verdes"
