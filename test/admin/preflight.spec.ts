@@ -16,6 +16,7 @@ import {
   resetGoogleWalletTokenCache,
 } from "../../src/google/api";
 import worker from "../../src/index";
+import { insertOrder } from "./fixtures";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -203,6 +204,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   for (const key of TEMPLATE_KEYS) await env.ASSETS.delete(key);
+  await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM users");
 });
 
@@ -434,6 +436,63 @@ describe("BigCommerce", () => {
       },
     ];
     expect(find(await check(), "Webhook token").status).toBe("ok");
+  });
+});
+
+describe("the legacy import", () => {
+  /**
+   * `insertOrder` in the shared fixtures always writes `first_seen_via =
+   * 'sync'`, and this group is entirely about rows that arrived the other
+   * way, so it inserts its own.
+   */
+  async function insertImportedOrder(orderId: string, status: string | null, email: string) {
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
+         status, test_mode, created_on, expires_on, first_seen_via)
+       VALUES (?, 'bigcommerce', ?, ?, 'Test', 'Member', ?, 0, '2019-04-01', '2020-04-01', 'legacy_postgres')`,
+    )
+      .bind(orderId, email, email, status)
+      .run();
+  }
+
+  const CHECK = "Imported orders that count for nothing";
+
+  it("says nothing either way before the import has run", async () => {
+    expect(find(await check(), CHECK).status).toBe("skip");
+  });
+
+  it("passes when every imported order carries a status that counts", async () => {
+    await insertImportedOrder("101_bc", "Completed", "one@example.com");
+    await insertImportedOrder("102_bc", "Shipped", "two@example.com");
+    const result = find(await check(), CHECK);
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("All 2");
+  });
+
+  it("counts the orders and the people a statusless import would drop", async () => {
+    // The #89 case: the export marks any `*_bc` order as a BigCommerce order,
+    // so an empty legacy fulfilment status meets a paid-only allow-list it
+    // cannot satisfy.
+    await insertImportedOrder("101_bc", "Completed", "one@example.com");
+    await insertImportedOrder("102_bc", null, "two@example.com");
+    await insertImportedOrder("103_bc", "", "two@example.com");
+    const result = find(await check(), CHECK);
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("2 of 3");
+    // Both statusless orders belong to one address, so one member is at risk.
+    expect(result.detail).toContain("1 member address.");
+    expect(result.detail).toContain("#89");
+  });
+
+  it("pluralises the address count, since this page is read at a glance", async () => {
+    await insertImportedOrder("102_bc", null, "two@example.com");
+    await insertImportedOrder("103_bc", null, "three@example.com");
+    expect(find(await check(), CHECK).detail).toContain("2 member addresses");
+  });
+
+  it("ignores orders that arrived through the store sync", async () => {
+    await insertOrder({ id: "201_bc", email: "sync@example.com", created: "2025-01-01", status: null });
+    expect(find(await check(), CHECK).status).toBe("skip");
   });
 });
 

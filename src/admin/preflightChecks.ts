@@ -25,6 +25,7 @@ import forge from "node-forge";
 import { signWebhookToken } from "../bigcommerce/webhookToken";
 import { GOOGLE_WALLET_API, getGoogleWalletAccessToken } from "../google/api";
 import type { Env } from "../index";
+import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -425,6 +426,63 @@ function deliveryChecks(env: Env): CheckGroup {
   return { title: "Member-facing integrations", results };
 }
 
+/**
+ * What the one-time legacy import brought in, and whether any of it is being
+ * silently discarded.
+ *
+ * The export classifies a historical order as `bigcommerce` whenever its id
+ * ends in `_bc`, and takes its status from the old application's own
+ * fulfilment field -- which is often empty. `COUNTS_AS_MEMBERSHIP` applies a
+ * paid-only allow-list to `bigcommerce` rows, and an empty status satisfies
+ * nothing, so those orders confer no membership. The scheduled resync works
+ * forward from a cursor and never revisits orders that old, so nothing
+ * repairs it later. See los-verdes/card-losverd-es#89.
+ *
+ * That issue is blocked on exactly the number below, which can only be taken
+ * after the import has run against the real database -- so the page takes it,
+ * rather than leaving it to be remembered.
+ */
+async function legacyImportChecks(env: Env): Promise<CheckGroup> {
+  const result = await attempt("Imported orders that count for nothing", async () => {
+    // `NOT (COUNTS_AS_MEMBERSHIP)` would be wrong here, and wrong in the one
+    // way that matters: the rule evaluates to NULL rather than false for a
+    // row with no status, because `lower(NULL) IN (...)` is NULL -- and `NOT
+    // NULL` is NULL, not true. As a WHERE clause that is harmless (NULL is
+    // not true, so the order doesn't count, which is correct). Negated, it
+    // would skip exactly the statusless orders this check exists to find.
+    const doesNotCount = `COALESCE((${COUNTS_AS_MEMBERSHIP}), 0) = 0`;
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS imported,
+              SUM(CASE WHEN ${doesNotCount} THEN 1 ELSE 0 END) AS discarded,
+              COUNT(DISTINCT CASE WHEN ${doesNotCount} THEN member_email END) AS people
+         FROM membership_orders
+        WHERE first_seen_via = 'legacy_postgres' AND source = 'bigcommerce'`,
+    ).first<{ imported: number; discarded: number | null; people: number }>();
+    const imported = row?.imported ?? 0;
+    if (imported === 0) {
+      return skip(
+        "Imported orders that count for nothing",
+        "No historical `*_bc` orders here yet -- run the legacy import before reading anything into this.",
+      );
+    }
+    const discarded = row?.discarded ?? 0;
+    if (discarded === 0) {
+      return ok(
+        "Imported orders that count for nothing",
+        `All ${imported} imported \`*_bc\` orders carry a status that counts.`,
+      );
+    }
+    // A warning rather than a failure: the rule is working as written, and
+    // what to do about it is a decision (#89) rather than a fix.
+    const people = row?.people ?? 0;
+    return warn(
+      "Imported orders that count for nothing",
+      `${discarded} of ${imported} imported \`*_bc\` orders fail the paid-only allow-list, across ${people} member ${people === 1 ? "address" : "addresses"}. Settle #89 before cutover -- these are members who would quietly lose their card.`,
+    );
+  });
+  return { title: "Legacy import", results: [result] };
+}
+
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 const WEBHOOK_PATH = "/bigcommerce/order-webhook";
 const WEBHOOK_SCOPE = "store/order/*";
@@ -561,6 +619,7 @@ export async function runPreflightChecks(
   return [
     await identityChecks(env, requestUrl),
     await storageChecks(env),
+    await legacyImportChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live),
