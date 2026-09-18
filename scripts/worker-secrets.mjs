@@ -48,6 +48,7 @@ export const WORKER_SECRETS = [
   "TURNSTILE_SECRET_KEY", // TURNSTILE_SITE_KEY is public: a plain var in wrangler.toml
   // Slack members sync
   "SLACK_BOT_TOKEN",
+  "SLACK_ALERT_WEBHOOK_URL",
 ];
 
 function fail(message) {
