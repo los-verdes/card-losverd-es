@@ -1,0 +1,59 @@
+# Keeping dependencies current without it becoming a job.
+#
+# The aim is low-effort long-term maintenance, which here means few pull
+# requests rather than many: one grouped PR a week for the routine bumps, and
+# a separate one only where a major version genuinely needs thinking about.
+# GitHub's own Dependabot rather than a third-party service, so there is
+# nothing extra to run or keep credentials for.
+#
+# Deliberately no auto-merge. These land code nobody has read, and CI passing
+# is not the same as someone having decided the change is wanted.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # Enough for the grouped PR plus a couple of majors; a low cap means a
+    # quiet week never turns into a backlog of twenty branches.
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Everything routine in one PR. Most weeks this is the only one, and
+      # reviewing it is reading a changelog rather than a diff.
+      routine:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors of these change how the code is written, not just what it
+      # depends on, so they are done deliberately rather than arriving as a
+      # PR that sits going stale. Minor and patch updates still come through
+      # the group above.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/coverage-istanbul"
+        update-types: ["version-update:semver-major"]
+
+  # Addresses a warning we have been carrying rather than fixing: every
+  # workflow run is annotated that Node.js 20 is deprecated, naming the
+  # third-party actions still targeting it. Nothing in this repository can fix
+  # that -- it needs each action's next major release -- so the useful thing is
+  # to be told when one ships.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(actions)"
+    groups:
+      actions:
+        patterns: ["*"]
