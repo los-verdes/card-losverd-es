@@ -396,3 +396,14 @@ describe("GET /no-active-membership", () => {
     expect(res.headers.get("Location")).toBe("/login");
   });
 });
+
+describe("branding", () => {
+  it("links the stylesheet and drops the inline body style", async () => {
+    await seedCurrentMember();
+
+    const html = await (await get("/")).text();
+
+    expect(html).toContain('<link rel="stylesheet" href="/assets/app.css"');
+    expect(html).toContain('<body class="member">');
+  });
+});

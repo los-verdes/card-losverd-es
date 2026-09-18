@@ -1,5 +1,6 @@
 /**
- * Public, unauthenticated images from R2.
+ * Public, unauthenticated assets: the stylesheet and display font bundled
+ * into the Worker, and an allow-list of images from R2.
  *
  * This exists because Google Wallet will not accept a pass logo as bytes: a
  * `GenericObject` names it as a URL (`logo.sourceUri`) and Google's servers
@@ -14,7 +15,9 @@
  */
 
 import { Hono } from "hono";
+import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import type { Env } from "./index";
+import { APP_CSS } from "./styles";
 
 /** Public file name -> R2 key. */
 export const PUBLIC_ASSETS: Record<string, string> = {
@@ -28,7 +31,35 @@ export const PUBLIC_ASSETS: Record<string, string> = {
  */
 const MAX_AGE_SECONDS = 86_400;
 
+/**
+ * A year, for the font. Its bytes are fixed for a given file name -- a
+ * different font would be a different file -- so there is nothing to
+ * invalidate. The stylesheet gets an hour instead, since it changes with
+ * deploys and an hour is a tolerable wait for a colour to be corrected.
+ */
+const IMMUTABLE_SECONDS = 31_536_000;
+const STYLESHEET_MAX_AGE_SECONDS = 3_600;
+
 const assets = new Hono<{ Bindings: Env }>();
+
+// Bundled rather than in R2, and so declared before the R2 handler below:
+// both are fetched by a browser on the first page it renders, and neither
+// should depend on the bucket having been populated by a deploy.
+assets.get("/app.css", (c) =>
+  c.body(APP_CSS, 200, {
+    "Content-Type": "text/css; charset=utf-8",
+    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
+  }),
+);
+
+// The same face the card image is rendered with (src/cardimage/render.ts),
+// so a member's card and the page around it agree.
+assets.get("/bungee.woff", (c) =>
+  c.body(bungeeFont, 200, {
+    "Content-Type": "font/woff",
+    "Cache-Control": `public, max-age=${IMMUTABLE_SECONDS}, immutable`,
+  }),
+);
 
 assets.get("/:name", async (c) => {
   const key = PUBLIC_ASSETS[c.req.param("name")];

@@ -397,3 +397,12 @@ describe("GET /admin/reports/consolidations", () => {
     expect(await (await get("/admin/reports")).text()).toContain('<a href="/admin/reports/consolidations">Consolidations</a>');
   });
 });
+
+describe("branding", () => {
+  it("links the same stylesheet the member pages use", async () => {
+    const html = await (await get("/admin/reports")).text();
+
+    expect(html).toContain('<link rel="stylesheet" href="/assets/app.css"');
+    expect(html).toContain('<body class="admin">');
+  });
+});

@@ -1,6 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PUBLIC_ASSETS } from "../src/assets";
+import { VERDE } from "../src/styles";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 
@@ -88,5 +89,47 @@ describe("GET /assets/:name", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("image/png");
+  });
+});
+
+describe("the bundled stylesheet and font", () => {
+  it("serves the stylesheet without a session, as every page links it", async () => {
+    const res = await get("/assets/app.css");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/css");
+    const css = await res.text();
+    expect(css).toContain(VERDE);
+    expect(css).toContain("@font-face");
+  });
+
+  it("points the font-face at the font this Worker actually serves", async () => {
+    // A stylesheet naming a URL nobody serves fails silently: headings just
+    // render in the fallback face and nothing says why.
+    const css = await (await get("/assets/app.css")).text();
+    const [, url] = css.match(/src: url\("([^"]+)"\)/) ?? [];
+
+    expect(url).toBeDefined();
+    expect((await get(url as string)).status).toBe(200);
+  });
+
+  it("serves the font as a font, cached hard, since its bytes never change", async () => {
+    const res = await get("/assets/bungee.woff");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("font/woff");
+    expect(res.headers.get("Cache-Control")).toContain("immutable");
+    expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+  });
+
+  it("doesn't cache the stylesheet as hard, since it changes with deploys", async () => {
+    const cacheControl = (await get("/assets/app.css")).headers.get("Cache-Control");
+
+    expect(cacheControl).toContain("max-age=3600");
+    expect(cacheControl).not.toContain("immutable");
+  });
+
+  it("still 404s an unknown asset name", async () => {
+    expect((await get("/assets/app.js")).status).toBe(404);
   });
 });
