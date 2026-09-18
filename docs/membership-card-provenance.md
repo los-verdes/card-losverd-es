@@ -169,13 +169,16 @@ a last resort.
 | :--- | :--- | :--- | :--- |
 | Holder's name | yes | yes | yes |
 | Tier | yes | yes | yes |
-| Member since | yes | yes | **no** |
+| Member since | yes | yes | yes |
 | Good through | yes | yes | yes |
 | Card number | on the back | as QR alt text | under the QR code |
 | Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
 
-The card image (`src/cardimage/template.ts`) is the one that omits "member
-since"; it shows name, tier, "Good through <date>", and the QR code.
+All three carry the same fields. The card image
+(`src/cardimage/template.ts`) omitted "member since" for a while, deliberately,
+so that the date would not raise questions while unrelated membership renewal
+problems were being worked through; it was restored once the provenance of
+those dates was established (2026-09-18).
 
 ## 4. How the software decides who is a current member
 
