@@ -9,6 +9,7 @@
 
 import { renderMembershipCardPng } from "../cardimage/render";
 import {
+  GOOGLE_WALLET_BRANDING,
   buildSaveToWalletUrl,
   signSaveToWalletJwt,
   type GoogleWalletConfig,
@@ -212,8 +213,7 @@ export async function buildGoogleWalletSaveUrl(
     issuerId: env.GOOGLE_WALLET_ISSUER_ID,
     classSuffix: env.GOOGLE_WALLET_CLASS_SUFFIX,
     origins: [env.PUBLIC_BASE_URL],
-    cardTitle: "Los Verdes",
-    hexBackgroundColor: "#00B140",
+    ...GOOGLE_WALLET_BRANDING,
   };
   const jwt = await signSaveToWalletJwt(
     {
