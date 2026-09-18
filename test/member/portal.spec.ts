@@ -458,3 +458,34 @@ describe("branding", () => {
     expect(html).toContain('<body class="member">');
   });
 });
+
+describe("the no-membership page", () => {
+  it("tells an ordinary user to check the address they signed in with", async () => {
+    await insertUser("someone@example.com");
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("matches the one used to");
+    expect(html).not.toContain("Hide My Email");
+  });
+
+  it("names Apple's private relay when that is what the address is", async () => {
+    // Apple offers "Hide My Email" on every sign-in, and choosing it lands a
+    // paying member here with no way to work out why. Nothing can join the
+    // relay address to their order, so saying which problem this is, is the
+    // whole of the remedy.
+    await insertUser("abc123def@privaterelay.appleid.com");
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("Hide My Email");
+    expect(html).toContain("Share My Email");
+    expect(html).not.toContain("matches the one used to");
+  });
+
+  it("recognises the relay domain whatever its case", async () => {
+    await insertUser("ABC123@PrivateRelay.AppleID.com");
+
+    expect(await (await get("/no-active-membership")).text()).toContain("Hide My Email");
+  });
+});
