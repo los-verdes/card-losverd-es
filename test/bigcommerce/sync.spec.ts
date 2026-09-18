@@ -499,7 +499,7 @@ describe("BigCommerceClient", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("server exploded", { status: 500 }),
     );
-    await expect(client.getOrder(1)).rejects.toThrow(/500/);
+    await expect(client.getOrderIfPresent(1)).rejects.toThrow(/500/);
   });
 
   it("getOrderProducts returns [] on a 204 (BigCommerce's empty-line-items response)", async () => {
@@ -560,7 +560,7 @@ describe("BigCommerceClient", () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify(makeOrder()), { status: 200 }));
 
-    await expect(client.getOrder(1001)).resolves.toMatchObject({ id: 1001 });
+    await expect(client.getOrderIfPresent(1001)).resolves.toMatchObject({ id: 1001 });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 

@@ -1,8 +1,9 @@
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyWalletsUpdated } from "../member/walletUpdates";
+import { postSlackAlert } from "../slack/alert";
 import { maybeEmailNewOrderCard } from "../email/newOrder";
-import { recordMembershipOrder } from "./orders";
+import { bigCommerceOrderKey, recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
@@ -98,8 +99,22 @@ export class BigCommerceClient {
     }
   }
 
-  async getOrder(orderId: number | string): Promise<BigCommerceOrder> {
+  /**
+   * The order, or `null` when BigCommerce reports it no longer exists.
+   *
+   * Distinguishing "gone" from "failed" matters: a 404 is a fact about the
+   * store, not a transient error, and retrying it five times before
+   * dead-lettering only delays the same answer (#105). v2 answers 204 for a
+   * resource with no content, which for a single order means the same thing.
+   */
+  async getOrderIfPresent(
+    orderId: number | string,
+  ): Promise<BigCommerceOrder | null> {
     const res = await this.get(`orders/${orderId}`);
+    if (res.status === 404 || res.status === 204) {
+      await res.body?.cancel();
+      return null;
+    }
     if (!res.ok) {
       throw new Error(
         `BigCommerce getOrder(${orderId}) failed: ${res.status} ${await res.text()}`,
@@ -423,16 +438,76 @@ async function applyMembershipOrder(
  * Producer call site is the webhook route (`src/bigcommerce/routes.ts`),
  * via the `etl-sync` queue (`src/queues/etlSync.ts`).
  */
+export type MissingOrderOutcome = "flagged" | "already-flagged" | "not-ours";
+
+/**
+ * Records that BigCommerce no longer returns an order we hold, and raises it
+ * once for a person (los-verdes/card-losverd-es#105).
+ *
+ * What it deliberately does **not** do is stop the order counting. A deleted
+ * order keeps conferring membership until someone looks at it and decides
+ * otherwise (decided 2026-09-18). The alternative -- revoking a card because
+ * one API call came back 404 -- would turn a BigCommerce incident into
+ * members losing their cards en masse, and an order vanishing is rare enough
+ * that a person can afford to look.
+ *
+ * Idempotent: only the first sighting sets the timestamp or alerts, so a
+ * webhook that fires repeatedly for the same deleted order does not repeat
+ * itself in Slack.
+ */
+export async function flagOrderMissingFromStore(
+  env: Env,
+  orderId: number | string,
+): Promise<MissingOrderOutcome> {
+  const key = bigCommerceOrderKey(orderId);
+  const update = await env.DB.prepare(
+    `UPDATE membership_orders
+        SET missing_since = ?, updated_at = unixepoch('subsec') * 1000
+      WHERE order_id = ? AND missing_since IS NULL`,
+  )
+    .bind(Date.now(), key)
+    .run();
+
+  if ((update.meta.changes ?? 0) === 0) {
+    const existing = await env.DB.prepare(
+      "SELECT 1 AS present FROM membership_orders WHERE order_id = ?",
+    )
+      .bind(key)
+      .first<{ present: number }>();
+    if (!existing) {
+      // A webhook for an order we never held -- most often one with no
+      // membership in it. Nothing was ever derived from it, so nothing to do.
+      console.info(`flagOrderMissingFromStore(${key}): not an order we hold`);
+      return "not-ours";
+    }
+    return "already-flagged";
+  }
+
+  console.warn(`flagOrderMissingFromStore(${key}): BigCommerce no longer returns this order`);
+  // No order id or address in the alert, for the same reason the dead-letter
+  // alert carries none: a Slack channel has a wider audience than our logs.
+  await postSlackAlert(
+    env,
+    ":mag: A membership order is no longer in BigCommerce. It still counts towards its member's membership; see the admin reports' \"Missing from BigCommerce\" list to decide what should happen to it.",
+  );
+  return "flagged";
+}
+
 export async function syncBigCommerceOrder(
   env: Env,
   storeHash: string,
   orderId: number | string,
 ): Promise<void> {
   const client = new BigCommerceClient(storeHash, env.BIGCOMMERCE_ACCESS_TOKEN);
-  const [order, products] = await Promise.all([
-    client.getOrder(orderId),
-    client.getOrderProducts(orderId),
-  ]);
+  // Fetched before the line items rather than alongside them: if the order is
+  // gone, its products are gone too, and asking would only turn one clear
+  // answer into a second failure.
+  const order = await client.getOrderIfPresent(orderId);
+  if (!order) {
+    await flagOrderMissingFromStore(env, orderId);
+    return;
+  }
+  const products = await client.getOrderProducts(orderId);
 
   const membership = resolveMembership(products);
   if (!membership) {

@@ -142,6 +142,18 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain("nothing will be sent");
   });
 
+  it("says when the store no longer has the order, without implying it was withdrawn", async () => {
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = ? WHERE order_id = '1001_bc'")
+      .bind(Date.UTC(2026, 8, 17))
+      .run();
+
+    const body = await (await request("/admin/orders/1001_bc")).text();
+
+    expect(body).toContain("No longer returned by the store");
+    expect(body).toContain("2026-09-17");
+    expect(body).toContain("It still counts");
+  });
+
   it("warns when a reviewed address appears nowhere", async () => {
     const body = await (await request("/admin/orders/1001_bc?email=typo@exmaple.com")).text();
 

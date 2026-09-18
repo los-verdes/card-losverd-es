@@ -31,6 +31,8 @@ export interface AttributableOrder {
   expires_on: string;
   /** Whether the order counts as a membership (not voided or a test order). */
   counts: number;
+  /** When BigCommerce stopped returning this order, if it has (#105). */
+  missing_since: number | null;
 }
 
 export async function getAttributableOrder(
@@ -40,7 +42,7 @@ export async function getAttributableOrder(
   return db
     .prepare(
       `SELECT order_id, source, order_email, member_email, first_name, last_name, sku, status,
-              created_on, expires_on, (${COUNTS_AS_MEMBERSHIP}) AS counts
+              created_on, expires_on, missing_since, (${COUNTS_AS_MEMBERSHIP}) AS counts
        FROM membership_orders WHERE order_id = ?`,
     )
     .bind(orderId)

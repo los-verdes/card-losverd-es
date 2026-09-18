@@ -90,6 +90,14 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
           ["Started", order.created_on.slice(0, 10)],
           ["Expires", order.expires_on.slice(0, 10)],
           ["Status", `${order.status ?? ""}${order.counts ? "" : " (doesn't count as a membership)"}`],
+          ...(order.missing_since
+            ? ([
+                [
+                  "In BigCommerce",
+                  `No longer returned by the store, first noticed ${new Date(order.missing_since).toISOString().slice(0, 10)}. It still counts; see the "Missing from BigCommerce" report.`,
+                ],
+              ] as const)
+            : []),
         ] as const
       ).map(([label, value]) => (
         <tr>

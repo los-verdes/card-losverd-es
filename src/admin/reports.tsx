@@ -19,11 +19,13 @@ import {
   consolidations,
   expiredMemberships,
   listChannels,
+  missingOrders,
   ordersByMonth,
   slackCrossReference,
   type AttributedOrderRow,
   type DuplicateNameRow,
   type MembershipOrderRow,
+  type MissingOrderRow,
   type ReportFilters,
   type SlackCrossReference,
 } from "./reportQueries";
@@ -299,6 +301,10 @@ reports.get("/", (c) =>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
           Slack accounts, and Slack users who never bought a membership.
         </li>
+        <li>
+          <a href="/admin/reports/missing">Missing from BigCommerce</a>: orders the store no longer returns. They
+          still count; this is the list to decide about.
+        </li>
       </ul>
     </AdminPage>,
   ),
@@ -558,6 +564,83 @@ reports.get("/consolidations", async (c) => {
           </section>
         );
       })}
+    </AdminPage>,
+  );
+});
+
+const MISSING_ORDER_COLUMNS = [
+  "order_id",
+  "member_email",
+  "first_name",
+  "last_name",
+  "status",
+  "created_on",
+  "expires_on",
+  "missing_since",
+] as const;
+
+/**
+ * Orders BigCommerce has stopped returning (#105).
+ *
+ * Read this page as a question, not a defect list. Nothing here has been
+ * taken away from anyone: each order still counts towards its member's
+ * membership, exactly as it did before it went missing. The flag is here
+ * because deciding to withdraw somebody's membership is a judgement, and a
+ * 404 from an API is not a good enough reason to make it automatically.
+ */
+reports.get("/missing", async (c) => {
+  const rows = await missingOrders(c.env.DB);
+  if (c.req.query("format") === "csv") {
+    return new Response(toCsv([...MISSING_ORDER_COLUMNS], rows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="missing-orders-${toIsoSeconds(new Date()).slice(0, 10)}.csv"`,
+      },
+    });
+  }
+  return c.html(
+    <AdminPage title="Missing from BigCommerce">
+      <p>
+        Orders the store no longer returns, oldest sighting first. <strong>They still count towards membership</strong>
+        {" "}
+        -- nothing has been withdrawn from anyone. An order can vanish because it was deleted or archived in
+        BigCommerce, and it can also vanish because the store had a bad day, so the flag clears itself if a later
+        sync finds the order again.
+      </p>
+      {rows.length === 0 ? (
+        <p>No orders are missing.</p>
+      ) : (
+        <div style="overflow-x: auto">
+          <table style="border-collapse: collapse; font-size: 0.9rem">
+            <thead>
+              <tr>
+                {["Order", "Member", "Name", "Status", "Membership", "First missed"].map((heading) => (
+                  <th style={cellStyle}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: MissingOrderRow) => (
+                <tr>
+                  <td style={cellStyle}>
+                    <a href={orderPath(row.order_id)}>{row.order_id}</a>
+                  </td>
+                  <td style={cellStyle}>{row.member_email}</td>
+                  <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+                  <td style={cellStyle}>{row.status ?? ""}</td>
+                  <td style={cellStyle}>
+                    {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
+                  </td>
+                  <td style={cellStyle}>{new Date(row.missing_since).toISOString().slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p>
+        <a href="/admin/reports/missing?format=csv">Download CSV</a>
+      </p>
     </AdminPage>,
   );
 });
