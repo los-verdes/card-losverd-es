@@ -82,6 +82,7 @@ CSV cells that a spreadsheet would evaluate as formulas are neutralized
 | `/admin/reports/orders` | Orders per month for a year against the year before. | Membership Orders |
 | `/admin/reports/consolidations` | Two tables: orders whose membership is attributed to another address (with who changed it, when, and why), and billing names appearing under several addresses. Each order links to its admin page. | Membership Consolidations |
 | `/admin/reports/slack` | Four tables: current members in Slack, current members not in Slack, lapsed members in Slack, and Slack users with no membership orders. Current snapshot only; each table downloads separately (`?table=...&format=csv`). | Slack User Stuff |
+| `/admin/reports/missing` | Orders BigCommerce no longer returns, oldest sighting first. They still count towards membership; this is the list to decide about. | None -- the legacy app never noticed |
 
 Common filters on the active and expired pages: `q` (matches either email
 or the billing name) and `channel`. SQL lives in
@@ -96,6 +97,28 @@ shows "legacy import" rather than an admin and a date. The second groups
 counted orders by lower-cased, trimmed billing name, listing every name that
 appears under more than one `member_email` -- usually one person with two
 addresses, to be consolidated by attributing their orders to one of them.
+
+### Missing from BigCommerce
+
+Orders the store has stopped returning, with when each was first missed
+(los-verdes/card-losverd-es#105). **Nothing on this page has been withdrawn
+from anyone**: a flagged order counts towards its member's membership exactly
+as it did before, and their card is untouched. The flag exists because
+deciding to end somebody's membership is a judgement, and a 404 from an API
+is not a good enough reason to make it automatically -- a BigCommerce incident
+would otherwise become mass membership loss.
+
+An order is flagged when a webhook prompts a sync and the store answers that
+the order no longer exists. The flag clears itself if a later sync finds the
+order again, so a 404 during an outage does not leave a mark to tidy up by
+hand.
+
+Two things it does not cover. It catches **deletion**, not **archival**: an
+archived order simply stops appearing in the order list, and the resync walks
+forward from a cursor rather than looking for absences, so nothing notices.
+And there is deliberately no button here to stop a flagged order counting --
+that is a deliberate withdrawal of a membership, which is
+[#31](https://github.com/los-verdes/card-losverd-es/issues/31).
 
 ### Slack cross-reference
 
