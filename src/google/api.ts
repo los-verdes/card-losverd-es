@@ -88,6 +88,44 @@ export async function getGoogleWalletAccessToken(
 }
 
 /**
+ * Updates an object Google already has, and does nothing if it has none.
+ *
+ * The distinction from `upsertGenericObject` matters: this runs from the
+ * order sync, once per member whose pass-visible details changed, so a
+ * backfill or a full resync passes through it for every member at once.
+ * Inserting there would mint a Wallet object for every member on the roll,
+ * including everyone who has never asked for one -- the same class of bulk
+ * side effect the card emails are guarded against. A member who has never
+ * saved a pass has nothing to refresh, and the save link creates the object
+ * when they do.
+ */
+export async function updateGenericObjectIfPresent(
+  credentials: GoogleWalletCredentials,
+  object: GenericObject,
+): Promise<"updated" | "absent"> {
+  const token = await getGoogleWalletAccessToken(credentials);
+  const res = await fetch(
+    `${GOOGLE_WALLET_API}/genericObject/${encodeURIComponent(object.id)}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(object),
+    },
+  );
+  if (res.ok) return "updated";
+  if (res.status === 404) {
+    await res.body?.cancel();
+    return "absent";
+  }
+  throw new Error(
+    `Google Wallet object update failed: ${res.status} ${(await res.text()).slice(0, 300)}`,
+  );
+}
+
+/**
  * Writes `object` to Google: an insert, or -- once it exists, which the API
  * reports as 409 -- a full update, so a changed name or expiry lands on the
  * pass the member already saved. Returns which happened.

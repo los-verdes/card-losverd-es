@@ -5,6 +5,7 @@ import {
   GOOGLE_WALLET_API,
   getGoogleWalletAccessToken,
   resetGoogleWalletTokenCache,
+  updateGenericObjectIfPresent,
   upsertGenericObject,
 } from "../../src/google/api";
 import { buildGenericObject, googleWalletConfig, type MemberWalletInput } from "../../src/google/jwt";
@@ -165,6 +166,40 @@ describe("upsertGenericObject", () => {
     mockGoogle({ insertStatus: 409, updateStatus: 500 });
 
     await expect(upsertGenericObject(credentials, object)).rejects.toThrow("update failed: 500 nope");
+  });
+});
+
+describe("updateGenericObjectIfPresent", () => {
+  const object = buildGenericObject(MEMBER, CONFIG);
+
+  it("updates an object Google already has, without inserting", async () => {
+    const calls = mockGoogle();
+
+    expect(await updateGenericObjectIfPresent(credentials, object)).toBe("updated");
+
+    const update = calls[1];
+    expect(update.method).toBe("PUT");
+    expect(update.url).toBe(`${GOOGLE_WALLET_API}/genericObject/${encodeURIComponent(object.id)}`);
+    expect(JSON.parse(update.body!)).toEqual(object);
+    // The token exchange and the PUT, and nothing else: no POST.
+    expect(calls).toHaveLength(2);
+    expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/genericObject"))).toBe(false);
+  });
+
+  it("does nothing for a member who has never saved a pass", async () => {
+    // This is the guard that keeps a full resync from minting a Wallet
+    // object for every member on the roll.
+    const calls = mockGoogle({ updateStatus: 404 });
+
+    expect(await updateGenericObjectIfPresent(credentials, object)).toBe("absent");
+
+    expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/genericObject"))).toBe(false);
+  });
+
+  it("throws on any other failure, quoting Google's error", async () => {
+    mockGoogle({ updateStatus: 500 });
+
+    await expect(updateGenericObjectIfPresent(credentials, object)).rejects.toThrow("update failed: 500 nope");
   });
 });
 

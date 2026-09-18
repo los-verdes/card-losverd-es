@@ -8,7 +8,10 @@
  */
 
 import { renderMembershipCardPng } from "../cardimage/render";
-import { upsertGenericObject } from "../google/api";
+import {
+  updateGenericObjectIfPresent,
+  upsertGenericObject,
+} from "../google/api";
 import {
   buildGenericObject,
   buildSaveToWalletUrl,
@@ -190,10 +193,15 @@ export async function renderCardImage(
  * Whether the Google Wallet service-account secrets are set. A type guard, so
  * callers get both values as plain strings once it passes.
  */
-export function isGoogleWalletConfigured(env: Env): env is Env & {
+/** An `Env` known to carry the Google Wallet service-account secrets. */
+export type GoogleWalletConfigured = Env & {
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: string;
   GOOGLE_WALLET_PRIVATE_KEY_PEM: string;
-} {
+};
+
+export function isGoogleWalletConfigured(
+  env: Env,
+): env is GoogleWalletConfigured {
   return Boolean(
     env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL &&
       env.GOOGLE_WALLET_PRIVATE_KEY_PEM,
@@ -205,13 +213,10 @@ export function isGoogleWalletConfigured(env: Env): env is Env & {
  * isn't configured (`GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` /
  * `GOOGLE_WALLET_PRIVATE_KEY_PEM` secrets).
  */
-export async function buildGoogleWalletSaveUrl(
-  env: Env,
+async function googleWalletObjectFor(
+  env: GoogleWalletConfigured,
   member: MemberRecord,
-): Promise<string> {
-  if (!isGoogleWalletConfigured(env)) {
-    throw new Error("Google Wallet credentials are not configured");
-  }
+) {
   const config = googleWalletConfig({
     issuerId: env.GOOGLE_WALLET_ISSUER_ID,
     classSuffix: env.GOOGLE_WALLET_CLASS_SUFFIX,
@@ -233,6 +238,36 @@ export async function buildGoogleWalletSaveUrl(
       verifyUrl: await verifyUrl(env, member),
     },
     config,
+  );
+  return { config, credentials, object };
+}
+
+/**
+ * Brings Google's copy of a member's pass up to date, for a member who has
+ * one. Does nothing for a member who has never saved a pass: see
+ * `updateGenericObjectIfPresent`.
+ */
+export async function refreshGoogleWalletObject(
+  env: Env,
+  member: MemberRecord,
+): Promise<"updated" | "absent" | "not-configured"> {
+  if (!isGoogleWalletConfigured(env)) {
+    return "not-configured";
+  }
+  const { credentials, object } = await googleWalletObjectFor(env, member);
+  return updateGenericObjectIfPresent(credentials, object);
+}
+
+export async function buildGoogleWalletSaveUrl(
+  env: Env,
+  member: MemberRecord,
+): Promise<string> {
+  if (!isGoogleWalletConfigured(env)) {
+    throw new Error("Google Wallet credentials are not configured");
+  }
+  const { config, credentials, object } = await googleWalletObjectFor(
+    env,
+    member,
   );
   // Write the object through the API, then link to it by id: a link
   // carrying the whole object is longer than Google's safe length (#96).

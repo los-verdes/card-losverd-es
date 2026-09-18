@@ -16,7 +16,7 @@ import {
 } from "../bigcommerce/sync";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
-import { notifyPassUpdated } from "../passkit/updates";
+import { notifyWalletsUpdated } from "../member/walletUpdates";
 
 export interface AttributableOrder {
   order_id: string;
@@ -153,7 +153,7 @@ export async function attributeOrder(
   const previous = await refreshMemberFromOrders(env, previousMemberEmail, fallback);
   const current = await refreshMemberFromOrders(env, memberEmail, fallback);
   for (const result of [previous, current]) {
-    if (result?.passChanged) await notifyPassUpdated(env, result.memberId);
+    if (result?.passChanged) await notifyWalletsUpdated(env, result.memberId);
   }
   return { previousMemberEmail, previous, current };
 }
