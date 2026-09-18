@@ -20,9 +20,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildManifest, buildPassJson } from '../src/passkit/generator.ts';
-import { signManifestDetached } from '../src/passkit/signer.ts';
-import { getTestCertChain } from '../test/fixtures/certChain.ts';
+import { buildManifest, buildPassJson } from '../src/passkit/generator';
+import { signManifestDetached } from '../src/passkit/signer';
+import { getTestCertChain } from '../test/fixtures/certChain';
 
 const MEMBER = {
   memberId: 'LV-00000000-0000-4000-8000-000000000000',

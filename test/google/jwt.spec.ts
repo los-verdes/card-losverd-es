@@ -2,6 +2,7 @@ import { exportPKCS8, exportSPKI, importSPKI, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
 import {
   buildGenericObject,
+  googleWalletConfig,
   buildSaveToWalletPayload,
   buildSaveToWalletUrl,
   signSaveToWalletJwt,
@@ -66,6 +67,38 @@ function testCredentials(privateKeyPem: string): GoogleWalletCredentials {
     privateKeyPem,
   };
 }
+
+describe("googleWalletConfig", () => {
+  it("builds the whole config from the three things that differ per environment", () => {
+    expect(
+      googleWalletConfig({
+        issuerId: "3388000000022222222",
+        classSuffix: "los_verdes_member_staging_v1",
+        baseUrl: "https://staging.example.test",
+      }),
+    ).toEqual({
+      issuerId: "3388000000022222222",
+      classSuffix: "los_verdes_member_staging_v1",
+      origins: ["https://staging.example.test"],
+      cardTitle: "Los Verdes",
+      hexBackgroundColor: "#00B140",
+      logoUri: "https://staging.example.test/assets/crest.png",
+    });
+  });
+
+  it("gives the logo an absolute URL, since Google fetches it rather than being handed it", () => {
+    // A relative or empty value is accepted by everything here and rejected by
+    // Google with "URL cannot be empty", far from the cause.
+    const { logoUri } = googleWalletConfig({
+      issuerId: "1",
+      classSuffix: "c",
+      baseUrl: "https://card.losverd.es",
+    });
+
+    expect(() => new URL(logoUri)).not.toThrow();
+    expect(logoUri).toBe("https://card.losverd.es/assets/crest.png");
+  });
+});
 
 describe("buildGenericObject", () => {
   it("builds id/classId from the issuer id, and cardTitle/header from config and member name", () => {

@@ -23,10 +23,9 @@
 import { SignJWT, importPKCS8 } from "jose";
 import { unstable_readConfig } from "wrangler";
 import {
-  GOOGLE_WALLET_BRANDING,
   buildGenericObject,
+  googleWalletConfig,
   type GenericObject,
-  type GoogleWalletConfig,
   type MemberWalletInput,
 } from "../src/google/jwt";
 
@@ -159,12 +158,11 @@ const { vars } = unstable_readConfig(
   { config: "wrangler.toml", env: env === "production" ? undefined : env },
   { hideWarnings: true },
 );
-const config: GoogleWalletConfig = {
+const config = googleWalletConfig({
   issuerId: vars.GOOGLE_WALLET_ISSUER_ID as string,
   classSuffix: vars.GOOGLE_WALLET_CLASS_SUFFIX as string,
-  origins: [vars.PUBLIC_BASE_URL as string],
-  ...GOOGLE_WALLET_BRANDING,
-};
+  baseUrl: vars.PUBLIC_BASE_URL as string,
+});
 const classId = `${config.issuerId}.${config.classSuffix}`;
 
 const item = await readItem();
