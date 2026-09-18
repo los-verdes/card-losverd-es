@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import worker from "../../src/index";

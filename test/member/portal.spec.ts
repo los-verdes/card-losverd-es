@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../src/member/portal";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";

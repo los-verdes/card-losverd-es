@@ -6,7 +6,7 @@ import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
 import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
 
 const ORIGIN = "https://card.losverd.es";

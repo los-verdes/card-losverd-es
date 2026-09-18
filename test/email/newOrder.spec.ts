@@ -4,7 +4,7 @@ import { syncBigCommerceOrder, syncSubscriptionsEtl, type BigCommerceOrder, type
 import * as updates from "../../src/passkit/updates";
 import { maybeEmailNewOrderCard } from "../../src/email/newOrder";
 import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import LOGO from "../fixtures/sample-logo.png";
 
 const ORIGIN = "https://card.losverd.es";

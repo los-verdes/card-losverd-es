@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { unzipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
-import { getTestCertChain } from "../../src/spikes/pkcs7-signing/certs";
+import { getTestCertChain } from "../fixtures/certChain";
 import type { PassSigningCredentials } from "../../src/passkit/signer";
 import {
   assemblePassBundle,

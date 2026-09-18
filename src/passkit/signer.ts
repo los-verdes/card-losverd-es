@@ -12,18 +12,19 @@ export interface PassSigningCredentials {
 /**
  * Produces a PKCS#7 **detached** signature over `manifestBytes` (the
  * `.pkpass` bundle's `manifest.json`), per Phase 4.6. Promoted from the
- * Phase 1.0.1 spike (`src/spikes/pkcs7-signing/signer.ts`, see PR #2) -- the
- * ASN.1/PKCS7 structure this produces was independently verified there via
- * `openssl smime -verify`. The one thing that changes here versus the spike:
- * real Apple-issued certificates (Pass Type ID cert + WWDR intermediate) are
- * passed in rather than a throwaway self-signed chain generated in-process.
+ * Phase 1.0.1 risk spike (PR #2), which established that node-forge can
+ * produce a structurally valid detached signature inside workerd at all; the
+ * spike itself has since been retired, its throwaway certificate generator
+ * kept on as `test/fixtures/certChain.ts`.
  *
- * Real Apple Pass Type ID + WWDR certificates aren't available in this
- * environment yet (see the migration plan's Phase 0.2 credential inventory)
- * -- this function works against any valid PEM cert/key triple (including
- * `getTestCertChain()`'s spike certs) so it's fully testable today, and
- * becomes end-to-end real the moment those secrets are populated. No code
- * change needed when that happens.
+ * A round-trip unit test can pass against a subtly malformed ASN.1/PKCS7
+ * structure, so correctness here is checked from outside as well:
+ * `just verify-pkcs7-openssl` signs a bundle with this function and hands the
+ * result to `openssl smime -verify`.
+ *
+ * The function takes any valid PEM cert/key triple, so tests drive it with a
+ * self-signed chain while production passes the real Apple-issued Pass Type ID
+ * certificate and WWDR intermediate.
  */
 export function signManifestDetached(
   manifestBytes: Uint8Array,

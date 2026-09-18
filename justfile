@@ -127,15 +127,14 @@ tf-plan:
 tf-apply:
     just tf apply
 
-# Phase 1.0.1 risk spike: validate the PKCS#7 detached signature's ASN.1
-# structure with `openssl smime -verify` (independent of this codebase's own
-# unit tests -- a subtly-wrong PKCS#7 structure can pass a naive round-trip
-# test while still being malformed). Requires `openssl` on PATH. Bundles
-# first because the script's relative imports aren't resolvable by Node's
-# native TS loader directly, and it needs plain Node (not workerd) to shell
-# out to openssl.
+# Validate the PKCS#7 detached signature src/passkit/signer.ts produces with
+# `openssl smime -verify` -- independent of this codebase's own unit tests, a
+# subtly-wrong PKCS#7 structure can pass a naive round-trip test while still
+# being malformed. Requires `openssl` on PATH. Bundles first because the
+# script's relative imports aren't resolvable by Node's native TS loader
+# directly, and it needs plain Node (not workerd) to shell out to openssl.
 verify-pkcs7-openssl:
-    npx esbuild scripts/spikes/verify-pkcs7-openssl.ts --bundle --platform=node --format=esm --packages=external --outfile=.verify-pkcs7-bundle.mjs
+    npx esbuild scripts/verify-pkcs7-openssl.ts --bundle --platform=node --format=esm --packages=external --outfile=.verify-pkcs7-bundle.mjs
     node .verify-pkcs7-bundle.mjs
     rm -f .verify-pkcs7-bundle.mjs
 
