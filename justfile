@@ -87,6 +87,16 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# A failed "Save to Google Wallet" link tells the member only "Something went
+# wrong", and the JWT is validated inside Google, so there is nothing to tail.
+# This separates the causes: credentials, class, object fields, issuer access.
+# Read-only unless --insert is passed. Bundled first so it can use the
+# Worker's own object builder rather than a second copy of it.
+# Validate an environment's Google Wallet setup in detail
+google-wallet-check env *flags:
+    npx esbuild scripts/google-wallet-check.ts --bundle --platform=node --format=esm --packages=external --outfile=.google-wallet-check.mjs
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node .google-wallet-check.mjs {{ env }} {{ flags }}; status=$?; rm -f .google-wallet-check.mjs; exit $status
+
 # Google Wallet rejects a save link whose class does not exist yet, and
 # nothing else here creates it. Run once per environment, and again if the
 # class changes. Flags: --dry-run.

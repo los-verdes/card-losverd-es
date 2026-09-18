@@ -34,6 +34,17 @@ export interface GoogleWalletConfig {
   hexBackgroundColor: string;
 }
 
+/**
+ * Branding shared by every environment -- only the issuer, class and origins
+ * differ. Exported so `scripts/google-wallet-check.ts` validates the object
+ * this Worker actually issues, rather than a second copy of these values that
+ * could drift from it.
+ */
+export const GOOGLE_WALLET_BRANDING = {
+  cardTitle: "Los Verdes",
+  hexBackgroundColor: "#00B140",
+} as const;
+
 /** The subset of a `members` row (Phase 2.1) needed to build a Google Wallet object. */
 export interface MemberWalletInput {
   memberId: string; // == the GenericObject id suffix and the QR code's alternate text

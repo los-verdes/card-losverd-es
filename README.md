@@ -118,6 +118,24 @@ passes are filed under -- `just check-wrangler-envs` fails if they ever
 match. Issuer accounts also start in demo mode, where only test accounts can
 save a pass; production access is granted in the Google Pay & Wallet Console.
 
+When a save link fails, the member sees only "Something went wrong. Please try
+again." -- the same message whether the class is missing, the service account
+has no issuer access, the Wallet API is not enabled in its GCP project, the
+object is missing a required field, or the issuer is still in demo mode. The
+JWT is validated inside Google, so there is nothing to tail. To tell those
+apart:
+
+```bash
+just google-wallet-check staging              # read-only
+just google-wallet-check staging --insert     # have Google validate the object itself
+just google-wallet-check staging --object LV-... # look up one member's saved pass
+```
+
+It builds the object with the Worker's own builder, so what it checks is what
+members get. `--insert` is the authoritative check and the only way to get a
+specific error out of Google, but it writes one synthetic object to the issuer
+account, which cannot afterwards be deleted -- inert, since nobody holds it.
+
 ### Registering the BigCommerce order webhook
 
 BigCommerce doesn't sign webhooks, so each store's `store/order/*` webhook is registered with an `Authorization: bearer <token>` header the Worker recomputes from `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, the store hash, and `BIGCOMMERCE_CLIENT_ID`. Create or update it (and again after rotating the key) with:

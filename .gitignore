@@ -24,3 +24,5 @@ crash.*.log
 .legacy-import-bundle.mjs
 # Legacy Postgres export + generated import SQL contain member PII -- never commit.
 .legacy-export/
+# esbuild output for the Google Wallet checker (see the justfile recipe).
+.google-wallet-check.mjs
