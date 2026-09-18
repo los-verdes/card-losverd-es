@@ -51,18 +51,18 @@ function expiryVerdict(daysRemaining) {
     return {
       level: "expired",
       message: "beyond time to renew our Apple dev certificate :sweat_smile:"
-    }
+    };
   } else if (daysRemaining <= 30) {
     return {
       level: "warn",
       message: "Apple dev certificate is expiring in <= 30 days :yellow_siren:"
-    }
+    };
   }
 
   return {
     level: "ok",
     message: "Apple dev certificate is a-okay!"
-  }
+  };
 }
 
 /** This project's own pass identifiers, so a mismatched download is caught. */
