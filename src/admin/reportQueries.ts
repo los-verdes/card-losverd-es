@@ -355,8 +355,8 @@ export interface MissingOrderRow {
   created_on: string;
   expires_on: string;
   missing_since: number;
-  /** Whether it still counts -- see COUNTS_AS_MEMBERSHIP on the NULL case. */
-  counts: number | null;
+  /** Whether it still counts; the shared rule is always 0 or 1. */
+  counts: number;
 }
 
 /**

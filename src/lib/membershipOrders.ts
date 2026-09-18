@@ -35,8 +35,28 @@ export const VOID_LEGACY_STATUSES = ["canceled", "cancelled", "refunded", "decli
 
 const list = (values: string[]) => values.map((value) => `'${value}'`).join(", ");
 
-/** SQL condition on a `membership_orders` row: does this order count? */
-export const COUNTS_AS_MEMBERSHIP = `test_mode = 0 AND (CASE source
+/**
+ * SQL condition on a `membership_orders` row: does this order count?
+ *
+ * Always 0 or 1, never NULL -- which takes a deliberate `COALESCE` to
+ * guarantee. Left to itself the expression is three-valued: for a
+ * `bigcommerce` row with a NULL status, `lower(NULL) IN (...)` is NULL rather
+ * than false, and legacy imports produce exactly those rows in quantity
+ * (los-verdes/card-losverd-es#89).
+ *
+ * NULL would be harmless in the two ways this is used today -- as a `WHERE`
+ * clause, where NULL is not true and the order correctly does not count, and
+ * as a selected column read for truthiness. It is a trap in the two obvious
+ * ways it might be used next: `NOT (...)` stays NULL rather than becoming
+ * true, so it silently fails to find precisely the statusless orders, and a
+ * selected column compared with `=== 0` in TypeScript misses them the same
+ * way. Both of those now behave as anyone would expect.
+ *
+ * The honest answer for a statusless BigCommerce order is that it does not
+ * count, so 0 is what the rule should say. NULL was only ever an artefact of
+ * how `IN` treats NULL.
+ */
+export const COUNTS_AS_MEMBERSHIP = `COALESCE(test_mode = 0 AND (CASE source
     WHEN 'bigcommerce' THEN lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)})
     ELSE (status IS NULL OR lower(status) NOT IN (${list(VOID_LEGACY_STATUSES)}))
-  END)`;
+  END), 0)`;
