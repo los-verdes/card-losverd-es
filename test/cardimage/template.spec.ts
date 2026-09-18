@@ -15,6 +15,7 @@ function makeMember(overrides: Partial<MembershipCardMember> = {}): MembershipCa
     memberId: "LV-10023",
     verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     expirationDate: "2027-01-15",
+    memberSince: "2021-07-04",
     ...overrides,
   };
 }
@@ -31,7 +32,7 @@ describe("buildCardTree", () => {
   it("includes the member's name, tier, and member id somewhere in the tree", () => {
     const tree = buildCardTree(
       makeMember({ firstName: "Pat", lastName: "Lee", membershipTier: "los-pringles", memberId: "LV-99999" }),
-      "Good through Jan 15, 2027",
+      { memberSince: "Member since Jul 2021", expiration: "Good through Jan 15, 2027" },
       IMAGES,
     );
     const text = flattenText(tree);
@@ -40,19 +41,36 @@ describe("buildCardTree", () => {
     expect(text).toContain("los-pringles");
     expect(text).toContain("LV-99999");
     expect(text).toContain("Good through Jan 15, 2027");
+    expect(text).toContain("Member since Jul 2021");
   });
 
-  it("omits the expiration line entirely when no label is given", () => {
-    const withLabel = flattenText(buildCardTree(makeMember(), "Good through Jan 15, 2027", IMAGES));
-    const withoutLabel = flattenText(buildCardTree(makeMember(), null, IMAGES));
+  it("omits a date line entirely rather than showing it blank", () => {
+    const both = flattenText(
+      buildCardTree(makeMember(), { memberSince: "Member since Jul 2021", expiration: "Good through Jan 15, 2027" }, IMAGES),
+    );
+    const neither = flattenText(buildCardTree(makeMember(), { memberSince: null, expiration: null }, IMAGES));
+    const onlyExpiry = flattenText(
+      buildCardTree(makeMember(), { memberSince: null, expiration: "Good through Jan 15, 2027" }, IMAGES),
+    );
 
-    expect(withLabel).toContain("Good through Jan 15, 2027");
-    expect(withoutLabel).not.toContain("Good through Jan 15, 2027");
-    expect(withoutLabel.length).toBe(withLabel.length - 1);
+    expect(both).toContain("Member since Jul 2021");
+    expect(both).toContain("Good through Jan 15, 2027");
+    expect(neither).not.toContain("Good through Jan 15, 2027");
+    expect(neither).not.toContain("Member since Jul 2021");
+    expect(neither.length).toBe(both.length - 2);
+    expect(onlyExpiry.length).toBe(both.length - 1);
+  });
+
+  it("puts member since above good through, as the Wallet passes do", () => {
+    const text = flattenText(
+      buildCardTree(makeMember(), { memberSince: "Member since Jul 2021", expiration: "Good through Jan 15, 2027" }, IMAGES),
+    );
+
+    expect(text.indexOf("Member since Jul 2021")).toBeLessThan(text.indexOf("Good through Jan 15, 2027"));
   });
 
   it("embeds the given logo and QR data URLs", () => {
-    const tree = buildCardTree(makeMember(), null, IMAGES);
+    const tree = buildCardTree(makeMember(), { memberSince: null, expiration: null }, IMAGES);
     const json = JSON.stringify(tree);
 
     expect(json).toContain(IMAGES.logoDataUrl);

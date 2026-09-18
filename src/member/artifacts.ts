@@ -177,6 +177,7 @@ export async function renderCardImage(
       memberId: member.member_id,
       verifyUrl: await verifyUrl(env, member),
       expirationDate: member.expiration_date,
+      memberSince: member.member_since,
     },
     await readTemplateAsset(env, "templates/card/crest.png"),
   );

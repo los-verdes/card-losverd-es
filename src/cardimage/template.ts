@@ -30,6 +30,8 @@ export interface MembershipCardMember {
   verifyUrl: string;
   /** ISO8601 `YYYY-MM-DD`, or `null` for a membership with no expiry on record. */
   expirationDate: string | null;
+  /** ISO8601 `YYYY-MM-DD`, or `null` when neither an order nor an override supplies one. */
+  memberSince: string | null;
 }
 
 export interface CardImages {
@@ -60,9 +62,15 @@ function textNode(text: string, style: Record<string, string | number>): SatoriE
   return { type: 'div', props: { style, children: text } };
 }
 
+/** Pre-formatted date lines, in the order they appear; `null` leaves a line off entirely. */
+export interface CardLabels {
+  memberSince: string | null;
+  expiration: string | null;
+}
+
 export function buildCardTree(
   member: MembershipCardMember,
-  expirationLabel: string | null,
+  labels: CardLabels,
   images: CardImages,
 ): SatoriElement {
   // The real crest (see render.ts) is already circular within its own
@@ -108,10 +116,12 @@ export function buildCardTree(
     textNode(`${member.firstName} ${member.lastName}`, { fontSize: 46, color: WHITE }),
     textNode(member.membershipTier, { fontSize: 26, color: '#e7fbef', marginTop: 10 }),
   ];
-  if (expirationLabel) {
-    memberInfoChildren.push(
-      textNode(expirationLabel, { fontSize: 20, color: '#d8f5e4', marginTop: 8 }),
-    );
+  for (const label of [labels.memberSince, labels.expiration]) {
+    if (label) {
+      memberInfoChildren.push(
+        textNode(label, { fontSize: 20, color: '#d8f5e4', marginTop: 8 }),
+      );
+    }
   }
 
   const memberInfoBlock: SatoriElement = {
