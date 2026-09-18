@@ -22,6 +22,7 @@
  */
 
 import forge from "node-forge";
+import { signWebhookToken } from "../bigcommerce/webhookToken";
 import { GOOGLE_WALLET_API, getGoogleWalletAccessToken } from "../google/api";
 import type { Env } from "../index";
 
@@ -424,6 +425,105 @@ function deliveryChecks(env: Env): CheckGroup {
   return { title: "Member-facing integrations", results };
 }
 
+const BC_API_BASE = "https://api.bigcommerce.com/stores";
+const WEBHOOK_PATH = "/bigcommerce/order-webhook";
+const WEBHOOK_SCOPE = "store/order/*";
+
+interface BigCommerceHook {
+  destination?: string;
+  scope?: string;
+  is_active?: boolean;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Whether this store's order webhook will actually reach us, and be believed
+ * when it does.
+ *
+ * The second half is the one worth automating. A webhook subscription carries
+ * its `Authorization` header from the moment it was registered, so the
+ * production store's subscription holds the *legacy* app's token right up
+ * until someone updates it by hand after DNS moves -- at which point every
+ * delivery is a 401 and orders quietly stop syncing. The plan calls this out
+ * as a step to do "right after the flip", which is exactly the kind of step
+ * that gets missed.
+ *
+ * `live` says whether this Worker is already serving its own
+ * `PUBLIC_BASE_URL`. Before cutover a token mismatch is the expected state
+ * and only worth noting; after it, it means orders are being dropped.
+ */
+async function bigCommerceChecks(env: Env, live: boolean): Promise<CheckGroup> {
+  const results: CheckResult[] = [];
+  const { BIGCOMMERCE_STORE_HASH: storeHash, BIGCOMMERCE_ACCESS_TOKEN: accessToken } = env;
+
+  if (!accessToken) {
+    return {
+      title: "BigCommerce",
+      results: [fail("Access token", "BIGCOMMERCE_ACCESS_TOKEN unset; no order can be fetched or synced.")],
+    };
+  }
+
+  const headers = { "X-Auth-Token": accessToken, Accept: "application/json" };
+
+  results.push(
+    await attempt("Access token", async () => {
+      // Confirms the credential works *and* which store it opens, which is
+      // worth seeing on a page that exists to catch an environment pointed at
+      // the wrong one.
+      const res = await fetch(`${BC_API_BASE}/${storeHash}/v2/store`, { headers });
+      if (!res.ok) return fail("Access token", `BigCommerce answered ${res.status} for store ${storeHash}.`);
+      const store = await res.json<{ name?: string; domain?: string }>();
+      return ok("Access token", `Accepted for "${store.name ?? storeHash}" (${store.domain ?? storeHash}).`);
+    }),
+  );
+
+  // Matched against PUBLIC_BASE_URL rather than the host serving this page:
+  // the destination has to be where BigCommerce will deliver after cutover,
+  // not where an admin happens to be reading from.
+  const expected = `${new URL(env.PUBLIC_BASE_URL).origin}${WEBHOOK_PATH}`;
+  let hook: BigCommerceHook | undefined;
+  let listed = false;
+
+  results.push(
+    await attempt("Order webhook", async () => {
+      const res = await fetch(`${BC_API_BASE}/${storeHash}/v3/hooks`, { headers });
+      if (!res.ok) return fail("Order webhook", `Could not list webhooks: BigCommerce answered ${res.status}.`);
+      listed = true;
+      const { data = [] } = await res.json<{ data?: BigCommerceHook[] }>();
+      hook = data.find((each) => each.destination === expected && each.scope === WEBHOOK_SCOPE);
+      if (!hook)
+        return fail(
+          "Order webhook",
+          `No ${WEBHOOK_SCOPE} subscription delivering to ${expected}. Register one with \`just bigcommerce-ensure-webhook\`.`,
+        );
+      if (!hook.is_active) return fail("Order webhook", `The subscription for ${expected} exists but is inactive.`);
+      return ok("Order webhook", `${WEBHOOK_SCOPE} delivers to ${expected}.`);
+    }),
+  );
+
+  results.push(
+    await attempt("Webhook token", async () => {
+      if (!listed) return skip("Webhook token", "Not checked -- the webhook list could not be read.");
+      if (!hook) return skip("Webhook token", "Not checked -- no subscription found for this origin.");
+      // Compared, never reported: both sides are shared secrets.
+      const ours = `bearer ${await signWebhookToken(env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY, storeHash, env.BIGCOMMERCE_CLIENT_ID)}`;
+      const registered = hook.headers?.Authorization ?? hook.headers?.authorization ?? "";
+      if (registered === ours) return ok("Webhook token", "The registered header matches what this Worker verifies.");
+      return live
+        ? fail(
+            "Webhook token",
+            "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env> --cutover`.",
+          )
+        : warn(
+            "Webhook token",
+            "The registered header is not this Worker's. Expected before cutover, while the subscription still carries the legacy app's token -- but it must be updated as part of the flip.",
+          );
+    }),
+  );
+
+  return { title: "BigCommerce", results };
+}
+
 function queueChecks(env: Env): CheckGroup {
   const results: CheckResult[] = [];
   results.push(
@@ -452,11 +552,18 @@ export async function runPreflightChecks(
   requestUrl: string,
   now: Date = new Date(),
 ): Promise<CheckGroup[]> {
+  // Whether this Worker is already serving the origin it issues passes for.
+  // Several checks read differently either side of that line -- a webhook
+  // still carrying the legacy app's token is expected before cutover and
+  // means dropped orders after it.
+  const live = originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin).status === "ok";
+
   return [
     await identityChecks(env, requestUrl),
     await storageChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
+    await bigCommerceChecks(env, live),
     deliveryChecks(env),
     queueChecks(env),
   ];
@@ -474,6 +581,6 @@ export const MANUAL_STEPS = [
   "Scan a QR code from a legacy pass or an emailed card image and confirm /verify-pass accepts it.",
   "Send yourself a card from /email-card and confirm it arrives.",
   "Compare the admin reports against the legacy report; they gate decommissioning, not just cutover.",
-  "Confirm the BigCommerce webhook for this store points at this origin, and carries this environment's signing token.",
   "Spot-check a few early members' \"member since\" dates against the legacy import.",
+  "Reconcile the member count above against BigCommerce's own admin, after the legacy import and a full resync.",
 ];

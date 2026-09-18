@@ -9,6 +9,7 @@ import {
   runPreflightChecks,
 } from "../../src/admin/preflightChecks";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
+import { signWebhookToken } from "../../src/bigcommerce/webhookToken";
 import {
   GOOGLE_OAUTH_TOKEN_URL,
   GOOGLE_WALLET_API,
@@ -96,13 +97,38 @@ function appleChain(
   };
 }
 
-/** Google's two endpoints; `classStatus` is what the class GET answers with. */
-function mockGoogle(classStatus = 200) {
+const WEBHOOK_DESTINATION = "https://card.losverd.es/bigcommerce/order-webhook";
+
+interface RemoteState {
+  classStatus: number;
+  storeStatus: number;
+  hooksStatus: number;
+  hooks: unknown[];
+}
+
+/**
+ * Both external APIs the checks talk to. Mutated in place by a test that
+ * wants one of them to answer differently, so the healthy defaults only have
+ * to be stated once.
+ */
+let remote: RemoteState;
+
+async function registeredAuthorization() {
+  return `bearer ${await signWebhookToken(env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY, env.BIGCOMMERCE_STORE_HASH, env.BIGCOMMERCE_CLIENT_ID)}`;
+}
+
+function mockRemotes() {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url === GOOGLE_OAUTH_TOKEN_URL) return Response.json({ access_token: "token" });
     if (url.startsWith(`${GOOGLE_WALLET_API}/genericClass`))
-      return new Response("{}", { status: classStatus });
+      return new Response("{}", { status: remote.classStatus });
+    if (url.endsWith("/v2/store"))
+      return new Response(JSON.stringify({ name: "Los Verdes", domain: "shop.example" }), {
+        status: remote.storeStatus,
+      });
+    if (url.endsWith("/v3/hooks"))
+      return new Response(JSON.stringify({ data: remote.hooks }), { status: remote.hooksStatus });
     throw new Error(`unexpected fetch: ${url}`);
   });
 }
@@ -134,7 +160,23 @@ async function configureHealthyEnvironment() {
   // case cares about.
   env.ETL_SYNC_QUEUE_NAME = "etl-sync-production";
   env.ETL_SYNC_DLQ_NAME = "etl-sync-dlq-production";
+  env.BIGCOMMERCE_STORE_HASH = "storehash";
+  env.BIGCOMMERCE_ACCESS_TOKEN = "bc-access-token";
+  env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "bc-signing-key";
   for (const key of TEMPLATE_KEYS) await env.ASSETS.put(key, "png-bytes");
+  remote = {
+    classStatus: 200,
+    storeStatus: 200,
+    hooksStatus: 200,
+    hooks: [
+      {
+        scope: "store/order/*",
+        destination: WEBHOOK_DESTINATION,
+        is_active: true,
+        headers: { Authorization: await registeredAuthorization() },
+      },
+    ],
+  };
 }
 
 /** All results across every group, flattened -- most assertions want this. */
@@ -152,8 +194,8 @@ const find = (results: Awaited<ReturnType<typeof check>>, name: string) => {
 beforeEach(async () => {
   env.SESSION_SIGNING_KEY = SESSION_KEY;
   resetGoogleWalletTokenCache();
-  mockGoogle();
   await configureHealthyEnvironment();
+  mockRemotes();
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'admin@example.com', 1)").bind(ADMIN_ID).run();
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'member@example.com', 0)").bind(MEMBER_ID).run();
 });
@@ -272,20 +314,126 @@ describe("Apple pass signing", () => {
 
 describe("Google Wallet", () => {
   it("fails when the class does not exist under this issuer", async () => {
-    mockGoogle(404);
+    remote.classStatus = 404;
     const result = find(await check(), "Wallet class");
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("--insert");
   });
 
   it("points at the detailed checker for anything else Google says", async () => {
-    mockGoogle(403);
+    remote.classStatus = 403;
     expect(find(await check(), "Wallet class").detail).toContain("google-wallet-check");
   });
 
   it("reports unconfigured credentials without calling Google", async () => {
     env.GOOGLE_WALLET_PRIVATE_KEY_PEM = undefined;
     expect(find(await check(), "Service account").status).toBe("fail");
+  });
+});
+
+describe("BigCommerce", () => {
+  /** The pre-cutover view: reachable at workers.dev, configured for the real domain. */
+  const PRE_CUTOVER = "https://card-losverd-es.jeff-hogan1.workers.dev/admin/preflight";
+
+  it("names the store the token opens, so a misaimed environment shows up", async () => {
+    const result = find(await check(), "Access token");
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("shop.example");
+  });
+
+  it("fails on a rejected token", async () => {
+    remote.storeStatus = 401;
+    expect(find(await check(), "Access token").status).toBe("fail");
+  });
+
+  it("reports an unset token without calling BigCommerce", async () => {
+    env.BIGCOMMERCE_ACCESS_TOKEN = "";
+    const results = await check();
+    expect(find(results, "Access token").status).toBe("fail");
+    expect(results.some((each) => each.name === "Order webhook")).toBe(false);
+  });
+
+  it("fails when no subscription delivers to the configured origin", async () => {
+    remote.hooks = [];
+    const result = find(await check(), "Order webhook");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("bigcommerce-ensure-webhook");
+  });
+
+  it("fails on a subscription that exists but is switched off", async () => {
+    remote.hooks = [
+      { scope: "store/order/*", destination: WEBHOOK_DESTINATION, is_active: false, headers: {} },
+    ];
+    expect(find(await check(), "Order webhook").detail).toContain("inactive");
+  });
+
+  it("matches the destination against PUBLIC_BASE_URL, not the host being read from", async () => {
+    // An admin reading the page at workers.dev before cutover must still see
+    // the webhook that points where BigCommerce will deliver afterwards.
+    expect(find(await check(PRE_CUTOVER), "Order webhook").status).toBe("ok");
+  });
+
+  it("only warns about a foreign webhook token before cutover", async () => {
+    // The production subscription carries the legacy app's token until the
+    // flip, so this is the expected state rather than a defect.
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: WEBHOOK_DESTINATION,
+        is_active: true,
+        headers: { Authorization: "bearer the-legacy-apps-token" },
+      },
+    ];
+    const result = find(await check(PRE_CUTOVER), "Webhook token");
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("before cutover");
+  });
+
+  it("fails on a foreign webhook token once we are serving the real domain", async () => {
+    // Same state, after the flip: every delivery is being rejected and orders
+    // have stopped syncing.
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: WEBHOOK_DESTINATION,
+        is_active: true,
+        headers: { Authorization: "bearer the-legacy-apps-token" },
+      },
+    ];
+    const result = find(await check(), "Webhook token");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("--cutover");
+  });
+
+  it("never reports either token's value", async () => {
+    const ours = await registeredAuthorization();
+    const details = (await check()).map((result) => result.detail).join("\n");
+    expect(details).not.toContain(ours);
+    expect(details).not.toContain(env.BIGCOMMERCE_ACCESS_TOKEN);
+  });
+
+  it("skips the token comparison when the webhook list could not be read", async () => {
+    remote.hooksStatus = 500;
+    const results = await check();
+    expect(find(results, "Order webhook").status).toBe("fail");
+    expect(find(results, "Webhook token").status).toBe("skip");
+  });
+
+  it("skips the token comparison when no subscription matches", async () => {
+    remote.hooks = [{ scope: "store/order/*", destination: "https://elsewhere.example/hook" }];
+    expect(find(await check(), "Webhook token").status).toBe("skip");
+  });
+
+  it("reads a lowercased authorization header too", async () => {
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: WEBHOOK_DESTINATION,
+        is_active: true,
+        headers: { authorization: await registeredAuthorization() },
+      },
+    ];
+    expect(find(await check(), "Webhook token").status).toBe("ok");
   });
 });
 
@@ -393,7 +541,9 @@ describe("the readiness page", () => {
   });
 
   it("counts failures at the top so the page can be read at a glance", async () => {
-    env.BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID";
+    // Deliberately a self-contained break: the client id, say, also feeds the
+    // derived webhook token, so breaking it would fail two checks at once.
+    await env.ASSETS.delete("templates/card/crest.png");
     expect(await (await get()).text()).toContain("1 failing");
   });
 });
