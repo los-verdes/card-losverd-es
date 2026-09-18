@@ -582,7 +582,14 @@ async function bigCommerceChecks(env: Env, live: boolean): Promise<CheckGroup> {
   return { title: "BigCommerce", results };
 }
 
-function queueChecks(env: Env): CheckGroup {
+/**
+ * The order resync runs on a six-hourly cron, so two missed runs is the point
+ * at which something is more likely wrong than merely late.
+ */
+export const SYNC_STALE_AFTER_HOURS = 12;
+const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
+
+async function queueChecks(env: Env, now: Date): Promise<CheckGroup> {
   const results: CheckResult[] = [];
   results.push(
     env.ETL_SYNC_QUEUE
@@ -598,7 +605,36 @@ function queueChecks(env: Env): CheckGroup {
       ? ok("Queue names", `${env.ETL_SYNC_QUEUE_NAME} and ${env.ETL_SYNC_DLQ_NAME}.`)
       : fail("Queue names", `ETL_SYNC_QUEUE_NAME (${env.ETL_SYNC_QUEUE_NAME}) and ETL_SYNC_DLQ_NAME (${env.ETL_SYNC_DLQ_NAME}) name different environments.`),
   );
-  return { title: "Queues", results };
+
+  // The only job that records a watermark, and the one that matters: it is
+  // what keeps D1 a faithful cache of the store's orders. A cron that was
+  // never enabled and a cron that has been failing look the same from
+  // outside, and both look like nothing at all.
+  results.push(
+    await attempt("Order resync", async () => {
+      const row = await env.DB.prepare(
+        "SELECT last_run_at FROM etl_sync_state WHERE job_name = ?",
+      )
+        .bind(SUBSCRIPTIONS_ETL_JOB_NAME)
+        .first<{ last_run_at: number }>();
+      if (!row) {
+        return warn(
+          "Order resync",
+          "Has never completed here. Bringing an environment up includes enabling the cron triggers and running one full resync.",
+        );
+      }
+      const hours = Math.floor((now.getTime() - row.last_run_at) / 3_600_000);
+      const when = new Date(row.last_run_at).toISOString().replace("T", " ").slice(0, 16);
+      return hours >= SYNC_STALE_AFTER_HOURS
+        ? warn(
+            "Order resync",
+            `Last completed ${when}Z, ${hours} hours ago. It runs six-hourly, so this is either a cron that isn't enabled or one that is failing -- check the dead-letter alerts.`,
+          )
+        : ok("Order resync", `Last completed ${when}Z, ${hours} hours ago.`);
+    }),
+  );
+
+  return { title: "Queues and scheduled work", results };
 }
 
 /**
@@ -624,7 +660,7 @@ export async function runPreflightChecks(
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live),
     deliveryChecks(env),
-    queueChecks(env),
+    await queueChecks(env, now),
   ];
 }
 

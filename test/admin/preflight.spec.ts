@@ -205,6 +205,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const key of TEMPLATE_KEYS) await env.ASSETS.delete(key);
   await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM etl_sync_state");
   await env.DB.exec("DELETE FROM users");
 });
 
@@ -552,6 +553,30 @@ describe("configuration", () => {
     const results = await check();
     expect(find(results, "Slack alerts").status).toBe("warn");
     expect(find(results, "Slack member ETL").status).toBe("warn");
+  });
+
+  it("warns when the order resync has never completed here", async () => {
+    expect(find(await check(), "Order resync").status).toBe("warn");
+  });
+
+  it("passes on a recent resync, and warns once two runs have been missed", async () => {
+    const now = new Date("2026-09-18T12:00:00Z");
+    const record = async (lastRunAt: number) =>
+      env.DB.prepare(
+        `INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES ('sync_subscriptions_etl', ?, ?)
+         ON CONFLICT(job_name) DO UPDATE SET last_run_at = excluded.last_run_at`,
+      )
+        .bind(lastRunAt, lastRunAt)
+        .run();
+
+    await record(now.getTime() - 2 * 3_600_000);
+    expect(find(await check(undefined, now), "Order resync").status).toBe("ok");
+
+    // Six-hourly, so twelve hours means two runs went missing.
+    await record(now.getTime() - 20 * 3_600_000);
+    const stale = find(await check(undefined, now), "Order resync");
+    expect(stale.status).toBe("warn");
+    expect(stale.detail).toContain("20 hours ago");
   });
 
   it("catches queue names that disagree about which environment they serve", async () => {
