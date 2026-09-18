@@ -538,7 +538,18 @@ async function bigCommerceChecks(env: Env, live: boolean): Promise<CheckGroup> {
   // Matched against PUBLIC_BASE_URL rather than the host serving this page:
   // the destination has to be where BigCommerce will deliver after cutover,
   // not where an admin happens to be reading from.
-  const expected = `${new URL(env.PUBLIC_BASE_URL).origin}${WEBHOOK_PATH}`;
+  //
+  // Guarded rather than assumed. This page's whole purpose is to be readable
+  // on a half-configured environment, so an unset PUBLIC_BASE_URL has to cost
+  // two check results, not the entire page.
+  let expected: string;
+  try {
+    expected = `${new URL(env.PUBLIC_BASE_URL).origin}${WEBHOOK_PATH}`;
+  } catch {
+    const detail = "PUBLIC_BASE_URL is unset or not a URL, so there is no destination to compare against.";
+    results.push(fail("Order webhook", detail), skip("Webhook token", "Not checked -- see above."));
+    return { title: "BigCommerce", results };
+  }
   let hook: BigCommerceHook | undefined;
   let listed = false;
 

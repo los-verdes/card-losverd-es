@@ -613,6 +613,28 @@ describe("the readiness page", () => {
     expect((await get(MEMBER_ID)).status).toBe(403);
   });
 
+  it("still renders when the environment is barely configured at all", async () => {
+    // The case this page exists for. A single unguarded throw anywhere in the
+    // checks would replace the whole diagnosis with an error page, exactly
+    // when it is needed.
+    env.PUBLIC_BASE_URL = "";
+    env.PASSKIT_WEB_SERVICE_URL = "";
+    env.APPLE_PASS_CERT_PEM = "";
+    env.APPLE_PASS_KEY_PEM = "";
+    env.APPLE_WWDR_CERT_PEM = "";
+    env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = undefined;
+    env.GOOGLE_WALLET_PRIVATE_KEY_PEM = undefined;
+    env.BIGCOMMERCE_CLIENT_ID = "";
+    env.SENDGRID_API_KEY = undefined;
+    env.AUTH_GOOGLE_ID = undefined;
+    env.APPLE_SIGNIN_KEY_ID = undefined;
+
+    const res = await get();
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Still needs a person");
+  });
+
   it("renders every group and the steps that still need a person", async () => {
     const res = await get();
     expect(res.status).toBe(200);
