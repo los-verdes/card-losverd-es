@@ -16,6 +16,7 @@ const CONFIG: GoogleWalletConfig = {
   origins: ["https://card.losverd.es"],
   cardTitle: "Los Verdes",
   hexBackgroundColor: "#00B140",
+  logoUri: "https://card.losverd.es/assets/crest.png",
 };
 
 function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInput {
@@ -75,6 +76,17 @@ describe("buildGenericObject", () => {
     expect(object.cardTitle).toEqual({ defaultValue: { language: "en-US", value: "Los Verdes" } });
     expect(object.header).toEqual({ defaultValue: { language: "en-US", value: "Pat Lee" } });
     expect(object.hexBackgroundColor).toBe("#00B140");
+  });
+
+  it("carries a logo Google can fetch, without which the save fails", () => {
+    // Google will not take the image as bytes: it fetches this URL itself, so
+    // it has to be absolute and served without a session (src/assets.ts).
+    const object = buildGenericObject(makeMember(), CONFIG);
+
+    expect(object.logo).toEqual({
+      sourceUri: { uri: "https://card.losverd.es/assets/crest.png" },
+      contentDescription: { defaultValue: { language: "en-US", value: "Los Verdes" } },
+    });
   });
 
   it("always includes a membership tier text module", () => {
