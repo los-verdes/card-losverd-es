@@ -32,6 +32,11 @@ export interface GoogleWalletConfig {
   cardTitle: string;
   /** Hex background color for the card, e.g. `"#00B140"`. */
   hexBackgroundColor: string;
+  /**
+   * Absolute URL of the pass logo. Google fetches this itself, so it has to be
+   * publicly reachable -- served by `src/assets.ts`, not from R2 directly.
+   */
+  logoUri: string;
 }
 
 /**
@@ -94,6 +99,11 @@ export interface GenericObject {
   };
   hexBackgroundColor: string;
   state: GenericObjectState;
+  /** Required by Google on a generic object; omitting it fails the save with no usable error. */
+  logo: {
+    sourceUri: { uri: string };
+    contentDescription: LocalizedString;
+  };
 }
 
 /** The "Save to Google Wallet" JWT payload shape specified in Phase 5.2. */
@@ -186,6 +196,10 @@ export function buildGenericObject(
     },
     hexBackgroundColor: config.hexBackgroundColor,
     state: objectState(member.status),
+    logo: {
+      sourceUri: { uri: config.logoUri },
+      contentDescription: localizedString(config.cardTitle),
+    },
   };
 }
 

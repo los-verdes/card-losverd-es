@@ -215,6 +215,7 @@ export async function buildGoogleWalletSaveUrl(
     classSuffix: env.GOOGLE_WALLET_CLASS_SUFFIX,
     origins: [env.PUBLIC_BASE_URL],
     ...GOOGLE_WALLET_BRANDING,
+    logoUri: new URL("/assets/crest.png", env.PUBLIC_BASE_URL).toString(),
   };
   const jwt = await signSaveToWalletJwt(
     {

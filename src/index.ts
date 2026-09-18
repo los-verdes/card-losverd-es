@@ -4,6 +4,7 @@ import adminOrders from "./admin/orders";
 import adminReports from "./admin/reports";
 import { authConfig } from "./auth/authjs";
 import auth from "./auth/routes";
+import assets from "./assets";
 import bigcommerce from "./bigcommerce/routes";
 import { handleServerError } from "./lib/serverError";
 import emailCard from "./member/email-card";
@@ -131,6 +132,8 @@ app.route("/passkit", passkit);
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
+// Public images: Google Wallet fetches a pass logo by URL (src/assets.ts).
+app.route("/assets", assets);
 // Admin-only membership reports (replaces the legacy Data Studio report).
 app.route("/admin/reports", adminReports);
 // Admin order page: attribute an order to someone other than its purchaser.

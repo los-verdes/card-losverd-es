@@ -60,6 +60,7 @@ The `card.losverd.es` DNS record is deliberately not managed here yet -- that's 
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
+| `/assets/:name` | Public images, allow-listed; Google Wallet fetches the pass logo from here (`src/assets.ts`) | Public |
 | `/healthz` | Liveness check | Public |
 
 Behind the routes:
