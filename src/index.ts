@@ -111,6 +111,11 @@ export interface Env {
   // Optional -- the ETL is skipped (with a warning) until it's set via
   // `wrangler secret put`; no wrangler.toml placeholder.
   SLACK_BOT_TOKEN?: string;
+  // Secret -- a Slack incoming webhook URL for operational alerts
+  // (src/slack/alert.ts). Deliberately separate from SLACK_BOT_TOKEN, which
+  // can read every workspace member's email; this grants only "post to one
+  // channel". Optional: alerts are skipped (with a warning) until it's set.
+  SLACK_ALERT_WEBHOOK_URL?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
