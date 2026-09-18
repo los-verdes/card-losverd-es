@@ -1,6 +1,6 @@
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
-import { notifyPassUpdated } from "../passkit/updates";
+import { notifyWalletsUpdated } from "../member/walletUpdates";
 import { maybeEmailNewOrderCard } from "../email/newOrder";
 import { recordMembershipOrder } from "./orders";
 
@@ -413,7 +413,7 @@ async function applyMembershipOrder(
     membershipTier: membership.tier,
   });
   if (result?.passChanged) {
-    await notifyPassUpdated(env, result.memberId);
+    await notifyWalletsUpdated(env, result.memberId);
   }
   return memberEmail;
 }
