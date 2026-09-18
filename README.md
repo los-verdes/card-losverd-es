@@ -233,6 +233,7 @@ After cutover: MiniBC renewal data, membership revocation ([#31](https://github.
 
 ## More docs
 
+- [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): where each card field comes from and how "current member" is decided, written for the membership committee
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync
 - [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md): what carries over from legacy passes and QR codes, and what doesn't
