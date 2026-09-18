@@ -89,6 +89,9 @@ const RequestForm: FC<{
     <p>
       Prefer to sign in? <a href="/login">Log in</a> to see your card.
     </p>
+    <p>
+      <a href="/">Back to the start</a>
+    </p>
     <script
       src="https://challenges.cloudflare.com/turnstile/v0/api.js"
       async

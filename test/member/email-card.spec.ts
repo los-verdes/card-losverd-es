@@ -115,6 +115,9 @@ describe("GET /email-card", () => {
     expect(body).toContain('<div class="cf-turnstile" data-sitekey="0x4AAAAAAA-test-site-key"></div>');
     expect(body).toContain('src="https://challenges.cloudflare.com/turnstile/v0/api.js"');
     expect(body).not.toContain('role="alert"');
+    // Somewhere to go other than back into the form, on the page a visitor
+    // is most likely to arrive at without a session.
+    expect(body).toContain('<a href="/">Back to the start</a>');
   });
 
   it.each(["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "SENDGRID_API_KEY"] as const)(
