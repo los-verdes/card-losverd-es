@@ -11,9 +11,10 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <meta name="robots" content="noindex" />
       <title>{title} | Los Verdes Admin</title>
+      <link rel="stylesheet" href="/assets/app.css" />
     </head>
-    <body style="font-family: system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem">
-      <nav style="margin-bottom: 1rem">
+    <body class="admin">
+      <nav class="admin-nav">
         <a href="/admin/reports">Reports</a>
         {" · "}
         <a href="/admin/reports/active">Active memberships</a>

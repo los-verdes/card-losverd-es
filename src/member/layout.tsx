@@ -1,8 +1,8 @@
 /**
- * Shared page shell for server-rendered pages (Hono JSX). Deliberately
- * minimal: a centered, single-column layout with system fonts and no
- * external CSS/JS, so every page renders fast and works on a phone at a
- * door.
+ * Shared page shell for server-rendered pages (Hono JSX). Still deliberately
+ * minimal -- one narrow centred column, no client-side JavaScript -- but the
+ * styling now comes from `/assets/app.css` rather than an inline attribute,
+ * so the pages carry the group's colour and display face (#97).
  */
 
 import type { FC, PropsWithChildren } from "hono/jsx";
@@ -19,8 +19,9 @@ export const Page: FC<PropsWithChildren<{ title: string }>> = ({
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>{title} | Los Verdes</title>
+      <link rel="stylesheet" href="/assets/app.css" />
     </head>
-    <body style="font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 28rem; padding: 0 1rem; text-align: center">
+    <body class="member">
       {children}
     </body>
   </html>

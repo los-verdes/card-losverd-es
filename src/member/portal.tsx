@@ -99,13 +99,6 @@ const LogoutButton: FC = () => (
   </form>
 );
 
-const linkStyle =
-  "display: block; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid #00B140; border-radius: 0.5rem; color: inherit; text-decoration: none";
-
-const historyItemStyle =
-  "margin: 0.75rem 0; padding: 0.75rem; border: 1px solid #d8e8dd; border-radius: 0.5rem; text-align: left";
-
-const mutedStyle = "margin: 0.25rem 0 0; color: #555; font-size: 0.9rem";
 
 /**
  * Every order on record for this member, counting or not. An order that does
@@ -120,23 +113,23 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
   <section style="margin-top: 2rem">
     <h2 style="font-size: 1.1rem">Membership history</h2>
     {orders.length === 0 ? (
-      <p style={mutedStyle}>
+      <p class="muted">
         No membership orders are on record for <strong>{email}</strong>.
       </p>
     ) : (
       orders.map((order) => (
-        <div style={historyItemStyle}>
+        <div class="order">
           <p style="margin: 0">
             <strong>Order #{displayOrderNumber(order.order_id)}</strong>
             {order.product_name ? ` — ${order.product_name}` : ""}
           </p>
-          <p style={mutedStyle}>
+          <p class="muted">
             {formatShortDate(order.created_on.slice(0, 10))} to{" "}
             {formatShortDate(order.expires_on.slice(0, 10))}
             {order.status ? ` · ${order.status}` : ""}
           </p>
           {!order.counts && (
-            <p style={mutedStyle}>
+            <p class="muted">
               This order doesn't count towards membership.
             </p>
           )}
@@ -165,13 +158,13 @@ export const MemberCard: FC<{
       alt="Your Los Verdes membership card"
       style="width: 100%; height: auto"
     />
-    <a href="/passes/apple.pkpass" style={linkStyle}>
+    <a href="/passes/apple.pkpass" class="action">
       Add to Apple Wallet
     </a>
-    <a href="/passes/google" style={linkStyle}>
+    <a href="/passes/google" class="action">
       Add to Google Wallet
     </a>
-    <a href="/email-card" style={linkStyle}>
+    <a href="/email-card" class="action">
       Email me my card
     </a>
     <MembershipHistory orders={orders} email={member.email} />
@@ -194,7 +187,7 @@ export const NoActiveMembership: FC<{ email: string }> = ({ email }) => (
       Not a member yet, but would like to be? Grab a membership at the Los
       Verdes store.
     </p>
-    <a href={MEMBERSHIP_STORE_URL} style={linkStyle}>
+    <a href={MEMBERSHIP_STORE_URL} class="action">
       Visit Membership Store
     </a>
     <p>
@@ -252,7 +245,7 @@ portal.get("/passes/google", requireCurrentMember, async (c) => {
           Adding your card to Google Wallet isn't available right now. Please
           try again later, or use one of the other options on your card page.
         </p>
-        <a href="/" style={linkStyle}>
+        <a href="/" class="action">
           Back to my card
         </a>
       </Page>,
