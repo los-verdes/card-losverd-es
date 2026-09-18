@@ -21,7 +21,7 @@ import { Resvg, initWasm } from '@resvg/resvg-wasm';
 import RESVG_WASM from '@resvg/resvg-wasm/index_bg.wasm';
 import bungeeFontData from './assets/bungee-latin-400-normal.woff';
 import { bytesToBase64 } from '../lib/base64';
-import { formatShortDate } from '../lib/dateFormat';
+import { formatMonthYear, formatShortDate } from '../lib/dateFormat';
 import { buildQrCodeImage } from './qr';
 import { buildCardTree, CARD_WIDTH, CARD_HEIGHT, type MembershipCardMember } from './template';
 
@@ -60,15 +60,18 @@ export async function renderMembershipCardPng(
 
   const logoDataUrl = `data:image/png;base64,${bytesToBase64(logoPngBytes)}`;
   const qr = buildQrCodeImage(member.verifyUrl);
+  const memberSinceLabel = member.memberSince
+    ? `Member since ${formatMonthYear(member.memberSince)}`
+    : null;
   const expirationLabel = member.expirationDate
     ? `Good through ${formatShortDate(member.expirationDate)}`
     : null;
 
-  const tree = buildCardTree(member, expirationLabel, {
-    logoDataUrl,
-    qrDataUrl: qr.dataUrl,
-    qrSize: qr.size,
-  });
+  const tree = buildCardTree(
+    member,
+    { memberSince: memberSinceLabel, expiration: expirationLabel },
+    { logoDataUrl, qrDataUrl: qr.dataUrl, qrSize: qr.size },
+  );
 
   const svg = await satori(tree as never, {
     width: CARD_WIDTH,

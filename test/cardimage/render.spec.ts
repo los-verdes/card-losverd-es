@@ -16,6 +16,7 @@ function makeMember(overrides: Partial<MembershipCardMember> = {}): MembershipCa
     memberId: "LV-10023",
     verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     expirationDate: "2027-01-15",
+    memberSince: "2021-07-04",
     ...overrides,
   };
 }
@@ -35,6 +36,18 @@ describe("renderMembershipCardPng", () => {
   it("renders successfully for a member with no expiration date on record", async () => {
     const png = await renderMembershipCardPng(
       makeMember({ expirationDate: null }),
+      LOGO_BYTES,
+    );
+
+    expect(Array.from(png.slice(0, 8))).toEqual(PNG_MAGIC);
+    expect(png.byteLength).toBeGreaterThan(5_000);
+  });
+
+  it("renders successfully for a member with no member-since date on record", async () => {
+    // Neither a counted order nor an override supplied one -- the line is
+    // dropped rather than rendered blank.
+    const png = await renderMembershipCardPng(
+      makeMember({ memberSince: null }),
       LOGO_BYTES,
     );
 
