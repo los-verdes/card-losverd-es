@@ -95,6 +95,12 @@ const PEM_SECRETS = WORKER_SECRETS.filter((name) => name.endsWith("_PEM"));
  * `node-forge` reports "Invalid PEM formatted message" and `jose` reports
  * "asn1 encoding routines::too long". Catching it here means it never reaches
  * a Worker.
+ *
+ * The markers are not enough on their own, which cost a staging outage on
+ * 2026-09-17: a `.p8` arrived with intact `BEGIN`/`END` lines and a body that
+ * would not base64-decode, passed this check, and threw inside `importPKCS8`
+ * at request time. So the body is decoded here too -- cheap, and it is the
+ * same thing every consumer of the value goes on to do.
  */
 function pemProblem(name, value) {
   if (!PEM_SECRETS.includes(name)) return null;
@@ -110,6 +116,13 @@ function pemProblem(name, value) {
   }
   if (begin[1] === "ENCRYPTED PRIVATE KEY") {
     return "is passphrase-protected, which node-forge can't read. Strip the passphrase first: `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-nocrypt.pem`.";
+  }
+  // Every parser strips whitespace, then decodes what's between the markers.
+  const body = value
+    .slice(value.indexOf(begin[0]) + begin[0].length, value.indexOf(`-----END ${begin[1]}-----`))
+    .replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(body) || body.length % 4 !== 0) {
+    return `has a "${begin[1]}" body that isn't valid base64, so every parser will reject it. Re-copy the file's contents; something has mangled them in transit.`;
   }
   return null;
 }
