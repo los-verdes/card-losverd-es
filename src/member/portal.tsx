@@ -216,10 +216,24 @@ export const MemberCard: FC<{
  * us -- so the least we can do is say which of the two problems this is,
  * rather than leaving someone to conclude their membership has vanished.
  */
-export const APPLE_RELAY_DOMAIN = "@privaterelay.appleid.com";
+/**
+ * Both domains Apple issues Sign in with Apple addresses on. New ones move
+ * to `private.icloud.com` during 2026 while existing `privaterelay.appleid.com`
+ * addresses keep working indefinitely, so this is a growing list rather than
+ * a changing one -- Apple's own advice is to accept both.
+ *
+ * Matching only the older domain would not fail loudly. It would quietly
+ * start treating new Apple members as ordinary strangers and telling them to
+ * check the address on their order, which is the one thing that cannot help.
+ */
+export const APPLE_RELAY_DOMAINS = [
+  "@privaterelay.appleid.com",
+  "@private.icloud.com",
+];
 
 export function isAppleRelayAddress(email: string): boolean {
-  return email.toLowerCase().endsWith(APPLE_RELAY_DOMAIN);
+  const address = email.toLowerCase();
+  return APPLE_RELAY_DOMAINS.some((domain) => address.endsWith(domain));
 }
 
 export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
