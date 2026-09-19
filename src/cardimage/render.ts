@@ -58,6 +58,12 @@ export async function renderMembershipCardPng(
 ): Promise<Uint8Array> {
   await Promise.all([ensureResvgInitialized(), ensureYogaInitialized()]);
 
+  // Embedded as a data URL, not handed to Satori as a URL to fetch. Satori's
+  // own remote image fetching does not work in the Workers runtime and fails
+  // *silently* -- the image is simply absent from the output, with no error
+  // to notice. Anything referenced by the card template has to be fetched by
+  // this code and inlined before Satori sees it. (Found in the Phase 1.0.2
+  // spike; recorded here because this line is where it would be undone.)
   const logoDataUrl = `data:image/png;base64,${bytesToBase64(logoPngBytes)}`;
   const qr = buildQrCodeImage(member.verifyUrl);
   const memberSinceLabel = member.memberSince
