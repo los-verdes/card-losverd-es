@@ -268,6 +268,37 @@ describe("pass cache (R2)", () => {
     expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 2000)).toBeNull();
   });
 
+  it("misses when the pass content version has moved on, even for an unchanged member", async () => {
+    // The case the member version cannot cover. A member whose details are
+    // stable never bumps `last_updated_at`, so without this a change to what
+    // a pass contains would never reach them -- they would keep being handed
+    // the pass the old code built, indefinitely.
+    await putCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, new Uint8Array([1]));
+    const key = "cache/pkpass/pass.es.losverd.membership/LV-10023.pkpass";
+    const stored = await env.ASSETS.get(key);
+    await env.ASSETS.put(key, await stored!.arrayBuffer(), {
+      customMetadata: { lastUpdatedAt: "1000", passContentVersion: "an-older-version" },
+    });
+
+    expect(
+      await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000),
+    ).toBeNull();
+  });
+
+  it("misses a pass cached before content versions existed at all", async () => {
+    // Objects already in R2 carry no version metadata, so the first deploy
+    // after this regenerates them rather than serving them forever.
+    await env.ASSETS.put(
+      "cache/pkpass/pass.es.losverd.membership/LV-10023.pkpass",
+      new Uint8Array([1]),
+      { customMetadata: { lastUpdatedAt: "1000" } },
+    );
+
+    expect(
+      await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000),
+    ).toBeNull();
+  });
+
   it("treats a cached object without version metadata as a miss", async () => {
     await env.ASSETS.put("cache/pkpass/pass.es.losverd.membership/LV-10023.pkpass", new Uint8Array([1]));
 

@@ -117,6 +117,24 @@ export async function buildManifest(
  * `member.verifyUrl`, the same way `authToken` is. Unlike it, there's no
  * legacy `Content: ` prefix on the message.
  */
+/**
+ * Bump when a change here alters what a pass contains -- a field, a label, a
+ * colour, which asset is used, or the rule behind any of them.
+ *
+ * Generated passes are cached in R2 and only regenerated when the member's
+ * own record changes. A member whose details are stable never triggers that,
+ * so without this a pass-content change reaches only members who happen to
+ * renew or be corrected afterwards, and everyone else keeps being handed the
+ * old pass from cache indefinitely. #104 -- which stopped a pass claiming a
+ * lapsed membership was active -- is exactly that kind of change.
+ *
+ * Deliberately not the deploy or commit id: that would discard every cached
+ * pass on every deploy, and regenerating one costs a signature. This is the
+ * same discipline as a migration number, and the same failure mode if
+ * forgotten, which is why it sits here rather than beside the cache.
+ */
+export const PASS_CONTENT_VERSION = "2026-09-18.1";
+
 export function buildPassJson(
   member: MemberPassInput,
   config: PassKitConfig,
@@ -233,14 +251,24 @@ function cacheKey(passTypeIdentifier: string, serialNumber: string): string {
 }
 
 /**
- * Cached passes are tagged with the `members.last_updated_at` they were
- * generated from, and only served while that still matches. Any write path
- * that bumps `last_updated_at` (BigCommerce sync, the legacy import SQL,
- * future admin actions) therefore invalidates the cache implicitly -- there's
- * no separate invalidation call to forget, including from raw SQL that
- * can't reach R2. The next put overwrites the stale object in place.
+ * Cached passes are tagged with two things: the `members.last_updated_at`
+ * they were generated from, and the `PASS_CONTENT_VERSION` the code was on.
+ * A cached pass is served only while both still match.
+ *
+ * The first covers the member changing. Any write path that bumps
+ * `last_updated_at` (BigCommerce sync, the legacy import SQL, future admin
+ * actions) invalidates the cache implicitly -- there's no separate
+ * invalidation call to forget, including from raw SQL that can't reach R2.
+ *
+ * The second covers *us* changing. A member whose details are stable never
+ * bumps `last_updated_at`, so a change to what a pass contains would
+ * otherwise never reach them: they would keep being handed the pass built by
+ * the old code, for as long as nothing else about them moved.
+ *
+ * Either way the next put overwrites the stale object in place.
  */
 const LAST_UPDATED_AT_METADATA = "lastUpdatedAt";
+const CONTENT_VERSION_METADATA = "passContentVersion";
 
 /**
  * Reads a previously-generated `.pkpass` from R2's Phase 3.3 cache, or
@@ -255,7 +283,8 @@ export async function getCachedPass(
   const object = await bucket.get(cacheKey(passTypeIdentifier, serialNumber));
   if (
     !object ||
-    object.customMetadata?.[LAST_UPDATED_AT_METADATA] !== String(lastUpdatedAt)
+    object.customMetadata?.[LAST_UPDATED_AT_METADATA] !== String(lastUpdatedAt) ||
+    object.customMetadata?.[CONTENT_VERSION_METADATA] !== PASS_CONTENT_VERSION
   ) {
     return null;
   }
@@ -272,7 +301,10 @@ export async function putCachedPass(
 ): Promise<void> {
   await bucket.put(cacheKey(passTypeIdentifier, serialNumber), bytes, {
     httpMetadata: { contentType: "application/vnd.apple.pkpass" },
-    customMetadata: { [LAST_UPDATED_AT_METADATA]: String(lastUpdatedAt) },
+    customMetadata: {
+      [LAST_UPDATED_AT_METADATA]: String(lastUpdatedAt),
+      [CONTENT_VERSION_METADATA]: PASS_CONTENT_VERSION,
+    },
   });
 }
 
