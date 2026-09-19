@@ -19,7 +19,18 @@ Local runs go through the `just tf` wrapper, which shells out via `op run` to pu
 
 **This broad scope is intentional for now, not a final state.** Tightening every credential in this project (this token, the R2/S3 remote-state `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair below, and anything else) down to least-privilege is a tracked, must-do-before-considering-this-migration-done task -- see [issue #15](https://github.com/los-verdes/card-losverd-es/issues/15) (and the migration plan's Open Items).
 
-The minimum this token needs, derived from what Terraform and the Deploy workflow actually call (not yet tested against a narrowed token; details and a safe swap procedure are on the issue): account-level **D1: Edit**, **Workers R2 Storage: Edit**, **Queues: Edit**, and **Workers Scripts: Edit**, scoped to the Los Verdes account only. Zone-level permissions are not needed until the Phase 8 DNS cutover.
+The minimum this token needs, derived from what Terraform and the Deploy workflow actually call:
+
+| Permission group | Needed by |
+| --- | --- |
+| Account > **D1** > Edit | `cloudflare_d1_database`; `just db-migrate-remote` |
+| Account > **Workers R2 Storage** > Edit | `cloudflare_r2_bucket`; `just r2-upload-templates` |
+| Account > **Queues** > Edit | `cloudflare_queue`; `wrangler deploy` configuring queue consumers |
+| Account > **Workers Scripts** > Edit | `wrangler deploy` |
+
+Zone-level permissions are not needed until the Phase 8 DNS cutover.
+
+`just cloudflare-token-check` checks a token against that list before it is swapped in. It is read-only -- it lists each resource type rather than creating anything -- so it is safe to run against a candidate token at any time, and it names the group to add for anything missing. It proves each group is *granted*; it cannot prove the group is scoped to Edit rather than Read, because only a write does that. Deploy to staging to prove the rest.
 
 ## Remote state
 
