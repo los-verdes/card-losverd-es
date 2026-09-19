@@ -471,16 +471,27 @@ describe("the no-membership page", () => {
 
   it("names Apple's private relay when that is what the address is", async () => {
     // Apple offers "Hide My Email" on every sign-in, and choosing it lands a
-    // paying member here with no way to work out why. Nothing can join the
-    // relay address to their order, so saying which problem this is, is the
-    // whole of the remedy.
+    // paying member here with no way to work out why. Naming the cause is
+    // half the remedy; the claim link below is the other half.
     await insertUser("abc123def@privaterelay.appleid.com");
 
     const html = await (await get("/no-active-membership")).text();
 
     expect(html).toContain("Hide My Email");
-    expect(html).toContain("Share My Email");
     expect(html).not.toContain("matches the one used to");
+  });
+
+  it("no longer sends a relay member back to sign in again", async () => {
+    // The old advice was to sign out and choose Share My Email instead.
+    // Apple's own guidance is to accept the relay address, and that toggle
+    // turns out to be hard to find even for a technical member, so the page
+    // now offers to confirm the membership address by email instead (#144).
+    await insertUser("abc123def@privaterelay.appleid.com");
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).not.toContain("Share My Email");
+    expect(html).toContain('href="/claim-membership"');
   });
 
   it("recognises the relay domain whatever its case", async () => {

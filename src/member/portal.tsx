@@ -13,6 +13,7 @@ import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import type { Env } from "../index";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
+import { CLAIM_PATH } from "./claimMembership";
 import {
   displayOrderNumber,
   getMemberOrderHistory,
@@ -212,10 +213,17 @@ export const MemberCard: FC<{
  * own, and Apple offers that choice on every sign-in. It is a perfectly
  * ordinary thing to pick, and it lands the member here: the relay address
  * matches no order, so they are told there is no membership while holding
- * one. Nothing can join the two up -- the relay address is all Apple gives
- * us -- so the least we can do is say which of the two problems this is,
- * rather than leaving someone to conclude their membership has vanished.
+ * one.
+ *
+ * Nothing we are given can join the two up, and Apple's guidance is not to
+ * try -- the relay address is the account identifier, and the mailbox behind
+ * it is never disclosed. So the member joins them up instead, by proving
+ * control of the address they bought under (src/member/claimMembership.tsx).
+ * Recognising the address is what lets this page offer that rather than the
+ * generic advice to check the address on the order, which a relay address can
+ * never satisfy.
  */
+
 /**
  * Both domains Apple issues Sign in with Apple addresses on. New ones move
  * to `private.icloud.com` during 2026 while existing `privaterelay.appleid.com`
@@ -249,18 +257,20 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
       <p>
         That is an Apple private relay address, which is what Apple sends us
         when you choose <strong>Hide My Email</strong>. It won't match the
-        address on your order, even though your membership is fine. Log out
-        and sign in again, either with Apple choosing{" "}
-        <strong>Share My Email</strong>, or with the account you used to buy
-        your membership.
+        address on your order, even though your membership is fine. You don't
+        need to sign in again -- tell us the address you bought your
+        membership under and we'll confirm it by email.
       </p>
     ) : (
       <p>
         Check that the email address you signed in with matches the one used to
-        purchase your membership. If it doesn't, log out and sign back in with
-        that account.
+        purchase your membership. If you bought it under a different address,
+        you can confirm that address by email instead of signing in again.
       </p>
     )}
+    <a href={CLAIM_PATH} class="action">
+      I bought my membership under a different address
+    </a>
     <p>
       Not a member yet, but would like to be? Grab a membership at the Los
       Verdes store.

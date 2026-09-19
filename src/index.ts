@@ -9,6 +9,7 @@ import auth from "./auth/routes";
 import assets from "./assets";
 import bigcommerce from "./bigcommerce/routes";
 import { handleServerError } from "./lib/serverError";
+import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
 import portal from "./member/portal";
 import verifyPass from "./member/verify-pass";
@@ -148,6 +149,9 @@ app.route("/passkit", passkit);
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
+// Claiming a membership bought under another address (#144), which is how
+// an Apple Hide My Email sign-in reaches its card.
+app.route(CLAIM_PATH, claimMembership);
 // Public images: Google Wallet fetches a pass logo by URL (src/assets.ts).
 app.route("/assets", assets);
 // Admin-only membership reports (replaces the legacy Data Studio report).
