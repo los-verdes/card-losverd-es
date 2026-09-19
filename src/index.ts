@@ -4,7 +4,7 @@ import adminMemberSince from "./admin/memberSince";
 import adminOrders from "./admin/orders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
-import { authConfig } from "./auth/authjs";
+import { authConfig, landOnSessionBridge } from "./auth/authjs";
 import auth from "./auth/routes";
 import assets from "./assets";
 import bigcommerce from "./bigcommerce/routes";
@@ -133,6 +133,9 @@ app.route("/bigcommerce", bigcommerce);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);
+// Registered before the handler it wraps, so it can rewrite where a
+// finished OAuth callback sends the browser (see `landOnSessionBridge`).
+app.use("/api/auth/callback/*", landOnSessionBridge);
 app.use("/api/auth/*", initAuthConfig(authConfig), authHandler());
 
 // Apple PassKit Web Service API (Phase 4). Mounted at `/passkit` to match
