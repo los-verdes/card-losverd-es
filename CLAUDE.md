@@ -48,6 +48,12 @@ of sending as a defect regardless of what it enables.
 
 ## Working in this repository
 
+**Start from the pinned issue.** [#163](https://github.com/los-verdes/card-losverd-es/issues/163)
+carries the current state: what is in flight, what is blocked and on whom,
+and what to read in what order. It changes often, which is why it is an issue
+rather than a file here.
+
+
 **Never merge a pull request without explicit approval for that specific
 PR.** Enabling auto-merge is the sanctioned exception, because the branch
 ruleset requires a review from someone other than the last pusher, so a
