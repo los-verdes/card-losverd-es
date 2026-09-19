@@ -2,7 +2,7 @@
 
 import type { FC, PropsWithChildren } from "hono/jsx";
 
-export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid #ddd; white-space: nowrap";
+export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap";
 
 export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
   <html lang="en">

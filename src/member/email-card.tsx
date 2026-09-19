@@ -64,7 +64,7 @@ const RequestForm: FC<{
       email your membership card to it.
     </p>
     {error && (
-      <p role="alert" style="color: #b00020">
+      <p role="alert" style="color: var(--danger)">
         {error}
       </p>
     )}

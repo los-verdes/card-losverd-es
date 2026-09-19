@@ -54,7 +54,7 @@ const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, fo
         <strong>{email}</strong>
       </p>
       {nowhere && (
-        <p style="color: #b00020">
+        <p style="color: var(--danger)">
           This address doesn't appear anywhere yet (no card, orders, login, or Slack account). Check it for typos.
         </p>
       )}
@@ -167,7 +167,7 @@ orders.get("/:orderId", async (c) => {
   return c.html(
     <AdminPage title={`Membership order ${order.order_id}`}>
       {done && (
-        <section style="border: 1px solid #00B140; padding: 0.5rem 1rem; margin-bottom: 1rem">
+        <section style="border: 1px solid var(--verde); padding: 0.5rem 1rem; margin-bottom: 1rem">
           <p>
             Attributed to <strong>{order.member_email}</strong> (previously {done.previous}).
             {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
@@ -197,7 +197,7 @@ orders.get("/:orderId", async (c) => {
         </form>
       ) : (
         <form method="get" action={path}>
-          {proposed && "error" in proposed && <p style="color: #b00020">{proposed.error}</p>}
+          {proposed && "error" in proposed && <p style="color: var(--danger)">{proposed.error}</p>}
           <label>
             Member email
             <br />
