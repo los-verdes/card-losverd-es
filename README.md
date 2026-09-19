@@ -81,8 +81,9 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 Behind the routes:
 
 - **`etl-sync` queue** (`src/queues/`): one consumer at a time, five retries, then a dead-letter queue. Carries BigCommerce order syncs and the scheduled jobs below.
-- **Scheduled jobs** (`src/scheduled.ts`): BigCommerce order resync and the Slack members sync. **Staging runs the resync every six hours** (`[env.staging.triggers]` in `wrangler.toml`) against the sandbox store; the Slack sync waits on staging having its own Slack app ([#133](https://github.com/los-verdes/card-losverd-es/issues/133)). **Production has no triggers yet**, until its BigCommerce credentials are in place.
+- **Scheduled jobs** (`src/scheduled.ts`): BigCommerce order resync, the Slack members sync, and a weekly readiness check that runs the `/admin/preflight` checks and posts to Slack **only when one has failed** (`src/admin/readinessAlert.ts`) -- so a pass certificate nearing expiry is noticed without anyone opening the page. **Staging runs the resync every six hours** (`[env.staging.triggers]` in `wrangler.toml`) against the sandbox store; the Slack sync waits on staging having its own Slack app ([#133](https://github.com/los-verdes/card-losverd-es/issues/133)). **Production has no triggers yet**, until its BigCommerce credentials are in place.
 - **Apple pass updates** (`src/passkit/apns.ts`, `updates.ts`): when a sync changes something visible on a pass, registered devices get an APNs push.
+- **Who we may email** (`EMAIL_RECIPIENT_ALLOWLIST`, a plain var): `*` permits any address, an empty value permits none, and anything else is a comma- or space-separated list of addresses and domains. It means the same thing in every environment -- production carries `*` explicitly, so an environment that loses the var goes quiet rather than open. Enforced in `sendEmail`, which every outbound message passes through; a suppressed send is logged and never throws. Staging is limited to `losverd.es`, which is what makes realistic member data safe to hold there.
 - **New-order card emails** (`src/email/newOrder.ts`): when an order webhook reports an order has reached `Completed`, the member is emailed their card, once. **Off until `CARD_EMAIL_NEW_ORDERS_SINCE` is set** to a date -- see [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md).
 
 ## Data (D1)
@@ -249,7 +250,7 @@ Feature-complete enough to exercise end to end on staging; **not yet cut over**.
 Before cutover:
 
 - Real credentials for BigCommerce, Apple, Google, SendGrid, Turnstile, and Slack, then enable the cron triggers.
-- Run the one-time legacy export ([`scripts/legacy-export/`](scripts/legacy-export/README.md)) while the legacy database still exists. It is the only source for Squarespace-era orders. It can be rehearsed as often as wanted; only the last run before cutover is the real one.
+- Run the one-time legacy export ([`scripts/legacy-export/`](scripts/legacy-export/README.md)) while the legacy database still exists. It is the only source for Squarespace-era orders. It can be rehearsed as often as wanted; only the last run before cutover is the real one. For the real run, consider emptying production's `EMAIL_RECIPIENT_ALLOWLIST` first -- a fourth guard over the three in `src/email/newOrder.ts`, on the one operation where a mistake reaches people.
 - Decide what a legacy BigCommerce order with no status counts as ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), before that export is loaded. `/admin/preflight` counts the affected orders once it has run.
 - Tighten every credential to least privilege ([#15](https://github.com/los-verdes/card-losverd-es/issues/15)).
 - Validate on real devices: Apple Wallet install and update, Google Wallet save.
