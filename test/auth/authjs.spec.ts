@@ -356,20 +356,24 @@ describe("/api/auth (Auth.js)", () => {
         expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first()).toEqual({ n: 1 });
       });
 
-      it("redirects to /login without a valid Auth.js session", async () => {
+      it("redirects to /login without a valid Auth.js session, saying which", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
         const res = await request("/login/complete", { headers: { Cookie: "__Secure-authjs.session-token=forged" } });
         expect(res.status).toBe(302);
-        expect(res.headers.get("Location")).toBe("/login");
+        expect(res.headers.get("Location")).toBe("/login?error=no-authjs-session");
         expect(lvSessionToken(res)).toBeUndefined();
       });
 
-      it("redirects to /login if the linked user was deleted before the bridge ran", async () => {
+      it("redirects to /login if the linked user was deleted before the bridge ran, saying which", async () => {
+        // Distinct from the case above on purpose: a deleted account and an
+        // unreadable cookie want completely different investigations.
+        vi.spyOn(console, "warn").mockImplementation(() => {});
         const { jar } = await runGoogleLogin({ email_verified: true }, `${ORIGIN}/login/complete`);
         await env.DB.exec("DELETE FROM users");
 
         const res = await request("/login/complete", {}, jar);
 
-        expect(res.headers.get("Location")).toBe("/login");
+        expect(res.headers.get("Location")).toBe("/login?error=linked-user-missing");
         expect(lvSessionToken(res)).toBeUndefined();
       });
     });
@@ -404,5 +408,32 @@ describe("the login page", () => {
 
   it("carries the group's branding, unlike the page it replaced", async () => {
     expect(await loginHtml()).toContain('<link rel="stylesheet" href="/assets/app.css"');
+  });
+});
+
+describe("the session bridge's failure modes", () => {
+  // These three used to be one silent redirect, which is why "Apple login is
+  // broken" could not be narrowed without guessing.
+  it("names a missing Auth.js session, the cookie case", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const res = await request("/login/complete");
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/login?error=no-authjs-session");
+    expect(warn).toHaveBeenCalledWith("login bridge: not completing sign-in", {
+      reason: "no-authjs-session",
+    });
+  });
+
+  it("tells the member their sign-in didn't complete, rather than looking like nothing happened", async () => {
+    const html = await (await request("/login?error=no-authjs-session")).text();
+
+    expect(html).toContain("Trying again often works");
+    expect(html).toContain('href="/email-card"');
+  });
+
+  it("says nothing of the sort on an ordinary visit", async () => {
+    expect(await (await request("/login")).text()).not.toContain("Trying again often works");
   });
 });

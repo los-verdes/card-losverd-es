@@ -40,6 +40,7 @@ auth.get(LOGIN_PATH, (c) => {
     renderLoginPage({
       signInHref: signIn.pathname + signIn.search,
       providers: configuredProviders(c.env),
+      failed: c.req.query("error") !== undefined,
     }),
   );
 });
@@ -61,7 +62,27 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
           .first<{ id: number; is_admin: number }>()
       : null;
   if (!user) {
-    return c.redirect(LOGIN_PATH);
+    // Three different things end up here, and they used to be one silent
+    // redirect back to the page the member had just come from -- which looks
+    // to them like the sign-in did nothing, and leaves nothing to read
+    // afterwards. Naming which one costs a line and is the difference
+    // between "Apple login is broken" and knowing where to look.
+    //
+    // No addresses or tokens: this is a login path and Workers Logs keeps
+    // lines for seven days.
+    const reason = !authUser
+      ? // Auth.js finished but its session isn't readable here. Its cookies
+        // are the thing to suspect -- Apple returns via a cross-site POST,
+        // which a SameSite=Lax cookie is not sent on.
+        "no-authjs-session"
+      : typeof userId !== "number"
+        ? // Signed in, but the `jwt` callback never linked a user, so
+          // `linkOAuthUser` didn't run or didn't finish.
+          "no-linked-user-id"
+        : // Linked to a user id that no longer exists.
+          "linked-user-missing";
+    console.warn("login bridge: not completing sign-in", { reason });
+    return c.redirect(`${LOGIN_PATH}?error=${reason}`);
   }
 
   const token = await issueSessionToken(c.env.SESSION_SIGNING_KEY, {
