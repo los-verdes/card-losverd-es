@@ -56,7 +56,7 @@ export async function sendClaimLinkEmail(
   recipient: string,
   confirmUrl: string,
 ): Promise<void> {
-  await sendEmail(env.SENDGRID_API_KEY, {
+  await sendEmail(env, {
     from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
     to: { email: recipient },
     subject: CLAIM_EMAIL_SUBJECT,

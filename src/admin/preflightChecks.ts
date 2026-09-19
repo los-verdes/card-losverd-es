@@ -24,6 +24,10 @@
 import forge from "node-forge";
 import { signWebhookToken } from "../bigcommerce/webhookToken";
 import { GOOGLE_WALLET_API, getGoogleWalletAccessToken } from "../google/api";
+import {
+  ALLOW_ANY_RECIPIENT,
+  parseRecipientAllowlist,
+} from "../email/sendgrid";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
@@ -383,6 +387,24 @@ async function googleWalletChecks(env: Env): Promise<CheckGroup> {
 
 function deliveryChecks(env: Env): CheckGroup {
   const results: CheckResult[] = [];
+
+  // Reported on the page because "no email arrived" is otherwise a puzzle
+  // with the answer in a config file. Never a failure: every one of the three
+  // settings is a deliberate choice, including the one that sends nothing.
+  const allowlist = parseRecipientAllowlist(env.EMAIL_RECIPIENT_ALLOWLIST);
+  results.push(
+    allowlist.includes(ALLOW_ANY_RECIPIENT)
+      ? ok("Who we may email", "Any address (EMAIL_RECIPIENT_ALLOWLIST is `*`).")
+      : allowlist.length === 0
+        ? warn(
+            "Who we may email",
+            "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty, so every send is suppressed and logged. Set it to `*` to email anyone, or to the addresses and domains this environment may reach.",
+          )
+        : warn(
+            "Who we may email",
+            `Only ${allowlist.join(", ")}. Every other recipient is suppressed and logged, which is what makes realistic member data safe to hold here.`,
+          ),
+  );
 
   const turnstileSite = env.TURNSTILE_SITE_KEY;
   const turnstileSecret = env.TURNSTILE_SECRET_KEY;

@@ -176,7 +176,7 @@ export async function sendMembershipCardEmail(
     reason,
     baseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ""),
   };
-  await sendEmail(env.SENDGRID_API_KEY, {
+  await sendEmail(env, {
     from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
     to: { email: member.email, name: props.name },
     subject: EMAIL_SUBJECT,
