@@ -26,3 +26,19 @@ export function formatMonthYear(isoDate: string): string {
     timeZone: "UTC",
   }).format(new Date(isoDate));
 }
+
+/**
+ * `value` if it is a real `YYYY-MM-DD` date, else null.
+ *
+ * The round trip is what makes it strict. `Date.parse` accepts `2021-02-30`
+ * and quietly rolls it forward to 2 March, so a shaped-but-unreal date would
+ * otherwise be accepted and silently become a different day -- which, for a
+ * date someone is correcting by hand, is worse than refusing it.
+ */
+export function parseIsoDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : null;
+}
