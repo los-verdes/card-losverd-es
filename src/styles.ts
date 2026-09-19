@@ -20,16 +20,64 @@
  * Kept as a string rather than a `.css` file because a Worker has no static
  * file serving: everything is either bundled or fetched from R2, and a string
  * is the honest version of "bundled".
+ *
+ * The pages honour a dark device (#141) by restating the custom properties
+ * below under `prefers-color-scheme`, so a page's own rules never mention a
+ * colour twice. Two things deliberately sit outside that: the card image and
+ * the Wallet passes, which are artwork with fixed colours and look wrong
+ * inverted, and the emailed card (`src/email/card.tsx`), because mail clients
+ * neither load this stylesheet nor support the query reliably -- its colours
+ * stay inline and light on purpose.
  */
 
 /** The group's green, matching the pass and the card image. */
 export const VERDE = "#00B140";
 
 export const APP_CSS = `:root {
+  /* Every colour on the site is one of these, so honouring a dark device is
+     a matter of restating them rather than hunting down declarations. Pages
+     name them by meaning (--danger, not a particular red) for the same
+     reason: a red legible on white is not the red legible on near-black. */
   --verde: ${VERDE};
   --ink: #14181f;
+  --bg: #fff;
   --muted: #555;
   --rule: #d8e8dd;
+  --danger: #b00020;
+  --success: #137333;
+  --warn: #a15c00;
+
+  /* Lets the browser dark-render what we don't control: form fields, the
+     canvas behind a short page, scrollbars. Without it those stay white and
+     the page comes apart at the edges. */
+  color-scheme: light dark;
+}
+
+/* Honouring a dark device (#141). Only the tokens change; no rule below is
+   restated, which is what keeps the two modes from drifting apart.
+
+   Every value clears 4.5:1 against --bg, except --rule, which only has to be
+   seen rather than read -- a hairline as bright as text turns the admin
+   tables into stripes. The light palette's colours all fail when inverted
+   (--muted 2.39:1, --danger 2.43, --success 2.99, --warn 3.43), so these are
+   lighter, less saturated versions of the same hues rather than the same
+   values reused.
+
+   --verde is deliberately absent: #00B140 measures 6.24:1 here, better than
+   the 2.69 it manages on white, so the brand colour needs no dark variant
+   (the white case is #143, and not this file's decision to make). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Near-black rather than #000: pure black behind light text haloes on
+       OLED, and the page reads as harsher than the light one. */
+    --bg: #14181f;
+    --ink: #e7eaee;
+    --muted: #a7b0bd;
+    --rule: #2b323c;
+    --danger: #ff9d9d;
+    --success: #7fd69a;
+    --warn: #e8bd76;
+  }
 }
 
 /* Bungee is a display face: all caps, heavy, for headings only. Swap rather
@@ -47,6 +95,7 @@ body {
   margin: 2rem auto;
   padding: 0 1rem;
   color: var(--ink);
+  background: var(--bg);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }

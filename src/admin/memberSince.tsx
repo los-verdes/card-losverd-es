@@ -131,7 +131,7 @@ const Subject: FC<{ subject: MemberSinceSubject; today: string; error?: string }
         {member ? `${member.first_name} ${member.last_name}`.trim() : email}
       </h2>
       {!member && (
-        <p style="color: #b00020">
+        <p style="color: var(--danger)">
           No membership card exists for this address yet. A correction saved now will apply
           as soon as one does -- but check the address for typos first.
         </p>
@@ -163,7 +163,7 @@ const Subject: FC<{ subject: MemberSinceSubject; today: string; error?: string }
         </tbody>
       </table>
 
-      {error && <p style="color: #b00020">{error}</p>}
+      {error && <p style="color: var(--danger)">{error}</p>}
 
       <form method="post" action={MEMBER_SINCE_PATH}>
         <input type="hidden" name="email" value={email} />
@@ -221,12 +221,12 @@ memberSince.get("/", async (c) => {
         current store, or one bought on someone else's behalf -- it can be corrected here,
         and the correction wins wherever the date is shown.
       </p>
-      {saved === "set" && <p style="color: #137333">Correction saved. Their card will show it from now on.</p>}
+      {saved === "set" && <p style="color: var(--success)">Correction saved. Their card will show it from now on.</p>}
       {saved === "cleared" && (
-        <p style="color: #137333">Correction removed. Their card is back to the date from their orders.</p>
+        <p style="color: var(--success)">Correction removed. Their card is back to the date from their orders.</p>
       )}
       <SearchForm email={email} />
-      {email && !isWellFormedEmail(email) && <p style="color: #b00020">That doesn't look like an email address.</p>}
+      {email && !isWellFormedEmail(email) && <p style="color: var(--danger)">That doesn't look like an email address.</p>}
       {subject && <Subject subject={subject} today={today} error={error ?? undefined} />}
     </AdminPage>,
   );
