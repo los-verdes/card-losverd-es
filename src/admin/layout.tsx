@@ -29,6 +29,8 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
         {" · "}
         <a href="/admin/reports/missing">Missing orders</a>
         {" · "}
+        <a href="/admin/member-since">Member since</a>
+        {" · "}
         <a href="/admin/preflight">Readiness</a>
         {" · "}
         <a href="/">My card</a>

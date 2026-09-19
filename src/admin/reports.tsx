@@ -9,6 +9,7 @@
 import { Hono } from "hono";
 import type { FC } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
+import { parseIsoDate } from "../lib/dateFormat";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
@@ -96,15 +97,6 @@ const CONSOLIDATION_TABLES = [
 class BadRequest extends Error {}
 
 /** A real calendar date in `YYYY-MM-DD` form, or null. */
-function parseDate(value: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === value
-    ? value
-    : null;
-}
-
 interface ReportRequest {
   /** `YYYY-MM-DD` as typed, or empty for "right now". */
   asOfDate: string;
@@ -121,7 +113,7 @@ interface ReportRequest {
  */
 function parseReportRequest(query: Record<string, string>, now: Date): ReportRequest {
   const asOfDate = query.as_of ?? "";
-  if (asOfDate && !parseDate(asOfDate)) {
+  if (asOfDate && !parseIsoDate(asOfDate)) {
     throw new BadRequest("as_of must be a date in YYYY-MM-DD form");
   }
   const page = query.page === undefined ? 1 : Number(query.page);

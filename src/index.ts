@@ -1,5 +1,6 @@
 import { authHandler, initAuthConfig } from "@hono/auth-js";
 import { Hono } from 'hono';
+import adminMemberSince from "./admin/memberSince";
 import adminOrders from "./admin/orders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
@@ -150,6 +151,8 @@ app.route("/assets", assets);
 app.route("/admin/reports", adminReports);
 // Admin order page: attribute an order to someone other than its purchaser.
 app.route("/admin/orders", adminOrders);
+// Admin: correct a member's "member since" date where the orders can't say.
+app.route("/admin/member-since", adminMemberSince);
 // Admin readiness page: what this environment's deployment is missing.
 app.route("/admin/preflight", adminPreflight);
 app.route("/", portal);
