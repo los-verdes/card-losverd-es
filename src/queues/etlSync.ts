@@ -67,6 +67,20 @@ async function dispatchEtlSyncMessage(
     case "run_slack_members_etl":
       await runSlackMembersEtl(env);
       return;
+    default: {
+      // The same reasoning `handleQueueBatch` applies one file over, for the
+      // same reason: acking a message nothing understands throws the work
+      // away silently. Throwing retries it and, failing that, dead-letters
+      // it -- which since #28's alerting says so in Slack.
+      //
+      // The realistic way to get here is a deploy ordering: a producer
+      // shipping a new message type before the consumer that handles it, or
+      // a rollback past one. Those are recoverable if the message survives,
+      // and not if it doesn't.
+      const unhandled: never = message;
+      const type = (unhandled as { type?: unknown }).type;
+      throw new Error(`etl-sync: no handler for message type ${JSON.stringify(type)}`);
+    }
   }
 }
 
