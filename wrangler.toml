@@ -99,6 +99,10 @@ SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 # environment -- queue names are account-wide).
 ETL_SYNC_QUEUE_NAME = "etl-sync-production"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-production"
+# What this environment calls itself in anything a person reads -- currently
+# the Slack alerts (src/slack/alert.ts). Spelled out rather than inferred from
+# a queue name or a URL, so it stays right if either changes.
+ENVIRONMENT = "production"
 
 # Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
 # terraform/queues.tf; bindings live here. src/index.ts's queue() handler
@@ -173,6 +177,7 @@ CARD_EMAIL_NEW_ORDERS_SINCE = ""
 SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
+ENVIRONMENT = "staging"
 
 [[env.staging.queues.producers]]
 queue = "etl-sync-staging"
