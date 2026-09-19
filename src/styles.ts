@@ -185,6 +185,36 @@ button {
   font-size: 0.9rem;
 }
 
+/* The readiness page's manual steps. Ticking one is only a way of keeping
+   your place while working down a long list on a second screen -- there is no
+   JavaScript here and nothing is stored, so a reload starts over, which is
+   the honest behaviour for a list whose real state lives in the world rather
+   than in the page. Checked steps fade and strike through rather than
+   disappearing, so the list keeps its shape and you can see what is left
+   against what is done. */
+ul.checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+ul.checklist label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+
+ul.checklist input {
+  accent-color: var(--verde);
+  flex: none;
+}
+
+ul.checklist input:checked + span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
 nav.admin-nav {
   margin-bottom: 1rem;
 }

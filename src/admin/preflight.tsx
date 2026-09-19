@@ -85,10 +85,16 @@ preflight.get("/", async (c) => {
         <h2 style="font-size: 1.1rem; margin-bottom: 0.4rem">Still needs a person</h2>
         <p style="margin-top: 0; color: var(--muted)">
           No code above can do these. Work down the list on the environment serving this page.
+          Ticking is just for keeping your place -- nothing is saved, and a reload starts over.
         </p>
-        <ul>
+        <ul class="checklist">
           {MANUAL_STEPS.map((step) => (
-            <li style="margin-bottom: 0.3rem">{step}</li>
+            <li>
+              <label>
+                <input type="checkbox" />
+                <span>{step}</span>
+              </label>
+            </li>
           ))}
         </ul>
       </section>
