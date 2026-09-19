@@ -160,6 +160,49 @@ describe("runSlackMembersEtl", () => {
     expect(rows[0]).toMatchObject({ deleted: 1, real_name: "Jane Q. Doe", is_admin: 0 });
   });
 
+  it("removes someone the workspace no longer lists", async () => {
+    mockSlackPages([[JANE, { ...JANE, id: "U002", name: "sam" }]]);
+    await runSlackMembersEtl(env);
+    vi.restoreAllMocks();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    mockSlackPages([[JANE]]);
+
+    await runSlackMembersEtl(env);
+
+    expect((await allRows()).map((row) => row.slack_id)).toEqual([JANE.id]);
+  });
+
+  it("clears out the previous workspace when the token is pointed at another one", async () => {
+    // The case that matters for #133: swapping an environment's Slack app
+    // must not leave the old workspace's people behind, counted as current
+    // by reports that never look at `team_id`.
+    mockSlackPages([[JANE]]);
+    await runSlackMembersEtl(env);
+    vi.restoreAllMocks();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    mockSlackPages([[{ ...JANE, id: "U900", team_id: "T-OTHER", name: "someone-else" }]]);
+
+    await runSlackMembersEtl(env);
+
+    const rows = await allRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ slack_id: "U900", team_id: "T-OTHER" });
+  });
+
+  it("leaves the table alone when the list comes back empty", async () => {
+    // A token that can no longer see anyone is far likelier to be a broken
+    // token than an empty workspace, and emptying the table on one bad run
+    // is not recoverable without another successful one.
+    mockSlackPages([[JANE]]);
+    await runSlackMembersEtl(env);
+    vi.restoreAllMocks();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    mockSlackPages([[]]);
+
+    expect(await runSlackMembersEtl(env)).toBe(0);
+    expect(await allRows()).toHaveLength(1);
+  });
+
   it("handles an empty workspace page without touching D1", async () => {
     mockSlackPages([[]]);
 

@@ -15,6 +15,15 @@
  *
  * Deactivated members need no special handling: Slack keeps listing them
  * with `deleted: true`, so the upsert alone keeps the table accurate.
+ *
+ * Members who stop being listed altogether do need handling, and get it: a
+ * completed run deletes every row it didn't just write. The table is a copy
+ * of one workspace's user list, so anything the workspace no longer reports
+ * is not a member of it. That matters most when the *token* changes rather
+ * than the workspace -- pointing an environment at a different Slack app
+ * would otherwise leave the previous workspace's people in the table
+ * indefinitely, counted as current by the reports, which never filter on
+ * `team_id` (los-verdes/card-losverd-es#133).
  */
 
 import type { Env } from "../index";
@@ -198,7 +207,20 @@ export async function runSlackMembersEtl(env: Env): Promise<number> {
       total += members.length;
     }
     if (!nextCursor) {
-      console.log("run_slack_members_etl: done", { members: total });
+      // Only after a complete run: the loop throws rather than returning
+      // early, so reaching here means the whole list was read. Skipped
+      // entirely when the list came back empty -- a token that can no longer
+      // see anyone should leave the table alone rather than empty it.
+      let removed = 0;
+      if (total > 0) {
+        const pruned = await env.DB.prepare(
+          "DELETE FROM slack_users WHERE synced_at < ?",
+        )
+          .bind(syncedAt)
+          .run();
+        removed = pruned.meta.changes ?? 0;
+      }
+      console.log("run_slack_members_etl: done", { members: total, removed });
       return total;
     }
     cursor = nextCursor;
