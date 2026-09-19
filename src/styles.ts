@@ -55,19 +55,24 @@ export const APP_CSS = `:root {
 
 /* TODO(human): the dark palette.
 
-   @media (prefers-color-scheme: dark) {
-     :root {
-       --ink: ...;      light text
-       --bg: ...;       page background, near-black rather than pure black
-       --muted: ...;    secondary notes
-       --rule: ...;     hairlines and table borders
-       --danger: ...;   errors
-       --success: ...;  confirmations
-       --warn: ...;     preflight warnings
-     }
-   }
+   Add a prefers-color-scheme dark media query here, holding a :root block
+   that restates these seven tokens (deliberately not written out as CSS,
+   since the tests parse this file and would read a skeleton as the real
+   thing):
 
-   --verde stays as it is: #00B140 measures 6.24:1 against a dark
+     --ink       light text
+     --bg        page background, near-black rather than pure black
+     --muted     secondary notes
+     --rule      hairlines and table borders
+     --danger    errors
+     --success   confirmations
+     --warn      preflight warnings
+
+   Each of those must reach 4.5:1 against --bg, except --rule, which only
+   has to be visible. test/styles.spec.ts checks all of it, and is known to
+   pass on a palette meeting those constraints.
+
+   --verde needs no override: #00B140 measures 6.24:1 against a dark
    background, better than it manages on white (#143). */
 
 /* Bungee is a display face: all caps, heavy, for headings only. Swap rather
