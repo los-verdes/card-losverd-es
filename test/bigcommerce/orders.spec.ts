@@ -57,6 +57,32 @@ describe("helpers", () => {
 });
 
 describe("recordMembershipOrder", () => {
+  it("leaves a transferred membership where the legacy import put it", async () => {
+    // The legacy app transferred a membership with its
+    // `add-memberships-to-user-email` command, which repointed
+    // `annual_membership.user_id` at the recipient and left `customer_email`
+    // alone. The export turns that into a `member_email` that differs from
+    // `order_email`, and cards are derived from `member_email` -- so every
+    // membership ever gifted or reassigned in the legacy app depends on a
+    // later sync of the same order not overwriting it.
+    //
+    // Nothing enforces that but `member_email`'s absence from the upsert's
+    // SET list, which is an easy thing to "complete" while adding a column
+    // next to it. Hence this test rather than a comment.
+    await recordMembershipOrder(env, ORDER, PRODUCT);
+    const orderId = bigCommerceOrderKey(ORDER.id);
+    await env.DB.prepare("UPDATE membership_orders SET member_email = ? WHERE order_id = ?")
+      .bind("recipient@example.com", orderId)
+      .run();
+
+    await recordMembershipOrder(env, ORDER, PRODUCT);
+
+    const [row] = await orderRows();
+    expect(row.member_email).toBe("recipient@example.com");
+    // The purchaser's own address still updates, since that is the store's to say.
+    expect(row.order_email).toBe("sam.rivera@example.com");
+  });
+
   it("clears the missing flag when the store returns the order again", async () => {
     // A 404 during a BigCommerce incident shouldn't leave a permanent mark;
     // the next successful sync is evidence the order is fine (#105).
