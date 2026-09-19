@@ -8,6 +8,7 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../src/member/portal";
 import { getTestCertChain } from "../fixtures/certChain";
+import { CARD_WIDTH, CARD_HEIGHT } from "../../src/cardimage/template";
 import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
 
@@ -163,6 +164,35 @@ describe("access control", () => {
   });
 });
 
+describe("the card image", () => {
+  it("reserves its space before it arrives, so nothing jumps", async () => {
+    // The image is rendered on demand, so it is never instant. Without
+    // intrinsic dimensions the browser cannot know its shape until the bytes
+    // land, and everything below it moves when they do.
+    await seedCurrentMember();
+    await seedTemplateAssets();
+
+    const html = await (await get("/")).text();
+
+    expect(html).toContain('width="1050"');
+    expect(html).toContain('height="660"');
+    expect(html).toContain('class="card-image"');
+  });
+
+  it("takes its dimensions from the renderer rather than repeating them", async () => {
+    // A second copy of the card's size would be wrong the first time the
+    // card is resized, and wrong silently -- the page would simply reserve
+    // the wrong shape.
+    await seedCurrentMember();
+    await seedTemplateAssets();
+
+    const html = await (await get("/")).text();
+
+    expect(html).toContain(`width="${CARD_WIDTH}"`);
+    expect(html).toContain(`height="${CARD_HEIGHT}"`);
+  });
+});
+
 describe("the admin breadcrumb", () => {
   const ADMIN_LINK = /<a href="\/admin\/reports">Admin/;
 
@@ -227,7 +257,9 @@ describe("GET /", () => {
     expect(html).toContain("los-pringles");
     expect(html).toContain("Member since Jul 2021");
     expect(html).toContain("Good through Mar 4, 2099");
-    expect(html).toContain('<img src="/card.png"');
+    // Attribute order is the renderer's business; that the card is on the
+    // page is this test's.
+    expect(html).toMatch(/<img[^>]*src="\/card\.png"/);
     expect(html).toMatch(/<a href="\/passes\/apple.pkpass"[^>]*>Add to Apple Wallet<\/a>/);
     expect(html).toMatch(/<a href="\/passes\/google"[^>]*>Add to Google Wallet<\/a>/);
     expect(html).toMatch(/<a href="\/email-card"[^>]*>Email me my card<\/a>/);
