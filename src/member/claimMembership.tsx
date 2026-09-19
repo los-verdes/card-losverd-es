@@ -37,6 +37,7 @@ import {
 import { requireAuth } from "../middleware/auth";
 import { getMemberByEmail, isMembershipCurrent } from "./artifacts";
 import { issueClaimToken, verifyClaimToken } from "./claimToken";
+import { isAppleRelayAddress } from "./portal";
 import { isWellFormedEmail } from "./email-card";
 import { Page, SUPPORT_EMAIL } from "./layout";
 
@@ -62,7 +63,10 @@ export const RECIPIENT_RATE_LIMIT: RateLimitRule = {
   windowSeconds: 24 * 60 * 60,
 };
 
-const ClaimForm: FC<{ error?: string }> = ({ error }) => (
+const ClaimForm: FC<{ error?: string; signedInWithRelay?: boolean }> = ({
+  error,
+  signedInWithRelay,
+}) => (
   <Page title="Find My Membership">
     <h1>Find my membership</h1>
     <p>
@@ -70,11 +74,16 @@ const ClaimForm: FC<{ error?: string }> = ({ error }) => (
       one you signed in with, enter it here. We'll email that address a link to
       confirm it's yours.
     </p>
-    <p class="muted">
-      This is what to use if you signed in with Apple and chose{" "}
-      <strong>Hide My Email</strong>. Apple gives us a private relay address
-      instead of your own, which won't match your order.
-    </p>
+    {signedInWithRelay && (
+      // Only when the address we actually hold is a relay one. Said to
+      // someone who signed in with Google it explains a situation they are
+      // not in, which reads as the page guessing rather than knowing.
+      <p class="muted">
+        You signed in with Apple and chose <strong>Hide My Email</strong>, so
+        Apple gave us a private relay address instead of your own. That is why
+        it doesn't match your order.
+      </p>
+    )}
     {error && (
       <p role="alert" style="color: var(--danger, #b00020)">
         {error}
@@ -176,7 +185,17 @@ export async function sendClaimLink(
 
 const claim = new Hono<ClaimEnv>();
 
-claim.get("/", requireAuth, (c) => c.html(<ClaimForm />));
+claim.get("/", requireAuth, async (c) => {
+  // The note about Hide My Email is only true for some visitors, so it is
+  // shown only to them -- which takes reading the address this session is
+  // actually signed in as.
+  const user = await c.env.DB.prepare("SELECT email FROM users WHERE id = ?")
+    .bind(c.get("session").userId)
+    .first<{ email: string }>();
+  return c.html(
+    <ClaimForm signedInWithRelay={isAppleRelayAddress(user?.email ?? "")} />,
+  );
+});
 
 claim.post("/", requireAuth, csrf(), async (c) => {
   const userId = c.get("session").userId;

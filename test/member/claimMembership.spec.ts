@@ -219,6 +219,25 @@ describe("requesting a claim link", () => {
     expect(res.body).toContain("Hide My Email");
   });
 
+  it("explains Hide My Email only to someone it actually happened to", async () => {
+    // USER_ID signed in with a relay address, so the explanation applies.
+    const html = (await request("/claim-membership")).body;
+
+    expect(html).toContain("Hide My Email");
+  });
+
+  it("says nothing about Apple to someone who signed in another way", async () => {
+    // OTHER_USER_ID is an ordinary address. Telling them Apple gave us a
+    // relay address describes a situation they are not in, and reads as the
+    // page guessing rather than knowing.
+    const html = (await request("/claim-membership", {}, OTHER_USER_ID)).body;
+
+    expect(html).not.toContain("Hide My Email");
+    // The form itself is still offered -- the reason for being here is not
+    // limited to Apple.
+    expect(html).toContain("Membership email address");
+  });
+
   it("emails a confirmation link to a current member's address", async () => {
     const fetchSpy = mockSendGrid();
 
