@@ -25,11 +25,22 @@ export interface LoginPageProps {
   signInHref: string;
   /** Which providers are actually configured, so the page doesn't offer one that isn't. */
   providers: string[];
+  /** Set when the member has just been sent back here by a sign-in that didn't complete. */
+  failed?: boolean;
 }
 
-export const LoginPage: FC<LoginPageProps> = ({ signInHref, providers }) => (
+export const LoginPage: FC<LoginPageProps> = ({ signInHref, providers, failed }) => (
   <Page title="Your Membership Card">
     <h1>Los Verdes Membership Card</h1>
+
+    {failed && (
+      // Arriving back here having just signed in successfully elsewhere is
+      // baffling without this: it reads as though nothing happened.
+      <p style="color: #b00020">
+        That sign-in didn't complete. Trying again often works. If it doesn't,
+        you can still have your card emailed to you below.
+      </p>
+    )}
 
     {providers.length > 0 ? (
       <>
