@@ -31,6 +31,9 @@ export interface Env {
   // routes batches by.
   ETL_SYNC_QUEUE_NAME: string;
   ETL_SYNC_DLQ_NAME: string;
+  // Not secret -- what this environment calls itself in anything a person
+  // reads (src/slack/alert.ts).
+  ENVIRONMENT: string;
   // Not secret -- public pass/branding identifiers, see Phase 4.
   PASSKIT_PASS_TYPE_IDENTIFIER: string;
   PASSKIT_TEAM_IDENTIFIER: string;
