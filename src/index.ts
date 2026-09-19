@@ -112,6 +112,13 @@ export interface Env {
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the legacy app's sender and SendGrid ASM unsubscribe group,
   // in wrangler.toml `[vars]`. An empty group ID sends without one.
+  /**
+   * Who this environment may email (#155). `*` permits anyone, an empty
+   * string permits nobody, and anything else is a comma- or space-separated
+   * list of addresses and domains. The same value means the same thing in
+   * every environment; production carries `*` explicitly.
+   */
+  EMAIL_RECIPIENT_ALLOWLIST: string;
   EMAIL_FROM_ADDRESS: string;
   EMAIL_FROM_NAME: string;
   SENDGRID_UNSUBSCRIBE_GROUP_ID: string;

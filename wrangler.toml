@@ -81,6 +81,10 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # (EMAIL_FROM_ADDRESS/EMAIL_FROM_NAME/SENDGRID_GROUP_ID in digital-membership's
 # settings.py). SENDGRID_API_KEY and TURNSTILE_SECRET_KEY are secrets with no
 # placeholder here.
+# Who this environment may email (#155). `*` is the only value that permits
+# anyone, and production says so explicitly rather than inheriting it from an
+# empty default -- an environment that loses this var sends to nobody.
+EMAIL_RECIPIENT_ALLOWLIST = "*"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 # A Turnstile site key is public -- it's rendered into the /email-card form --
@@ -171,6 +175,11 @@ GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
 GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_staging_v1"
 AUTH_APPLE_ID = "es.losverd.card.staging"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
+# Staging may only email test mailboxes, so realistic member data is safe to
+# hold here (#155). `losverd.es` runs Cloudflare Email Routing, so addresses
+# like card-test@losverd.es are routing rules rather than real accounts.
+# Anything else is suppressed and logged; it never throws.
+EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
 # Staging's own Turnstile widget, bound to the workers.dev hostname above.
