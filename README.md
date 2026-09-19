@@ -81,7 +81,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 Behind the routes:
 
 - **`etl-sync` queue** (`src/queues/`): one consumer at a time, five retries, then a dead-letter queue. Carries BigCommerce order syncs and the scheduled jobs below.
-- **Scheduled jobs** (`src/scheduled.ts`): BigCommerce order resync and the Slack members sync. **Not enabled yet**: `wrangler.toml` has no `[triggers]` until real BigCommerce credentials are in place.
+- **Scheduled jobs** (`src/scheduled.ts`): BigCommerce order resync and the Slack members sync. **Staging runs the resync every six hours** (`[env.staging.triggers]` in `wrangler.toml`) against the sandbox store; the Slack sync waits on staging having its own Slack app ([#133](https://github.com/los-verdes/card-losverd-es/issues/133)). **Production has no triggers yet**, until its BigCommerce credentials are in place.
 - **Apple pass updates** (`src/passkit/apns.ts`, `updates.ts`): when a sync changes something visible on a pass, registered devices get an APNs push.
 - **New-order card emails** (`src/email/newOrder.ts`): when an order webhook reports an order has reached `Completed`, the member is emailed their card, once. **Off until `CARD_EMAIL_NEW_ORDERS_SINCE` is set** to a date -- see [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md).
 
