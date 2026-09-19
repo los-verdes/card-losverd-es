@@ -97,11 +97,16 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
-# Read-only against everything except the queue: it sends one message that no
-# handler understands, which retries, dead-letters and should produce a Slack
-# alert about thirteen minutes later. Proves the wiring the unit tests cannot:
-# that this environment's queue is bound to the right dead-letter queue, its
-# consumer is deployed, and its webhook points somewhere anyone reads.
+# Sends one `dlq_drill` message, which fails on purpose. Two modes, proving
+# different things:
+#
+#   (default)  onto etl-sync, where it retries and dead-letters. Proves the
+#              whole chain including the dead_letter_queue binding, which no
+#              test can see. Takes about thirteen minutes.
+#   --direct   straight onto the dead-letter queue. Proves the consumer and
+#              webhook in seconds, and nothing about how a message reaches
+#              them -- the right one after rotating a webhook.
+#
 # Defaults to staging; production needs --yes-production.
 #
 # Prove the dead-letter alert actually reaches Slack, in a real environment

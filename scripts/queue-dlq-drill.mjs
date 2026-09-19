@@ -11,14 +11,28 @@
 // is configuration, and configuration is what is actually wrong when an alert
 // does not arrive.
 //
-// The message deliberately carries a type no handler knows. `dispatchEtlSyncMessage`
-// throws on an unrecognised type by design (#127, so nothing is ever acked
-// and silently discarded), which makes it the one failure that is guaranteed,
-// repeatable, and touches no member data on its way.
+// The message is a real member of the `etl-sync` union, `dlq_drill`, whose
+// handler throws on purpose. Named rather than relying on an unrecognised
+// type, so the drill does not depend on whatever `default:` happens to do,
+// and so a `dlq_drill` in the logs or in Slack is obviously a drill rather
+// than something to investigate. It carries no member data either way.
+//
+// Two modes, because they prove different things:
+//
+//   default    onto `etl-sync`, where it fails, retries, and dead-letters.
+//              Proves the whole chain -- including that this environment's
+//              queue is bound to the right dead-letter queue, which is the
+//              part no test can see. Takes about thirteen minutes.
+//
+//   --direct   straight onto the dead-letter queue. Proves the consumer and
+//              the webhook, in seconds, and proves nothing about the binding
+//              or the retry configuration. The right one for "I rotated the
+//              webhook, does it still reach the channel".
 //
 // Usage:
-//   just queue-dlq-drill              # staging
-//   just queue-dlq-drill production   # refuses without --yes-production
+//   just queue-dlq-drill                        # staging, full chain
+//   just queue-dlq-drill staging --direct       # staging, seconds
+//   just queue-dlq-drill production             # refuses without --yes-production
 
 const API = process.env.CLOUDFLARE_API_BASE ?? "https://api.cloudflare.com/client/v4";
 const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -46,7 +60,8 @@ if (env === "production" && !confirmedProduction) {
   );
 }
 
-const queueName = `etl-sync-${env}`;
+const direct = process.argv.includes("--direct");
+const queueName = direct ? `etl-sync-dlq-${env}` : `etl-sync-${env}`;
 
 async function api(path, init) {
   const res = await fetch(`${API}${path}`, {
@@ -78,7 +93,7 @@ await api(`/accounts/${accountId}/queues/${queue.queue_id}/messages`, {
     content_type: "json",
     body: {
       type: "dlq_drill",
-      note: "Deliberately unhandled. Proves the dead-letter alert path; safe to ignore.",
+      note: "A drill. Proves the dead-letter alert path; safe to ignore.",
       sentAt,
     },
   }),
@@ -89,26 +104,44 @@ await api(`/accounts/${accountId}/queues/${queue.queue_id}/messages`, {
 const delays = [1, 2, 3, 4, 5].map((n) => Math.min(300, 15 * 2 ** n));
 const totalMinutes = Math.round(delays.reduce((a, b) => a + b, 0) / 60);
 
-console.log(`Sent one unhandleable message to ${queueName} at ${sentAt}.
+const tail = `npx wrangler tail ${env === "production" ? '--env=""' : `--env ${env}`} --format pretty`;
+
+console.log(
+  direct
+    ? `Sent one drill message straight to ${queueName} at ${sentAt}.
+
+The dead-letter consumer should post to Slack within seconds, naming the
+queue, the message id, the attempt count and the type (\`dlq_drill\`) -- and
+nothing else, because a real dead-lettered body can contain member data.
+
+This proves the dead-letter consumer is deployed and its webhook reaches a
+channel someone reads. It deliberately proves nothing about how a message
+gets there: it skipped the retries and the dead_letter_queue binding
+entirely. Run without --direct for that.
+
+Watch it:  ${tail}`
+    : `Sent one drill message to ${queueName} at ${sentAt}.
 
 What should happen, in order:
 
-  1. The consumer throws on it -- it has no handler, which is the point.
+  1. Its handler throws -- deliberately; that is what dlq_drill is for.
   2. It retries 5 times, backing off ${delays.join("s, ")}s.
-  3. It lands in etl-sync-dlq-${env}.
+  3. It lands in etl-sync-dlq-${env}, because the consumer is configured to
+     send it there. That binding is the thing this mode proves and no test
+     can.
   4. The dead-letter consumer posts to Slack, naming the queue, the message
-     id, the attempt count and the type (\`dlq_drill\`) -- and nothing else,
-     because a real dead-lettered body can contain member data.
+     id, the attempt count and the type -- and nothing else, because a real
+     dead-lettered body can contain member data.
 
 Allow about ${totalMinutes} minutes before deciding it has failed. Most of that is
-the backoff, and watching for the first minute proves nothing.
+backoff, and watching the first minute proves nothing. Use --direct if you
+only need to know whether the alert reaches Slack.
 
-Watch it happen:
-
-  npx wrangler tail ${env === "production" ? '--env=""' : `--env ${env}`} --format pretty
+Watch it:  ${tail}
 
 If no Slack message arrives but the tail shows "Dead-lettered queue message",
 the queue wiring is fine and the problem is SLACK_ALERT_WEBHOOK_URL -- check
-\`just secrets-status ${env}\` and that the webhook still points at a live channel.
-If the tail shows nothing at all, the consumer is not deployed for this
-environment.`);
+\`just secrets-status ${env}\` and that the webhook still points at a live
+channel. If the tail shows nothing at all, the consumer is not deployed for
+this environment.`,
+);
