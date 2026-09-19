@@ -24,6 +24,13 @@ export interface PassKitConfig {
   organizationName: string;
   /** Apple polls this for registration/update checks -- see Phase 4.1/4.2. */
   webServiceURL: string;
+  /**
+   * Which environment issued the pass. Shown on the back only when it isn't
+   * production, so a member's own card stays uncluttered while a pass
+   * accidentally installed from staging says so on its face -- that pass
+   * points at staging's web service and will never be updated by production.
+   */
+  environment?: string;
 }
 
 type PassTextAlignment =
@@ -132,12 +139,17 @@ export async function buildManifest(
  * pass on every deploy, and regenerating one costs a signature. This is the
  * same discipline as a migration number, and the same failure mode if
  * forgotten, which is why it sits here rather than beside the cache.
+ *
+ * It is also shown on the pass itself -- the bottom of the back of an Apple
+ * pass, the last detail of a Google one -- so that a member can be asked what
+ * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
 export const PASS_CONTENT_VERSION = "2026-09-18.1";
 
 export function buildPassJson(
   member: MemberPassInput,
   config: PassKitConfig,
+  builtAt: Date = new Date(),
 ): Uint8Array {
   const secondaryFields: PassField[] = [];
   if (member.memberSince) {
@@ -173,6 +185,37 @@ export function buildPassJson(
       textAlignment: "PKTextAlignmentLeft",
     });
   }
+
+  // Last, below everything anyone reads on purpose. Nobody needs these, which
+  // is why they can be asked for: "what does the bottom of the back say?" is
+  // a question a member can answer over a message, and between them the
+  // answers settle the questions a stale-looking pass actually raises.
+  //
+  // `Built` is the more useful of the two in practice -- a date can be
+  // compared against when a fix shipped without anyone having to remember
+  // what the version before it was.
+  if (config.environment && config.environment !== "production") {
+    backFields.push({
+      key: "environment",
+      label: "Environment",
+      value: config.environment,
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
+  backFields.push(
+    {
+      key: "card_version",
+      label: "Card version",
+      value: PASS_CONTENT_VERSION,
+      textAlignment: "PKTextAlignmentLeft",
+    },
+    {
+      key: "built_at",
+      label: "Built",
+      value: builtAt.toISOString().slice(0, 10),
+      textAlignment: "PKTextAlignmentLeft",
+    },
+  );
 
   const pass: PassJson = {
     formatVersion: 1,
