@@ -1,0 +1,43 @@
+# Slack app manifest for verde-bot. Paste into "Create an app -> From a
+# manifest" at https://api.slack.com/apps, or use it to check an existing
+# app still matches what the Worker needs. See README.md beside this file.
+#
+# For staging, change `display_information.name` and
+# `features.bot_user.display_name` to something that reads as staging in a
+# channel list; everything else is identical (los-verdes/card-losverd-es#133).
+display_information:
+  name: verde-bot
+  description: Los Verdes membership card service
+  background_color: "#00b140"
+
+features:
+  bot_user:
+    display_name: verde-bot
+    # Nothing here listens for messages or events, so the bot is never
+    # meaningfully "online". Saying otherwise invites people to talk to it.
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      # Reading the workspace's user list, for the members ETL that
+      # cross-references Slack accounts against memberships
+      # (src/slack/membersEtl.ts calls users.list and nothing else).
+      - users:read
+      # The same call returns email addresses only with this scope, and the
+      # cross-reference is by email.
+      - users:read.email
+      # Creates the incoming webhook that dead-letter and readiness alerts
+      # are posted to (src/slack/alert.ts). The webhook URL is produced at
+      # install time and is a separate secret from the bot token.
+      - incoming-webhook
+
+settings:
+  org_deploy_enabled: false
+  # No socket mode and no event subscriptions: the Worker never receives
+  # anything from Slack. Both directions of traffic are outbound HTTP calls
+  # it makes itself.
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  app_level_token_rotation_enabled: false
+  is_mcp_enabled: false
