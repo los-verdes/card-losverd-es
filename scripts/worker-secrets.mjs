@@ -18,39 +18,10 @@
 //     only lengths and line counts (a PEM should span several lines).
 
 import { unstable_readConfig } from "wrangler";
+import { WORKER_SECRETS } from "./lib/workerSecrets.ts";
 
 const ENVIRONMENTS = ["production", "staging"];
 
-/** Every Worker secret the code reads (`Env` in src/index.ts, minus the plain vars in wrangler.toml). */
-export const WORKER_SECRETS = [
-  // Login and sessions
-  "AUTH_SECRET",
-  "SESSION_SIGNING_KEY",
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "APPLE_SIGNIN_KEY_ID",
-  "APPLE_SIGNIN_PRIVATE_KEY_PEM",
-  // BigCommerce
-  "BIGCOMMERCE_ACCESS_TOKEN",
-  "BIGCOMMERCE_WEBHOOK_SIGNING_KEY",
-  // Apple Wallet passes and QR verification
-  "APPLE_PASS_CERT_PEM",
-  "APPLE_PASS_KEY_PEM",
-  "APPLE_WWDR_CERT_PEM",
-  "PASS_SIGNATURE_KEY",
-  "PASS_SIGNATURE_KEY_PREVIOUS",
-  "APNS_KEY_ID",
-  "APNS_PRIVATE_KEY_PEM",
-  // Google Wallet
-  "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL",
-  "GOOGLE_WALLET_PRIVATE_KEY_PEM",
-  // Email card delivery
-  "SENDGRID_API_KEY",
-  "TURNSTILE_SECRET_KEY", // TURNSTILE_SITE_KEY is public: a plain var in wrangler.toml
-  // Slack members sync
-  "SLACK_BOT_TOKEN",
-  "SLACK_ALERT_WEBHOOK_URL",
-];
 
 function fail(message) {
   console.error(`worker-secrets: ${message}`);

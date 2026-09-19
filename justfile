@@ -87,6 +87,15 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# The two environments should share no secret values, so that a staging leak
+# is not also a production compromise. Reads both 1Password items and reports
+# only names and whether they match -- never a value. The few that genuinely
+# cannot differ are listed in the script, each with its reason.
+#
+# Fail if staging and production share any secret value
+secrets-compare:
+    node scripts/secrets-compare.mjs
+
 # A failed "Save to Google Wallet" link tells the member only "Something went
 # wrong", and the JWT is validated inside Google, so there is nothing to tail.
 # This separates the causes: credentials, class, object fields, issuer access.
