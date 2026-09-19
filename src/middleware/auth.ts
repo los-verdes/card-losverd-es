@@ -62,6 +62,26 @@ async function loadUser(
 }
 
 /**
+ * Sends an unauthenticated visitor to log in, saying where they were sent
+ * from.
+ *
+ * The marker is for us rather than for them. A bare `/login` is where every
+ * unexplained sign-in problem ends up, and it looks identical whether the
+ * member never signed in, or signed in perfectly and arrived holding a
+ * session this app could not then read. Carrying the path they were bounced
+ * off makes those two distinguishable from the address bar alone, without a
+ * log tail.
+ */
+function redirectToLogin(c: {
+  req: { path: string; url: string };
+  redirect: (location: string) => Response;
+}): Response {
+  const search = new URL(c.req.url).search;
+  const from = encodeURIComponent(`${c.req.path}${search}`);
+  return c.redirect(`${LOGIN_PATH}?from=${from}`);
+}
+
+/**
  * Verifies the session cookie and sets `c.get("session")`, else redirects
  * to login. Mirrors the legacy `login_required`.
  *
@@ -76,7 +96,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
   const token = readSessionCookie(c);
   let session = token ? await verifySessionToken(secret, token) : null;
   if (!session) {
-    return c.redirect(LOGIN_PATH);
+    return redirectToLogin(c);
   }
 
   let renewedToken: string | null = null;
@@ -84,7 +104,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
     const user = await loadUser(c.env, session.userId);
     if (!user) {
       clearSessionCookie(c);
-      return c.redirect(LOGIN_PATH);
+      return redirectToLogin(c);
     }
     renewedToken = await issueSessionToken(secret, {
       userId: user.id,

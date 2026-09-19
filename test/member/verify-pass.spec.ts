@@ -71,7 +71,7 @@ describe("GET /verify-pass/:serial", () => {
   it("requires login", async () => {
     const res = await verify(LEGACY_SERIAL, await signPassSerial(PASS_KEY, LEGACY_SERIAL), false);
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe("/login");
+    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 
   it.each<[string, string | undefined]>([

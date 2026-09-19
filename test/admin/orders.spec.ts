@@ -76,7 +76,7 @@ describe("access control", () => {
     const res = await request("/admin/orders/1001_bc", { as: null });
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe("/login");
+    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 
   it("refuses a logged-in non-admin, for viewing and attributing alike", async () => {
