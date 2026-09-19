@@ -13,6 +13,7 @@ import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import type { Env } from "../index";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
+import { CLAIM_PATH } from "./claimMembership";
 import {
   displayOrderNumber,
   getMemberOrderHistory,
@@ -249,18 +250,20 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
       <p>
         That is an Apple private relay address, which is what Apple sends us
         when you choose <strong>Hide My Email</strong>. It won't match the
-        address on your order, even though your membership is fine. Log out
-        and sign in again, either with Apple choosing{" "}
-        <strong>Share My Email</strong>, or with the account you used to buy
-        your membership.
+        address on your order, even though your membership is fine. You don't
+        need to sign in again -- tell us the address you bought your
+        membership under and we'll confirm it by email.
       </p>
     ) : (
       <p>
         Check that the email address you signed in with matches the one used to
-        purchase your membership. If it doesn't, log out and sign back in with
-        that account.
+        purchase your membership. If you bought it under a different address,
+        you can confirm that address by email instead of signing in again.
       </p>
     )}
+    <a href={CLAIM_PATH} class="action">
+      I bought my membership under a different address
+    </a>
     <p>
       Not a member yet, but would like to be? Grab a membership at the Los
       Verdes store.
