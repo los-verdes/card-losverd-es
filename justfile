@@ -97,6 +97,17 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# Read-only against everything except the queue: it sends one message that no
+# handler understands, which retries, dead-letters and should produce a Slack
+# alert about thirteen minutes later. Proves the wiring the unit tests cannot:
+# that this environment's queue is bound to the right dead-letter queue, its
+# consumer is deployed, and its webhook points somewhere anyone reads.
+# Defaults to staging; production needs --yes-production.
+#
+# Prove the dead-letter alert actually reaches Slack, in a real environment
+queue-dlq-drill env="staging" *flags:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/queue-dlq-drill.mjs {{ env }} {{ flags }}
+
 # The two environments should share no secret values, so that a staging leak
 # is not also a production compromise. Reads both 1Password items and reports
 # only names and whether they match -- never a value. The few that genuinely

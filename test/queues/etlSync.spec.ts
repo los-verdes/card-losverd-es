@@ -299,6 +299,24 @@ describe("handleEtlSyncBatch", () => {
     );
   });
 
+  it("retries rather than acks the type the dead-letter drill sends", async () => {
+    // `scripts/queue-dlq-drill.mjs` proves the dead-letter alert reaches
+    // Slack in a real environment by sending exactly this message and
+    // waiting for it to exhaust its retries. That only works while an
+    // unrecognised type is retried rather than acked. Making the default
+    // case ack-and-warn would look tidier and would silently break the
+    // drill: the message would vanish, no alert would arrive, and the
+    // obvious conclusion would be that Slack alerting is broken.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const message = makeMessage({ type: "dlq_drill" } as unknown as EtlSyncMessage);
+
+    await handleEtlSyncBatch(makeBatch([message]), env);
+
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalled();
+  });
+
   it("routes run_readiness_check to the readiness check and acks", async () => {
     // Enqueued weekly by `scheduled()` (#95). It runs the same checks the
     // readiness page does and posts to Slack only when one has failed, so in
