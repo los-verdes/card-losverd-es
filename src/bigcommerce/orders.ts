@@ -67,6 +67,12 @@ export async function recordMembershipOrder(
        modified_on = excluded.modified_on,
        -- BigCommerce returned it, so whatever made it look missing is over
        -- (#105). A transient 404 therefore heals itself on the next sync.
+       -- Deliberately absent from this list: member_email. It is the only
+       -- record of a membership the legacy app transferred (its
+       -- add-memberships-to-user-email command repointed the order at another
+       -- user and left customer_email alone), and of any order an admin has
+       -- since attributed (#70). The store has no opinion on either, so the
+       -- store's copy must not win. test/bigcommerce/orders.spec.ts pins this.
        missing_since = NULL,
        updated_at = unixepoch('subsec') * 1000
      RETURNING member_email`,
