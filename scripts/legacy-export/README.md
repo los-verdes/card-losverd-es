@@ -70,6 +70,25 @@ Overrides are keyed by email and applied when a pass is read, so members
 created by BigCommerce sync after the import still pick up their legacy
 date. Re-running the import never overwrites a `manual` override.
 
+**The real load is rehearsable too, and worth rehearsing.** Until cutover the
+production database serves nobody -- `card.losverd.es` still points at the
+legacy stack -- so the import can be run against it, checked, the database
+emptied, and the whole thing run again, as many times as it takes. The
+one-shot step is the *export*: Postgres is decommissioned afterwards (plan
+Phase 8.3) and the Squarespace-era history in it exists nowhere else. So take
+the export early and carefully, and treat loading it as something to practise
+rather than to get right first time.
+
+To start over, drop what the import wrote and re-run it:
+
+```bash
+npx wrangler d1 execute card-losverd-es-db-production --remote --command   "DELETE FROM membership_orders WHERE first_seen_via = 'legacy_postgres'; DELETE FROM legacy_membership_cards; DELETE FROM member_since_overrides WHERE source = 'legacy_postgres'"
+```
+
+That leaves anything the BigCommerce sync recorded, and any `manual`
+override, alone. Doing it after cutover would not be safe, which is the
+reason for doing the rehearsing before.
+
 ## 4. Spot-check
 
 ```bash
