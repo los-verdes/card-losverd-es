@@ -255,12 +255,13 @@ Before cutover:
 - Tighten every credential to least privilege ([#15](https://github.com/los-verdes/card-losverd-es/issues/15)).
 - Validate on real devices: Apple Wallet install and update, Google Wallet save.
 
-Deliberately dropped from the legacy app: Squarespace integration, Yahoo login, BigCommerce storefront SSO, migrating installed legacy passes (members get a fresh pass).
+Deliberately dropped from the legacy app: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
 
 After cutover: MiniBC renewal data, membership revocation ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
 
 ## More docs
 
+- [`docs/migration-plan.md`](docs/migration-plan.md): the phase index the code's `Phase N` comments refer to, and where each phase's detail lives now
 - [`docs/architecture-decisions.md`](docs/architecture-decisions.md): why Cloudflare, why TypeScript, why one DNS cutover, and the non-profit context those rest on
 - [`docs/cutover.md`](docs/cutover.md): the ordered runbook for moving `card.losverd.es` and retiring GCP
 - [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): where each card field comes from and how "current member" is decided, written for the membership committee

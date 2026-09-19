@@ -34,8 +34,16 @@ None of this depends on DNS, so production can be fully working and
 populated before anyone is pointed at it.
 
 1. **Set every production secret**: `just secrets-push production`.
-2. **Register the new OAuth callback URLs** with Google and Apple, keeping
-   the legacy ones until cutover is settled.
+2. **Register the new OAuth callback URLs** with Google and Apple. **Add
+   them; do not replace the legacy ones** -- the legacy app keeps serving
+   logins until DNS moves, and removing its callbacks breaks it before
+   anything has replaced it.
+
+   The path changes, not just the host, which is easy to miss. The legacy
+   app mounts python-social-auth at the root, so its callbacks are
+   `/complete/google-oauth2/` and `/complete/apple/`. Auth.js uses
+   `/api/auth/callback/google` and `/api/auth/callback/apple`. Register the
+   `workers.dev` equivalents too, so login can be exercised before cutover.
 3. **Turnstile**: the widget's allowed hostnames must include
    `card.losverd.es` as well as the `workers.dev` host, or `/email-card`
    fails bot verification.
