@@ -24,6 +24,13 @@ import { SignJWT, importPKCS8 } from "jose";
 import type { Env } from "../index";
 import { linkOAuthUser } from "./oauth-link";
 
+/**
+ * Where Auth.js sends the browser once a sign-in finishes. Duplicated from
+ * `routes.ts` rather than imported, because importing it the other way round
+ * would be a cycle.
+ */
+export const POST_SIGN_IN_PATH = "/login/complete";
+
 const APPLE_CLIENT_SECRET_TTL_SECONDS = 5 * 60;
 
 /** Claim in the Auth.js token carrying the linked `users.id`. */
@@ -121,6 +128,25 @@ export async function authConfig(
     providers,
     callbacks: {
       signIn: ({ profile }) => isVerifiedEmailProfile(profile),
+      /**
+       * Always the session bridge, rather than wherever Auth.js would
+       * otherwise go.
+       *
+       * Auth.js remembers the requested destination in a `callbackUrl`
+       * cookie, which is `SameSite=Lax`. Apple returns via a cross-site POST
+       * (`response_mode=form_post`), and a Lax cookie is not sent on one --
+       * so for Apple the destination was forgotten and Auth.js fell back to
+       * the site root. That needs a session this app hasn't issued yet,
+       * which bounced the member to the login page looking as though nothing
+       * had happened. Google was unaffected, returning by a same-site GET.
+       *
+       * Naming the destination here removes the dependency on that cookie
+       * entirely, for every provider and whatever Auth.js decides its
+       * default should be in future. The bridge is the only sensible landing
+       * place regardless: it is what turns an Auth.js session into this
+       * app's own, and it is where a failure gets reported.
+       */
+      redirect: ({ baseUrl }) => `${baseUrl}${POST_SIGN_IN_PATH}`,
       // `account` is only present on the sign-in itself, so linking runs once
       // per OAuth login rather than on every session read.
       async jwt({ token, account, user }) {
