@@ -122,11 +122,23 @@ export function originVerdict(
   );
 }
 
-async function identityChecks(env: Env, requestUrl: string): Promise<CheckGroup> {
+async function identityChecks(
+  env: Env,
+  requestUrl: string | null,
+): Promise<CheckGroup> {
   const results: CheckResult[] = [];
-  const requestOrigin = new URL(requestUrl).origin;
 
-  results.push(originVerdict(env.PUBLIC_BASE_URL ?? "", requestOrigin));
+  // `null` means nobody asked for this page -- a scheduled run. There is no
+  // origin to compare against, and comparing PUBLIC_BASE_URL with itself
+  // would manufacture an "ok" that means nothing.
+  results.push(
+    requestUrl === null
+      ? skip(
+          "Public base URL",
+          "Not checked -- this ran on a schedule, so there is no request to compare the configured origin against.",
+        )
+      : originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin),
+  );
 
   // Apple appends `/v1/...` to whatever `webServiceURL` a pass declares, and
   // asks for updates there for as long as the pass is installed. Pointing it
@@ -652,14 +664,25 @@ async function queueChecks(env: Env, now: Date): Promise<CheckGroup> {
  */
 export async function runPreflightChecks(
   env: Env,
-  requestUrl: string,
+  requestUrl: string | null,
   now: Date = new Date(),
 ): Promise<CheckGroup[]> {
   // Whether this Worker is already serving the origin it issues passes for.
   // Several checks read differently either side of that line -- a webhook
   // still carrying the legacy app's token is expected before cutover and
   // means dropped orders after it.
-  const live = originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin).status === "ok";
+  //
+  // A scheduled run (`requestUrl === null`) cannot tell: it has no request
+  // whose host it could compare. It assumes pre-cutover, which is the
+  // assumption that cannot raise a false alarm -- before cutover the strict
+  // reading would report a deliberate, known state as a failure every time
+  // it ran, and an alert that fires on a known-good state is one people
+  // learn to ignore. The page, which does have a request, still reports the
+  // strict verdict, and a post-cutover token mismatch also surfaces as the
+  // order resync going stale.
+  const live =
+    requestUrl !== null &&
+    originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin).status === "ok";
 
   return [
     await identityChecks(env, requestUrl),

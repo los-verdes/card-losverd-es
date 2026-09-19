@@ -49,6 +49,7 @@ describe("scheduled()", () => {
     ["15 */6 * * *", { type: "sync_subscriptions_etl" }],
     ["30 * * * *", { type: "sync_customers_etl" }],
     ["30 */12 * * *", { type: "sync_minibc_subscriptions_etl" }],
+    ["0 9 * * 1", { type: "run_readiness_check" }],
   ];
 
   for (const [cron, expectedMessage] of cases) {

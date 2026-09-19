@@ -299,6 +299,20 @@ describe("handleEtlSyncBatch", () => {
     );
   });
 
+  it("routes run_readiness_check to the readiness check and acks", async () => {
+    // Enqueued weekly by `scheduled()` (#95). It runs the same checks the
+    // readiness page does and posts to Slack only when one has failed, so in
+    // this environment -- no Slack webhook configured -- it finds problems,
+    // declines to post, and still acks rather than retrying.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const message = makeMessage({ type: "run_readiness_check" });
+
+    await handleEtlSyncBatch(makeBatch([message]), env);
+
+    expect(message.ack).toHaveBeenCalledOnce();
+    expect(message.retry).not.toHaveBeenCalled();
+  });
+
   it("retries a failing message with backoff and does not fail the rest of the batch", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(
       new Error("BigCommerce API is down"),

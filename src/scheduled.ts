@@ -12,6 +12,11 @@ const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   "15 */6 * * *": { type: "sync_subscriptions_etl" },
   "30 * * * *": { type: "sync_customers_etl" },
   "30 */12 * * *": { type: "sync_minibc_subscriptions_etl" },
+  // Weekly rather than daily: the slowest thing it watches is the Apple pass
+  // certificate, which warns thirty days out, so a week's granularity still
+  // leaves four warnings before it lapses. It posts only when something has
+  // actually failed (src/admin/readinessAlert.ts).
+  "0 9 * * 1": { type: "run_readiness_check" },
 };
 
 /**
