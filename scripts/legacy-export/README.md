@@ -66,6 +66,35 @@ npx wrangler d1 execute card-losverd-es-db-production --remote --file .legacy-ex
 ```
 
 The import only writes the three tables above; it never modifies `members`.
+
+### Belt and braces: mute production's email while backfilling
+
+Nothing in the import sends email, and the three guards in
+`src/email/newOrder.ts` exist precisely so that a backfill or a resync
+cannot mail existing members. The resync that follows the import is the
+riskiest thing this project does, though, and there is now a fourth guard
+available that costs one command and takes effect immediately:
+
+```bash
+# before the import and the full resync that follows it
+npx wrangler deploy --env="" --var EMAIL_RECIPIENT_ALLOWLIST:""
+# afterwards, once the member counts have been checked
+npx wrangler deploy --env=""     # restores the `*` in wrangler.toml
+```
+
+An empty allow-list means production emails nobody at all, so even a bug
+that got past the other three would have nothing to deliver through. It is
+worth doing for the real run rather than the rehearsals, since it is the run
+where a mistake reaches people.
+
+Wrangler prints a CLI-overridden var as `(hidden)` rather than showing its
+value, so **confirm on `/admin/preflight`**: the "Who we may email" check
+reports the restriction actually in force, which is the deployed Worker's
+own answer rather than a claim about what was deployed.
+
+Remember to put it back. While it is empty, a member using `/email-card`
+gets silence, and the only signs are a suppressed send in the logs and that
+same warning on the readiness page.
 Overrides are keyed by email and applied when a pass is read, so members
 created by BigCommerce sync after the import still pick up their legacy
 date. Re-running the import never overwrites a `manual` override.
