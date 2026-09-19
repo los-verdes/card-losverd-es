@@ -181,7 +181,10 @@ async function configureHealthyEnvironment() {
 }
 
 /** All results across every group, flattened -- most assertions want this. */
-async function check(url = "https://card.losverd.es/admin/preflight", now = new Date("2026-09-18T00:00:00Z")) {
+async function check(
+  url: string | null = "https://card.losverd.es/admin/preflight",
+  now = new Date("2026-09-18T00:00:00Z"),
+) {
   const groups = await runPreflightChecks(env, url, now);
   return groups.flatMap((group) => group.results);
 }
@@ -406,6 +409,27 @@ describe("BigCommerce", () => {
     const result = find(await check(), "Webhook token");
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("--cutover");
+  });
+
+  it("leaves a foreign webhook token a warning on a scheduled run, which cannot tell", async () => {
+    // A scheduled run has no request, so it cannot know whether this Worker
+    // is serving its own PUBLIC_BASE_URL yet. Reading it strictly would
+    // report the deliberate pre-cutover state as a failure on every run, and
+    // the weekly alert built on these verdicts (#95) would cry wolf until
+    // someone muted it. Assuming pre-cutover is the assumption that cannot
+    // raise a false alarm.
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: WEBHOOK_DESTINATION,
+        is_active: true,
+        headers: { Authorization: "bearer the-legacy-apps-token" },
+      },
+    ];
+
+    const result = find(await check(null), "Webhook token");
+
+    expect(result.status).toBe("warn");
   });
 
   it("never reports either token's value", async () => {

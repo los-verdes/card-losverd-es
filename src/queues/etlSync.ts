@@ -6,6 +6,7 @@ import {
   syncSubscriptionsEtl,
   type SubscriptionsEtlCursor,
 } from "../bigcommerce/sync";
+import { runReadinessCheck } from "../admin/readinessAlert";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 
 /**
@@ -24,7 +25,8 @@ export type EtlSyncMessage =
     }
   | { type: "sync_customers_etl" }
   | { type: "sync_minibc_subscriptions_etl" }
-  | { type: "run_slack_members_etl" };
+  | { type: "run_slack_members_etl" }
+  | { type: "run_readiness_check" };
 
 /** Enqueue a message onto the `etl-sync` queue (the single typed send site). */
 export async function enqueueEtlSync(
@@ -66,6 +68,9 @@ async function dispatchEtlSyncMessage(
       return;
     case "run_slack_members_etl":
       await runSlackMembersEtl(env);
+      return;
+    case "run_readiness_check":
+      await runReadinessCheck(env);
       return;
     default: {
       // The same reasoning `handleQueueBatch` applies one file over, for the

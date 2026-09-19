@@ -208,4 +208,7 @@ max_retries = 0
 # A resync never emails anyone (see src/email/newOrder.ts). Production gets
 # its own [triggers] block once its secrets are set, with the same schedules.
 [env.staging.triggers]
-crons = ["15 */6 * * *"]
+# "15 */6 * * *" the BigCommerce resync; "0 9 * * 1" the weekly readiness
+# check, which posts to Slack only when a check has actually failed
+# (src/admin/readinessAlert.ts). Both map to a message in src/scheduled.ts.
+crons = ["15 */6 * * *", "0 9 * * 1"]
