@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+/// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 import { APP_CSS, VERDE } from "../src/styles";
 
@@ -13,7 +13,11 @@ function luminance(hex: string): number {
     const c = value / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  // `#555` is as valid as `#555555` and CSS authors write both, so expand the
+  // short form rather than quietly reading it as NaN.
+  const digits = hex.slice(1);
+  const full = digits.length === 3 ? [...digits].map((d) => d + d).join("") : digits;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
@@ -55,7 +59,7 @@ describe("the colour tokens", () => {
   it("resolve to plain hex, so contrast can be reasoned about at all", () => {
     for (const palette of [LIGHT, DARK]) {
       for (const name of [...TEXT_TOKENS, "--verde", "--bg", "--rule"]) {
-        expect(palette[name], name).toMatch(/^#[0-9a-fA-F]{6}$/);
+        expect(palette[name], name).toMatch(/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/);
       }
     }
   });
@@ -110,24 +114,29 @@ describe("pages keep their colours in the stylesheet", () => {
   // The rule dark mode depends on: a hex literal in a `style` attribute
   // cannot respond to prefers-color-scheme, so each one is a patch of light
   // mode surviving on a dark page.
-  const PAGES = [
-    "src/admin/layout.tsx",
-    "src/admin/memberSince.tsx",
-    "src/admin/orders.tsx",
-    "src/admin/preflight.tsx",
-    "src/admin/reports.tsx",
-    "src/auth/loginPage.tsx",
-    "src/member/email-card.tsx",
-    "src/member/layout.tsx",
-    "src/member/portal.tsx",
-    "src/member/verify-pass.tsx",
-  ];
+  //
+  // Globbed rather than listed. Vite inlines these at transform time, which
+  // matters twice over: the Workers test pool has no working `node:fs`, and a
+  // hardcoded list silently stops covering pages added after it was written.
+  const SOURCES = import.meta.glob("../src/**/*.tsx", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
 
-  it.each(PAGES)("%s names no colour of its own", (path) => {
-    const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-    const inStyleAttributes = source.matchAll(/style="([^"]*)"/g);
-    for (const [, declarations] of inStyleAttributes) {
-      expect(declarations, path).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+  /** Mail templates are exempt -- see the emailed-card test below. */
+  const pages = Object.entries(SOURCES).filter(([path]) => !path.includes("/email/"));
+
+  it("finds pages to check at all, rather than passing on an empty glob", () => {
+    expect(pages.length).toBeGreaterThan(5);
+  });
+
+  it.each(pages)("%s names no colour of its own", (_path, source) => {
+    for (const [, declarations] of source.matchAll(/style="([^"]*)"/g)) {
+      // `var(--danger, #b00020)` is allowed: the fallback only applies where
+      // the token is undefined, so it cannot strand a page in light mode.
+      const literal = declarations.replace(/var\(--[a-z-]+,\s*#[0-9a-fA-F]{3,6}\)/g, "");
+      expect(literal).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
     }
   });
 
@@ -135,7 +144,6 @@ describe("pages keep their colours in the stylesheet", () => {
     // Mail clients neither fetch /assets/app.css nor honour the media query
     // dependably, so that one template keeps inline, light colours on
     // purpose. Asserted so a later sweep doesn't "fix" it.
-    const email = readFileSync(new URL("../src/email/card.tsx", import.meta.url), "utf8");
-    expect(email).toMatch(/#[0-9a-fA-F]{3,6}\b/);
+    expect(SOURCES["../src/email/card.tsx"]).toMatch(/#[0-9a-fA-F]{3,6}\b/);
   });
 });
