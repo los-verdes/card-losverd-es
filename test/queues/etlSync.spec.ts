@@ -71,6 +71,25 @@ describe("handleEtlSyncBatch", () => {
     await env.DB.exec("DELETE FROM etl_sync_state");
   });
 
+  it("retries rather than discards a message type it doesn't recognise", async () => {
+    // Acking would throw the work away in silence. The realistic way to get
+    // here is deploy ordering -- a producer shipping a new message type
+    // before the consumer that handles it, or a rollback past one -- and
+    // that is recoverable only if the message survives. Retrying leads to
+    // the dead-letter queue, which announces itself in Slack.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const message = makeMessage({ type: "sync_something_new" } as unknown as EtlSyncMessage);
+
+    await handleEtlSyncBatch(makeBatch([message]), env);
+
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledWith(
+      "etl-sync handler failed",
+      expect.objectContaining({ type: "sync_something_new" }),
+    );
+  });
+
   it("dispatches sync_bigcommerce_order and acks on success", async () => {
     const order = {
       id: 4242,
