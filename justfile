@@ -68,6 +68,16 @@ deploy env="production":
 check-wrangler-envs:
     node scripts/check-wrangler-envs.mjs
 
+# Read-only, so it is safe against a candidate token before swapping it in:
+# creates nothing, changes nothing. Proves each permission group is granted,
+# not that it is granted at Edit rather than Read -- only a staging deploy
+# proves that. To try a narrowed token instead of the one in 1Password, run
+# the script directly with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID set.
+#
+# Check the Cloudflare API token has every permission Terraform and Deploy need
+cloudflare-token-check:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
+
 # Worker secrets: 1Password is the source of truth, since Cloudflare never
 # returns a secret's value. One item per environment in the "Los Verdes" vault,
 # `lv-card-losverd-es-worker-<env>`, with one field per secret labeled with its
