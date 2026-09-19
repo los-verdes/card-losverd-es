@@ -127,8 +127,10 @@ queue = "etl-sync-dlq-production"
 max_batch_size = 10
 max_retries = 0
 
-# No [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts) would
-# call BigCommerce with placeholder credentials until real secrets are set.
+# No production [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts)
+# would call BigCommerce with placeholder credentials until real secrets are
+# set. Staging, whose secrets are complete, runs the BigCommerce resync on a
+# schedule -- see [env.staging.triggers] at the end of this file.
 
 # =============================================================================
 # Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
@@ -195,3 +197,15 @@ dead_letter_queue = "etl-sync-dlq-staging"
 queue = "etl-sync-dlq-staging"
 max_batch_size = 10
 max_retries = 0
+
+# Cron triggers, staging only (decided 2026-09-19): the scheduled BigCommerce
+# resync (src/scheduled.ts maps the schedule to `sync_subscriptions_etl`) runs
+# here first, against the sandbox store, so the cron -> queue -> resync path
+# is exercised before production. Deliberately only that one job:
+#   - "0 */6 * * *" (Slack members) stays off until staging has its own Slack
+#     app (#133) -- today it holds production's bot token;
+#   - "30 * * * *" (customers) and "30 */12 * * *" (MiniBC) are stubs.
+# A resync never emails anyone (see src/email/newOrder.ts). Production gets
+# its own [triggers] block once its secrets are set, with the same schedules.
+[env.staging.triggers]
+crons = ["15 */6 * * *"]
