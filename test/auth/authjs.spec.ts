@@ -9,7 +9,7 @@ import {
   jwtVerify,
 } from "jose";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { appleClientSecret, isVerifiedEmailProfile, providerFullName } from "../../src/auth/authjs";
+import { appleClientSecret, authConfig, isVerifiedEmailProfile, providerFullName } from "../../src/auth/authjs";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 
@@ -267,11 +267,14 @@ describe("/api/auth (Auth.js)", () => {
       return { callback, jar };
     }
 
-    it("issues an Auth.js session for a verified Google email", async () => {
+    it("issues an Auth.js session for a verified Google email, landing on the bridge", async () => {
+      // The destination is the bridge for every provider now, rather than
+      // whatever the `callbackUrl` cookie survived to say -- for Apple it
+      // did not survive at all, being SameSite=Lax across a cross-site POST.
       const { callback, jar } = await runGoogleLogin({ email_verified: true });
 
       expect(callback.status).toBe(302);
-      expect(callback.headers.get("Location")).toBe(`${ORIGIN}/`);
+      expect(callback.headers.get("Location")).toBe(`${ORIGIN}/login/complete`);
       expect(jar.names()).toContain("__Secure-authjs.session-token");
 
       const session = await request("/api/auth/session", {}, jar);
@@ -435,5 +438,27 @@ describe("the session bridge's failure modes", () => {
 
   it("says nothing of the sort on an ordinary visit", async () => {
     expect(await (await request("/login")).text()).not.toContain("Trying again often works");
+  });
+});
+
+describe("where Auth.js sends the browser after signing in", () => {
+  async function redirectTo(url: string) {
+    const config = await authConfig({ env } as unknown as Parameters<typeof authConfig>[0]);
+    return config.callbacks!.redirect!({ url, baseUrl: ORIGIN });
+  }
+
+  it("always lands on the session bridge, whatever it is handed", async () => {
+    // Apple returns by cross-site POST, so the `callbackUrl` cookie Auth.js
+    // would otherwise consult (SameSite=Lax) isn't sent, and the destination
+    // fell back to the site root -- which needs a session not issued yet, so
+    // the member bounced back to the login page as if nothing had happened.
+    await expect(redirectTo(`${ORIGIN}/`)).resolves.toBe(`${ORIGIN}/login/complete`);
+    await expect(redirectTo(`${ORIGIN}/login/complete`)).resolves.toBe(`${ORIGIN}/login/complete`);
+  });
+
+  it("ignores an off-site destination rather than honouring it", async () => {
+    await expect(redirectTo("https://example.invalid/steal")).resolves.toBe(
+      `${ORIGIN}/login/complete`,
+    );
   });
 });
