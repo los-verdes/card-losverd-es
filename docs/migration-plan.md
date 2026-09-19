@@ -1,14 +1,10 @@
 # Migration plan: phase index
 
-The plan that drove this rewrite was written before the build and specified
-it in detail -- schemas, file trees, route behaviour, queue configuration.
-The code now specifies itself, and says so at the point of use, so keeping a
-second copy of those specifications only created something that could drift
-out of agreement with the thing it described.
-
-What remains here is an index. Ninety-odd comments in this repository cite a
-phase number, so the numbering is preserved and each entry says what that
-phase covered and where its detail lives now.
+The plan that drove this rewrite specified it in detail before the build.
+The code now specifies itself at the point of use, and what remains here is
+an index. Dozens of comments cite a phase number, so the numbering is
+preserved and each entry says what that phase covered and where its detail
+lives now.
 
 The decisions that shaped the whole project are in
 [`architecture-decisions.md`](architecture-decisions.md). The one phase that
