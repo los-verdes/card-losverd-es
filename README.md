@@ -50,10 +50,10 @@ The `card.losverd.es` DNS record is deliberately not managed here yet -- that's 
 
 ## Keeping dependencies current
 
-Twenty-one direct dependencies, and the intent is that keeping them current stays a few minutes a month rather than a standing chore. Dependabot (`.github/dependabot.yml`) does the watching; the design is about keeping the number of pull requests low rather than the number of updates high.
+Twenty direct dependencies, and the intent is that keeping them current stays a few minutes a month rather than a standing chore. Dependabot (`.github/dependabot.yml`) does the watching; the design is about keeping the number of pull requests low rather than the number of updates high.
 
 - **One grouped PR a week** for every minor and patch update across all dependencies. Most weeks this is the only one, and reviewing it means reading a changelog rather than a diff.
-- **A second grouped PR** for GitHub Actions, which also gets us told when an action finally ships a release that drops Node 20 -- the deprecation warning every workflow run currently carries, which nothing in this repository can fix.
+- **A second grouped PR** for GitHub Actions. Worth keeping current for its own sake: a runner deprecation is announced against action versions, so the way it reaches this repository is an action that has not been bumped.
 - **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group.
 - **Nothing auto-merges.** CI passing is not the same as someone having decided the change is wanted, and these land code nobody has read.
 
@@ -66,13 +66,14 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | Path | What it is | Auth |
 | :--- | :--- | :--- |
 | `/` , `/card.png`, `/passes/apple.pkpass`, `/passes/google` | Member portal: your card, card image, and wallet passes (`src/member/portal.tsx`) | Logged-in current member |
-| `/login`, `/logout`, `/api/auth/*` | Login with Google or Apple via Auth.js, bridged to a signed `lv_session` cookie (`src/auth/`) | Public |
+| `/login`, `/logout`, `/api/auth/*` | Login with Google or Apple via Auth.js, bridged to a signed `lv_session` cookie. `/login` also offers `/email-card`, for anyone who has neither account (`src/auth/`) | Public |
 | `/email-card` | No-login fallback: emails a member their card. Turnstile-protected and rate limited; never reveals whether an address is a member (`src/member/email-card.tsx`) | Public |
 | `/verify-pass` | What a card's QR code points at; shows the holder's current membership (`src/member/verify-pass.tsx`) | Any logged-in user |
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
+| `/admin/member-since` | Correct a member's "member since" date when their orders don't show when they really joined (`src/admin/memberSince.tsx`) | Admin |
 | `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |
 | `/assets/:name` | Public images, allow-listed; Google Wallet fetches the pass logo from here (`src/assets.ts`) | Public |
 | `/healthz` | Liveness check | Public |
@@ -115,6 +116,22 @@ Use a different value per environment. Random values (`openssl rand -hex 32`) wo
 
 Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` would break every QR code already issued, so it rotates through an overlap window ([`docs/pass-signature-rotation.md`](docs/pass-signature-rotation.md)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
+| Secret | Needed for |
+| :--- | :--- |
+| `SESSION_SIGNING_KEY`, `AUTH_SECRET` | Any login at all |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Login with Google |
+| `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY_PEM` | Sign in with Apple |
+| `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` | Order sync and webhook verification |
+| `APPLE_PASS_CERT_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_WWDR_CERT_PEM` | Signing Apple Wallet passes |
+| `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM` | Pushing Apple pass updates |
+| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
+| `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
+| `SENDGRID_API_KEY`, `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var) |
+| `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
+| `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
+
+For the `*_PEM` secrets, paste the file's own text. 1Password's password fields strip the line breaks, which is harmless -- both parsers used here (`node-forge` for pass signing, `jose` for JWT keys) discard whitespace before decoding the base64. A value carrying literal `\n` escapes, as copied out of a Google service-account JSON file, is *not* harmless: it fails at runtime with an opaque ASN.1 error, so `secrets-push` refuses it (along with a value that isn't PEM at all, one that's truncated, and a passphrase-protected key, which `node-forge` can't read).
+
 ### Creating the Google Wallet class
 
 A "Save to Google Wallet" link only works if the pass class it names already
@@ -150,6 +167,7 @@ It builds the object with the Worker's own builder, so what it checks is what
 members get. `--insert` is the authoritative check and the only way to get a
 specific error out of Google, but it writes one synthetic object to the issuer
 account, which cannot afterwards be deleted -- inert, since nobody holds it.
+
 ### Renewing the Apple pass certificate
 
 Apple issues a Pass Type ID certificate for one year. When it lapses, signing
@@ -201,23 +219,7 @@ just bigcommerce-ensure-webhook staging
 
 It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es.jeff-hogan1.workers.dev`.
 
-| Secret | Needed for |
-| :--- | :--- |
-| `SESSION_SIGNING_KEY`, `AUTH_SECRET` | Any login at all |
-| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Login with Google |
-| `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY_PEM` | Sign in with Apple |
-| `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` | Order sync and webhook verification |
-| `APPLE_PASS_CERT_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_WWDR_CERT_PEM` | Signing Apple Wallet passes |
-| `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM` | Pushing Apple pass updates |
-| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
-| `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
-| `SENDGRID_API_KEY`, `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var) |
-| `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
-| `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
-
-For the `*_PEM` secrets, paste the file's own text. 1Password's password fields strip the line breaks, which is harmless -- both parsers used here (`node-forge` for pass signing, `jose` for JWT keys) discard whitespace before decoding the base64. A value carrying literal `\n` escapes, as copied out of a Google service-account JSON file, is *not* harmless: it fails at runtime with an opaque ASN.1 error, so `secrets-push` refuses it (along with a value that isn't PEM at all, one that's truncated, and a passphrase-protected key, which `node-forge` can't read).
-
-### Making someone an admin
+## Making someone an admin
 
 Admin is a flag in D1, checked on every admin request. The person logs in once so their `users` row exists, then:
 
@@ -230,7 +232,7 @@ npx wrangler d1 execute DB --remote --env="" --command \
 
 Worth doing early on a new environment rather than last: the readiness page below is admin-gated, and it is most useful while an environment is still being set up.
 
-### Checking whether an environment is ready
+## Checking whether an environment is ready
 
 `/admin/preflight` reports what the deployed Worker can see of its own environment: whether `PUBLIC_BASE_URL` matches the host serving it, whether the D1 migrations ran and the R2 template images are uploaded, whether the Apple pass certificate matches its key and its bundled WWDR intermediate and how long it has left, whether the Google Wallet class exists, whether BigCommerce accepts the access token and has an order webhook pointing here carrying the token this Worker verifies, and which of the optional integrations are configured.
 
@@ -247,15 +249,14 @@ Feature-complete enough to exercise end to end on staging; **not yet cut over**.
 Before cutover:
 
 - Real credentials for BigCommerce, Apple, Google, SendGrid, Turnstile, and Slack, then enable the cron triggers.
-- Run the one-time legacy export ([`scripts/legacy-export/`](scripts/legacy-export/README.md)) while the legacy database still exists. It is the only source for Squarespace-era orders.
-- Fix the full-resync page cap ([#57](https://github.com/los-verdes/card-losverd-es/issues/57)) before the first full `members` load.
-- Finish the reporting pages that replace the legacy Data Studio report ([#53](https://github.com/los-verdes/card-losverd-es/issues/53)); the legacy report reads the database that cutover retires.
+- Run the one-time legacy export ([`scripts/legacy-export/`](scripts/legacy-export/README.md)) while the legacy database still exists. It is the only source for Squarespace-era orders. It can be rehearsed as often as wanted; only the last run before cutover is the real one.
+- Decide what a legacy BigCommerce order with no status counts as ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), before that export is loaded. `/admin/preflight` counts the affected orders once it has run.
 - Tighten every credential to least privilege ([#15](https://github.com/los-verdes/card-losverd-es/issues/15)).
-- Validate on real devices: Apple Wallet install and update, Google Wallet save, webhook delivery from the sandbox store ([#7](https://github.com/los-verdes/card-losverd-es/issues/7)).
+- Validate on real devices: Apple Wallet install and update, Google Wallet save.
 
 Deliberately dropped from the legacy app: Squarespace integration, Yahoo login, BigCommerce storefront SSO, migrating installed legacy passes (members get a fresh pass).
 
-After cutover: MiniBC renewal data, membership revocation ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)), Google Wallet object updates ([#28](https://github.com/los-verdes/card-losverd-es/issues/28)), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
+After cutover: MiniBC renewal data, membership revocation ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
 
 ## More docs
 
