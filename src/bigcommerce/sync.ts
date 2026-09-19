@@ -77,6 +77,10 @@ export class BigCommerceClient {
     private readonly accessToken: string,
   ) {}
 
+  // Callers interpolate ids into `path`, and a URL normalises `..` away
+  // rather than rejecting it, so an id carrying dot segments would silently
+  // address a different endpoint -- with this store's token attached. Ids are
+  // encoded at every call site for that reason.
   private url(path: string, query?: URLSearchParams): string {
     const base = `${BC_API_BASE}/${this.storeHash}/v2/${path}`;
     return query ? `${base}?${query.toString()}` : base;
@@ -110,7 +114,7 @@ export class BigCommerceClient {
   async getOrderIfPresent(
     orderId: number | string,
   ): Promise<BigCommerceOrder | null> {
-    const res = await this.get(`orders/${orderId}`);
+    const res = await this.get(`orders/${encodeURIComponent(orderId)}`);
     if (res.status === 404 || res.status === 204) {
       await res.body?.cancel();
       return null;
@@ -126,7 +130,7 @@ export class BigCommerceClient {
   async getOrderProducts(
     orderId: number | string,
   ): Promise<BigCommerceOrderProduct[]> {
-    const res = await this.get(`orders/${orderId}/products`);
+    const res = await this.get(`orders/${encodeURIComponent(orderId)}/products`);
     if (res.status === 204) return [];
     if (!res.ok) {
       throw new Error(

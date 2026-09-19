@@ -29,6 +29,25 @@ export function verifyWebhookAuthorization(
   return timingSafeEqual(incoming, expectedToken.toLowerCase());
 }
 
+/**
+ * BigCommerce order ids are positive integers. Checking that here keeps an id
+ * from a webhook body out of the API path it is interpolated into -- a URL
+ * normalises `..` away rather than rejecting it, so an id containing dot
+ * segments would address a different endpoint with this store's token
+ * attached. Exploiting that needs the webhook token, so this is a second
+ * lock rather than the only one; the call sites encode the id as well.
+ *
+ * It also fails the obvious way round: a malformed id is answered now,
+ * instead of becoming a queue message that retries five times and
+ * dead-letters.
+ */
+export function isValidOrderId(id: unknown): boolean {
+  return (
+    (typeof id === "number" || typeof id === "string") &&
+    /^[1-9][0-9]{0,17}$/.test(String(id))
+  );
+}
+
 const bigcommerce = new Hono<{ Bindings: Env }>();
 
 /**
@@ -82,6 +101,10 @@ bigcommerce.post("/order-webhook", async (c) => {
   }
 
   if (payload.data.type === "order" && payload.data.id !== undefined) {
+    if (!isValidOrderId(payload.data.id)) {
+      console.warn("bigcommerce order-webhook: refusing an order id that isn't one");
+      return c.text("Bad Request: data.id is not an order id", 400);
+    }
     await enqueueEtlSync(c.env, {
       type: "sync_bigcommerce_order",
       orderId: String(payload.data.id),

@@ -2,6 +2,7 @@ import "../setup/d1";
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyWebhookAuthorization } from "../../src/bigcommerce/routes";
+import { isValidOrderId } from "../../src/bigcommerce/routes";
 import { signWebhookToken } from "../../src/bigcommerce/webhookToken";
 import type { EtlSyncMessage } from "../../src/queues/etlSync";
 
@@ -218,6 +219,47 @@ describe("POST /bigcommerce/order-webhook", () => {
 
     expect(res.status).toBe(200);
     expect(sent).toEqual([]);
+  });
+
+  // The id is interpolated into a BigCommerce API path, and a URL normalises
+  // `..` away rather than rejecting it, so an id carrying dot segments would
+  // address a different endpoint with this store's token attached. Reaching
+  // this needs the webhook token, so it is a second lock -- but a cheap one.
+  it.each([
+    ["dot segments", "../../v2/customers"],
+    ["a query string", "1?include=x"],
+    ["a path separator", "1/products"],
+    ["not a number", "abc"],
+    ["zero", 0],
+    ["a negative number", -1],
+    ["empty", ""],
+  ])("refuses an order id with %s, without enqueueing", async (_label, id) => {
+    const sent: EtlSyncMessage[] = [];
+    (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
+      send: async (message: EtlSyncMessage) => {
+        sent.push(message);
+      },
+    } as unknown as Queue<EtlSyncMessage>;
+
+    const res = await SELF.fetch(
+      "https://example.com/bigcommerce/order-webhook",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: await validAuthHeader(),
+        },
+        body: JSON.stringify(webhookPayload({ data: { type: "order", id } })),
+      },
+    );
+
+    expect(res.status).toBe(400);
+    expect(sent).toEqual([]);
+  });
+
+  it("still accepts an ordinary numeric order id, as a string or a number", async () => {
+    expect(isValidOrderId(1001)).toBe(true);
+    expect(isValidOrderId("1001")).toBe(true);
   });
 
 });
