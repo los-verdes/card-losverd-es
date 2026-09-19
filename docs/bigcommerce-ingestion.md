@@ -60,13 +60,22 @@ to Workers:
      itself issued. The `signWebhookToken`/`verifyWebhookSignature` helpers
      are pure functions, so this is a config/secrets exercise at cutover,
      not a code change.
-4. If `data.type === "order"`, enqueue
-   `{ type: "sync_bigcommerce_order", orderId: data.id, storeHash }` onto
-   `ETL_SYNC_QUEUE` (see §3) and return `200` immediately — **no inline
+4. If `data.type === "order"`, check `data.id` is a positive integer, which
+   is all a BigCommerce order id ever is. Reject (400) otherwise. The id is
+   interpolated into the API path the sync later fetches, and a URL
+   normalises `..` away rather than rejecting it, so an id carrying dot
+   segments would address a different endpoint with this store's access
+   token attached. Reaching that needs the webhook token verified in step 3,
+   so this is a second lock rather than the only one -- the client encodes
+   ids into the path as well. It also means a malformed id is answered here
+   rather than becoming a queue message that retries five times and
+   dead-letters.
+5. Enqueue `{ type: "sync_bigcommerce_order", orderId: data.id, storeHash }`
+   onto `ETL_SYNC_QUEUE` (see §3) and return `200` immediately — **no inline
    sync work happens in the request**, matching Phase 2.5.5's stated
    design and today's Python behavior of acking fast and syncing
    out-of-band.
-5. Any other `data.type` (e.g. `customer`) is logged and acked 200 with no
+6. Any other `data.type` (e.g. `customer`) is logged and acked 200 with no
    further action — same as today's Python `else` branch (`No handler
    available for {data_type}`), since only orders drive membership state
    today.
@@ -121,6 +130,26 @@ new member overlap between the lookup and the insert, the row that got there
 first keeps its id and token and takes the same derived state. Running the
 same order through this path any number of times converges to the same row --
 the idempotency property the tests in §4 assert directly.
+
+### Orders BigCommerce no longer has
+
+A webhook fires for a deleted order like any other, and the sync's fetch
+then 404s. That is a fact about the store rather than a failure, so it is
+not retried: the order's row is flagged with `missing_since`, Slack is told
+once, and the message is acked. Nothing is retried five times to reach the
+same answer.
+
+**A flagged order still counts towards its member's membership**, and their
+card is untouched (decided 2026-09-18, los-verdes/card-losverd-es#105).
+Withdrawing a membership on the strength of one API response would turn a
+BigCommerce incident into members losing their cards en masse; the flag
+raises it for a person instead, on the "Missing from BigCommerce" report.
+A later sync that finds the order again clears the flag, so a transient 404
+heals itself.
+
+This catches deletion, not archival. An archived order simply stops
+appearing in the order list, and the resync (§4) walks forward from a cursor
+rather than looking for absences, so nothing notices.
 
 ## 3. Integration with the `etl-sync` queue
 
