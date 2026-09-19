@@ -20,17 +20,55 @@
  * Kept as a string rather than a `.css` file because a Worker has no static
  * file serving: everything is either bundled or fetched from R2, and a string
  * is the honest version of "bundled".
+ *
+ * The pages honour a dark device (#141) by restating the custom properties
+ * below under `prefers-color-scheme`, so a page's own rules never mention a
+ * colour twice. Two things deliberately sit outside that: the card image and
+ * the Wallet passes, which are artwork with fixed colours and look wrong
+ * inverted, and the emailed card (`src/email/card.tsx`), because mail clients
+ * neither load this stylesheet nor support the query reliably -- its colours
+ * stay inline and light on purpose.
  */
 
 /** The group's green, matching the pass and the card image. */
 export const VERDE = "#00B140";
 
 export const APP_CSS = `:root {
+  /* Every colour on the site is one of these, so honouring a dark device is
+     a matter of restating them rather than hunting down declarations. Pages
+     name them by meaning (--danger, not a particular red) for the same
+     reason: a red legible on white is not the red legible on near-black. */
   --verde: ${VERDE};
   --ink: #14181f;
+  --bg: #fff;
   --muted: #555;
   --rule: #d8e8dd;
+  --danger: #b00020;
+  --success: #137333;
+  --warn: #a15c00;
+
+  /* Lets the browser dark-render what we don't control: form fields, the
+     canvas behind a short page, scrollbars. Without it those stay white and
+     the page comes apart at the edges. */
+  color-scheme: light dark;
 }
+
+/* TODO(human): the dark palette.
+
+   @media (prefers-color-scheme: dark) {
+     :root {
+       --ink: ...;      light text
+       --bg: ...;       page background, near-black rather than pure black
+       --muted: ...;    secondary notes
+       --rule: ...;     hairlines and table borders
+       --danger: ...;   errors
+       --success: ...;  confirmations
+       --warn: ...;     preflight warnings
+     }
+   }
+
+   --verde stays as it is: #00B140 measures 6.24:1 against a dark
+   background, better than it manages on white (#143). */
 
 /* Bungee is a display face: all caps, heavy, for headings only. Swap rather
    than block -- a heading in the system font for one frame beats a blank
@@ -47,6 +85,7 @@ body {
   margin: 2rem auto;
   padding: 0 1rem;
   color: var(--ink);
+  background: var(--bg);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }

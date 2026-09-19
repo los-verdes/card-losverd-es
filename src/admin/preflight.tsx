@@ -28,13 +28,13 @@ import {
 } from "./preflightChecks";
 
 const STATUS_STYLE: Record<CheckStatus, { label: string; colour: string }> = {
-  ok: { label: "OK", colour: "#137333" },
-  warn: { label: "WARN", colour: "#a15c00" },
-  fail: { label: "FAIL", colour: "#b3261e" },
-  skip: { label: "OFF", colour: "#5f6368" },
+  ok: { label: "OK", colour: "var(--success)" },
+  warn: { label: "WARN", colour: "var(--warn)" },
+  fail: { label: "FAIL", colour: "var(--danger)" },
+  skip: { label: "OFF", colour: "var(--muted)" },
 };
 
-const rowStyle = "padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top";
+const rowStyle = "padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top";
 
 const Group: FC<{ group: CheckGroup }> = ({ group }) => (
   <section style="margin-bottom: 1.75rem">
@@ -83,7 +83,7 @@ preflight.get("/", async (c) => {
       ))}
       <section>
         <h2 style="font-size: 1.1rem; margin-bottom: 0.4rem">Still needs a person</h2>
-        <p style="margin-top: 0; color: #5f6368">
+        <p style="margin-top: 0; color: var(--muted)">
           No code above can do these. Work down the list on the environment serving this page.
         </p>
         <ul>
