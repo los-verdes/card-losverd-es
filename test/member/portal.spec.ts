@@ -488,4 +488,14 @@ describe("the no-membership page", () => {
 
     expect(await (await get("/no-active-membership")).text()).toContain("Hide My Email");
   });
+
+  it("recognises the private.icloud.com domain Apple is moving new sign-ins to", async () => {
+    // Apple began issuing Sign in with Apple addresses on private.icloud.com
+    // during 2026, keeping the older domain working. Matching only the old
+    // one would send every new Apple member the generic advice to check the
+    // address on their order, which for a relay address is a dead end.
+    await insertUser("abc123def@private.icloud.com");
+
+    expect(await (await get("/no-active-membership")).text()).toContain("Hide My Email");
+  });
 });
