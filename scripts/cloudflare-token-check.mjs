@@ -88,7 +88,18 @@ function reason({ status, body }) {
   return `HTTP ${status}: ${error.message}${chained ? ` (${chained})` : ""}`;
 }
 
-const verify = await call("/user/tokens/verify");
+// Cloudflare has two kinds of API token, verified at two endpoints: a
+// user-owned token at /user/tokens/verify, and an account-owned token at
+// /accounts/{id}/tokens/verify. A group-owned account is exactly where a
+// narrowed token might be created as account-owned, so try both before
+// concluding anything about the token itself.
+let verify = await call("/user/tokens/verify");
+if (verify.status === 401 || verify.status === 403) {
+  const accountVerify = await call(`/accounts/${accountId}/tokens/verify`);
+  if (accountVerify.body?.success) {
+    verify = accountVerify;
+  }
+}
 if (verify.status === 400) {
   // 6111, "Invalid format for Authorization header" -- the value isn't
   // shaped like a token at all, so it is usually a quoting or op:// mistake
