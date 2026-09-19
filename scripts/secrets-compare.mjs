@@ -85,13 +85,21 @@ async function loadItems() {
   return items;
 }
 
-/** Secret name -> value, skipping 1Password's own built-in fields and blanks. */
+/**
+ * Secret name -> value, skipping 1Password's own built-in fields and blanks.
+ *
+ * Whitespace is stripped before comparing: 1Password strips newlines from
+ * password fields, and two copies of the same PEM pasted at different times
+ * can differ only in line endings. An exact match would call those different
+ * and quietly miss a shared key, which is the wrong direction for this tool
+ * to fail in.
+ */
 function secretsOf(item) {
   const secrets = new Map();
   for (const field of item.fields ?? []) {
     if (field.purpose) continue;
     if (WORKER_SECRETS.includes(field.label) && field.value) {
-      secrets.set(field.label, field.value);
+      secrets.set(field.label, field.value.replace(/\s+/g, ""));
     }
   }
   return secrets;
