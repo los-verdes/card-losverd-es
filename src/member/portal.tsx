@@ -202,6 +202,13 @@ export const MemberCard: FC<{
       src="/card.png"
       width={CARD_WIDTH}
       height={CARD_HEIGHT}
+      // Sizing stays on the element rather than moving to the class.
+      // /assets/app.css is cached for an hour, and this page is not, so for
+      // up to an hour after a deploy a browser can hold HTML that needs a
+      // rule its stylesheet has not got yet. A class carrying `width: 100%`
+      // fails open at 1050px -- the card's intrinsic width -- which
+      // overflows a phone screen. Inline, it cannot skew.
+      style="width: 100%; height: auto"
       alt="Your Los Verdes membership card"
     />
     <a href="/passes/apple.pkpass" class="action">
