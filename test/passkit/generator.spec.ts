@@ -9,6 +9,7 @@ import {
   buildPassJson,
   getCachedPass,
   invalidateCachedPass,
+  PASS_CONTENT_VERSION,
   putCachedPass,
   type MemberPassInput,
   type PassKitConfig,
@@ -50,8 +51,10 @@ function testSigningCredentials(): PassSigningCredentials {
 }
 
 describe("buildPassJson", () => {
+  const BUILT_AT = new Date("2026-09-19T11:22:33Z");
+
   function parse(member: MemberPassInput, config: PassKitConfig = CONFIG) {
-    return JSON.parse(new TextDecoder().decode(buildPassJson(member, config)));
+    return JSON.parse(new TextDecoder().decode(buildPassJson(member, config, BUILT_AT)));
   }
 
   it("builds top-level identifiers from config and the member", () => {
@@ -149,14 +152,53 @@ describe("buildPassJson", () => {
 
   it("shows the member id as the Card # back field, with no status note for an active member", () => {
     const pass = parse(makeMember({ memberId: "LV-10023", status: "active" }));
-    expect(pass.generic.backFields).toEqual([
+    expect(pass.generic.backFields.filter((f: { key: string }) => f.key === "status")).toEqual([]);
+    expect(pass.generic.backFields[0]).toEqual({
+      key: "member_id",
+      label: "Card #",
+      value: "LV-10023",
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  });
+
+  it("ends the back with what to ask a member for when their pass looks stale", () => {
+    // Deliberately last, under everything anyone reads on purpose. A member
+    // can read these off their phone, and between them they answer whether
+    // the pass was built by the code we think it was, and when.
+    const back = parse(makeMember()).generic.backFields;
+
+    expect(back.slice(-2)).toEqual([
       {
-        key: "member_id",
-        label: "Card #",
-        value: "LV-10023",
+        key: "card_version",
+        label: "Card version",
+        value: PASS_CONTENT_VERSION,
+        textAlignment: "PKTextAlignmentLeft",
+      },
+      {
+        key: "built_at",
+        label: "Built",
+        value: "2026-09-19",
         textAlignment: "PKTextAlignmentLeft",
       },
     ]);
+  });
+
+  it("marks a pass as staging's, and says nothing on a production one", () => {
+    // A pass installed from staging by accident points at staging's web
+    // service and will never be updated by production. Better that it says so
+    // than that someone works it out from a pass that simply stops changing.
+    const staging = parse(makeMember(), { ...CONFIG, environment: "staging" });
+    expect(staging.generic.backFields).toContainEqual({
+      key: "environment",
+      label: "Environment",
+      value: "staging",
+      textAlignment: "PKTextAlignmentLeft",
+    });
+
+    const production = parse(makeMember(), { ...CONFIG, environment: "production" });
+    expect(
+      production.generic.backFields.some((f: { key: string }) => f.key === "environment"),
+    ).toBe(false);
   });
 
   it("adds a Status back field for an expired or revoked member", () => {

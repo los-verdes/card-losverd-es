@@ -1,5 +1,6 @@
 import { SignJWT, importPKCS8 } from "jose";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
+import { PASS_CONTENT_VERSION } from "../passkit/generator";
 
 /**
  * Google Wallet service-account credentials needed to sign a "Save to
@@ -221,6 +222,14 @@ export function buildGenericObject(
       body: formatShortDate(member.expirationDate),
     });
   }
+
+  // Last, for the same reason it is the last back field on the Apple pass:
+  // it is there to be asked for, not to be read.
+  textModulesData.push({
+    id: "card_version",
+    header: "Card version",
+    body: PASS_CONTENT_VERSION,
+  });
 
   return {
     id: objectId(config, member),
