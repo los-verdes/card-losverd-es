@@ -11,6 +11,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <meta name="robots" content="noindex" />
       <title>{title} | Los Verdes Admin</title>
+      <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
       <link rel="stylesheet" href="/assets/app.css" />
     </head>
     <body class="admin">

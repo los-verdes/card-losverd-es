@@ -17,7 +17,7 @@
 import { Hono } from "hono";
 import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import type { Env } from "./index";
-import { APP_CSS } from "./styles";
+import { APP_CSS, VERDE } from "./styles";
 
 /** Public file name -> R2 key. */
 export const PUBLIC_ASSETS: Record<string, string> = {
@@ -40,6 +40,24 @@ const MAX_AGE_SECONDS = 86_400;
 const IMMUTABLE_SECONDS = 31_536_000;
 const STYLESHEET_MAX_AGE_SECONDS = 3_600;
 
+/**
+ * The favicon, authored here rather than bundled as a file.
+ *
+ * A crest does not survive 16 pixels -- `templates/card/crest.png` is 53 KB
+ * of detail that becomes a smudge in a tab strip -- so this is a mark that
+ * reads at that size: the group's green, and a single stroked V. Two shapes,
+ * high contrast, no text, no font to resolve.
+ *
+ * SVG rather than ICO because it is a string, which means it bundles like
+ * the stylesheet, scales to every size a browser asks for, and can be read
+ * and changed in a diff.
+ */
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="${VERDE}"/>
+  <path d="M9.5 9.5 16 22.5 22.5 9.5" fill="none" stroke="#fff" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
 const assets = new Hono<{ Bindings: Env }>();
 
 // Bundled rather than in R2, and so declared before the R2 handler below:
@@ -58,6 +76,16 @@ assets.get("/bungee.woff", (c) =>
   c.body(bungeeFont, 200, {
     "Content-Type": "font/woff",
     "Cache-Control": `public, max-age=${IMMUTABLE_SECONDS}, immutable`,
+  }),
+);
+
+// Every page links this, so a browser asks for it once per session rather
+// than falling back to /favicon.ico and being answered with a 404 on every
+// page view.
+assets.get("/favicon.svg", (c) =>
+  c.body(FAVICON_SVG, 200, {
+    "Content-Type": "image/svg+xml",
+    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
   }),
 );
 

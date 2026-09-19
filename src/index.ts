@@ -137,6 +137,11 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
+
+// Pages link the SVG directly, so a browser never asks for this. Crawlers
+// and anything that doesn't parse the HTML still do, and answering them with
+// a 404 on every visit is noise in a log kept for seven days.
+app.get("/favicon.ico", (c) => c.redirect("/assets/favicon.svg", 301));
 app.route("/bigcommerce", bigcommerce);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
