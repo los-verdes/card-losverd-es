@@ -1,7 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUBLIC_ASSETS } from "../src/assets";
 import { VERDE } from "../src/styles";
+import { PUBLIC_ASSETS } from "../src/assets";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 
@@ -127,6 +127,32 @@ describe("the bundled stylesheet and font", () => {
 
     expect(cacheControl).toContain("max-age=3600");
     expect(cacheControl).not.toContain("immutable");
+  });
+
+  it("serves a favicon that is a real SVG, cached like the stylesheet", async () => {
+    const res = await get("/assets/favicon.svg");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
+    const body = await res.text();
+    expect(body.startsWith("<svg")).toBe(true);
+    expect(body).toContain("viewBox");
+  });
+
+  it("draws the mark in the group's own green, not a hardcoded copy of it", async () => {
+    // Shares the constant with the stylesheet and the card image, so the
+    // three cannot drift into three slightly different greens.
+    const body = await (await get("/assets/favicon.svg")).text();
+
+    expect(body).toContain(VERDE);
+  });
+
+  it("sends /favicon.ico to it, rather than answering 404 on every visit", async () => {
+    // Pages link the SVG, so a browser never asks. Crawlers do.
+    const res = await get("/favicon.ico");
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe("/assets/favicon.svg");
   });
 
   it("still 404s an unknown asset name", async () => {
