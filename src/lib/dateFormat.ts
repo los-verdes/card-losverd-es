@@ -1,6 +1,6 @@
 /**
  * Formats an ISO8601 `YYYY-MM-DD` date as e.g. "Feb 17, 2024" -- matches the
- * real example pass's ("lv_apple_pass-hogan.pkpass") "Good through" field.
+ * "Good through" field on a real pass issued by the legacy production app.
  * Shared by PassKit's and Google Wallet's pass-content generators and the
  * card-image generator, which all show a member's expiration date in this
  * exact format.

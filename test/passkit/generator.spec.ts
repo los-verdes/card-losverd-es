@@ -15,10 +15,9 @@ import {
   type PassKitConfig,
 } from "../../src/passkit/generator";
 
-// Matches the real example pass (`lv_apple_pass-hogan.pkpass`) pulled from
-// the legacy production app, used to validate this generator's output shape
-// - but with fabricated values throughout, not the real member's actual
-// name/email/tokens/signature.
+// Matches a real pass issued by the legacy production app, used to validate
+// this generator's output shape - but with fabricated values throughout, not
+// any real member's actual name/email/tokens/signature.
 const CONFIG: PassKitConfig = {
   passTypeIdentifier: "pass.es.losverd.card",
   teamIdentifier: "TEAMID1234",

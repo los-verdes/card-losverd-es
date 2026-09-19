@@ -107,9 +107,8 @@ export async function buildManifest(
 /**
  * Builds `pass.json` content for a real Los Verdes membership pass. Field
  * structure, labels, and date formats (member_since as "Jul 2021",
- * expiration as "Feb 17, 2024") come from a real pass pulled from the
- * legacy production app (`lv_apple_pass-hogan.pkpass`), not invented from
- * the Apple PassKit spec alone.
+ * expiration as "Feb 17, 2024") come from a real pass issued by the legacy
+ * production app, not invented from the Apple PassKit spec alone.
  *
  * Two things that real example did which this deliberately does NOT
  * replicate, since they look like legacy-app bugs rather than intended
