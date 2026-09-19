@@ -131,7 +131,7 @@ describe("access control", () => {
   it.each([...MEMBER_PATHS, "/no-active-membership"])("%s redirects logged-out visitors to login", async (path) => {
     const res = await get(path, null);
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe("/login");
+    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 
   it.each(MEMBER_PATHS)("%s redirects a user without a current membership", async (path) => {
@@ -444,7 +444,7 @@ describe("GET /no-active-membership", () => {
   it("sends a session whose user no longer exists back to login", async () => {
     const res = await get("/no-active-membership", 404);
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe("/login");
+    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 });
 

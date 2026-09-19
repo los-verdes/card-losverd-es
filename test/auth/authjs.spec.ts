@@ -337,7 +337,7 @@ describe("/api/auth (Auth.js)", () => {
         const complete = await request("/login/complete", {}, jar);
 
         expect(complete.status).toBe(302);
-        expect(complete.headers.get("Location")).toBe("/");
+        expect(complete.headers.get("Location")).toBe("/?signed_in=1");
         const session = await verifySessionToken(SESSION_KEY, lvSessionToken(complete)!);
         expect(session).toMatchObject({ userId: user!.id, isAdmin: false });
         // The Auth.js session is cleared, leaving lv_session as the only live session.

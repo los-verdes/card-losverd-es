@@ -79,13 +79,13 @@ describe("requireAuth", () => {
   it("redirects to login with no session cookie", async () => {
     const res = await request("/me");
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(LOGIN_PATH);
+    expect(res.headers.get("Location")).toBe(`${LOGIN_PATH}?from=%2Fme`);
   });
 
   it("redirects to login with an invalid session cookie", async () => {
     const res = await request("/me", "garbage");
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(LOGIN_PATH);
+    expect(res.headers.get("Location")).toBe(`${LOGIN_PATH}?from=%2Fme`);
   });
 
   it("passes a fresh session through without renewing or reading D1", async () => {
@@ -123,7 +123,7 @@ describe("requireAuth", () => {
     const res = await request("/me", token);
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(LOGIN_PATH);
+    expect(res.headers.get("Location")).toBe(`${LOGIN_PATH}?from=%2Fme`);
     expect(res.headers.get("Set-Cookie")).toMatch(new RegExp(`${SESSION_COOKIE_NAME}=;`));
   });
 });
@@ -169,9 +169,9 @@ describe("requireActiveMembership", () => {
     return request("/card", token);
   }
 
-  it("redirects unauthenticated requests to login", async () => {
+  it("redirects unauthenticated requests to login, saying which page sent them", async () => {
     const res = await request("/card");
-    expect(res.headers.get("Location")).toBe(LOGIN_PATH);
+    expect(res.headers.get("Location")).toBe(`${LOGIN_PATH}?from=%2Fcard`);
   });
 
   it("allows a user whose membership is linked by user_id", async () => {

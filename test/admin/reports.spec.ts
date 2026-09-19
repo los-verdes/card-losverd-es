@@ -43,7 +43,7 @@ describe("access control", () => {
     const res = await get(path, null);
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe("/login");
+    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 
   it.each(PATHS)("%s refuses a logged-in non-admin", async (path) => {

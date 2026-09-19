@@ -98,7 +98,13 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
       sameSite: "Lax",
     });
   }
-  return c.redirect("/");
+  // `signed_in` is a breadcrumb, not state: it makes "the bridge ran and
+  // issued a session" visible in the address bar. If a member ends up back
+  // at the login page carrying `?from=%2F%3Fsigned_in%3D1`, the sign-in
+  // worked and the session this app issued could not be read on the very
+  // next request -- which is a completely different problem from never
+  // having reached here at all.
+  return c.redirect("/?signed_in=1");
 });
 
 /**
