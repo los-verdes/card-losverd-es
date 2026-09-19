@@ -5,6 +5,7 @@ import { csrf } from "hono/csrf";
 import type { Env } from "../index";
 import { LOGIN_PATH } from "../middleware/auth";
 import { LV_USER_ID_CLAIM, authConfig } from "./authjs";
+import { configuredProviders, renderLoginPage } from "./loginPage";
 import {
   clearSessionCookie,
   issueSessionToken,
@@ -23,13 +24,24 @@ const AUTHJS_SESSION_COOKIES = [
 ];
 
 /**
- * Phase 2.3.2: where `requireAuth` sends logged-out users. Hands off to
- * Auth.js's provider picker, returning to the session bridge afterwards.
+ * Phase 2.3.2: where `requireAuth` sends logged-out users.
+ *
+ * This used to redirect straight to Auth.js's provider picker. It renders our
+ * own page instead, because that redirect offered signing in and nothing
+ * else: `/email-card` is public, is the answer for anyone without a Google or
+ * Apple account (or with one under a different address), and was reachable
+ * only by knowing the URL. The hand-off to Auth.js is unchanged -- the sign-in
+ * link goes exactly where this redirect went.
  */
 auth.get(LOGIN_PATH, (c) => {
   const signIn = new URL("/api/auth/signin", c.req.url);
   signIn.searchParams.set("callbackUrl", LOGIN_COMPLETE_PATH);
-  return c.redirect(signIn.pathname + signIn.search);
+  return c.html(
+    renderLoginPage({
+      signInHref: signIn.pathname + signIn.search,
+      providers: configuredProviders(c.env),
+    }),
+  );
 });
 
 /**

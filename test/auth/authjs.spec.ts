@@ -299,10 +299,22 @@ describe("/api/auth (Auth.js)", () => {
           .find(Boolean);
       }
 
-      it("GET /login sends the browser to Auth.js's sign-in page, returning to the bridge", async () => {
+      it("GET /login offers Auth.js's sign-in page, still returning to the bridge", async () => {
+        // The hand-off is what it always was; only the page in front of it
+        // is new, so this asserts the link rather than a redirect.
         const res = await request("/login");
-        expect(res.status).toBe(302);
-        expect(res.headers.get("Location")).toBe("/api/auth/signin?callbackUrl=%2Flogin%2Fcomplete");
+
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain(
+          'href="/api/auth/signin?callbackUrl=%2Flogin%2Fcomplete"',
+        );
+      });
+
+      it("GET /login offers the email route, for someone who won't be signing in", async () => {
+        // The reason this page exists: /email-card is public and is the whole
+        // answer for a member with no Google or Apple account, and it used to
+        // be reachable only by knowing the URL.
+        expect(await (await request("/login")).text()).toContain('href="/email-card"');
       });
 
       it("links a new user on sign-in, then exchanges the Auth.js session for lv_session", async () => {
@@ -361,5 +373,36 @@ describe("/api/auth (Auth.js)", () => {
         expect(lvSessionToken(res)).toBeUndefined();
       });
     });
+  });
+});
+
+describe("the login page", () => {
+  async function loginHtml() {
+    return (await request("/login")).text();
+  }
+
+  it("names only the providers that are configured", async () => {
+    expect(await loginHtml()).toContain("Sign in with Google or Apple");
+
+    env.APPLE_SIGNIN_PRIVATE_KEY_PEM = undefined;
+
+    expect(await loginHtml()).toContain("Sign in with Google");
+    expect(await loginHtml()).not.toContain("or Apple");
+  });
+
+  it("still offers the email route when no provider is configured at all", async () => {
+    // The worst case for a member, and the one where the alternative matters
+    // most: nothing to sign in with, but their card is still reachable.
+    env.AUTH_GOOGLE_SECRET = undefined;
+    env.APPLE_SIGNIN_PRIVATE_KEY_PEM = undefined;
+
+    const html = await loginHtml();
+
+    expect(html).toContain("Signing in is unavailable");
+    expect(html).toContain('href="/email-card"');
+  });
+
+  it("carries the group's branding, unlike the page it replaced", async () => {
+    expect(await loginHtml()).toContain('<link rel="stylesheet" href="/assets/app.css"');
   });
 });
