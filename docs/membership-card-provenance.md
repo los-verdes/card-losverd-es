@@ -285,8 +285,11 @@ Overrides come from two places, recorded in the row's `source`:
   earliest membership order it had for that person. For early members this is
   the only surviving record of when they joined, and it is loaded by the
   scripts under `scripts/legacy-export/`.
-* **Manual corrections** (`manual`). Set by hand to correct or fill in
-  anyone's date.
+* **Manual corrections** (`manual`). Set on the **Member since** admin page,
+  which shows the date a member's orders imply alongside any correction
+  already recorded, and takes a note saying why. Clearing a correction only
+  removes a manual one, so a date that came from the old system cannot be
+  deleted by accident. No database access or developer needed.
 
 A manual correction outranks the imported value: re-running the legacy import
 updates only rows that came from the import itself and leaves a manual row

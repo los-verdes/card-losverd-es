@@ -11,8 +11,8 @@ codes verifiable.
 
 Sources: the legacy app's `member_card/models/membership_card.py`,
 `member_card/routes/passkit.py`, `member_card/passes/__init__.py`,
-`member_card/utils.py`, `member_card/settings.py`, and a real production
-pass (`lv_apple_pass-hogan.pkpass`).
+`member_card/utils.py`, `member_card/settings.py`, and a real pass issued by
+the legacy production app.
 
 ## 1. What installed passes contain
 
