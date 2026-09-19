@@ -213,10 +213,17 @@ export const MemberCard: FC<{
  * own, and Apple offers that choice on every sign-in. It is a perfectly
  * ordinary thing to pick, and it lands the member here: the relay address
  * matches no order, so they are told there is no membership while holding
- * one. Nothing can join the two up -- the relay address is all Apple gives
- * us -- so the least we can do is say which of the two problems this is,
- * rather than leaving someone to conclude their membership has vanished.
+ * one.
+ *
+ * Nothing we are given can join the two up, and Apple's guidance is not to
+ * try -- the relay address is the account identifier, and the mailbox behind
+ * it is never disclosed. So the member joins them up instead, by proving
+ * control of the address they bought under (src/member/claimMembership.tsx).
+ * Recognising the address is what lets this page offer that rather than the
+ * generic advice to check the address on the order, which a relay address can
+ * never satisfy.
  */
+
 /**
  * Both domains Apple issues Sign in with Apple addresses on. New ones move
  * to `private.icloud.com` during 2026 while existing `privaterelay.appleid.com`
