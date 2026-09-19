@@ -15,18 +15,11 @@ webhook delivery, order sync, login with Google and with Apple, the portal,
 the card image, both wallet passes, `/email-card`, `/verify-pass`, and the
 admin reports.
 
-**Start from `/admin/preflight`.** It reports what the deployed Worker can
-see of its own environment -- origin agreement, D1 migrations and row
-counts, R2 template assets, the Apple signing chain, the Google Wallet
-class, the BigCommerce token and webhook, and the queue bindings. It exists
-because every misconfiguration found while validating staging by hand was
-invisible from outside the Worker, and surfaced as a generic error page
-hours after the deploy that caused it.
-
-The steps no code can take -- installing a pass on a real phone, saving one
-on Android, comparing reports against the legacy one -- are listed on that
-same page, so there is one list to work down rather than a second document
-to keep current.
+**Start from `/admin/preflight`** (what it checks and why is in the
+[README](../README.md#checking-whether-an-environment-is-ready)). The steps
+no code can take -- a pass on a real phone, a save on Android, the reports
+compared against the legacy one -- are listed on that same page, so there is
+one list to work down rather than a second document to keep current.
 
 ## 2. Bring production up, still on its `workers.dev` hostname
 
@@ -49,8 +42,9 @@ populated before anyone is pointed at it.
    fails bot verification.
 4. **Google Wallet**: `just google-wallet-ensure-class production`, and
    confirm the issuer has publishing access rather than demo-only.
-5. **Enable cron triggers** in `wrangler.toml`. Doing this now means D1 is
-   populated and syncing before any member sees the new stack.
+5. **Add a production `[triggers]` block** to `wrangler.toml`, with the same
+   schedules as `[env.staging.triggers]`, which is commented. Doing this now
+   means D1 is populated and syncing before any member sees the new stack.
 6. **Run the legacy Postgres export and import**
    ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
    Rehearse the load rather than trying to get it right once: until cutover
@@ -61,6 +55,14 @@ populated before anyone is pointed at it.
    > decommissioned in section 5 and the Squarespace-era order history in it
    > exists nowhere else -- the Squarespace account is gone. Take the export
    > early and carefully, and verify it before relying on it.
+
+   Two things to settle before the *real* load: what a legacy BigCommerce
+   order with no status counts as
+   ([#89](https://github.com/los-verdes/card-losverd-es/issues/89);
+   `/admin/preflight` counts the affected orders once an import has run),
+   and whether to empty production's `EMAIL_RECIPIENT_ALLOWLIST` for the
+   duration -- a fourth guard over the three in `src/email/newOrder.ts`, on
+   the one operation where a mistake reaches people.
 
 7. **Run a full BigCommerce resync**, then reconcile member counts against
    BigCommerce's own admin.

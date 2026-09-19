@@ -9,7 +9,7 @@ This is the Cloudflare Workers + D1 + R2 rewrite of [`digital-membership`](https
 - **Runtime:** [Hono](https://hono.dev/) on Cloudflare Workers (TypeScript)
 - **Datastore:** Cloudflare D1 (SQLite)
 - **Storage:** Cloudflare R2
-- **Async:** Cloudflare Queues, plus cron triggers once enabled
+- **Async:** Cloudflare Queues and cron triggers
 - **Pages:** server-rendered Hono JSX, no client-side framework
 - **Infra:** Terraform (`terraform/`) for D1, R2, and queues; Wrangler for Worker deploys
 
@@ -54,7 +54,7 @@ Twenty direct dependencies, and the intent is that keeping them current stays a 
 
 - **One grouped PR a week** for every minor and patch update across all dependencies. Most weeks this is the only one, and reviewing it means reading a changelog rather than a diff.
 - **A second grouped PR** for GitHub Actions. Worth keeping current for its own sake: a runner deprecation is announced against action versions, so the way it reaches this repository is an action that has not been bumped.
-- **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group.
+- **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group. As of 2026-09-19 ESLint is on 10; Vitest 5 waits on `@cloudflare/vitest-plugin` (1.1.13 pins `vitest ^4.1.0`) and TypeScript 7 on `typescript-eslint` (8.70 stops at `<6.1`), so re-check those two peer ranges before trying either.
 - **Nothing auto-merges.** CI passing is not the same as someone having decided the change is wanted, and these land code nobody has read.
 
 When a bump breaks something, close the PR rather than leaving it open: Dependabot will not re-raise the same version, but it will offer the next one. That is exactly the behaviour wanted for `satori`, which is [pinned at 0.32.0](https://github.com/los-verdes/card-losverd-es/issues/8) because of a Workers runtime incompatibility rather than anything in its API -- a Dependabot PR turns "someone should check whether this is fixed yet" into a CI run that answers it.
@@ -245,15 +245,7 @@ The steps no code can take — installing a pass on a real iPhone, saving one on
 
 ## Status
 
-Feature-complete enough to exercise end to end on staging; **not yet cut over**. `digital-membership` on GCP is still production.
-
-Before cutover:
-
-- Real credentials for BigCommerce, Apple, Google, SendGrid, Turnstile, and Slack, then enable the cron triggers.
-- Run the one-time legacy export ([`scripts/legacy-export/`](scripts/legacy-export/README.md)) while the legacy database still exists. It is the only source for Squarespace-era orders. It can be rehearsed as often as wanted; only the last run before cutover is the real one. For the real run, consider emptying production's `EMAIL_RECIPIENT_ALLOWLIST` first -- a fourth guard over the three in `src/email/newOrder.ts`, on the one operation where a mistake reaches people.
-- Decide what a legacy BigCommerce order with no status counts as ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), before that export is loaded. `/admin/preflight` counts the affected orders once it has run.
-- Tighten every credential to least privilege ([#15](https://github.com/los-verdes/card-losverd-es/issues/15)).
-- Validate on real devices: Apple Wallet install and update, Google Wallet save.
+Feature-complete enough to exercise end to end on staging; **not yet cut over**. `digital-membership` on GCP is still production. What remains, in order, is [`docs/cutover.md`](docs/cutover.md); what is blocked and on what is the [issue tracker](https://github.com/los-verdes/card-losverd-es/issues).
 
 Deliberately dropped from the legacy app: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
 
@@ -270,4 +262,4 @@ After cutover: MiniBC renewal data, membership revocation ([#31](https://github.
 - [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md): what carries over from legacy passes and QR codes, and what doesn't
 - [`scripts/legacy-export/README.md`](scripts/legacy-export/README.md): the one-time legacy database export runbook
 - [`terraform/README.md`](terraform/README.md): infrastructure, remote state, API token scope
-- [`CLAUDE.md`](CLAUDE.md): working conventions (warning triage, no real personal data in development)
+- [`CLAUDE.md`](CLAUDE.md): how to work in this repository -- bot attribution on pushes, the no-bulk-email rule, no real personal data, warning triage, and the sharp edges

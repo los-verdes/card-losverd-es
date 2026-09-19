@@ -1,13 +1,10 @@
 # Architecture decisions
 
 Why this service is built the way it is. These decisions were made before the
-rewrite began and have not changed since, which is why they live here rather
-than in the migration plan: the plan describes work that is nearly finished,
-while these outlive it.
-
-Decisions made during the build are recorded where they apply -- in code
-comments at the point they matter, and in the issues that settled them.
-This file is for the few that shaped everything else.
+rewrite began and have not changed since. Decisions made during the build are
+recorded where they apply -- in code comments at the point they matter, and
+in the issues that settled them. This file is for the few that shaped
+everything else.
 
 ## The context these decisions share
 
@@ -18,10 +15,10 @@ formal SLA.
 That is not a disclaimer; it is the premise most of what follows rests on.
 Reducing the number of things that must be understood, paid for and kept
 running is weighted more heavily than avoiding all user-visible disruption.
-Where those two conflict, simplicity wins, and the plan says so explicitly
-rather than pretending the trade does not exist.
+Where those two conflict, simplicity wins, and this document says so rather
+than pretending the trade does not exist.
 
-Two things are deliberately exempt, because they cannot be regenerated:
+Two things are exempt from that trade, because they cannot be regenerated:
 
 - **Legacy membership-card records**, enough to keep QR codes already printed
   and installed still verifiable.
