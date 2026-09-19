@@ -34,6 +34,7 @@ import {
   renderCardImage,
   type MemberRecord,
 } from "./artifacts";
+import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
 import { Page, SUPPORT_EMAIL } from "./layout";
 
 // The membership store the legacy no-membership page links to.
@@ -188,10 +189,20 @@ export const MemberCard: FC<{
       <p>Member since {formatMonthYear(member.member_since)}</p>
     )}
     <p>Good through {formatShortDate(member.expiration_date)}</p>
+    {/*
+      Intrinsic dimensions, even though CSS sizes it. Without them the
+      browser cannot know the shape until the bytes arrive, so it reserves
+      no room and everything below jumps down when the card lands -- and
+      this card is rendered on demand, so that arrival is never instant.
+      With them the space is the right shape from the first paint and the
+      image fades into it.
+    */}
     <img
+      class="card-image"
       src="/card.png"
+      width={CARD_WIDTH}
+      height={CARD_HEIGHT}
       alt="Your Los Verdes membership card"
-      style="width: 100%; height: auto"
     />
     <a href="/passes/apple.pkpass" class="action">
       Add to Apple Wallet

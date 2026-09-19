@@ -150,6 +150,20 @@ button {
   text-decoration: none;
 }
 
+/* The membership card. The width and height attributes on the element give
+   the browser its aspect ratio before the image exists, so the space is
+   reserved and nothing below moves when it arrives; these rules make that
+   reserved space look
+   deliberate rather than like a gap. The tint is the card's own background,
+   so what appears first is the right shape and roughly the right colour, and
+   the image resolves into it. */
+.card-image {
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--verde) 12%, var(--bg));
+}
+
 .order {
   margin: 0.75rem 0;
   padding: 0.75rem;
