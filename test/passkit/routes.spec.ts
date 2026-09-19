@@ -4,6 +4,11 @@ import { strFromU8, unzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { getTestCertChain } from "../fixtures/certChain";
+import {
+  LOG_RATE_LIMIT,
+  MAX_LOG_ENTRIES,
+  MAX_LOG_MESSAGE_LENGTH,
+} from "../../src/passkit/routes";
 
 const PASS_TYPE_ID = "pass.es.losverd.card";
 const BASE = "https://example.com/passkit";
@@ -431,6 +436,47 @@ describe("POST /v1/log", () => {
   it("tolerates a missing/malformed logs field (treats as empty)", async () => {
     const res = await SELF.fetch(path, { method: "POST", body: JSON.stringify({}) });
     expect(res.status).toBe(200);
+  });
+
+  // This endpoint cannot be authenticated -- Apple's devices post to it when
+  // something, possibly auth itself, is already broken -- so it is the one
+  // place anyone at all can write rows through. Each bound below is what
+  // stops that being interesting to abuse.
+  it("stores only the first MAX_LOG_ENTRIES of an oversized batch", async () => {
+    const logs = Array.from({ length: MAX_LOG_ENTRIES + 25 }, (_, i) => `entry ${i}`);
+
+    const res = await SELF.fetch(path, { method: "POST", body: JSON.stringify({ logs }) });
+
+    expect(res.status).toBe(200);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pass_device_logs").first<{ n: number }>();
+    expect(row?.n).toBe(MAX_LOG_ENTRIES);
+  });
+
+  it("truncates a message rather than storing a payload", async () => {
+    const res = await SELF.fetch(path, {
+      method: "POST",
+      body: JSON.stringify({ logs: ["x".repeat(MAX_LOG_MESSAGE_LENGTH + 5_000)] }),
+    });
+
+    expect(res.status).toBe(200);
+    const row = await env.DB.prepare("SELECT message FROM pass_device_logs").first<{ message: string }>();
+    expect(row?.message.length).toBe(MAX_LOG_MESSAGE_LENGTH);
+  });
+
+  it("stops storing once a caller exceeds the rate limit, still answering 200", async () => {
+    // 200 either way on purpose: a device that has just failed at something
+    // is not helped by a rejection, and Apple would only retry it.
+    for (let i = 0; i < LOG_RATE_LIMIT.limit + 3; i++) {
+      const res = await SELF.fetch(path, {
+        method: "POST",
+        headers: { "cf-connecting-ip": "198.51.100.7" },
+        body: JSON.stringify({ logs: [`entry ${i}`] }),
+      });
+      expect(res.status).toBe(200);
+    }
+
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pass_device_logs").first<{ n: number }>();
+    expect(row?.n).toBe(LOG_RATE_LIMIT.limit);
   });
 });
 
