@@ -179,6 +179,22 @@ describe("the card image", () => {
     expect(html).toContain('class="card-image"');
   });
 
+  it("carries its own sizing, so a stale stylesheet cannot overflow a phone", async () => {
+    // /assets/app.css is cached for an hour and this page is not, so after a
+    // deploy a browser can hold new HTML and old CSS. Sizing that lived only
+    // in the stylesheet failed open at the card's intrinsic 1050px and ran
+    // off the side of a phone screen -- worse than the layout shift it was
+    // added to fix. Inline, the two cannot disagree.
+    await seedCurrentMember();
+    await seedTemplateAssets();
+
+    const html = await (await get("/")).text();
+    const img = html.match(/<img[^>]*class="card-image"[^>]*>/)?.[0] ?? "";
+
+    expect(img).toContain("width: 100%");
+    expect(img).toContain("height: auto");
+  });
+
   it("takes its dimensions from the renderer rather than repeating them", async () => {
     // A second copy of the card's size would be wrong the first time the
     // card is resized, and wrong silently -- the page would simply reserve

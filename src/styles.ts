@@ -113,6 +113,13 @@ body.admin {
   margin: 1.5rem auto;
 }
 
+/* No image, whatever its intrinsic size, may be wider than what holds it.
+   The card carries its own sizing inline as well; this is the net for
+   anything added later that forgets. */
+img {
+  max-width: 100%;
+}
+
 h1, h2, h3 {
   font-family: "Bungee", system-ui, sans-serif;
   color: var(--verde);
@@ -158,8 +165,6 @@ button {
    so what appears first is the right shape and roughly the right colour, and
    the image resolves into it. */
 .card-image {
-  width: 100%;
-  height: auto;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--verde) 12%, var(--bg));
 }
