@@ -207,6 +207,21 @@ export const MemberCard: FC<{
   </Page>
 );
 
+/**
+ * Apple's "Hide My Email" gives us a relay address instead of the member's
+ * own, and Apple offers that choice on every sign-in. It is a perfectly
+ * ordinary thing to pick, and it lands the member here: the relay address
+ * matches no order, so they are told there is no membership while holding
+ * one. Nothing can join the two up -- the relay address is all Apple gives
+ * us -- so the least we can do is say which of the two problems this is,
+ * rather than leaving someone to conclude their membership has vanished.
+ */
+export const APPLE_RELAY_DOMAIN = "@privaterelay.appleid.com";
+
+export function isAppleRelayAddress(email: string): boolean {
+  return email.toLowerCase().endsWith(APPLE_RELAY_DOMAIN);
+}
+
 export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
   email,
   isAdmin,
@@ -216,11 +231,22 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
     <p>
       No current membership was found for <strong>{email}</strong>.
     </p>
-    <p>
-      Check that the email address you signed in with matches the one used to
-      purchase your membership. If it doesn't, log out and sign back in with
-      that account.
-    </p>
+    {isAppleRelayAddress(email) ? (
+      <p>
+        That is an Apple private relay address, which is what Apple sends us
+        when you choose <strong>Hide My Email</strong>. It won't match the
+        address on your order, even though your membership is fine. Log out
+        and sign in again, either with Apple choosing{" "}
+        <strong>Share My Email</strong>, or with the account you used to buy
+        your membership.
+      </p>
+    ) : (
+      <p>
+        Check that the email address you signed in with matches the one used to
+        purchase your membership. If it doesn't, log out and sign back in with
+        that account.
+      </p>
+    )}
     <p>
       Not a member yet, but would like to be? Grab a membership at the Los
       Verdes store.
