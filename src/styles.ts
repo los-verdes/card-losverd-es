@@ -53,27 +53,32 @@ export const APP_CSS = `:root {
   color-scheme: light dark;
 }
 
-/* TODO(human): the dark palette.
+/* Honouring a dark device (#141). Only the tokens change; no rule below is
+   restated, which is what keeps the two modes from drifting apart.
 
-   Add a prefers-color-scheme dark media query here, holding a :root block
-   that restates these seven tokens (deliberately not written out as CSS,
-   since the tests parse this file and would read a skeleton as the real
-   thing):
+   Every value clears 4.5:1 against --bg, except --rule, which only has to be
+   seen rather than read -- a hairline as bright as text turns the admin
+   tables into stripes. The light palette's colours all fail when inverted
+   (--muted 2.39:1, --danger 2.43, --success 2.99, --warn 3.43), so these are
+   lighter, less saturated versions of the same hues rather than the same
+   values reused.
 
-     --ink       light text
-     --bg        page background, near-black rather than pure black
-     --muted     secondary notes
-     --rule      hairlines and table borders
-     --danger    errors
-     --success   confirmations
-     --warn      preflight warnings
-
-   Each of those must reach 4.5:1 against --bg, except --rule, which only
-   has to be visible. test/styles.spec.ts checks all of it, and is known to
-   pass on a palette meeting those constraints.
-
-   --verde needs no override: #00B140 measures 6.24:1 against a dark
-   background, better than it manages on white (#143). */
+   --verde is deliberately absent: #00B140 measures 6.24:1 here, better than
+   the 2.69 it manages on white, so the brand colour needs no dark variant
+   (the white case is #143, and not this file's decision to make). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Near-black rather than #000: pure black behind light text haloes on
+       OLED, and the page reads as harsher than the light one. */
+    --bg: #14181f;
+    --ink: #e7eaee;
+    --muted: #a7b0bd;
+    --rule: #2b323c;
+    --danger: #ff9d9d;
+    --success: #7fd69a;
+    --warn: #e8bd76;
+  }
+}
 
 /* Bungee is a display face: all caps, heavy, for headings only. Swap rather
    than block -- a heading in the system font for one frame beats a blank
