@@ -5,6 +5,7 @@ import forge from "node-forge";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CERT_EXPIRY_WARN_DAYS,
+  MANUAL_STEPS,
   originVerdict,
   runPreflightChecks,
 } from "../../src/admin/preflightChecks";
@@ -668,6 +669,23 @@ describe("the readiness page", () => {
     expect(body).toContain("Google Wallet");
     expect(body).toContain("Still needs a person");
     expect(body).toContain("0 failing");
+  });
+
+  it("makes each manual step tickable, for keeping your place", async () => {
+    const body = await (await get()).text();
+
+    // One checkbox per step, each wrapped in a label so the text is part of
+    // the hit target -- these get worked through on a phone beside a laptop.
+    const checkboxes = body.match(/<input type="checkbox"/g) ?? [];
+    expect(checkboxes).toHaveLength(MANUAL_STEPS.length);
+    expect(body).toContain("<label>");
+  });
+
+  it("says plainly that ticking is not saved", async () => {
+    // There is no JavaScript and no storage here, so a reload starts over.
+    // Someone part-way down a cutover checklist needs to know that before
+    // they rely on it, not after.
+    expect(await (await get()).text()).toContain("nothing is saved");
   });
 
   it("counts failures at the top so the page can be read at a glance", async () => {
