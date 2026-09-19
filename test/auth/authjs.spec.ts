@@ -8,8 +8,15 @@ import {
   generateKeyPair,
   jwtVerify,
 } from "jose";
+import { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { appleClientSecret, authConfig, isVerifiedEmailProfile, providerFullName } from "../../src/auth/authjs";
+import {
+  appleClientSecret,
+  authConfig,
+  isVerifiedEmailProfile,
+  landOnSessionBridge,
+  providerFullName,
+} from "../../src/auth/authjs";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 
@@ -55,6 +62,10 @@ class CookieJar {
   }
   names(): string[] {
     return [...this.cookies.keys()];
+  }
+  /** Stands in for a cookie a browser declines to send back. */
+  forget(name: string) {
+    this.cookies.delete(name);
   }
 }
 
@@ -224,7 +235,12 @@ describe("/api/auth (Auth.js)", () => {
   });
 
   describe("Google callback round trip", () => {
-    async function runGoogleLogin(claims: Record<string, unknown>, callbackUrl = `${ORIGIN}/`) {
+    async function runGoogleLogin(
+      claims: Record<string, unknown>,
+      callbackUrl = `${ORIGIN}/`,
+      /** Chance to interfere with the cookies the callback gets to see. */
+      beforeCallback: (jar: CookieJar) => void = () => {},
+    ) {
       const idpKeys = await generateKeyPair("RS256", { extractable: true });
       const jwk = { ...(await exportJWK(idpKeys.publicKey)), kid: "google-test-key", alg: "RS256", use: "sig" };
       vi.spyOn(console, "error").mockImplementation(() => {});
@@ -259,6 +275,7 @@ describe("/api/auth (Auth.js)", () => {
       const jar = new CookieJar();
       const start = await startSignIn("google", jar, callbackUrl);
       const state = new URL(start.headers.get("Location")!).searchParams.get("state");
+      beforeCallback(jar);
       const callback = await request(
         `/api/auth/callback/google?code=auth-code&state=${state}`,
         {},
@@ -279,6 +296,25 @@ describe("/api/auth (Auth.js)", () => {
 
       const session = await request("/api/auth/session", {}, jar);
       expect(await session.json()).toMatchObject({ user: { email: "jane@example.com" } });
+    });
+
+    it("still lands on the bridge when the callbackUrl cookie doesn't come back", async () => {
+      // The staging failure, reproduced: Apple returns by cross-site POST,
+      // and a SameSite=Lax cookie is not sent on one. Auth.js relaxes its
+      // state and nonce cookies for form_post but not this one, so the
+      // remembered destination vanishes and Auth.js falls back to the site
+      // root -- a page needing a session the bridge hasn't issued yet, which
+      // bounced the member straight back to /login. Driven through Google's
+      // flow because `app.request` has no notion of a cross-site POST; the
+      // missing cookie is the whole mechanism either way.
+      const { callback, jar } = await runGoogleLogin(
+        { email_verified: true },
+        `${ORIGIN}/login/complete`,
+        (cookies) => cookies.forget("__Secure-authjs.callback-url"),
+      );
+
+      expect(callback.headers.get("Location")).toBe(`${ORIGIN}/login/complete`);
+      expect(jar.names()).toContain("__Secure-authjs.session-token");
     });
 
     it("refuses an unverified Google email", async () => {
@@ -460,5 +496,64 @@ describe("where Auth.js sends the browser after signing in", () => {
     await expect(redirectTo("https://example.invalid/steal")).resolves.toBe(
       `${ORIGIN}/login/complete`,
     );
+  });
+});
+
+describe("landing on the session bridge after an OAuth callback", () => {
+  /** Stands in for Auth.js, returning whatever it is told to. */
+  function callbackReturning(init: ResponseInit) {
+    const app = new Hono();
+    app.use("/api/auth/callback/*", landOnSessionBridge);
+    app.all("/api/auth/callback/*", () => new Response(null, init));
+    return app.request(`${ORIGIN}/api/auth/callback/apple`, { method: "POST" });
+  }
+
+  async function locationFor(location: string) {
+    const res = await callbackReturning({ status: 302, headers: { Location: location } });
+    return res.headers.get("Location");
+  }
+
+  it("redirects a finished sign-in to the bridge instead of the site root", async () => {
+    // What Apple's cross-site POST actually produced on staging: the
+    // `callbackUrl` cookie (SameSite=Lax) isn't sent, so Auth.js falls back
+    // to the origin -- a page needing a session the bridge hasn't issued yet.
+    expect(await locationFor(ORIGIN)).toBe(`${ORIGIN}/login/complete`);
+    expect(await locationFor(`${ORIGIN}/`)).toBe(`${ORIGIN}/login/complete`);
+  });
+
+  it("rewrites a relative destination too", async () => {
+    expect(await locationFor("/members")).toBe(`${ORIGIN}/login/complete`);
+  });
+
+  it("leaves the session cookie the sign-in just issued untouched", async () => {
+    const res = await callbackReturning({
+      status: 302,
+      headers: [
+        ["Location", ORIGIN],
+        ["Set-Cookie", "__Secure-authjs.session-token=abc; Path=/; HttpOnly"],
+        ["Set-Cookie", "__Secure-authjs.callback-url=xyz; Path=/; HttpOnly"],
+      ],
+    });
+
+    expect(res.headers.get("Location")).toBe(`${ORIGIN}/login/complete`);
+    expect(res.headers.getSetCookie()).toHaveLength(2);
+  });
+
+  it("leaves Auth.js's own pages alone, so a failure can still explain itself", async () => {
+    const error = `${ORIGIN}/api/auth/error?error=Configuration`;
+    expect(await locationFor(error)).toBe(error);
+    expect(await locationFor(`${ORIGIN}/api/auth/signin`)).toBe(`${ORIGIN}/api/auth/signin`);
+  });
+
+  it("never redirects off-site", async () => {
+    expect(await locationFor("https://example.invalid/steal")).toBe(
+      "https://example.invalid/steal",
+    );
+  });
+
+  it("leaves a response that isn't a redirect alone", async () => {
+    const res = await callbackReturning({ status: 200 });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull();
   });
 });

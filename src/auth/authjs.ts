@@ -20,6 +20,7 @@ import Apple from "@auth/core/providers/apple";
 import Google from "@auth/core/providers/google";
 import type { Provider } from "@auth/core/providers";
 import type { Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import { SignJWT, importPKCS8 } from "jose";
 import type { Env } from "../index";
 import { linkOAuthUser } from "./oauth-link";
@@ -30,6 +31,49 @@ import { linkOAuthUser } from "./oauth-link";
  * would be a cycle.
  */
 export const POST_SIGN_IN_PATH = "/login/complete";
+
+/** Auth.js's mount point, matching `basePath` below and the routes in `index.ts`. */
+const AUTHJS_BASE_PATH = "/api/auth";
+
+/**
+ * Sends the browser to the session bridge once Auth.js's OAuth callback has
+ * finished, whatever destination Auth.js settled on.
+ *
+ * The `redirect` callback below cannot do this on its own, which is not
+ * obvious from Auth.js's documentation. Auth.js resolves the destination
+ * once, on the *sign-in* route, and remembers it in a `callbackUrl` cookie;
+ * the callback route then returns that cookie's value verbatim and never
+ * consults `redirect` again. Apple returns by a cross-site POST
+ * (`response_mode=form_post`), for which Auth.js relaxes only its `state`
+ * and `nonce` cookies to `SameSite=None` -- `callbackUrl` stays `Lax`, so
+ * the browser does not send it, and the destination falls back to the site
+ * root. The root requires a session this app has not issued yet (the bridge
+ * is what issues it), so the member was bounced to the login page looking as
+ * though the sign-in had done nothing at all. Google, returning by a
+ * same-site GET, was unaffected. Observed on staging 2026-09-19.
+ *
+ * Rewriting the finished response covers every provider and response mode
+ * without depending on which cookies survive the trip. Auth.js's own pages
+ * are left alone: a failed login redirects to its error or sign-in screen,
+ * and those are the responses that say why it stopped. Off-site destinations
+ * are left alone too, so this only ever redirects further into this app.
+ *
+ * Headers are edited in place rather than copied onto a new response: the
+ * success path is carrying the `Set-Cookie` that *is* the sign-in, and
+ * rebuilding a response risks collapsing repeated `Set-Cookie` headers.
+ */
+export const landOnSessionBridge = createMiddleware<{ Bindings: Env }>(
+  async (c, next) => {
+    await next();
+    const location = c.res.headers.get("Location");
+    if (!location) return;
+    const origin = new URL(c.req.url).origin;
+    const destination = new URL(location, origin);
+    if (destination.origin !== origin) return;
+    if (destination.pathname.startsWith(`${AUTHJS_BASE_PATH}/`)) return;
+    c.res.headers.set("Location", `${origin}${POST_SIGN_IN_PATH}`);
+  },
+);
 
 const APPLE_CLIENT_SECRET_TTL_SECONDS = 5 * 60;
 
@@ -129,22 +173,16 @@ export async function authConfig(
     callbacks: {
       signIn: ({ profile }) => isVerifiedEmailProfile(profile),
       /**
-       * Always the session bridge, rather than wherever Auth.js would
-       * otherwise go.
+       * Pins the destination Auth.js stores at sign-in to the session
+       * bridge, which is the only sensible landing place: it is what turns
+       * an Auth.js session into this app's own, and where a failure gets
+       * reported. Ignoring the URL it is handed also means a crafted
+       * `?callbackUrl=` cannot send a member anywhere else.
        *
-       * Auth.js remembers the requested destination in a `callbackUrl`
-       * cookie, which is `SameSite=Lax`. Apple returns via a cross-site POST
-       * (`response_mode=form_post`), and a Lax cookie is not sent on one --
-       * so for Apple the destination was forgotten and Auth.js fell back to
-       * the site root. That needs a session this app hasn't issued yet,
-       * which bounced the member to the login page looking as though nothing
-       * had happened. Google was unaffected, returning by a same-site GET.
-       *
-       * Naming the destination here removes the dependency on that cookie
-       * entirely, for every provider and whatever Auth.js decides its
-       * default should be in future. The bridge is the only sensible landing
-       * place regardless: it is what turns an Auth.js session into this
-       * app's own, and it is where a failure gets reported.
+       * This is not what makes the browser arrive there, though it reads
+       * like it should be -- Auth.js does not consult this callback when the
+       * OAuth callback finishes. `landOnSessionBridge` above is what
+       * actually lands the member on the bridge, and explains why.
        */
       redirect: ({ baseUrl }) => `${baseUrl}${POST_SIGN_IN_PATH}`,
       // `account` is only present on the sign-in itself, so linking runs once
