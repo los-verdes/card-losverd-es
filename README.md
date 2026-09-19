@@ -2,7 +2,7 @@
 
 Digital membership card service for the [Los Verdes supporters group](https://www.losverdesatx.org/), serving `card.losverd.es`.
 
-This is the Cloudflare Workers + D1 + R2 rewrite of [`digital-membership`](https://github.com/los-verdes/digital-membership) (Python/Flask on GCP). The two run side by side during the migration: `digital-membership` stays live and authoritative in production until this one is fully built and validated, at which point cutover happens via a DNS repoint (see "Status" below for how close that is). The full phase-by-phase migration plan is tracked separately, not in this repo.
+This is the Cloudflare Workers + D1 + R2 rewrite of [`digital-membership`](https://github.com/los-verdes/digital-membership) (Python/Flask on GCP). The two run side by side during the migration: `digital-membership` stays live and authoritative in production until this one is fully built and validated, at which point cutover happens via a DNS repoint (see "Status" below for how close that is). Why that stack was chosen is in [`docs/architecture-decisions.md`](docs/architecture-decisions.md); how the switch happens is in [`docs/cutover.md`](docs/cutover.md).
 
 ## Stack
 
@@ -261,6 +261,8 @@ After cutover: MiniBC renewal data, membership revocation ([#31](https://github.
 
 ## More docs
 
+- [`docs/architecture-decisions.md`](docs/architecture-decisions.md): why Cloudflare, why TypeScript, why one DNS cutover, and the non-profit context those rest on
+- [`docs/cutover.md`](docs/cutover.md): the ordered runbook for moving `card.losverd.es` and retiring GCP
 - [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): where each card field comes from and how "current member" is decided, written for the membership committee
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync

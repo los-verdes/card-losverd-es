@@ -32,3 +32,72 @@ local files that will never be committed.
 Use obviously synthetic values that keep the real format: `example.com`
 addresses, invented names, a 24-character hex string for a Squarespace order
 id, `1001_bc` for a BigCommerce order key.
+
+## Never email members as a side effect
+
+A membership card is emailed only because a member asked for it, or because
+a new order completed. It is never sent as a side effect of a backfill, a
+resync, the legacy import, or cutover -- those touch every member at once,
+and getting it wrong means mailing hundreds of people who did not ask.
+
+Three guards in `src/email/newOrder.ts` enforce that, each sufficient alone,
+and a fourth (`EMAIL_RECIPIENT_ALLOWLIST`) limits who an environment may
+email at all. Read the comment at the top of that file before changing
+anything on the send path, and treat a change that makes a bulk path capable
+of sending as a defect regardless of what it enables.
+
+## Working in this repository
+
+**Never merge a pull request without explicit approval for that specific
+PR.** Enabling auto-merge is the sanctioned exception, because the branch
+ruleset requires a review from someone other than the last pusher, so a
+human approval still stands between the branch and `main`.
+
+**Automation acts as `verde-bot`, and that includes pushes.** GitHub takes
+"last pusher" from whoever authenticated the push, not from the commit
+author. `origin` is an SSH remote, so a plain `git push` authenticates as
+the key's owner -- which makes the maintainer the last pusher on a PR he
+then cannot approve. Push over HTTPS with the token inline, and never write
+it into `.git/config`:
+
+```bash
+GH_TOKEN="$(gh auth token --hostname github.com --user verde-bot)" gh pr create ...
+git push "https://verde-bot:$(gh auth token --hostname github.com --user verde-bot)@github.com/los-verdes/card-losverd-es.git" <branch>
+```
+
+`gh api repos/los-verdes/card-losverd-es/activity` reports the actor per
+push, which is the field the ruleset reads.
+
+**Check what already exists before starting.** More than one session has
+built the same thing twice, having read a stale copy of the state. Re-fetch,
+and check open PRs and remote branches touching the same files, before
+writing code.
+
+**Git work happens in a worktree**, not the main checkout. The stash stack
+is shared across worktrees, so never use a bare `git stash` -- prefer a
+temporary commit, or `git stash push -u -m "<tag>"` and recover the entry by
+tag.
+
+**Writing for other people to read.** Pull request descriptions are short
+and telegraphic: what changed, anything surprising, anything the reviewer
+must do. Everything in the repository and on GitHub -- issues, comments,
+code comments, docs -- is written in the project's collective voice, which
+records a decision and its date rather than naming an individual. Assign
+`@jeffwecan` to any issue whose next step is his: a credential, a console
+action, or an answer to a question the issue poses.
+
+### Sharp edges worth knowing
+
+- Auto-merge goes quiet when a PR conflicts, which looks identical to
+  waiting for review. `gh pr list --json number,mergeStateStatus` shows
+  `DIRTY`; re-enable it after resolving.
+- Force-pushing a rebased branch by URL needs an explicit lease --
+  `--force-with-lease=refs/heads/<branch>:<old sha>` -- because a bare one
+  has no remote-tracking ref to compare against and is rejected as stale.
+- `gh pr create` after a push by URL needs `--head <branch> --base main`.
+- `gh pr edit` can fail with a Projects-classic GraphQL error;
+  `gh api -X PATCH repos/.../pulls/N -F body=@file` works, and the same
+  shape edits an issue body.
+- `node:fs` does not work in the Workers test pool. To read source in a
+  test, use `import.meta.glob("...", { query: "?raw", eager: true })`, which
+  Vite inlines at transform time.
