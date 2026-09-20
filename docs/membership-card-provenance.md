@@ -573,6 +573,30 @@ or a change, not an open-ended design exercise.
    standing in the group, which sits with the Code of Conduct work they
    already own.
 
+   There is a second question hiding inside the first, and it is not a
+   technical one. Everything on a card is derived from orders, but a
+   withdrawal is a decision about a *person*. Those come apart: the reports
+   are all built from order history and never consult a person's membership
+   record, so a membership withdrawn that way would stop the card working
+   while the same person went on appearing in "Active memberships", in the
+   monthly counts, and in the Slack cross-reference as current. Whoever
+   answered the next question about them would be reading something different
+   from what the member was seeing.
+
+   So the decision is really between two meanings. **Withdrawing from the
+   person** says their standing has changed while leaving the record of what
+   they bought untouched, and the reports would need to be taught to say so.
+   **Stopping the orders counting** treats the purchase itself as no longer
+   conferring membership, and everything derived from orders -- card, passes,
+   access, and every report -- then agrees without being told, because they
+   already share one rule. The second also composes with gifts, since it
+   follows the order rather than an address, and it is the same mechanism that
+   would let an order the store no longer has be stopped from counting.
+
+   Worth settling before anything is built: the first is a change to the
+   reports, the second is a change to the data. Neither is hard; they are
+   different promises to the member.
+
 9. **Should a historical order with no recorded status still count?**
    It depends on which era it came from, and that asymmetry needs a decision
    before cutover. A blank status on an imported pre-BigCommerce order counts
