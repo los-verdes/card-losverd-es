@@ -188,7 +188,7 @@ export function parseLegacyExport(input: unknown): LegacyExport {
   if (input.format_version !== 5) {
     fail(
       "format_version",
-      "expected 5 (re-run scripts/legacy-export/export.sql; version 4 and earlier mistake every order's era, version 3 leaves behind names members chose for themselves, version 2 carries Squarespace test orders, version 1 predates membership_orders)",
+      "expected 5 (re-run scripts/legacy-export/export.sql; version 4 and earlier take an order's era and key from the shape of its id, version 3 leaves behind names members chose for themselves, version 2 carries Squarespace test orders, version 1 predates membership_orders)",
     );
   }
   const exportedAt = requireString(input, "exported_at", "$");

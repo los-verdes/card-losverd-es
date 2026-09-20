@@ -145,7 +145,7 @@ describe("parseLegacyExport", () => {
     ["a version 1 export, with a hint to re-export", validExport({ format_version: 1 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["a version 2 export, which still carries test orders", validExport({ format_version: 2 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["a version 3 export, which leaves behind chosen names", validExport({ format_version: 3 }), /re-run scripts\/legacy-export\/export\.sql/],
-    ["a version 4 export, which mistakes every order's era", validExport({ format_version: 4 }), /re-run scripts\/legacy-export\/export\.sql/],
+    ["a version 4 export, which keys orders on the shape of their id", validExport({ format_version: 4 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["missing exported_at", validExport({ exported_at: "" }), /exported_at/],
     ["free-text exported_at", validExport({ exported_at: "now\nDROP TABLE members" }), /exported_at/],
     ["member_since not an array", validExport({ member_since: {} }), /member_since: expected an array/],
