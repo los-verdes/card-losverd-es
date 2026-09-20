@@ -15,9 +15,8 @@ are theirs outright -- anything that settles a person's standing in the group,
 such as whether a membership can be withdrawn before it expires. Those are
 marked where they appear.
 
-Nothing here is a proposal. It is a description of what the code does right
-now, so the rules can be confirmed or changed deliberately rather than
-discovered by accident. Code and database names appear in `backticks` after
+This is a description of what the code does right
+now. It documents the current implementation explicitly for reference _and also_ to invite feedback and/or proposals to change that implementation. Code and database names appear in `backticks` after
 each plain-English statement, for anyone who wants to check a claim against
 the source.
 
