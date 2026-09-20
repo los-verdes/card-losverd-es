@@ -1,6 +1,7 @@
 /** Shared shell for the admin pages (src/admin/). */
 
 import type { FC, PropsWithChildren } from "hono/jsx";
+import { STYLESHEET_PATH } from "../styles";
 
 export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap";
 
@@ -12,7 +13,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <meta name="robots" content="noindex" />
       <title>{title} | Los Verdes Admin</title>
       <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-      <link rel="stylesheet" href="/assets/app.css" />
+      <link rel="stylesheet" href={STYLESHEET_PATH} />
     </head>
     <body class="admin">
       <nav class="admin-nav">

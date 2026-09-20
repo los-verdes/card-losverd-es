@@ -1,4 +1,5 @@
 import "../setup/d1";
+import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import {
   SignJWT,
@@ -446,7 +447,7 @@ describe("the login page", () => {
   });
 
   it("carries the group's branding, unlike the page it replaced", async () => {
-    expect(await loginHtml()).toContain('<link rel="stylesheet" href="/assets/app.css"');
+    expect(await loginHtml()).toContain(`<link rel="stylesheet" href="${STYLESHEET_PATH}"`);
   });
 });
 

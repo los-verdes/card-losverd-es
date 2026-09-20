@@ -17,7 +17,7 @@
 import { Hono } from "hono";
 import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import type { Env } from "./index";
-import { APP_CSS, VERDE } from "./styles";
+import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
 
 /** Public file name -> R2 key. */
 export const PUBLIC_ASSETS: Record<string, string> = {
@@ -63,6 +63,21 @@ const assets = new Hono<{ Bindings: Env }>();
 // Bundled rather than in R2, and so declared before the R2 handler below:
 // both are fetched by a browser on the first page it renders, and neither
 // should depend on the bucket having been populated by a deploy.
+// Named after its own contents, so a browser either holds this exact
+// stylesheet or fetches it -- the HTML can never ask for a rule its CSS has
+// not got. That is what makes caching it forever safe, and the hour-long
+// compromise it replaces was what broke the card image on phones (#174).
+assets.get(STYLESHEET_PATH.replace("/assets", ""), (c) =>
+  c.body(APP_CSS, 200, {
+    "Content-Type": "text/css; charset=utf-8",
+    "Cache-Control": `public, max-age=${IMMUTABLE_SECONDS}, immutable`,
+  }),
+);
+
+// The unversioned path stays as a fallback for anything still asking for it
+// -- a tab opened before this shipped, a bookmark, a copied link. Nothing
+// this app renders links it any more, so it is kept on the old short cache
+// rather than promoted.
 assets.get("/app.css", (c) =>
   c.body(APP_CSS, 200, {
     "Content-Type": "text/css; charset=utf-8",

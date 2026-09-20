@@ -1,4 +1,5 @@
 import "../setup/d1";
+import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { unzipSync } from "fflate";
 import { Hono } from "hono";
@@ -502,7 +503,7 @@ describe("branding", () => {
 
     const html = await (await get("/")).text();
 
-    expect(html).toContain('<link rel="stylesheet" href="/assets/app.css"');
+    expect(html).toContain(`<link rel="stylesheet" href="${STYLESHEET_PATH}"`);
     expect(html).toContain('<body class="member">');
   });
 });

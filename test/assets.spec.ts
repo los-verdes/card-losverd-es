@@ -1,6 +1,6 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VERDE } from "../src/styles";
+import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS } from "../src/assets";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
@@ -127,6 +127,44 @@ describe("the bundled stylesheet and font", () => {
 
     expect(cacheControl).toContain("max-age=3600");
     expect(cacheControl).not.toContain("immutable");
+  });
+
+  it("serves the stylesheet at a path named after its contents, cached forever", async () => {
+    const res = await get(STYLESHEET_PATH);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/css; charset=utf-8");
+    // Safe to cache forever precisely because the name changes with the
+    // bytes: a browser either has this exact file or fetches it.
+    expect(res.headers.get("Cache-Control")).toContain("immutable");
+    expect(await res.text()).toBe(APP_CSS);
+  });
+
+  it("links from the pages the same path it serves", async () => {
+    // The whole point. If these two disagreed, every page would 404 its own
+    // stylesheet -- loudly, which is better than the silent half-styled page
+    // this replaces, but still worth pinning.
+    const html = await (await get("/login")).text();
+
+    expect(html).toContain(`href="${STYLESHEET_PATH}"`);
+    expect(html).not.toContain('href="/assets/app.css"');
+  });
+
+  it("changes the path when the stylesheet changes, and not otherwise", async () => {
+    // The property the whole scheme rests on. A hash that did not move with
+    // the content would cache a stale stylesheet forever -- strictly worse
+    // than the hour-long window it replaces.
+    expect(stylesheetPathFor(APP_CSS)).toBe(STYLESHEET_PATH);
+    expect(stylesheetPathFor(APP_CSS + "/* a change */")).not.toBe(STYLESHEET_PATH);
+  });
+
+  it("still answers the unversioned path, for anything that still asks", async () => {
+    // A tab opened before this shipped, or a copied link. Nothing renders it
+    // now, so it keeps the short cache rather than being promoted.
+    const res = await get("/assets/app.css");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).not.toContain("immutable");
   });
 
   it("serves a favicon that is a real SVG, cached like the stylesheet", async () => {
