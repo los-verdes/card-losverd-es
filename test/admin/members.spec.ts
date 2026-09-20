@@ -1,0 +1,144 @@
+import "../setup/d1";
+import { createExecutionContext, env } from "cloudflare:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
+import worker from "../../src/index";
+import { classify } from "../../src/admin/members";
+import { setDisplayName } from "../../src/member/displayName";
+
+const SESSION_KEY = "test-session-signing-key-0123456789";
+const ADMIN_ID = 1;
+const CARD = "LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6";
+const EMAIL = "jane@example.com";
+
+beforeEach(async () => {
+  env.SESSION_SIGNING_KEY = SESSION_KEY;
+  env.PUBLIC_BASE_URL = "https://card.losverd.es";
+  await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, ?, 1)")
+    .bind(ADMIN_ID, "admin@example.com")
+    .run();
+  await env.DB.prepare(
+    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status,
+       expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', ?, 'standard', 'active', '2099-03-04', '2021-07-15', 'token', 1)`,
+  )
+    .bind(CARD, EMAIL)
+    .run();
+});
+
+afterEach(async () => {
+  await env.DB.exec("DELETE FROM member_display_names");
+  await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM members");
+  await env.DB.exec("DELETE FROM users");
+});
+
+async function get(path: string, asUser: number | null = ADMIN_ID) {
+  const headers = new Headers();
+  if (asUser !== null) {
+    const token = await issueSessionToken(SESSION_KEY, { userId: asUser, isAdmin: true });
+    headers.set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+  }
+  return worker.fetch(
+    new Request(`https://card.losverd.es${path}`, { headers, redirect: "manual" }),
+    env,
+    createExecutionContext(),
+  );
+}
+
+describe("working out what an admin typed", () => {
+  it.each([
+    ["jane@example.com", "email"],
+    ["  Jane@Example.com  ", "email"],
+    ["LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6", "card"],
+    ["lv-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6", "card"],
+    ["1001_bc", "order"],
+    ["5f00000000000000000000a1", "order"],
+    ["", "empty"],
+    ["   ", "empty"],
+  ])("reads %j as a %s", (raw, kind) => {
+    expect(classify(raw).kind).toBe(kind);
+  });
+
+  it("lower-cases an email but leaves a card number alone", () => {
+    // The card number is compared against `members.member_id` as stored.
+    expect(classify(" Jane@Example.com ")).toEqual({ kind: "email", value: "jane@example.com" });
+    expect(classify(` ${CARD} `)).toEqual({ kind: "card", value: CARD });
+  });
+});
+
+describe("finding a member", () => {
+  it("finds one by the card number printed on their pass", async () => {
+    // The point of the whole page: it is the one identifier a member can
+    // always read out, and nothing could look one up before.
+    const res = await get(`/admin/members?q=${encodeURIComponent(CARD)}`);
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Jane Doe");
+    expect(body).toContain(EMAIL);
+  });
+
+  it("finds the same member by email", async () => {
+    const res = await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`);
+
+    expect(await res.text()).toContain(CARD);
+  });
+
+  it("shows the name they chose, and what their orders say", async () => {
+    // An admin looking at a card that says something unexpected needs to see
+    // both, or the card and the order history look like they disagree.
+    await setDisplayName(env, EMAIL, "Chuy", "member");
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("Chuy");
+    expect(body).toContain("Jane Doe");
+  });
+
+  it("sends an order number to the order page rather than guessing at a person", async () => {
+    const res = await get("/admin/members?q=1001_bc");
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("/admin/orders/1001_bc");
+  });
+
+  it("says so plainly when a card number matches nothing", async () => {
+    const body = await (
+      await get("/admin/members?q=LV-00000000-0000-4000-8000-000000000000")
+    ).text();
+
+    expect(body).toContain("No membership carries that card number");
+  });
+
+  it("says so plainly when an address matches nothing", async () => {
+    const body = await (await get("/admin/members?q=nobody@example.com")).text();
+
+    expect(body).toContain("No membership is held under that address");
+  });
+
+  it("shows just the search box with nothing typed", async () => {
+    const res = await get("/admin/members");
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).not.toContain("No membership");
+  });
+
+  it("is admin-only", async () => {
+    // `requireAdmin` reads `users.is_admin` rather than trusting the session
+    // token's flag, so this needs a different user rather than a different
+    // token.
+    await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, ?, 0)")
+      .bind("member@example.com")
+      .run();
+
+    expect((await get(`/admin/members?q=${CARD}`, 9)).status).toBe(403);
+    expect((await get(`/admin/members?q=${CARD}`, null)).status).toBe(302);
+  });
+
+  it("is never cached, since it shows names and addresses", async () => {
+    const res = await get(`/admin/members?q=${encodeURIComponent(CARD)}`);
+
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
