@@ -367,6 +367,49 @@ export interface MissingOrderRow {
  * These still confer membership. The flag exists so a person can decide,
  * rather than a 404 deciding for them.
  */
+export interface ExtraMembershipOrderRow {
+  /** Present so `toCsv` accepts these rows, as with the other report types. */
+  [key: string]: string | number | null;
+  order_id: string;
+  member_email: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: string | null;
+  created_on: string;
+  expires_on: string;
+  /** How many memberships the order carried. Always above 1 in this report. */
+  membership_units: number;
+  /** Whether it still counts; the shared rule is always 0 or 1. */
+  counts: number;
+}
+
+/**
+ * Orders carrying more than one membership, most memberships first.
+ *
+ * The storefront is configured so this never happens, and a good deal here
+ * depends on it -- an order has one row and one membership to give. This
+ * report is what turns that from an assumption into something noticed.
+ *
+ * Each row means somebody paid for a membership that no card exists for.
+ * The order still confers the one membership it is recorded as; the extras
+ * have nowhere to go, so putting them right is a person's job. An order
+ * corrected in BigCommerce drops off this list on the next sync.
+ */
+export async function ordersWithExtraMemberships(
+  db: D1Database,
+): Promise<ExtraMembershipOrderRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT order_id, member_email, first_name, last_name, status, created_on, expires_on,
+              membership_units, (${COUNTS_AS_MEMBERSHIP}) AS counts
+         FROM membership_orders
+        WHERE membership_units > 1
+        ORDER BY membership_units DESC, created_on, order_id`,
+    )
+    .all<ExtraMembershipOrderRow>();
+  return results;
+}
+
 export async function missingOrders(db: D1Database): Promise<MissingOrderRow[]> {
   const { results } = await db
     .prepare(

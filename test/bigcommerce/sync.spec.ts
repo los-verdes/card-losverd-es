@@ -7,6 +7,7 @@ import {
   MAX_CHAIN_MESSAGES,
   MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
   ORDERS_PAGE_SIZE,
+  countMembershipUnits,
   deriveMembershipState,
   refreshMemberFromOrders,
   syncBigCommerceOrder,
@@ -1112,4 +1113,167 @@ describe("pass-change detection and update pushes", () => {
 
     expect(apnsCalls).toEqual([]);
   });
+});
+
+
+/**
+ * The storefront is configured so an order never carries more than one
+ * membership, and `membership_orders` is keyed on the order id, so an order
+ * has one row and one membership to give. These cover the check that turns
+ * that from an assumption into something we would notice breaking (#188).
+ */
+describe("more than one membership on an order", () => {
+  async function unitsFor(orderId: number): Promise<number | null> {
+    const row = await env.DB.prepare(
+      "SELECT membership_units FROM membership_orders WHERE order_id = ?",
+    )
+      .bind(`${orderId}_bc`)
+      .first<{ membership_units: number | null }>();
+    return row?.membership_units ?? null;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await clearMembershipTables();
+  });
+
+  it("records one for an ordinary order", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts());
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(1);
+  });
+
+  it("counts a quantity above one, and still records the single membership", async () => {
+    // The likelier breach of the two: adding a second line item is unusual,
+    // but raising the quantity is an ordinary thing to do at checkout.
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts([{ quantity: 2 }]));
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(2);
+    // The member still gets the membership they would have got before. A line
+    // item never withdraws anyone's membership by itself.
+    expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
+  });
+
+  it("counts two membership line items as two", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(
+      order,
+      makeProducts([{ sku: "LOSV-MEM-0001" }, { sku: "LOSV-MEM-0001" }]),
+    );
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(2);
+  });
+
+  it("does not count merchandise bought alongside a membership", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(
+      order,
+      makeProducts([
+        { sku: "LOSV-MEM-0001" },
+        { sku: "SOME-OTHER-SKU", name: "Scarf", quantity: 3 },
+      ]),
+    );
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(1);
+  });
+
+  it("says so once, not on every resync of the same order", async () => {
+    // A resync revisits every order. Repeating the alert each time would
+    // train everyone to ignore it.
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts([{ quantity: 2 }]));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    const carriesMany = warn.mock.calls.filter((call) =>
+      String(call[0]).includes("carries 2 memberships"),
+    );
+    expect(carriesMany).toHaveLength(1);
+  });
+
+  it("stops flagging an order once the store is corrected", async () => {
+    // Recounted from the line items every sync, so a refunded extra or a
+    // corrected quantity drops the order off the report by itself.
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts([{ quantity: 2 }]));
+    await syncBigCommerceOrder(env, "store123", order.id);
+    expect(await unitsFor(order.id)).toBe(2);
+
+    vi.restoreAllMocks();
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockBigCommerceOrderFetch(order, makeProducts([{ quantity: 1 }]));
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(1);
+  });
+});
+
+describe("countMembershipUnits", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is zero when the order has no membership on it", () => {
+    expect(countMembershipUnits(makeProducts([{ sku: "SOME-OTHER-SKU" }]))).toBe(0);
+  });
+
+  it("is one for a single membership", () => {
+    expect(countMembershipUnits(makeProducts())).toBe(1);
+  });
+
+  it("reads a quantity BigCommerce sent as a string", () => {
+    // The v2 API has a history of returning numeric fields as strings, which
+    // is why `quantity` is not typed as a number.
+    expect(countMembershipUnits(makeProducts([{ quantity: "2" }]))).toBe(2);
+  });
+
+  it("adds up quantities across several membership line items", () => {
+    expect(
+      countMembershipUnits(makeProducts([{ quantity: 2 }, { quantity: 3 }])),
+    ).toBe(5);
+  });
+
+  it("counts no quantity as one, without comment", () => {
+    // Not told, rather than told something that makes no sense. Our own
+    // fixtures omit it, and so may any other caller.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(countMembershipUnits(makeProducts([{ quantity: undefined }]))).toBe(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([["" as const], ["abc" as const], [0], [-1], [1.5]])(
+    "counts an unreadable quantity %j as one rather than as a breach",
+    (quantity) => {
+      // Every row on the "More than one membership" report should be a case
+      // where somebody demonstrably paid for a card that does not exist. A
+      // malformed response is not that, and putting ordinary orders on the
+      // report would teach whoever reads it to disbelieve the list.
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      expect(countMembershipUnits(makeProducts([{ quantity }]))).toBe(1);
+
+      // Not silent, though: it goes to the log rather than to the report.
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("unreadable quantity"),
+      );
+    },
+  );
 });

@@ -90,6 +90,11 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
           ["Started", order.created_on.slice(0, 10)],
           ["Expires", order.expires_on.slice(0, 10)],
           ["Status", `${order.status ?? ""}${order.counts ? "" : " (doesn't count as a membership)"}`],
+          ...(order.membership_units && order.membership_units > 1
+            ? [
+                `Carried ${order.membership_units} memberships; only this one was recorded. See the "More than one membership" report.`,
+              ]
+            : []),
           ...(order.missing_since
             ? ([
                 [
