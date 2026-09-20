@@ -1,4 +1,5 @@
 import "../setup/d1";
+import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAGE_SIZE } from "../../src/admin/reports";
@@ -402,7 +403,7 @@ describe("branding", () => {
   it("links the same stylesheet the member pages use", async () => {
     const html = await (await get("/admin/reports")).text();
 
-    expect(html).toContain('<link rel="stylesheet" href="/assets/app.css"');
+    expect(html).toContain(`<link rel="stylesheet" href="${STYLESHEET_PATH}"`);
     expect(html).toContain('<body class="admin">');
   });
 });

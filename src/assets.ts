@@ -17,7 +17,7 @@
 import { Hono } from "hono";
 import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import type { Env } from "./index";
-import { APP_CSS, VERDE } from "./styles";
+import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
 
 /** Public file name -> R2 key. */
 export const PUBLIC_ASSETS: Record<string, string> = {
@@ -34,11 +34,16 @@ const MAX_AGE_SECONDS = 86_400;
 /**
  * A year, for the font. Its bytes are fixed for a given file name -- a
  * different font would be a different file -- so there is nothing to
- * invalidate. The stylesheet gets an hour instead, since it changes with
- * deploys and an hour is a tolerable wait for a colour to be corrected.
+ * invalidate. The stylesheet earns the same treatment by carrying a hash of
+ * its contents in its path (src/styles.ts).
+ *
+ * The favicon keeps an hour. It could be versioned the same way, but a stale
+ * one costs an out-of-date square in a tab strip rather than an unstyled
+ * page, and it is linked from the same two shells that would have to change
+ * to version it -- not worth the machinery for that.
  */
 const IMMUTABLE_SECONDS = 31_536_000;
-const STYLESHEET_MAX_AGE_SECONDS = 3_600;
+const FAVICON_MAX_AGE_SECONDS = 3_600;
 
 /**
  * The favicon, authored here rather than bundled as a file.
@@ -63,12 +68,17 @@ const assets = new Hono<{ Bindings: Env }>();
 // Bundled rather than in R2, and so declared before the R2 handler below:
 // both are fetched by a browser on the first page it renders, and neither
 // should depend on the bucket having been populated by a deploy.
-assets.get("/app.css", (c) =>
+// Named after its own contents, so a browser either holds this exact
+// stylesheet or fetches it -- the HTML can never ask for a rule its CSS has
+// not got. That is what makes caching it forever safe, and the hour-long
+// compromise it replaces was what broke the card image on phones (#174).
+assets.get(STYLESHEET_PATH.replace("/assets", ""), (c) =>
   c.body(APP_CSS, 200, {
     "Content-Type": "text/css; charset=utf-8",
-    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
+    "Cache-Control": `public, max-age=${IMMUTABLE_SECONDS}, immutable`,
   }),
 );
+
 
 // The same face the card image is rendered with (src/cardimage/render.ts),
 // so a member's card and the page around it agree.
@@ -85,7 +95,7 @@ assets.get("/bungee.woff", (c) =>
 assets.get("/favicon.svg", (c) =>
   c.body(FAVICON_SVG, 200, {
     "Content-Type": "image/svg+xml",
-    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
+    "Cache-Control": `public, max-age=${FAVICON_MAX_AGE_SECONDS}`,
   }),
 );
 

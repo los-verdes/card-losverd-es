@@ -1,6 +1,6 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VERDE } from "../src/styles";
+import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS } from "../src/assets";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
@@ -94,7 +94,7 @@ describe("GET /assets/:name", () => {
 
 describe("the bundled stylesheet and font", () => {
   it("serves the stylesheet without a session, as every page links it", async () => {
-    const res = await get("/assets/app.css");
+    const res = await get(STYLESHEET_PATH);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/css");
@@ -106,7 +106,7 @@ describe("the bundled stylesheet and font", () => {
   it("points the font-face at the font this Worker actually serves", async () => {
     // A stylesheet naming a URL nobody serves fails silently: headings just
     // render in the fallback face and nothing says why.
-    const css = await (await get("/assets/app.css")).text();
+    const css = await (await get(STYLESHEET_PATH)).text();
     const [, url] = css.match(/src: url\("([^"]+)"\)/) ?? [];
 
     expect(url).toBeDefined();
@@ -122,11 +122,43 @@ describe("the bundled stylesheet and font", () => {
     expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
   });
 
-  it("doesn't cache the stylesheet as hard, since it changes with deploys", async () => {
-    const cacheControl = (await get("/assets/app.css")).headers.get("Cache-Control");
+  it("serves the stylesheet at a path named after its contents, cached forever", async () => {
+    const res = await get(STYLESHEET_PATH);
 
-    expect(cacheControl).toContain("max-age=3600");
-    expect(cacheControl).not.toContain("immutable");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/css; charset=utf-8");
+    // Safe to cache forever precisely because the name changes with the
+    // bytes: a browser either has this exact file or fetches it.
+    expect(res.headers.get("Cache-Control")).toContain("immutable");
+    expect(await res.text()).toBe(APP_CSS);
+  });
+
+  it("links from the pages the same path it serves", async () => {
+    // The whole point. If these two disagreed, every page would 404 its own
+    // stylesheet -- loudly, which is better than the silent half-styled page
+    // this replaces, but still worth pinning.
+    const html = await (await get("/login")).text();
+
+    expect(html).toContain(`href="${STYLESHEET_PATH}"`);
+    expect(html).not.toContain('href="/assets/app.css"');
+  });
+
+  it("changes the path when the stylesheet changes, and not otherwise", async () => {
+    // The property the whole scheme rests on. A hash that did not move with
+    // the content would cache a stale stylesheet forever -- strictly worse
+    // than the hour-long window it replaces.
+    expect(stylesheetPathFor(APP_CSS)).toBe(STYLESHEET_PATH);
+    expect(stylesheetPathFor(APP_CSS + "/* a change */")).not.toBe(STYLESHEET_PATH);
+  });
+
+  it("no longer answers the unversioned path at all", async () => {
+    // Dropped once it was established nobody but the maintainer had ever
+    // loaded the site (2026-09-20). It was insurance against a browser
+    // holding a tab from before the versioned path shipped, and the only
+    // route left that could serve a stylesheet the HTML was not built
+    // against -- which is the whole thing this change exists to make
+    // impossible.
+    expect((await get("/assets/app.css")).status).toBe(404);
   });
 
   it("serves a favicon that is a real SVG, cached like the stylesheet", async () => {

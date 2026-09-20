@@ -6,6 +6,7 @@
  */
 
 import type { FC, PropsWithChildren } from "hono/jsx";
+import { STYLESHEET_PATH } from "../styles";
 
 /** Where members are told to write when something's wrong (the legacy app's contact). */
 export const SUPPORT_EMAIL = "merchteam@losverdesatx.org";
@@ -20,7 +21,7 @@ export const Page: FC<PropsWithChildren<{ title: string }>> = ({
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>{title} | Los Verdes</title>
       <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-      <link rel="stylesheet" href="/assets/app.css" />
+      <link rel="stylesheet" href={STYLESHEET_PATH} />
     </head>
     <body class="member">
       {children}

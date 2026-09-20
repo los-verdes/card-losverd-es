@@ -224,3 +224,44 @@ nav.admin-nav {
   margin-bottom: 1rem;
 }
 `;
+
+/**
+ * A short content hash of the stylesheet, and the path it is served at.
+ *
+ * The pages that link this are generated per request and never cached; the
+ * stylesheet was cached for an hour. So for up to an hour after a deploy a
+ * browser held new HTML and the previous stylesheet, and any rule the new
+ * HTML depended on simply was not there. That is not hypothetical: moving
+ * the card image's sizing into a class did exactly this, and the card
+ * overflowed every phone that had the old file (#174).
+ *
+ * Naming the file after its contents removes the failure entirely. The HTML
+ * asks for the stylesheet it was built against, so a browser either has that
+ * exact file or fetches it -- there is no version of this in which the two
+ * disagree. It can then be cached forever, which is also faster than the
+ * hour-long compromise it replaces.
+ *
+ * The same reasoning as `PASS_CONTENT_VERSION` in src/passkit/generator.ts:
+ * a cached thing needs to know which version of its source it came from.
+ *
+ * FNV-1a rather than SHA-256: this only has to change when the bytes change,
+ * and a synchronous 32-bit hash does that without making module
+ * initialisation asynchronous. A collision would serve a stale stylesheet,
+ * which is the bug we already have, not a worse one.
+ */
+function contentHash(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/** Where a given stylesheet would be served. Exported so a test can show the path moves with the content. */
+export function stylesheetPathFor(css: string): string {
+  return `/assets/app.${contentHash(css)}.css`;
+}
+
+/** What every page links, and what `src/assets.ts` serves immutably. */
+export const STYLESHEET_PATH = stylesheetPathFor(APP_CSS);
