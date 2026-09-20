@@ -48,14 +48,31 @@ export interface MemberRecord {
   last_updated_at: number;
 }
 
+/**
+ * One member, with everything that overrides what the order sync derived.
+ *
+ * A revocation is resolved here rather than by the callers, which is what
+ * makes the rest of this cheap: `revoked` was already a legal `status` and
+ * was already honoured by the access checks, the Apple pass's status field,
+ * the Google object's state and the admin screens. It simply had no way to
+ * arrive. Resolving it in one `SELECT` means every one of those keeps
+ * working without being told.
+ *
+ * The expiry is dropped with it, so a revoked membership reads as expired
+ * everywhere that asks a date rather than a status -- there is no longer a
+ * "good through" that means anything. The underlying `members` row is left
+ * alone, so lifting a revocation is a single delete.
+ */
 const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name, m.membership_tier,
-         m.status, m.expiration_date,
+         CASE WHEN r.member_id IS NOT NULL THEN 'revoked' ELSE m.status END AS status,
+         CASE WHEN r.member_id IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
          d.display_name,
          m.auth_token, m.last_updated_at
   FROM members m
        LEFT JOIN member_since_overrides o ON o.email = m.email
-       LEFT JOIN member_display_names d ON d.email = m.email`;
+       LEFT JOIN member_display_names d ON d.email = m.email
+       LEFT JOIN revoked_cards r ON r.member_id = m.member_id`;
 
 /**
  * The name to put on a card, as the two fields every renderer expects.

@@ -74,6 +74,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/members` | Find a member by the card number on their pass, their email, or an order number; set the name their card shows (`src/admin/members.tsx`) | Admin |
+| `/admin/revocations` | Memberships withdrawn before they expired, and lifting one again (`src/admin/revocations.tsx`) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
 | `/admin/member-since` | Correct a member's "member since" date when their orders don't show when they really joined (`src/admin/memberSince.tsx`) | Admin |
 | `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |

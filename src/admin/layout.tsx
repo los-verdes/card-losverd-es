@@ -33,6 +33,8 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
         {" · "}
         <a href="/admin/members">Find a member</a>
         {" · "}
+        <a href="/admin/revocations">Withdrawn</a>
+        {" · "}
         <a href="/admin/member-since">Member since</a>
         {" · "}
         <a href="/admin/preflight">Readiness</a>

@@ -21,9 +21,22 @@ import { lookupPassHolder, type PassHolder } from "./passHolder";
 
 export const VerificationResult: FC<{ holder: PassHolder }> = ({ holder }) => (
   <Page title="Card Verification">
-    <h1>{holder.active ? "MEMBERSHIP VALID" : "MEMBERSHIP EXPIRED"}</h1>
-    {!holder.active && (
-      <p>This card is genuine, but its holder has no current membership.</p>
+    <h1>
+      {holder.active
+        ? "MEMBERSHIP VALID"
+        : holder.revoked
+          ? "MEMBERSHIP WITHDRAWN"
+          : "MEMBERSHIP EXPIRED"}
+    </h1>
+    {holder.revoked ? (
+      // Said plainly rather than left as "expired": the card is genuine
+      // either way, and somebody holding one up is owed an answer that does
+      // not sound like it could be fixed by renewing.
+      <p>This card is genuine, but this membership has been withdrawn.</p>
+    ) : (
+      !holder.active && (
+        <p>This card is genuine, but its holder has no current membership.</p>
+      )
     )}
     {holder.name && <p style="font-size: 1.5rem">{holder.name}</p>}
     {holder.expirationDate && (

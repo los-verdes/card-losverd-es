@@ -66,6 +66,34 @@ const list = (values: string[]) => values.map((value) => `'${value}'`).join(", "
  * count, so 0 is what the rule should say. NULL was only ever an artefact of
  * how `IN` treats NULL.
  */
+/**
+ * SQL condition on a `membership_orders` row: is the person it is attributed
+ * to still a member in good standing?
+ *
+ * Separate from `COUNTS_AS_MEMBERSHIP` because the two answer different
+ * questions. That rule scores an order -- was it paid, was it refunded --
+ * and a withdrawal says nothing about the order. Somebody whose membership
+ * is withdrawn still bought what they bought, and the money is still the
+ * group's, so the sale stays on the books.
+ *
+ * Which is exactly why this has to be applied by hand where it belongs. Only
+ * reports about *who is a member now* want it: a withdrawn member must not be
+ * listed as current, or the reports and the access checks would tell
+ * different stories about the same person and whoever answered their next
+ * question would be reading the wrong one. Reports about what was sold --
+ * orders by month, consolidations, the order-level flags -- must not have it,
+ * or the group's own sales history would quietly change when somebody was
+ * asked to leave.
+ *
+ * Correlated on `member_email`, so it goes in a `WHERE` on an unaliased
+ * `membership_orders`.
+ */
+export const MEMBER_IN_GOOD_STANDING = `NOT EXISTS (
+    SELECT 1 FROM members mm
+      JOIN revoked_cards rc ON rc.member_id = mm.member_id
+     WHERE mm.email = membership_orders.member_email
+  )`;
+
 export const COUNTS_AS_MEMBERSHIP = `COALESCE((CASE source
     WHEN 'bigcommerce' THEN lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)})
     ELSE (status IS NULL OR lower(status) NOT IN (${list(VOID_LEGACY_STATUSES)}))

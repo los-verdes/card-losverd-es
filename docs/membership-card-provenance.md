@@ -416,6 +416,14 @@ page — checks the expiry date directly rather than trusting a stored
 active/expired label, because that label is only recalculated when an order
 sync happens to touch the record.
 
+**A membership can also be withdrawn**, which is the one way of stopping
+being a current member that has nothing to do with orders. It is recorded
+against the card (`revoked_cards`) rather than on the membership record,
+because the order sync rebuilds that record and would undo it. While it is in
+force the card reads as withdrawn, carries no expiry, and its holder is
+refused everywhere a current membership is required -- see
+[question 8](#9-decisions-worth-confirming).
+
 That stored label (`members.status`) is not decorative, though: it is what
 decides whether an Apple pass carries an "Expired" note on its back, and what
 Google Wallet is told about the card's state. Since it only moves when a sync
@@ -672,41 +680,37 @@ or a change, not an open-ended design exercise.
    recorded "member since" override follows the old address rather than the
    person.
 
-8. **Does the group need a way to withdraw a membership before it expires?**
-   Currently there is none. The data model has a "revoked" state and the
-   access checks respect it, but nothing in the software ever sets it, and the
-   routine order sync would overwrite it if it were set by hand. Revocation is
-   already tracked as post-cutover work
-   ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)); what it
-   should mean in practice is the **Membership Committee's** decision rather
-   than the implementer's -- withdrawing a membership settles someone's
-   standing in the group, which sits with the Code of Conduct work they
-   already own.
+8. **Is withdrawing a membership shaped the way the group wants it?** It
+   exists now. An admin withdraws one from that member's page and the card
+   stops working: it reads as withdrawn rather than expired, the "good
+   through" date goes away, the passes already installed are told, and the
+   holder loses the member area. A short note is kept alongside it, because
+   somebody will be asked to explain the decision later. Lifting it is one
+   action and puts the membership back to whatever the orders say, since
+   nothing underneath was altered. Everything currently withdrawn sits on one
+   page, deliberately short.
 
-   There is a second question hiding inside the first, and it is not a
-   technical one. Everything on a card is derived from orders, but a
-   withdrawal is a decision about a *person*. Those come apart: the reports
-   are all built from order history and never consult a person's membership
-   record, so a membership withdrawn that way would stop the card working
-   while the same person went on appearing in "Active memberships", in the
-   monthly counts, and in the Slack cross-reference as current. Whoever
-   answered the next question about them would be reading something different
-   from what the member was seeing.
+   Two choices inside that are worth a look rather than assumed.
 
-   So the decision is really between two meanings. **Withdrawing from the
-   person** says their standing has changed while leaving the record of what
-   they bought untouched, and the reports would need to be taught to say so.
-   **Stopping the orders counting** treats the purchase itself as no longer
-   conferring membership, and everything derived from orders -- card, passes,
-   access, and every report -- then agrees without being told, because they
-   already share one rule. The second also composes with gifts, since it
-   follows the order rather than an address, and it is the same mechanism that
-   would let an order the store no longer has be stopped from counting.
+   **It follows the card, not the address.** A withdrawal is keyed on the
+   card number, which never changes, so re-pointing an address does not lift
+   it. But somebody who bought a fresh membership under a different address
+   would get a new card, and this would not follow them to it. Whether that
+   is a loophole or the right answer -- a new purchase being a genuinely new
+   membership -- is a question about what withdrawal means rather than about
+   the software.
 
-   Worth settling before anything is built: the first is a change to the
-   reports, the second is a change to the data. Neither is hard; they are
-   different promises to the member.
+   **It does not change what was sold.** They stop being listed as a current
+   member, but the order stays in the monthly sales figures and in the
+   consolidations. That is deliberate: the money is still the group's, and
+   the books should not move because somebody was asked to leave. If a
+   withdrawal should erase the sale too, that is a different thing and would
+   need saying.
 
+   What it is *for* remains the **Membership Committee's** to settle. The
+   software makes no judgement about when this is appropriate and nothing in
+   it is limited to conduct cases; the note is the only record of why, and it
+   is free text.
 
 ## Appendix: orders from before BigCommerce
 
