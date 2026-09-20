@@ -56,15 +56,19 @@ populated before anyone is pointed at it.
    > exists nowhere else -- the Squarespace account is gone. Take the export
    > early and carefully, and verify it before relying on it.
 
-   Two things to settle before the *real* load. Whether a partially
-   refunded order still confers membership
-   ([#210](https://github.com/los-verdes/card-losverd-es/issues/210)): nine
-   of them count today under the old system's rule and would stop counting
-   here, and the status alone cannot say whether the membership or something
-   else on the same order was refunded. And whether to empty production's
+   One thing to settle before the *real* load: whether to empty production's
    `EMAIL_RECIPIENT_ALLOWLIST` for the duration -- a fourth guard over the
    three in `src/email/newOrder.ts`, on the one operation where a mistake
    reaches people.
+
+   Expect nine members to lose a membership they hold today. They are the
+   orders the old store left as `Partially Refunded`, which counted there and
+   do not count here
+   ([#210](https://github.com/los-verdes/card-losverd-es/issues/210)). That is
+   the intended outcome rather than a surprise: the status is as likely to be
+   stale, or left over from a renewal problem long since resolved, as it is to
+   describe anything current. If members write in afterwards, that is the
+   moment to work out what produces the status -- not before, on nine rows.
 
    `/admin/preflight` counts imported orders that count for nothing once an
    import has run, which is the check to read after loading rather than a
