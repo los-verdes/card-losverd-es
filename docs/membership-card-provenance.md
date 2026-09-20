@@ -694,29 +694,6 @@ or a change, not an open-ended design exercise.
    reports, the second is a change to the data. Neither is hard; they are
    different promises to the member.
 
-9. **Should a historical order with no recorded status still count?**
-   It depends on which era it came from, and that asymmetry needs a decision
-   before cutover. A blank status on an imported pre-BigCommerce order counts
-   ([appendix](#appendix-orders-from-before-bigcommerce)), because many of
-   those rows have none and excluding them would drop real historical members.
-   The same blank status on a **BigCommerce** order does not count, because
-   that side requires a positively paid status.
-
-   This matters because the one-time import classifies any order whose id ends
-   in `_bc` as a BigCommerce order and fills its status from the old system's
-   own fulfilment field, which is frequently empty. Those rows therefore land
-   under the strict paid-only rule with nothing to satisfy it, and the current
-   store's resync does not revisit orders that old, so they would stay
-   uncounted. The effect would be members quietly losing membership at
-   cutover — the one outcome the migration is most concerned to avoid.
-
-   Worth establishing from the real export, before it is loaded: how many
-   imported `_bc` rows have no usable status. If the answer is "more than
-   none", the rule needs to distinguish an order the store reported as unpaid
-   from one whose status was simply never recorded. The data already supports
-   that distinction — every order records whether it arrived through the store
-   sync or the historical import (`membership_orders.first_seen_via`).
-
 
 ## Appendix: orders from before BigCommerce
 
@@ -743,7 +720,16 @@ question about a current membership, the rules above are the whole answer.
 
 The statuses that void one of these orders are `canceled`, `cancelled`,
 `refunded` and `declined` (`VOID_LEGACY_STATUSES`). Anything else counts,
-including a blank status, which many of the imported rows have.
+including a blank status.
+
+In the event no imported order has a blank one. Every row in the old system's
+database carries a status, across both eras and all seven order channels,
+measured against it directly in September 2026. That was not assumed when
+this rule was written, and it was worth checking: had the answer gone the
+other way, the stricter BigCommerce rule would have quietly dropped imported
+members at cutover. The tolerance for a blank status stays because it costs
+nothing and the measurement speaks for the rows that exist today rather than
+for every row that ever will.
 
 That is the opposite shape to the BigCommerce rule, which counts an order only
 on a positively paid status, and the difference is deliberate. Squarespace's

@@ -58,9 +58,9 @@ statuses (`src/lib/membershipOrders.ts`, decided 2026-09-17):
   `Partially Refunded` one.
 * **Squarespace-era orders** are closed history with their own vocabulary
   (`FULFILLED`, `PENDING`, `CANCELED`), where `PENDING` means paid but not
-  yet shipped, and many rows have no status at all. They keep the legacy
-  app's rule: everything counts except a cancelled order. Applying
-  BigCommerce's list to them would silently drop real historical members.
+  yet shipped. They keep the legacy app's rule: everything counts except a
+  cancelled order. Applying BigCommerce's list to them would silently drop
+  real historical members.
 
 Membership cards use the same rule as the reports: the `members` sync derives
 each card from the member's counted orders (see

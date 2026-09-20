@@ -25,11 +25,16 @@ export const PAID_BIGCOMMERCE_STATUSES = [
 /**
  * Squarespace-era orders are closed history with their own vocabulary
  * (`FULFILLED`, `PENDING`, `CANCELED`), where `PENDING` means paid but not
- * yet shipped -- not BigCommerce's "payment pending". Many legacy rows have
- * no status at all. So these keep the legacy app's rule
- * (`AnnualMembership.is_canceled`): everything counts except a cancelled
- * order. Applying BigCommerce's allow-list here would silently drop real
- * historical members.
+ * yet shipped -- not BigCommerce's "payment pending". So these keep the
+ * legacy app's rule (`AnnualMembership.is_canceled`): everything counts
+ * except a cancelled order. Applying BigCommerce's allow-list here would
+ * silently drop real historical members.
+ *
+ * This comment used to say that many legacy rows carry no status at all.
+ * Measured against the old system's database in September 2026, none do --
+ * across both eras and every order channel (#89). The rule is unchanged,
+ * since it mirrors what that system did rather than resting on how many
+ * rows had a gap.
  */
 export const VOID_LEGACY_STATUSES = ["canceled", "cancelled", "refunded", "declined"];
 
