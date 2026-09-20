@@ -10,8 +10,9 @@
  *
  * The mechanism already existed and was documented as a `wrangler d1 execute`
  * one-liner, which makes it a developer's job. This page exists because it
- * shouldn't be: the people who know that someone joined in 2016 are the
- * membership committee, not whoever has database credentials.
+ * shouldn't be: the people who know that someone joined in 2016 are the Merch
+ * Team, who answer the mail this arrives in, not whoever has database
+ * credentials.
  *
  * So the page is built around showing the two dates apart -- the derived one
  * and the override -- since the question a corrector is really answering is

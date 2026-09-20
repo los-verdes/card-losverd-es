@@ -1,9 +1,17 @@
 # Where Membership Card Information Comes From
 
-This document is written for the membership committee. It explains, in plain
-language, where every piece of information printed on a Los Verdes membership
-card comes from, and exactly how the software decides whether someone counts
-as a current member today.
+This document is written for the Merch Team, who administer the storefront and
+answer the questions that arrive at `merchteam@losverdesatx.org`. It explains,
+in plain language, where every piece of information printed on a Los Verdes
+membership card comes from, and exactly how the software decides whether
+someone counts as a current member today. When a member writes in to say their
+card is wrong, this is the document that says which of these rules produced
+what they are looking at.
+
+The Membership Committee is named below where a decision is theirs rather than
+ours -- notably whether a membership can be withdrawn before it expires, which
+is a question about someone's standing in the group rather than about
+software.
 
 Nothing here is a proposal. It is a description of what the code does right
 now, so the rules can be confirmed or changed deliberately rather than
@@ -13,8 +21,8 @@ the source.
 
 The last section, [Decisions worth confirming](#8-decisions-worth-confirming),
 lists the places where the software had to pick a rule and where a different
-club policy would be equally easy to implement. That is the part most likely
-to need the committee's attention.
+policy would be equally easy to implement. That is the part most likely to
+need someone's attention beyond the Merch Team.
 
 ## 1. The short version
 
@@ -105,7 +113,7 @@ appears in lowercase.
 
 ### Member since
 
-The earliest date the club has on record for this person, shown as month and
+The earliest date the group has on record for this person, shown as month and
 year only (for example "Jul 2021", via `formatMonthYear()` in
 `src/lib/dateFormat.ts`). Two sources can supply it and they do not agree in
 every case, so the precedence matters — [section 5](#5-member-since-and-its-precedence-chain)
@@ -252,7 +260,7 @@ Squarespace-era test transactions.
 ## 5. "Member since" and its precedence chain
 
 "Member since" is the one field on the card with more than one possible
-source, because the club's early history does not exist in the current store.
+source, because the group's early history does not exist in the current store.
 
 ```mermaid
 flowchart TD
@@ -371,7 +379,7 @@ Every order in the history records two email addresses:
 
 * `order_email` — the address on the order itself, that is, the person who
   paid. Never changed.
-* `member_email` — the address the club considers the member for that order.
+* `member_email` — the address Los Verdes considers the member for that order.
 
 Memberships are grouped by `member_email`, so that column alone decides which
 card an order feeds. Normally the two are the same. They differ in two
@@ -410,7 +418,7 @@ This is listed as a question below.
 ## 8. Decisions worth confirming
 
 Each of these is a point where the software had to choose a rule and where a
-different club policy would be straightforward to implement. The current
+different policy would be straightforward to implement. The current
 behaviour is stated alongside each question, so the answer is a confirmation
 or a change, not an open-ended design exercise.
 
@@ -450,7 +458,7 @@ or a change, not an open-ended design exercise.
    the name comes from the billing details on the order. Re-attributing a gift
    moves the membership to the recipient but leaves the buyer's name on it
    until the recipient places an order of their own. If the recipient's name
-   should appear, the committee needs a way to record it.
+   should appear, the Merch Team needs a way to record it.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
@@ -458,13 +466,16 @@ or a change, not an open-ended design exercise.
    recorded "member since" override follows the old address rather than the
    person.
 
-8. **Does the club need a way to withdraw a membership before it expires?**
+8. **Does the group need a way to withdraw a membership before it expires?**
    Currently there is none. The data model has a "revoked" state and the
    access checks respect it, but nothing in the software ever sets it, and the
    routine order sync would overwrite it if it were set by hand. Revocation is
    already tracked as post-cutover work
    ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)); what it
-   should mean in practice is a policy question.
+   should mean in practice is a question for the **Membership Committee**
+   rather than for whoever builds it, since withdrawing a membership is a
+   decision about someone's standing in the group and sits alongside the Code
+   of Conduct work they already own.
 
 9. **Should a historical order with no recorded status still count?**
    It depends on which era it came from, and that asymmetry needs a decision
