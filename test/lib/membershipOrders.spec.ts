@@ -18,8 +18,8 @@ import { COUNTS_AS_MEMBERSHIP } from "../../src/lib/membershipOrders";
 async function insert(orderId: string, source: string, status: string | null) {
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-       status, test_mode, created_on, expires_on, first_seen_via)
-     VALUES (?, ?, 'someone@example.com', 'someone@example.com', 'Test', 'Member', ?, 0, '2025-01-01', '2026-01-01', 'sync')`,
+       status, created_on, expires_on, first_seen_via)
+     VALUES (?, ?, 'someone@example.com', 'someone@example.com', 'Test', 'Member', ?, '2025-01-01', '2026-01-01', 'sync')`,
   )
     .bind(orderId, source, status)
     .run();
@@ -64,16 +64,6 @@ describe("COUNTS_AS_MEMBERSHIP", () => {
   it("still counts a statusless legacy order, where NULL is handled explicitly", async () => {
     await insert("abc123def456abc123def456", "squarespace", null);
     expect(await countsValue("abc123def456abc123def456")).toBe(1);
-  });
-
-  it("never counts a test-mode order, whatever its status", async () => {
-    await env.DB.prepare(
-      `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-         status, test_mode, created_on, expires_on, first_seen_via)
-       VALUES ('1004_bc', 'bigcommerce', 'someone@example.com', 'someone@example.com', 'Test', 'Member',
-         'Completed', 1, '2025-01-01', '2026-01-01', 'sync')`,
-    ).run();
-    expect(await countsValue("1004_bc")).toBe(0);
   });
 
   it("selects only counting orders in a WHERE clause", async () => {

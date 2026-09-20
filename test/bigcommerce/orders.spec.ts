@@ -114,7 +114,6 @@ describe("recordMembershipOrder", () => {
         sku: "LOSV-MEM-0001",
         product_name: "Los Verdes Annual Membership",
         status: "Completed",
-        test_mode: 0,
         created_on: "2026-09-01T10:00:00Z",
         expires_on: "2027-09-01T10:00:00Z",
         modified_on: "2026-09-01T10:30:00Z",

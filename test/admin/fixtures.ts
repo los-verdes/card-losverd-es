@@ -8,7 +8,6 @@ export interface OrderFixture {
   last?: string;
   created: string;
   status?: string | null;
-  testMode?: boolean;
   channel?: string | null;
   source?: "bigcommerce" | "squarespace";
 }
@@ -21,8 +20,8 @@ export async function insertOrder(o: OrderFixture) {
   const expires = `${Number(o.created.slice(0, 4)) + 1}${o.created.slice(4)}`;
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, channel_name, order_email, member_email, first_name, last_name,
-       status, test_mode, created_on, expires_on, first_seen_via)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sync')`,
+       status, created_on, expires_on, first_seen_via)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sync')`,
   )
     .bind(
       o.id,
@@ -33,7 +32,6 @@ export async function insertOrder(o: OrderFixture) {
       o.first ?? "Test",
       o.last ?? "Member",
       o.status === undefined ? "Completed" : o.status,
-      o.testMode ? 1 : 0,
       o.created,
       expires,
     )

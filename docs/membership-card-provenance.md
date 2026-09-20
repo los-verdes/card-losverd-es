@@ -31,7 +31,6 @@ Membership Committee.
 * Orders are the only raw material. Every card is rebuilt from a person's
   order history; the card itself stores no independent state.
 * Not every order counts. A BigCommerce order counts only once it is paid.
-  Test orders never count.
 * Orders from before February 2023, when Los Verdes moved to BigCommerce, are
   described in [the appendix](#appendix-orders-from-before-bigcommerce).
 * All of one person's counted orders collapse into a single membership and a
@@ -51,7 +50,7 @@ flowchart TD
     HIST --> COUNT{"Does this order count<br/>as a membership?"}
     COUNT -->|"BigCommerce: only if paid —<br/>Awaiting Fulfillment, Awaiting Shipment,<br/>Shipped, Completed"| KEEP
     COUNT -->|"Imported historical order:<br/>counts unless cancelled"| KEEP
-    COUNT -->|"Unpaid, refunded, cancelled,<br/>declined, or a test order"| DROP["Ignored — affects no card"]
+    COUNT -->|"Unpaid, refunded,<br/>cancelled, or declined"| DROP["Ignored — affects no card"]
     KEEP["Counted orders, grouped by the<br/>address the order is attributed to"]
     KEEP --> CARD["One person, one membership, one card"]
     CARD --> F1["Holder's name —<br/>billing name on the latest counted order"]
@@ -228,14 +227,6 @@ status does not confer membership.
 That is the rule for every order placed since February 2023, and so for every
 current membership. Orders from before then are scored differently, for
 reasons set out in [the appendix](#appendix-orders-from-before-bigcommerce).
-
-### Test orders
-
-A separate flag excludes test orders regardless of status (`test_mode = 0` is
-required in every case). BigCommerce orders recorded by the current sync are
-always marked as not-test, so in practice this flag only ever excludes a
-handful of imported historical rows
-([appendix](#appendix-orders-from-before-bigcommerce)).
 
 ## 5. "Member since" and its precedence chain
 
@@ -524,9 +515,9 @@ the old system did: count it unless it was cancelled.
   `standard` for a record created from scratch.
 * **The same 365-day expiry was applied** to imported orders at import time,
   matching the old system's behaviour.
-* **Test orders were marked as such by Squarespace**, and the import carries
-  that flag through. Since the current sync always records orders as not-test,
-  this is the only place the test-order exclusion ever does anything.
+* **Test orders are not imported at all.** Squarespace flagged orders placed
+  against the store in test mode; the export leaves them behind, so they never
+  reach this system and nothing downstream has to know about them.
 
 ### Cards from that era still resolve
 

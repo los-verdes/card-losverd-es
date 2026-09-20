@@ -121,7 +121,6 @@ interface HistoryOrder {
   createdOn: string;
   email?: string;
   status?: string | null;
-  testMode?: number;
   source?: "bigcommerce" | "squarespace";
   sku?: string | null;
   firstName?: string | null;
@@ -132,8 +131,8 @@ interface HistoryOrder {
 async function insertHistoryOrder(order: HistoryOrder) {
   const createdOn = new Date(`${order.createdOn}T00:00:00Z`);
   await env.DB.prepare(
-    `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name, sku, status, test_mode, created_on, expires_on, first_seen_via)
-     VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'sync')`,
+    `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name, sku, status, created_on, expires_on, first_seen_via)
+     VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync')`,
   )
     .bind(
       order.orderId,
@@ -143,7 +142,6 @@ async function insertHistoryOrder(order: HistoryOrder) {
       order.lastName === undefined ? "Doe" : order.lastName,
       order.sku === undefined ? "LOSV-MEM-0001" : order.sku,
       order.status === undefined ? "Completed" : order.status,
-      order.testMode ?? 0,
       toIsoSeconds(createdOn),
       toIsoSeconds(membershipExpiry(createdOn)),
     )
@@ -325,13 +323,12 @@ describe("refreshMemberFromOrders", () => {
     expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
   });
 
-  it("leaves out refunded, cancelled, declined, and test orders", async () => {
+  it("leaves out refunded, cancelled, and declined orders", async () => {
     await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
     await insertHistoryOrder({ orderId: "2_bc", createdOn: "2080-01-15", status: "Declined" });
     await insertHistoryOrder({ orderId: "3_bc", createdOn: "2095-01-15", status: "Refunded" });
     await insertHistoryOrder({ orderId: "4_bc", createdOn: "2096-01-15", status: "Cancelled" });
     await insertHistoryOrder({ orderId: "sq-5", createdOn: "2097-01-15", status: "CANCELED", source: "squarespace" });
-    await insertHistoryOrder({ orderId: "sq-6", createdOn: "2098-01-15", testMode: 1, source: "squarespace" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 

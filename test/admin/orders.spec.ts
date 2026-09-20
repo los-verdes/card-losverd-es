@@ -180,7 +180,7 @@ describe("GET /admin/orders/:orderId", () => {
 
   it("flags an order that doesn't count as a membership, and copes with missing fields", async () => {
     await insertOrder({ id: "3003_bc", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
-    await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, status = NULL, test_mode = 1 WHERE order_id = '3003_bc'");
+    await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, status = NULL WHERE order_id = '3003_bc'");
 
     const body = await (await request("/admin/orders/3003_bc")).text();
 

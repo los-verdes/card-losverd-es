@@ -4,23 +4,26 @@
 --
 -- Column semantics mirror the legacy SQLAlchemy models exactly:
 --   * member_since: `User.member_since` = MIN(annual_membership.created_on),
---     with no channel/test-mode filtering (that's what cards show today).
+--     over every order including test ones, because that is the date cards
+--     show today. It can therefore predate the earliest exported order.
 --   * membership_cards: every card ever minted (one per membership period),
 --     since any of them may still be out in the world as a QR code.
 --   * membership_orders: every `annual_membership` row (BigCommerce *and*
 --     Squarespace), for D1's `membership_orders` history table. This is the
 --     only surviving record of Squarespace-era orders. `member_email` is the
 --     linked user's current email, which can differ from the order's own.
---     Rows that can't be represented (no order id, date, or email) are
---     counted in `membership_orders_total` but not exported, so the importer
---     can report how many were left behind instead of hiding it.
+--     Rows that can't be represented (no order id, date, or email), and
+--     Squarespace's test orders, are counted in `membership_orders_total`
+--     but not exported, so the importer can report how many were left
+--     behind instead of hiding it. Test orders are dropped here rather than
+--     carried and filtered later: nothing downstream has a use for them.
 -- Legacy timestamps are naive UTC (`datetime.utcnow()`), so dates are taken
 -- as-is without timezone conversion.
 
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 
 SELECT json_build_object(
-    'format_version', 2,
+    'format_version', 3,
     'exported_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     'member_since', COALESCE((
         SELECT json_agg(
@@ -67,7 +70,6 @@ SELECT json_build_object(
                 'sku', am.sku,
                 'product_name', am.product_name,
                 'status', am.fulfillment_status,
-                'test_mode', COALESCE(am.test_mode, false),
                 'created_on', to_char(am.created_on, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
                 'modified_on', to_char(am.modified_on, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
             )
@@ -78,5 +80,6 @@ SELECT json_build_object(
         WHERE am.order_id IS NOT NULL
           AND am.created_on IS NOT NULL
           AND am.customer_email IS NOT NULL
+          AND NOT COALESCE(am.test_mode, false)
     ), '[]'::json)
 );

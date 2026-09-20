@@ -37,13 +37,12 @@ export interface LegacyMembershipOrder {
   sku: string | null;
   product_name: string | null;
   status: string | null;
-  test_mode: boolean;
   created_on: string;
   modified_on: string | null;
 }
 
 export interface LegacyExport {
-  format_version: 2;
+  format_version: 3;
   exported_at: string;
   member_since: LegacyMemberSince[];
   membership_cards: LegacyMembershipCard[];
@@ -139,9 +138,6 @@ function parseMembershipOrder(
   if (customerId !== null && !Number.isInteger(customerId)) {
     fail(`${path}.customer_id`, "expected an integer or null");
   }
-  if (typeof row.test_mode !== "boolean") {
-    fail(`${path}.test_mode`, "expected a boolean");
-  }
   const order: LegacyMembershipOrder = {
     order_id: requireString(row, "order_id", path),
     source,
@@ -155,7 +151,6 @@ function parseMembershipOrder(
     sku: optionalString(row, "sku", path),
     product_name: optionalString(row, "product_name", path),
     status: optionalString(row, "status", path),
-    test_mode: row.test_mode,
     created_on: requireString(row, "created_on", path),
     modified_on: optionalString(row, "modified_on", path),
   };
@@ -180,10 +175,10 @@ function requireArray(obj: Record<string, unknown>, key: string): unknown[] {
 
 export function parseLegacyExport(input: unknown): LegacyExport {
   if (!isRecord(input)) fail("$", "expected a JSON object");
-  if (input.format_version !== 2) {
+  if (input.format_version !== 3) {
     fail(
       "format_version",
-      "expected 2 (re-run scripts/legacy-export/export.sql; version 1 predates membership_orders)",
+      "expected 3 (re-run scripts/legacy-export/export.sql; version 2 carries Squarespace test orders, version 1 predates membership_orders)",
     );
   }
   const exportedAt = requireString(input, "exported_at", "$");
@@ -250,7 +245,7 @@ export function parseLegacyExport(input: unknown): LegacyExport {
   }
 
   return {
-    format_version: 2,
+    format_version: 3,
     exported_at: exportedAt,
     member_since: memberSince,
     membership_cards: cards,
@@ -311,10 +306,10 @@ export function buildImportStatements(data: LegacyExport): string[] {
   for (const o of data.membership_orders) {
     statements.push(
       `INSERT INTO membership_orders (order_id, source, order_number, channel_name, order_email, member_email, first_name, last_name, ` +
-        `customer_id, sku, product_name, status, test_mode, created_on, expires_on, modified_on, first_seen_via) ` +
+        `customer_id, sku, product_name, status, created_on, expires_on, modified_on, first_seen_via) ` +
         `VALUES (${literal(o.order_id)}, ${literal(o.source)}, ${literal(o.order_number)}, ${literal(o.channel_name)}, ` +
         `${literal(o.order_email)}, ${literal(o.member_email)}, ${literal(o.first_name)}, ${literal(o.last_name)}, ` +
-        `${o.customer_id ?? "NULL"}, ${literal(o.sku)}, ${literal(o.product_name)}, ${literal(o.status)}, ${o.test_mode ? 1 : 0}, ` +
+        `${o.customer_id ?? "NULL"}, ${literal(o.sku)}, ${literal(o.product_name)}, ${literal(o.status)}, ` +
         `${literal(o.created_on)}, ${literal(expiresOn(o.created_on))}, ${literal(o.modified_on)}, 'legacy_postgres') ` +
         `ON CONFLICT(order_id) DO UPDATE SET member_email = excluded.member_email, updated_at = unixepoch('subsec') * 1000 ` +
         // An admin's attribution (#70) wins over the export's.
