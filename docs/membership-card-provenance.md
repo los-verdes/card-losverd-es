@@ -225,7 +225,7 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
 * **An order that disappears is flagged, not dropped.** If BigCommerce stops
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
-  alone (decided 2026-09-18). If the order reappears, the flag clears itself.
+  alone. If the order reappears, the flag clears itself.
   Withdrawing memberships on the strength of one unanswered request would
   turn a storefront incident into members losing their cards en masse.
 
@@ -239,8 +239,8 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   not detectable from anything this system stores.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
-  deferred until after the migration (decided 2026-09-17), so a MiniBC renewal
-  reaches this system only if it also produces a BigCommerce order.
+  not built yet and is not planned before the migration finishes, so a MiniBC
+  renewal reaches this system only if it also produces a BigCommerce order.
 
 None of these can invent a membership that was never bought; each of them can
 leave this system holding a stale answer. If a member's record looks wrong and
@@ -256,9 +256,10 @@ disagree with each other.
 
 ### Holder's name
 
-The billing name on the person's **most recent counted order**
-(`deriveMembershipState()` in `src/bigcommerce/sync.ts`, taking `first_name`
-and `last_name` from the latest order by date). It is shown as first and last
+Whatever the member has asked to be shown, and otherwise the billing name on
+their **most recent counted order** (`deriveMembershipState()` in
+`src/bigcommerce/sync.ts`, taking `first_name` and `last_name` from the latest
+order by date). It is shown as first and last
 name joined with a space — the large field on the front of the pass
 (`buildPassJson()` in `src/passkit/generator.ts`) and the card image
 (`src/cardimage/template.ts`).
@@ -274,6 +275,25 @@ purchase, and a member who never buys again keeps the name from their last
 purchase indefinitely. And because an attributed gift order still carries the
 *purchaser's* billing name, a gifted card can end up showing the giver's name
 (see [section 8](#8-gift-purchases-and-re-attributed-orders)).
+
+**A member can set the name on their own card.** Signed in, there is a page
+for it, and what they put there is shown instead of the name their orders
+give (`member_display_names`). Clearing it puts the card back to the derived
+name, which stays intact underneath the whole time, so nothing is lost by
+trying something. It is one free-text field rather than a first and last
+name, which suits a mononym or a name that does not split in two.
+
+This is why the name a card shows may not be the name on the orders behind
+it, and the admin member page shows both side by side for that reason. Names
+members set on the previous site are carried across by the one-time import,
+so somebody who renamed themselves there does not revert at cutover.
+
+Nothing checks what goes in that field. A membership card is a fun vanity
+item rather than an identity document and gets very little scrutiny in
+practice, so a card showing a nickname, or a name that is nobody's real one,
+is working as intended. If the group would rather that were not so, this is
+a good thing to say so about -- see
+[question 6](#9-decisions-worth-confirming).
 
 ### Membership tier
 
@@ -400,7 +420,7 @@ own status marking can lag behind reality for a while.
 
 **A BigCommerce order counts only when it is paid.** The statuses that count
 are `Awaiting Fulfillment`, `Awaiting Shipment`, `Shipped` and `Completed`
-(`PAID_BIGCOMMERCE_STATUSES`, decided 2026-09-17). Everything else is
+(`PAID_BIGCOMMERCE_STATUSES`). Everything else is
 excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
 `Pending`, `Awaiting Payment`) and money returned or the sale undone
 (`Refunded`, `Cancelled`, `Declined`, `Disputed`, and any other status the
@@ -609,11 +629,29 @@ or a change, not an open-ended design exercise.
    test orders. An alternative worth considering is showing whichever date is
    earlier.
 
-6. **Whose name belongs on a gifted card?** Currently the purchaser's, because
-   the name comes from the billing details on the order. Re-attributing a gift
-   moves the membership to the recipient but leaves the buyer's name on it
-   until the recipient places an order of their own. If the recipient's name
-   should appear, the Merch Team needs a way to record it.
+6. **Is a free-text name on a card the right latitude?** A member can set
+   whatever they like as the name on their own card, and nothing checks it.
+   That follows from treating a card as a fun vanity item rather than an
+   identity document -- one that gets very little scrutiny in practice, and
+   where a nickname or a name that is nobody's real one costs nothing.
+
+   The **Membership Committee** may see it differently, since a card is
+   shown to other people, and they are the ones who would field it if a name
+   somebody chose caused a problem. Worth their look rather than left to
+   whoever wrote the page. If they want limits, the shapes available are an
+   admin who can reset a name, a length or character restriction, or review
+   before a name appears -- and the field is small enough that any of them is
+   a modest change.
+
+   The membership behind the card is a separate matter and is treated as
+   one: who counts as current, whether one can be withdrawn, and who gets
+   emailed are all guarded much more carefully than what the card says.
+
+   Still to come is an admin able to set a name on somebody's behalf, which
+   the storage already allows for
+   ([#189](https://github.com/los-verdes/card-losverd-es/issues/189)). It
+   matters most for a gifted membership, where the card carries the giver's
+   name until the recipient buys something of their own.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
