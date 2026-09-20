@@ -49,8 +49,7 @@ Squarespace):
 ### What counts as a membership
 
 The rule is per store, because the two don't mean the same things by their
-statuses (`src/lib/membershipOrders.ts`,
-decided 2026-09-17):
+statuses (`src/lib/membershipOrders.ts`, decided 2026-09-17):
 
 * **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,
   `Awaiting Shipment`, `Completed`, or `Shipped`. An `Incomplete`,
