@@ -235,7 +235,7 @@ export function buildGenericObject(
     id: objectId(config, member),
     classId: classId(config),
     cardTitle: localizedString(config.cardTitle),
-    header: localizedString(`${member.firstName} ${member.lastName}`),
+    header: localizedString(`${member.firstName} ${member.lastName}`.trim()),
     textModulesData,
     barcode: {
       type: "QR_CODE",
