@@ -97,6 +97,16 @@ secrets-push env *names:
 secrets-status env:
     cloudflare="$(npx wrangler secret list --format json {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }})" && op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} --status "$cloudflare"
 
+# Enqueues onto the same etl-sync queue the cron uses, so the job runs exactly
+# as it does on a schedule -- same retries, same dead-letter queue, same
+# alerting. For watching a job once before trusting it to a timer, or
+# re-running one after fixing what broke it. Production needs
+# --yes-production.
+#
+# Run a scheduled job now: slack, resync or readiness
+etl-run env job *flags:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/etl-run.mjs {{ env }} {{ job }} {{ flags }}
+
 # Sends one `dlq_drill` message, which fails on purpose. Two modes, proving
 # different things:
 #

@@ -34,9 +34,11 @@
 //   just queue-dlq-drill staging --direct       # staging, seconds
 //   just queue-dlq-drill production             # refuses without --yes-production
 
-const API = process.env.CLOUDFLARE_API_BASE ?? "https://api.cloudflare.com/client/v4";
+import { sendQueueMessage } from "./lib/cloudflareQueue.ts";
+
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+const apiBase = process.env.CLOUDFLARE_API_BASE;
 
 const env = process.argv[2] ?? "staging";
 const confirmedProduction = process.argv.includes("--yes-production");
@@ -63,41 +65,16 @@ if (env === "production" && !confirmedProduction) {
 const direct = process.argv.includes("--direct");
 const queueName = direct ? `etl-sync-dlq-${env}` : `etl-sync-${env}`;
 
-async function api(path, init) {
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-  });
-  const body = await res.json().catch(() => null);
-  if (!body?.success) {
-    const error = body?.errors?.[0];
-    fail(`${path} -- HTTP ${res.status}${error ? `: ${error.message}` : ""}`);
-  }
-  return body.result;
-}
-
-// Queue ids are not in wrangler.toml -- it binds by name -- so look it up.
-const queues = await api(`/accounts/${accountId}/queues`, { method: "GET" });
-const queue = queues.find((q) => q.queue_name === queueName);
-if (!queue) {
-  fail(
-    `no queue named ${queueName} on this account. ` +
-      `Found: ${queues.map((q) => q.queue_name).join(", ") || "(none)"}`,
-  );
-}
-
 const sentAt = new Date().toISOString();
-await api(`/accounts/${accountId}/queues/${queue.queue_id}/messages`, {
-  method: "POST",
-  body: JSON.stringify({
-    content_type: "json",
-    body: {
-      type: "dlq_drill",
-      note: "A drill. Proves the dead-letter alert path; safe to ignore.",
-      sentAt,
-    },
-  }),
-});
+await sendQueueMessage(
+  queueName,
+  {
+    type: "dlq_drill",
+    note: "A drill. Proves the dead-letter alert path; safe to ignore.",
+    sentAt,
+  },
+  { token, accountId, apiBase, fail },
+);
 
 // From the backoff in src/queues/etlSync.ts: min(300, 15 * 2**attempts)
 // seconds between attempts, over the five retries the consumer allows.
