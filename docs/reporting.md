@@ -153,7 +153,8 @@ enabled.
 
 ## Who is an admin
 
-For now, only the maintainer's own account. The eventual list is the Los Verdes board (the
-"Starting XI") and the membership committee. Those names are published on the
+For now, only the maintainer's own account. The eventual list is the Los Verdes
+board (the "Starting XI"), the Merch Team, who administer the storefront and
+answer `merchteam@losverdesatx.org`, and the Membership Committee. Those names are published on the
 group's website, so the list may be derivable from there rather than
 maintained by hand; undecided.
