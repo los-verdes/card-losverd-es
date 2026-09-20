@@ -1,5 +1,7 @@
 import type { Env } from "../index";
+import { postSlackAlert } from "../slack/alert";
 import {
+  BigCommerceAuthError,
   syncBigCommerceOrder,
   syncCustomersEtl,
   syncMinibcSubscriptionsEtl,
@@ -122,6 +124,25 @@ export async function handleEtlSyncBatch(
       await dispatchEtlSyncMessage(message.body, env);
       message.ack();
     } catch (err) {
+      if (err instanceof BigCommerceAuthError) {
+        // Not retried, and not dead-lettered. Five more attempts get the same
+        // refusal, and the dead-letter alert that follows names the queue
+        // rather than the cause. Acking with an alert that says what is
+        // actually wrong is more use than thirteen minutes of backoff.
+        console.error("etl-sync handler stopped: BigCommerce credentials refused", {
+          type: message.body.type,
+          status: err.status,
+          error: err.message,
+        });
+        // No store hash or token detail: a Slack channel has a wider audience
+        // than our logs, the same reason the other alerts here carry none.
+        await postSlackAlert(
+          env,
+          ":closed_lock_with_key: BigCommerce refused this environment's credentials, so order syncing has stopped. The access token needs checking -- it may be revoked, too narrowly scoped, or pointed at the wrong store. /admin/preflight checks it directly.",
+        );
+        message.ack();
+        continue;
+      }
       console.error("etl-sync handler failed", {
         type: message.body.type,
         attempts: message.attempts,

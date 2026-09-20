@@ -107,6 +107,83 @@ describe("handleEtlSyncBatch", () => {
     expect(JSON.stringify(logged)).not.toBe("{}");
   });
 
+  describe("when BigCommerce refuses this environment's credentials", () => {
+    // Restored because this file has no other cleanup for it, and a webhook
+    // left configured would send every later test's Slack post into a fetch
+    // mock that does not expect one.
+    const realWebhook = env.SLACK_ALERT_WEBHOOK_URL;
+    afterEach(() => {
+      env.SLACK_ALERT_WEBHOOK_URL = realWebhook;
+    });
+
+    function mockRefusal(status: number) {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : String(input);
+        if (url.includes("api.bigcommerce.com")) {
+          return new Response("Access denied", { status });
+        }
+        // The Slack alert posts too; accept it rather than throwing.
+        return new Response("ok");
+      });
+    }
+
+    const message = () =>
+      makeMessage({
+        type: "sync_bigcommerce_order",
+        orderId: "4242",
+        storeHash: "store123",
+      });
+
+    it.each([401, 403])("acks rather than retrying a %d", async (status) => {
+      // Five more attempts over thirteen minutes reach the same refusal, and
+      // the dead-letter alert that follows names the queue rather than the
+      // cause. On staging's six-hourly resync that was four uninformative
+      // alerts a day (#194).
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      mockRefusal(status);
+      const msg = message();
+
+      await handleEtlSyncBatch(makeBatch([msg]), env);
+
+      expect(msg.ack).toHaveBeenCalledOnce();
+      expect(msg.retry).not.toHaveBeenCalled();
+    });
+
+    it("says the credentials were refused, not that something failed", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockRefusal(403);
+
+      await handleEtlSyncBatch(makeBatch([message()]), env);
+
+      expect(errors).toHaveBeenCalledWith(
+        "etl-sync handler stopped: BigCommerce credentials refused",
+        expect.objectContaining({ status: 403 }),
+      );
+    });
+
+    it("posts an alert naming the cause, without the store hash", async () => {
+      // A Slack channel has a wider audience than the logs, so the alert says
+      // what to go and check rather than which store or which token.
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      env.SLACK_ALERT_WEBHOOK_URL = "https://hooks.slack.test/refused";
+      const posts: string[] = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const url = typeof input === "string" ? input : String(input);
+        if (url.startsWith("https://hooks.slack.test/")) {
+          posts.push(String(init?.body ?? ""));
+          return new Response("ok");
+        }
+        return new Response("Access denied", { status: 403 });
+      });
+
+      await handleEtlSyncBatch(makeBatch([message()]), env);
+
+      expect(posts).toHaveLength(1);
+      expect(posts[0]).toContain("refused this environment");
+      expect(posts[0]).not.toContain("store123");
+    });
+  });
+
   it("dispatches sync_bigcommerce_order and acks on success", async () => {
     const order = {
       id: 4242,

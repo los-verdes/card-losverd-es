@@ -64,6 +64,32 @@ export const ORDERS_PAGE_SIZE = 250;
 const MAX_RATE_LIMIT_WAITS = 5;
 const MAX_RATE_LIMIT_WAIT_MS = 30_000;
 
+/**
+ * The store refused this environment's credentials: a 401 or a 403 rather
+ * than a transient failure.
+ *
+ * Its own type because the queue must treat it differently. Retrying a
+ * refused token five times over thirteen minutes reaches the same answer
+ * five times and then dead-letters, which announces itself in Slack as a
+ * generic dead-letter -- a message that says nothing about the cause. On
+ * staging's six-hourly resync that is four uninformative alerts a day for a
+ * problem one specific alert would describe exactly. Same reasoning as an
+ * order the store no longer has (#105): a fact about how things are set up
+ * is not a thing to retry.
+ */
+export class BigCommerceAuthError extends Error {
+  constructor(
+    readonly status: number,
+    readonly storeHash: string,
+  ) {
+    super(
+      `BigCommerce refused this environment's credentials: HTTP ${status} for store ${storeHash}. ` +
+        "The access token is missing, revoked, scoped too narrowly, or belongs to a different store.",
+    );
+    this.name = "BigCommerceAuthError";
+  }
+}
+
 function bcHeaders(accessToken: string): HeadersInit {
   return {
     "Content-Type": "application/json",
@@ -99,6 +125,13 @@ export class BigCommerceClient {
       const res = await fetch(this.url(path, query), {
         headers: bcHeaders(this.accessToken),
       });
+      // Before the ok/not-ok checks each caller makes, because every one of
+      // them would otherwise turn a refused token into a generic failure and
+      // hand it to the queue to retry.
+      if (res.status === 401 || res.status === 403) {
+        await res.body?.cancel();
+        throw new BigCommerceAuthError(res.status, this.storeHash);
+      }
       if (res.status !== 429 || waits >= MAX_RATE_LIMIT_WAITS) return res;
       await res.body?.cancel();
       const waitMs = Math.min(
