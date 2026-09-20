@@ -39,6 +39,32 @@ Do not assume the Membership Committee administers memberships because of the
 name -- that is the Merch Team. Documentation written for the wrong one of
 these is documentation nobody reads.
 
+## The provenance document is the specification
+
+`docs/membership-card-provenance.md` is the central specification for
+everything else in this repository. It is the project's main interface to the
+group's stakeholders -- the Merch Team who field members' questions, and the
+Membership Committee who are consulted on anything that settles a person's
+standing -- so it is the source of truth, and the rest of the repository
+aligns with it rather than the other way round.
+
+In practice:
+
+- A change to how membership works is described there, not just implemented.
+  Where that document and the code disagree, treat it as a defect and correct
+  whichever is wrong, rather than leaving the document to catch up later.
+- Other documents that restate its rules -- `docs/reporting.md` and
+  `docs/bigcommerce-ingestion.md` both do -- must not contradict it. When one
+  change makes several documents disagree, make the provenance document
+  correct first and bring the others into line with it.
+- It is not purely descriptive. It records what the code does today *and*
+  exists to invite feedback and proposals to change that, which is what the
+  "Decisions worth confirming" section is for. Do not trim the open questions
+  out of it for not being implementation.
+- Its diagrams keep labels to a few words per line on purpose. Mermaid no
+  longer grows a box to fit its text (mermaid-js/mermaid#7354), so a long
+  label is silently clipped when GitHub renders it; detail goes in the prose.
+
 ## No real personal data in development
 
 This repository is public, and the members are real people. Never put real
