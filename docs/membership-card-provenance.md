@@ -275,6 +275,13 @@ purchase indefinitely. And because an attributed gift order still carries the
 *purchaser's* billing name, a gifted card can end up showing the giver's name
 (see [section 8](#8-gift-purchases-and-re-attributed-orders)).
 
+**There is no way to set this name directly.** Not by the member, and not by
+an admin. The only way to change the name on a card today is to place an
+order under a different billing name, which means a member whose name has
+changed, or who goes by something other than what is on their payment card,
+has no route to a correct card at all. Whether that should stay true is
+[question 6](#9-decisions-worth-confirming).
+
 ### Membership tier
 
 The product bought on the **most recent counted order**, translated from its
@@ -609,11 +616,37 @@ or a change, not an open-ended design exercise.
    test orders. An alternative worth considering is showing whichever date is
    earlier.
 
-6. **Whose name belongs on a gifted card?** Currently the purchaser's, because
-   the name comes from the billing details on the order. Re-attributing a gift
-   moves the membership to the recipient but leaves the buyer's name on it
-   until the recipient places an order of their own. If the recipient's name
-   should appear, the Merch Team needs a way to record it.
+6. **Should the name on a card be something a person can set?** Currently it
+   is not settable at all: it is the billing name from the most recent
+   counted order, re-derived from order history every time a membership is
+   rebuilt. Three situations have no answer as a result.
+
+   A **gifted membership** shows the giver's name. Attribution already moves
+   the membership to the person it was bought for, but the name stays with
+   the purchase until the recipient buys something themselves -- so an order
+   can be transferred while the card still names somebody else.
+
+   A **name that has changed** cannot be corrected. The card keeps the old
+   one indefinitely, and the only way to replace it is to place another
+   order.
+
+   A **name someone does not go by** -- a nickname, a shortened form, a
+   chosen name -- never appears, because a payment card is the only thing
+   that gets a say.
+
+   The proposal on the table
+   ([#189](https://github.com/los-verdes/card-losverd-es/issues/189)) is two
+   routes: a member sets the name on their own card once signed in, and an
+   admin can set it too, the same way order attribution already works. The
+   name derived from orders would stay underneath, so clearing an override
+   returns the card to it.
+
+   The part that is genuinely not an implementation decision: a membership
+   card is an identity document within the group, shown to other people at
+   matches and events. What a person may put on their own -- and whether
+   anyone else may change it -- reaches inclusion and conduct, and so is the
+   **Membership Committee's** to settle rather than the Merch Team's or the
+   implementer's.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
