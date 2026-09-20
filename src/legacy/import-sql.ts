@@ -41,10 +41,20 @@ export interface LegacyMembershipOrder {
   modified_on: string | null;
 }
 
+/**
+ * A name a member chose on the old site, which had its own name-change page.
+ * Only exported where it differs from the name their orders would produce.
+ */
+export interface LegacyDisplayName {
+  email: string;
+  display_name: string;
+}
+
 export interface LegacyExport {
-  format_version: 3;
+  format_version: 4;
   exported_at: string;
   member_since: LegacyMemberSince[];
+  display_names: LegacyDisplayName[];
   membership_cards: LegacyMembershipCard[];
   /** Every `annual_membership` row in Postgres, exportable or not. */
   membership_orders_total: number;
@@ -175,10 +185,10 @@ function requireArray(obj: Record<string, unknown>, key: string): unknown[] {
 
 export function parseLegacyExport(input: unknown): LegacyExport {
   if (!isRecord(input)) fail("$", "expected a JSON object");
-  if (input.format_version !== 3) {
+  if (input.format_version !== 4) {
     fail(
       "format_version",
-      "expected 3 (re-run scripts/legacy-export/export.sql; version 2 carries Squarespace test orders, version 1 predates membership_orders)",
+      "expected 4 (re-run scripts/legacy-export/export.sql; version 3 leaves behind names members chose for themselves, version 2 carries Squarespace test orders, version 1 predates membership_orders)",
     );
   }
   const exportedAt = requireString(input, "exported_at", "$");
@@ -201,6 +211,18 @@ export function parseLegacyExport(input: unknown): LegacyExport {
   });
 
   const seenSerials = new Set<string>();
+  const seenDisplayNames = new Set<string>();
+  const displayNames = requireArray(input, "display_names").map((row, i) => {
+    const path = `display_names[${i}]`;
+    if (!isRecord(row)) fail(path, "expected an object");
+    const email = requireEmail(row, path);
+    if (seenDisplayNames.has(email)) fail(path, `duplicate email ${email}`);
+    seenDisplayNames.add(email);
+    const displayName = requireString(row, "display_name", path).trim();
+    if (displayName === "") fail(`${path}.display_name`, "expected a non-empty name");
+    return { email, display_name: displayName };
+  });
+
   const cards = requireArray(input, "membership_cards").map((row, i) => {
     const path = `membership_cards[${i}]`;
     if (!isRecord(row)) fail(path, "expected an object");
@@ -245,9 +267,10 @@ export function parseLegacyExport(input: unknown): LegacyExport {
   }
 
   return {
-    format_version: 3,
+    format_version: 4,
     exported_at: exportedAt,
     member_since: memberSince,
+    display_names: displayNames,
     membership_cards: cards,
     membership_orders_total: ordersTotal,
     membership_orders: orders,
@@ -294,6 +317,16 @@ export function buildImportStatements(data: LegacyExport): string[] {
     );
   }
 
+  for (const row of data.display_names) {
+    statements.push(
+      `INSERT INTO member_display_names (email, display_name, source) VALUES (${literal(row.email)}, ${literal(row.display_name)}, 'legacy_postgres') ` +
+        `ON CONFLICT(email) DO UPDATE SET display_name = excluded.display_name, updated_at = unixepoch('subsec') * 1000 ` +
+        // Never overwrites a name the member or an admin has since set here:
+        // a re-run of the import must not undo somebody's own choice.
+        `WHERE member_display_names.source = 'legacy_postgres'`,
+    );
+  }
+
   for (const card of data.membership_cards) {
     statements.push(
       `INSERT INTO legacy_membership_cards (serial_number, email, full_name, member_since, member_until) ` +
@@ -323,7 +356,7 @@ export function buildImportStatements(data: LegacyExport): string[] {
 export function buildImportSql(data: LegacyExport): string {
   return (
     `-- Generated from a legacy Postgres export taken at ${data.exported_at}.\n` +
-    `-- ${data.member_since.length} member_since rows, ${data.membership_cards.length} membership cards, ` +
+    `-- ${data.member_since.length} member_since rows, ${data.display_names.length} chosen names, ${data.membership_cards.length} membership cards, ` +
     `${data.membership_orders.length} of ${data.membership_orders_total} membership orders.\n` +
     buildImportStatements(data)
       .map((s) => `${s};`)

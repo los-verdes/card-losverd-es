@@ -6,6 +6,10 @@
 --   * member_since: `User.member_since` = MIN(annual_membership.created_on),
 --     over every order including test ones, because that is the date cards
 --     show today. It can therefore predate the earliest exported order.
+--   * display_names: the old site had its own name-change page
+--     (`POST /edit-user-name`), so `users.fullname` is sometimes a name the
+--     member chose rather than the one on their orders. Only the ones that
+--     differ are exported; see the query for why.
 --   * membership_cards: every card ever minted (one per membership period),
 --     since any of them may still be out in the world as a QR code.
 --   * membership_orders: every `annual_membership` row (BigCommerce *and*
@@ -23,7 +27,7 @@
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 
 SELECT json_build_object(
-    'format_version', 3,
+    'format_version', 4,
     'exported_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     'member_since', COALESCE((
         SELECT json_agg(
@@ -37,6 +41,39 @@ SELECT json_build_object(
             JOIN users u ON u.id = am.user_id
             WHERE u.email IS NOT NULL AND am.created_on IS NOT NULL
             GROUP BY lower(u.email)
+        ) t
+    ), '[]'::json),
+    'display_names', COALESCE((
+        SELECT json_agg(
+            json_build_object('email', t.email, 'display_name', t.display_name)
+            ORDER BY t.email
+        )
+        FROM (
+            SELECT lower(u.email) AS email, btrim(u.fullname) AS display_name
+            FROM users u
+            WHERE u.email IS NOT NULL
+              AND NULLIF(btrim(u.fullname), '') IS NOT NULL
+              -- Only people who actually bought something. Everyone who ever
+              -- signed in has a `users` row, and `ensure_user()` fills
+              -- `fullname` from their Google or Apple profile -- a name they
+              -- were given by a provider, not one they chose here.
+              AND EXISTS (SELECT 1 FROM annual_membership o WHERE o.user_id = u.id)
+              -- Only where it differs from the name their latest order would
+              -- produce. Elsewhere `fullname` is simply a copy of that, made
+              -- by `ensure_user()`, and importing those would pin every
+              -- member's name to whatever it happened to be at cutover
+              -- instead of letting it keep following the store.
+              AND btrim(u.fullname) IS DISTINCT FROM (
+                  SELECT btrim(concat_ws(' ',
+                             NULLIF(btrim(am.billing_address_first_name), ''),
+                             NULLIF(btrim(am.billing_address_last_name), '')))
+                  FROM annual_membership am
+                  WHERE am.user_id = u.id
+                    AND am.created_on IS NOT NULL
+                    AND NOT COALESCE(am.test_mode, false)
+                  ORDER BY am.created_on DESC
+                  LIMIT 1
+              )
         ) t
     ), '[]'::json),
     'membership_cards', COALESCE((
