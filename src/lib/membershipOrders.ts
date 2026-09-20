@@ -19,6 +19,11 @@ export const PAID_BIGCOMMERCE_STATUSES = [
   "awaiting fulfillment",
   "awaiting shipment",
   "completed",
+  // Paid, and some of it already sent. Found on four real orders in the old
+  // system's data (#89), which this list would have dropped -- an order
+  // half-shipped is no less paid for than one shipped whole, and nobody
+  // would have been able to explain to those four why their card stopped.
+  "partially shipped",
   "shipped",
 ];
 
