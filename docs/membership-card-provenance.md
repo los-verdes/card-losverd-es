@@ -641,12 +641,18 @@ or a change, not an open-ended design exercise.
    name derived from orders would stay underneath, so clearing an override
    returns the card to it.
 
-   The part that is genuinely not an implementation decision: a membership
-   card is an identity document within the group, shown to other people at
-   matches and events. What a person may put on their own -- and whether
-   anyone else may change it -- reaches inclusion and conduct, and so is the
-   **Membership Committee's** to settle rather than the Merch Team's or the
-   implementer's.
+   What a member may put there was raised as a question for the **Membership
+   Committee**, on the reasoning that a card is shown to other people and so
+   what appears on it touches conduct. Settled 2026-09-20, and worth writing
+   down because it shapes everything above: a membership card is a fun
+   vanity item rather than an identity document, gets very little scrutiny in
+   practice, and **it is fine if a card does not show somebody's real name.**
+   A free-text display name needs no ruling before it can be built.
+
+   The membership behind the card is still serious -- who counts as current,
+   whether one can be withdrawn, who gets emailed. The printed artefact is
+   not a credential, and designing its cosmetic fields as though somebody
+   might forge one would buy complexity nobody needs.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
