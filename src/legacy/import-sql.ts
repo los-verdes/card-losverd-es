@@ -51,7 +51,7 @@ export interface LegacyDisplayName {
 }
 
 export interface LegacyExport {
-  format_version: 4;
+  format_version: 5;
   exported_at: string;
   member_since: LegacyMemberSince[];
   display_names: LegacyDisplayName[];
@@ -185,10 +185,10 @@ function requireArray(obj: Record<string, unknown>, key: string): unknown[] {
 
 export function parseLegacyExport(input: unknown): LegacyExport {
   if (!isRecord(input)) fail("$", "expected a JSON object");
-  if (input.format_version !== 4) {
+  if (input.format_version !== 5) {
     fail(
       "format_version",
-      "expected 4 (re-run scripts/legacy-export/export.sql; version 3 leaves behind names members chose for themselves, version 2 carries Squarespace test orders, version 1 predates membership_orders)",
+      "expected 5 (re-run scripts/legacy-export/export.sql; version 4 and earlier mistake every order's era, version 3 leaves behind names members chose for themselves, version 2 carries Squarespace test orders, version 1 predates membership_orders)",
     );
   }
   const exportedAt = requireString(input, "exported_at", "$");
@@ -267,7 +267,7 @@ export function parseLegacyExport(input: unknown): LegacyExport {
   }
 
   return {
-    format_version: 4,
+    format_version: 5,
     exported_at: exportedAt,
     member_since: memberSince,
     display_names: displayNames,

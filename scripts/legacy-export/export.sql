@@ -16,6 +16,10 @@
 --     Squarespace), for D1's `membership_orders` history table. This is the
 --     only surviving record of Squarespace-era orders. `member_email` is the
 --     linked user's current email, which can differ from the order's own.
+--     An order's era comes from `channel_name`, not from its id. Measured
+--     against the real database in September 2026: no row in it carries a
+--     `_bc` suffix, and BigCommerce ids are bare 3-to-5 digit store numbers
+--     while Squarespace's are 24-character hex.
 --     Rows that can't be represented (no order id, date, or email), and
 --     Squarespace's test orders, are counted in `membership_orders_total`
 --     but not exported, so the importer can report how many were left
@@ -27,7 +31,7 @@
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 
 SELECT json_build_object(
-    'format_version', 4,
+    'format_version', 5,
     'exported_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     'member_since', COALESCE((
         SELECT json_agg(
@@ -95,15 +99,33 @@ SELECT json_build_object(
     'membership_orders', COALESCE((
         SELECT json_agg(
             json_build_object(
-                'order_id', am.order_id,
-                'source', CASE WHEN right(am.order_id, 3) = '_bc' THEN 'bigcommerce' ELSE 'squarespace' END,
+                -- The key the BigCommerce sync writes for the same order
+                -- (`bigCommerceOrderKey()`), so an imported order and a
+                -- synced one are one row rather than two. The old system
+                -- stored a bare store order id; the `_bc` suffix was only
+                -- ever added in its own responses.
+                'order_id', CASE
+                    WHEN am.channel_name LIKE 'bigcommerce%' THEN am.order_id || '_bc'
+                    ELSE am.order_id
+                END,
+                -- Which era an order belongs to, and so which counting rule
+                -- applies. Taken from the channel, which the old system set
+                -- to `bigcommerce_{source}` or to `Squarespace`, and never
+                -- leaves null. Emphatically not from the shape of the order
+                -- id: nothing in that database carries a `_bc` suffix, so a
+                -- test for one classifies every order as Squarespace and
+                -- scores 1,391 abandoned carts as memberships.
+                'source', CASE
+                    WHEN am.channel_name LIKE 'bigcommerce%' THEN 'bigcommerce'
+                    ELSE 'squarespace'
+                END,
                 'order_number', am.order_number,
                 'channel_name', am.channel_name,
                 'order_email', lower(am.customer_email),
                 'member_email', lower(COALESCE(u.email, am.customer_email)),
                 'first_name', am.billing_address_first_name,
                 'last_name', am.billing_address_last_name,
-                'customer_id', CASE WHEN right(am.order_id, 3) = '_bc' THEN u.bigcommerce_id END,
+                'customer_id', CASE WHEN am.channel_name LIKE 'bigcommerce%' THEN u.bigcommerce_id END,
                 'sku', am.sku,
                 'product_name', am.product_name,
                 'status', am.fulfillment_status,

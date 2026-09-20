@@ -50,7 +50,7 @@ function orderExport(order: Record<string, unknown>): Record<string, unknown> {
 
 function validExport(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    format_version: 4,
+    format_version: 5,
     exported_at: "2026-09-16T20:00:00Z",
     display_names: [],
     member_since: [
@@ -141,10 +141,11 @@ describe("parseLegacyExport", () => {
 
   it.each<[string, unknown, RegExp]>([
     ["non-object", [], /\$: expected a JSON object/],
-    ["unknown format_version", validExport({ format_version: 5 }), /format_version/],
+    ["unknown format_version", validExport({ format_version: 6 }), /format_version/],
     ["a version 1 export, with a hint to re-export", validExport({ format_version: 1 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["a version 2 export, which still carries test orders", validExport({ format_version: 2 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["a version 3 export, which leaves behind chosen names", validExport({ format_version: 3 }), /re-run scripts\/legacy-export\/export\.sql/],
+    ["a version 4 export, which mistakes every order's era", validExport({ format_version: 4 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["missing exported_at", validExport({ exported_at: "" }), /exported_at/],
     ["free-text exported_at", validExport({ exported_at: "now\nDROP TABLE members" }), /exported_at/],
     ["member_since not an array", validExport({ member_since: {} }), /member_since: expected an array/],
