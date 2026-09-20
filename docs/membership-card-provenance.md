@@ -15,20 +15,30 @@ are theirs outright -- anything that settles a person's standing in the group,
 such as whether a membership can be withdrawn before it expires. Those are
 marked where they appear.
 
-This is a description of what the code does right
-now. It documents the current implementation explicitly for reference _and also_ to invite feedback and/or proposals to change that implementation. Code and database names appear in `backticks` after
-each plain-English statement, for anyone who wants to check a claim against
-the source.
+This is a description of what the code does right now. It documents the
+current implementation explicitly, for reference, _and also_ to invite
+feedback and proposals to change that implementation. Code and database names
+appear in `backticks` after each plain-English statement, for anyone who wants
+to check a claim against the source.
 
-The last section, [Decisions worth confirming](#8-decisions-worth-confirming),
-lists the places where the software had to pick a rule and where a different
-policy would be equally easy to implement. That is the section to take to the
-Membership Committee.
+Because it is how the group's stakeholders see the way membership works, this
+document is the specification the rest of the repository follows. Where it and
+the code disagree, that is a defect rather than a documentation lag, and every
+other document here is written to agree with this one.
+
+The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
+gathers the places where the software had to pick a rule and where a different
+policy would be equally easy to implement. That is the most useful section to
+take to the Membership Committee, though feedback on any part of this is
+welcome.
 
 ## 1. The short version
 
 * Orders are the only raw material. Every card is rebuilt from a person's
   order history; the card itself stores no independent state.
+* Only orders containing a membership product are recorded at all. Merch
+  never reaches this system, and BigCommerce remains the authoritative record
+  of what was bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
 * Not every order counts. A BigCommerce order counts only once it is paid.
 * Orders from before February 2023, when Los Verdes moved to BigCommerce, are
   described in [the appendix](#appendix-orders-from-before-bigcommerce).
@@ -42,21 +52,24 @@ Membership Committee.
 ## 2. How it fits together
 
 ```mermaid
+%% Keep every label to a few words a line. Mermaid no longer grows a box to
+%% fit its text (mermaid-js/mermaid#7354), so a long label is silently clipped
+%% when this renders on GitHub. Detail belongs in the prose, not in the boxes.
 flowchart TD
-    BC["BigCommerce order<br/>(store webhook, or scheduled resync)"] --> HIST
-    SQ["Order from before BigCommerce<br/>(imported once; see appendix)"] --> HIST
-    HIST["Order history — one row per order, ever<br/>membership_orders"]
-    HIST --> COUNT{"Does this order count<br/>as a membership?"}
-    COUNT -->|"BigCommerce: only if paid —<br/>Awaiting Fulfillment, Awaiting Shipment,<br/>Shipped, Completed"| KEEP
-    COUNT -->|"Imported historical order:<br/>counts unless cancelled"| KEEP
-    COUNT -->|"Unpaid, refunded,<br/>cancelled, or declined"| DROP["Ignored — affects no card"]
-    KEEP["Counted orders, grouped by the<br/>address the order is attributed to"]
-    KEEP --> CARD["One person, one membership, one card"]
-    CARD --> F1["Holder's name —<br/>billing name on the latest counted order"]
-    CARD --> F2["Tier —<br/>product bought on the latest counted order"]
-    CARD --> F3["Member since —<br/>earliest counted order, unless overridden"]
-    CARD --> F4["Good through —<br/>furthest expiry: order date + 365 days"]
-    CARD --> F5["Card number —<br/>assigned once, never changes"]
+    BC["BigCommerce order<br/>webhook or resync"] --> HIST
+    SQ["Pre-2023 order<br/>imported once"] --> HIST
+    HIST["Order history<br/>membership_orders"]
+    HIST --> COUNT{"Does this<br/>order count?"}
+    COUNT -->|"paid"| KEEP
+    COUNT -->|"pre-2023:<br/>not cancelled"| KEEP
+    COUNT -->|"unpaid, refunded,<br/>cancelled, declined"| DROP["Ignored"]
+    KEEP["Counted orders,<br/>grouped by member"]
+    KEEP --> CARD["One membership,<br/>one card"]
+    CARD --> F1["Holder's name<br/>latest counted order"]
+    CARD --> F2["Tier<br/>latest counted order"]
+    CARD --> F3["Member since<br/>earliest counted order,<br/>or an override"]
+    CARD --> F4["Good through<br/>furthest expiry"]
+    CARD --> F5["Card number<br/>assigned once"]
 ```
 
 The rebuild happens in one place (`refreshMemberFromOrders()` in
@@ -67,7 +80,115 @@ than nudging the previous answer, which is why a refund or a correction takes
 effect on its own, and why the result does not depend on the order in which
 orders happen to arrive.
 
-## 3. Each field on the card
+The diagram keeps its labels short so they render legibly; the exact statuses
+behind "does this order count" are in
+[section 5](#5-how-the-software-decides-who-is-a-current-member), and what an
+order is in the first place is the next section.
+
+## 3. What an order is, and where it comes from
+
+Everything on a card is derived from orders, so it matters exactly what counts
+as one, and how far our list of them can be trusted to match the storefront's.
+
+### What makes an order a membership order
+
+An order becomes a membership order when one of the products on it is a
+membership. The SKU is what decides: the software holds an explicit list of
+membership SKUs (`MEMBERSHIP_SKU_TIER_MAP` in `src/bigcommerce/sync.ts`,
+currently the single entry `LOSV-MEM-0001`, tier `standard`), and an order is
+recorded here only when one of its line items matches. Everything else the
+storefront sells passes by untouched: an order for a scarf creates no record,
+and an order containing both a scarf and a membership is recorded as the
+membership it contains.
+
+If an order somehow carried two membership products, the first match decides
+the tier and the order still counts once. One order is one membership, never
+two.
+
+One consequence is worth stating plainly: **a membership sold under a SKU that
+is not on that list is invisible to this software.** It produces no card and
+appears in no report. Adding a new membership product to the storefront
+therefore means adding its SKU here too, which is a code change rather than a
+store setting, and is the first thing to check if a new product's buyers say
+they never received a card.
+
+### BigCommerce is the record; this is a copy
+
+**The storefront is authoritative.** Nothing in this software creates an
+order, and no screen in it can add one by hand. Every BigCommerce order here
+was read from the store, is keyed by the store's own order id
+(`membership_orders.order_id`, that id with `_bc` appended), and is refreshed
+from the store whenever it is read again.
+
+The exception is the orders from before February 2023, which were loaded once
+from the old system's database and have no storefront left to be re-read from.
+Everything in this section applies to BigCommerce orders; the imported ones
+cannot be repaired by reading them again, which is one reason they are
+described separately in
+[the appendix](#appendix-orders-from-before-bigcommerce).
+
+There is exactly one piece of order information this system holds that the
+storefront does not: who the membership is attributed to
+(`membership_orders.member_email`), which is what makes gifts and corrected
+addresses possible — see
+[section 8](#8-gift-purchases-and-re-attributed-orders). That field is
+deliberately never overwritten by a re-read. Every other field is the store's.
+
+A copy arrives by two routes, which run the same code:
+
+* **The store tells us.** A webhook fires when an order is placed or changes,
+  and the order is fetched and recorded within seconds
+  (`POST /bigcommerce/order-webhook`).
+* **We re-read the store.** A scheduled resync walks the store's order list
+  and re-reads everything modified recently, whether or not a webhook for it
+  ever arrived (`sync_subscriptions_etl`).
+
+### Why the copy can be trusted
+
+These are properties of how the copy is kept, not a promise that nothing goes
+wrong. What they buy is that mistakes are correctable and do not accumulate:
+
+* **Re-reading an order is always safe.** Recording an order overwrites any
+  existing row for that order id rather than adding a second one, so the same
+  order can be processed any number of times with an identical result. That is
+  what makes repair cheap: the fix for anything that looks wrong is to read it
+  again.
+* **Every field is replaced from the store, never merged.** A correction made
+  in BigCommerce — an amended name, a fixed email, a changed status —
+  overwrites what we hold the next time that order is read. The copy cannot
+  drift by accumulating edits, because it never edits; it overwrites.
+* **The resync overlaps on purpose.** It re-reads a trailing window rather
+  than resuming exactly where it left off, so an order modified right at the
+  edge of the previous run's window is read twice rather than missed once.
+* **It walks by order id, not by page number.** Page numbers shift underneath
+  a long run as orders change; an id cursor does not, so a run cannot skip
+  orders because the store re-sorted them mid-walk.
+* **Re-reading the whole store is a normal operation**, not an emergency
+  measure, and it is the intended answer to "are we certain this is right?".
+* **An order that disappears is flagged, not dropped.** If BigCommerce stops
+  returning an order we hold, it is marked and listed on the "Missing from
+  BigCommerce" report rather than deleted, and the member's card is left
+  alone (decided 2026-09-18). If the order reappears, the flag clears itself.
+  Withdrawing memberships on the strength of one unanswered request would
+  turn a storefront incident into members losing their cards en masse.
+
+### What this does not catch
+
+* **Archived orders.** The resync looks for orders that are there, not for
+  ones that have gone, so an order archived in BigCommerce keeps its
+  last-known copy here. Deletion is noticed; archival is not.
+* **Memberships sold under an unlisted SKU**, as above.
+* **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
+  and those do not flow through order webhooks at all. Reconciling them is
+  deferred until after the migration (decided 2026-09-17), so a MiniBC renewal
+  reaches this system only if it also produces a BigCommerce order.
+
+None of these can invent a membership that was never bought; each of them can
+leave this system holding a stale answer. If a member's record looks wrong and
+the reason is not somewhere in this document, re-reading their orders from the
+store is the first thing to try, and it cannot make matters worse.
+
+## 4. Each field on the card
 
 The stored membership record (`members`) is what all card formats read from.
 Apple Wallet passes, the "Save to Google Wallet" card, the emailed card image,
@@ -93,7 +214,7 @@ updates their billing name at checkout sees the card follow on their next
 purchase, and a member who never buys again keeps the name from their last
 purchase indefinitely. And because an attributed gift order still carries the
 *purchaser's* billing name, a gifted card can end up showing the giver's name
-(see [section 7](#7-gift-purchases-and-re-attributed-orders)).
+(see [section 8](#8-gift-purchases-and-re-attributed-orders)).
 
 ### Membership tier
 
@@ -101,11 +222,12 @@ The product bought on the **most recent counted order**, translated from its
 SKU by a fixed table (`MEMBERSHIP_SKU_TIER_MAP` in `src/bigcommerce/sync.ts`).
 Today that table has exactly one entry — SKU `LOSV-MEM-0001` means the
 `standard` tier — because the store sells a single membership product. An
-order containing no recognised membership SKU is not treated as a membership
-order at all and is skipped entirely.
+order with no recognised membership SKU is not a membership order at all
+([section 3](#3-what-an-order-is-and-where-it-comes-from)).
 
-An order whose SKU is not in that table leaves the tier as whatever is already
-on file, or `standard` for a record being created from scratch. The tier is printed on the card exactly as stored, so it currently
+An imported historical order whose SKU is not in that table leaves the tier as
+whatever is already on file, or `standard` for a record being created from
+scratch. The tier is printed on the card exactly as stored, so it currently
 appears in lowercase.
 
 ### Member since
@@ -113,7 +235,7 @@ appears in lowercase.
 The earliest date the group has on record for this person, shown as month and
 year only (for example "Jul 2021", via `formatMonthYear()` in
 `src/lib/dateFormat.ts`). Two sources can supply it and they do not agree in
-every case, so the precedence matters — [section 5](#5-member-since-and-its-precedence-chain)
+every case, so the precedence matters — [section 6](#6-member-since-and-its-precedence-chain)
 covers it in full.
 
 When neither source has a date, the field is left off the card entirely rather
@@ -137,7 +259,7 @@ The card's date is then the latest of those per-order expiries. Nothing is
 added up and nothing is stitched together: a second order does not extend the
 first one's year, it simply contributes its own expiry to the comparison. This
 is the mechanism behind renewals, and also the reason an early renewal can
-lose a few days — see [section 6](#6-several-orders-one-membership-one-card).
+lose a few days — see [section 7](#7-several-orders-one-membership-one-card).
 
 If no order counts — every one refunded, say — the expiry is emptied and the
 membership is no longer current.
@@ -187,7 +309,7 @@ so that the date would not raise questions while unrelated membership renewal
 problems were being worked through; it was restored once the provenance of
 those dates was established (2026-09-18).
 
-## 4. How the software decides who is a current member
+## 5. How the software decides who is a current member
 
 Two separate questions are involved, and they are answered in different
 places.
@@ -230,19 +352,20 @@ That is the rule for every order placed since February 2023, and so for every
 current membership. Orders from before then are scored differently, for
 reasons set out in [the appendix](#appendix-orders-from-before-bigcommerce).
 
-## 5. "Member since" and its precedence chain
+## 6. "Member since" and its precedence chain
 
 "Member since" is the one field on the card with more than one possible
 source, because the group's early history does not exist in the current store.
 
 ```mermaid
+%% Short labels only -- see the note on the diagram in section 2.
 flowchart TD
-    Q{"Is there a recorded override<br/>for this email address?<br/>member_since_overrides"}
-    Q -->|"Yes — a manual correction"| A["That date is shown on the card"]
-    Q -->|"Yes — from the old system's records"| A
-    Q -->|No| B{"Does the person have<br/>any counted orders?"}
-    B -->|Yes| C["The date of their<br/>earliest counted order"]
-    B -->|No| D["'Member since' is left off the card"]
+    Q{"Is there a<br/>recorded override?"}
+    Q -->|"yes: a correction"| A["That date is<br/>shown on the card"]
+    Q -->|"yes: from<br/>the old system"| A
+    Q -->|no| B{"Any counted<br/>orders?"}
+    B -->|yes| C["Their earliest<br/>counted order"]
+    B -->|no| D["No member since<br/>on the card"]
 ```
 
 **The order-derived value.** Each time a membership is rebuilt, the earliest
@@ -291,7 +414,7 @@ current rule does not rank them by reliability, only by origin:
 
 Because the rule is "prefer the override", an override wins even when it is
 *later* than the earliest counted order, which is not what "member since"
-usually implies. See the questions in [section 8](#8-decisions-worth-confirming).
+usually implies. See the questions in [section 9](#9-decisions-worth-confirming).
 
 Changing an override immediately marks that member's card as stale, so the
 next time their pass is fetched it is regenerated with the new date. That is
@@ -300,7 +423,7 @@ even when a date is corrected with hand-written SQL. Already-installed Wallet
 passes pick the change up on their next routine update rather than being
 pushed immediately.
 
-## 6. Several orders, one membership, one card
+## 7. Several orders, one membership, one card
 
 One person's whole order history collapses into one membership record and one
 card. The mechanics live in `refreshMemberFromOrders()` in
@@ -346,7 +469,7 @@ something actually visible on the card changed. That last detail is what stops
 a routine resync from making every member's phone re-download an identical
 pass.
 
-## 7. Gift purchases and re-attributed orders
+## 8. Gift purchases and re-attributed orders
 
 Every order in the history records two email addresses:
 
@@ -388,7 +511,7 @@ stays the purchaser's, and since the card's holder name comes from the latest
 counted order, a gift can leave the purchaser's name on the recipient's card.
 This is listed as a question below.
 
-## 8. Decisions worth confirming
+## 9. Decisions worth confirming
 
 Each of these is a point where the software had to choose a rule and where a
 different policy would be straightforward to implement. The current
