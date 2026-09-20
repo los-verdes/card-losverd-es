@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS etl_sync_state (
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
+-- The name a member wants shown on their card (see migrations/0014).
+-- Wins over the name derived from orders; absent means use the derived one.
+CREATE TABLE IF NOT EXISTS member_display_names (
+    email TEXT PRIMARY KEY,                   -- lower-cased, matching members.email
+    display_name TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('member', 'admin')),
+    note TEXT,
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
 -- Login Identities (see migrations/0004_member_auth.sql)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

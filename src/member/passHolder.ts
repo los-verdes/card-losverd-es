@@ -1,5 +1,5 @@
 import type { Env } from "../index";
-import { isMembershipCurrent, type MemberRecord } from "./artifacts";
+import { cardNameText, isMembershipCurrent, type MemberRecord } from "./artifacts";
 
 export interface PassHolder {
   name: string | null;
@@ -42,13 +42,21 @@ export async function lookupPassHolder(
   }
 
   const member = await env.DB.prepare(
-    "SELECT first_name, last_name, status, expiration_date FROM members WHERE email = ?",
+    // Joined rather than selected from `members` alone: the verification page
+    // must show the same name as the card it is verifying (migration 0014).
+    `SELECT m.first_name, m.last_name, m.status, m.expiration_date, d.display_name
+       FROM members m LEFT JOIN member_display_names d ON d.email = m.email
+      WHERE m.email = ?`,
   )
     .bind(email)
     .first<
       Pick<
         MemberRecord,
-        "first_name" | "last_name" | "status" | "expiration_date"
+        | "first_name"
+        | "last_name"
+        | "status"
+        | "expiration_date"
+        | "display_name"
       >
     >();
   if (!member) {
@@ -63,7 +71,7 @@ export async function lookupPassHolder(
   }
 
   return {
-    name: `${member.first_name} ${member.last_name}`.trim() || null,
+    name: cardNameText(member) || null,
     expirationDate: member.expiration_date,
     active: isMembershipCurrent(member, today),
   };

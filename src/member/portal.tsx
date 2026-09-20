@@ -7,6 +7,7 @@
  */
 
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
 import { every } from "hono/combine";
 import { createMiddleware } from "hono/factory";
 import type { FC } from "hono/jsx";
@@ -27,6 +28,7 @@ import {
 } from "../middleware/auth";
 import {
   buildGoogleWalletSaveUrl,
+  cardNameText,
   getApplePassBundle,
   getMemberByEmail,
   getMemberById,
@@ -36,6 +38,13 @@ import {
 } from "./artifacts";
 import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
 import { Page, SUPPORT_EMAIL } from "./layout";
+import {
+  MAX_DISPLAY_NAME_LENGTH,
+  clearDisplayName,
+  getDisplayName,
+  normalizeDisplayName,
+  setDisplayName,
+} from "./displayName";
 
 // The membership store the legacy no-membership page links to.
 export const MEMBERSHIP_STORE_URL =
@@ -220,6 +229,9 @@ export const MemberCard: FC<{
     <a href="/email-card" class="action">
       Email me my card
     </a>
+    <a href={NAME_PATH} class="action">
+      Change the name on my card
+    </a>
     <MembershipHistory orders={orders} email={member.email} />
     {isAdmin && <AdminLink />}
     <LogoutButton />
@@ -314,6 +326,97 @@ portal.get("/", requireCurrentMember, async (c) => {
     isCurrentAdmin(c.env, c.get("session").userId),
   ]);
   return c.html(<MemberCard member={member} orders={orders} isAdmin={isAdmin} />);
+});
+
+
+export const NAME_PATH = "/name";
+
+const NameForm: FC<{
+  member: CurrentMember;
+  current: string | null;
+  setByAdmin: boolean;
+  error?: string;
+  saved?: boolean;
+}> = ({ member, current, setByAdmin, error, saved }) => (
+  <Page title="The name on your card">
+    <h1>The name on your card</h1>
+    {saved && <p class="success">Saved. Any passes you have installed will catch up shortly.</p>}
+    {error && <p class="danger">{error}</p>}
+    <p>
+      Your card currently says <strong>{cardNameText(member)}</strong>. You can
+      put whatever you go by on it -- a nickname, a shorter version, however
+      you spell it.
+    </p>
+    {setByAdmin && current && (
+      <p class="muted">
+        This was set for you by an admin. Changing it here replaces it.
+      </p>
+    )}
+    <form method="post" action={NAME_PATH}>
+      <label for="display_name">Name to show</label>
+      <input
+        id="display_name"
+        name="display_name"
+        type="text"
+        value={current ?? ""}
+        maxlength={MAX_DISPLAY_NAME_LENGTH}
+        placeholder={`${member.first_name} ${member.last_name}`.trim()}
+        autocomplete="off"
+      />
+      <button type="submit">Save</button>
+    </form>
+    {current && (
+      <form method="post" action={NAME_PATH}>
+        <input type="hidden" name="clear" value="1" />
+        <button type="submit">
+          Use the name from my orders instead
+        </button>
+      </form>
+    )}
+    <p>
+      <a href="/">Back to your card</a>
+    </p>
+  </Page>
+);
+
+portal.get(NAME_PATH, requireCurrentMember, async (c) => {
+  const member = c.get("member");
+  const override = await getDisplayName(c.env, member.email);
+  return c.html(
+    <NameForm
+      member={member}
+      current={override?.display_name ?? null}
+      setByAdmin={override?.source === "admin"}
+      saved={c.req.query("saved") === "1"}
+    />,
+  );
+});
+
+portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
+  const member = c.get("member");
+  const form = await c.req.formData();
+
+  if (form.get("clear")) {
+    await clearDisplayName(c.env, member.email);
+    return c.redirect(`${NAME_PATH}?saved=1`, 303);
+  }
+
+  const result = normalizeDisplayName(String(form.get("display_name") ?? ""));
+  if (!result.ok) {
+    const override = await getDisplayName(c.env, member.email);
+    return c.html(
+      <NameForm
+        member={member}
+        current={override?.display_name ?? null}
+        setByAdmin={override?.source === "admin"}
+        error={result.reason}
+      />,
+      400,
+    );
+  }
+
+  await setDisplayName(c.env, member.email, result.value, "member");
+  return c.redirect(`${NAME_PATH}?saved=1`, 303);
 });
 
 portal.get("/card.png", requireCurrentMember, async (c) => {

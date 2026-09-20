@@ -113,7 +113,7 @@ export function buildCardTree(
   };
 
   const memberInfoChildren: (SatoriElement | string)[] = [
-    textNode(`${member.firstName} ${member.lastName}`, { fontSize: 46, color: WHITE }),
+    textNode(`${member.firstName} ${member.lastName}`.trim(), { fontSize: 46, color: WHITE }),
     textNode(member.membershipTier, { fontSize: 26, color: '#e7fbef', marginTop: 10 }),
   ];
   for (const label of [labels.memberSince, labels.expiration]) {

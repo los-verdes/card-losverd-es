@@ -27,6 +27,7 @@ import {
   isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
+  cardNameText,
 } from "../member/artifacts";
 import { sendEmail } from "./sendgrid";
 
@@ -169,7 +170,7 @@ export async function sendMembershipCardEmail(
   const applePass = await getApplePassBundle(env, member);
   const googleWalletUrl = await googleWalletLink(env, member);
   const props: CardEmailProps = {
-    name: `${member.first_name} ${member.last_name}`.trim(),
+    name: cardNameText(member),
     memberId: member.member_id,
     expirationDate: member.expiration_date,
     googleWalletUrl,

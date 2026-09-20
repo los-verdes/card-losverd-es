@@ -37,6 +37,13 @@ export interface MemberRecord {
   expiration_date: string | null;
   /** Effective value: a `member_since_overrides` row wins (migration 0005). */
   member_since: string | null;
+  /**
+   * What the member (or an admin) asked to be shown instead of the name
+   * derived from their orders; null when nobody has asked for anything
+   * (migration 0014). The derived `first_name`/`last_name` stay as they are
+   * underneath, so clearing this puts the card back to them.
+   */
+  display_name: string | null;
   auth_token: string;
   last_updated_at: number;
 }
@@ -44,8 +51,34 @@ export interface MemberRecord {
 const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name, m.membership_tier,
          m.status, m.expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
+         d.display_name,
          m.auth_token, m.last_updated_at
-  FROM members m LEFT JOIN member_since_overrides o ON o.email = m.email`;
+  FROM members m
+       LEFT JOIN member_since_overrides o ON o.email = m.email
+       LEFT JOIN member_display_names d ON d.email = m.email`;
+
+/**
+ * The name to put on a card, as the two fields every renderer expects.
+ *
+ * A display name is one free-text field (migration 0014), so it goes in
+ * `firstName` whole and leaves `lastName` empty -- a name someone chose is
+ * not ours to split, and several of them would not survive being split.
+ * Callers join the two with a space and trim.
+ */
+export function cardName(
+  member: Pick<MemberRecord, "display_name" | "first_name" | "last_name">,
+): { firstName: string; lastName: string } {
+  if (member.display_name) return { firstName: member.display_name, lastName: "" };
+  return { firstName: member.first_name, lastName: member.last_name };
+}
+
+/** The same name as one string, for the places that want it that way. */
+export function cardNameText(
+  member: Pick<MemberRecord, "display_name" | "first_name" | "last_name">,
+): string {
+  const { firstName, lastName } = cardName(member);
+  return `${firstName} ${lastName}`.trim();
+}
 
 export async function getMemberById(
   env: Env,
@@ -163,8 +196,7 @@ export async function getApplePassBundle(
   const bundle = await assemblePassBundle(
     {
       memberId: member.member_id,
-      firstName: member.first_name,
-      lastName: member.last_name,
+      ...cardName(member),
       membershipTier: member.membership_tier,
       status: effectiveStatus(member),
       expirationDate: member.expiration_date,
@@ -206,8 +238,7 @@ export async function renderCardImage(
 ): Promise<Uint8Array> {
   return renderMembershipCardPng(
     {
-      firstName: member.first_name,
-      lastName: member.last_name,
+      ...cardName(member),
       membershipTier: member.membership_tier,
       memberId: member.member_id,
       verifyUrl: await verifyUrl(env, member),
@@ -258,8 +289,7 @@ async function googleWalletObjectFor(
   const object = buildGenericObject(
     {
       memberId: member.member_id,
-      firstName: member.first_name,
-      lastName: member.last_name,
+      ...cardName(member),
       membershipTier: member.membership_tier,
       status: effectiveStatus(member),
       expirationDate: member.expiration_date,
