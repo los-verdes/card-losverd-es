@@ -149,9 +149,6 @@ function daysUntil(date) {
 
 function reportVerdict(daysRemaining) {
   const verdict = expiryVerdict(daysRemaining);
-  if (!verdict || typeof verdict.level !== "string") {
-    fail("expiryVerdict() returned nothing usable -- see the TODO in this script");
-  }
   const line = `${verdict.level.toUpperCase()}: ${verdict.message}`;
   if (verdict.level === "ok") {
     console.log(line);
