@@ -50,8 +50,15 @@ const FAVICON_MAX_AGE_SECONDS = 3_600;
  *
  * A crest does not survive 16 pixels -- `templates/card/crest.png` is 53 KB
  * of detail that becomes a smudge in a tab strip -- so this is a mark that
- * reads at that size: the group's green, and a single stroked V. Two shapes,
- * high contrast, no text, no font to resolve.
+ * reads at that size: the group's green, and `LV` drawn as stroked paths
+ * rather than set as text, so there is no font to resolve and no hinting to
+ * go wrong at 16 pixels.
+ *
+ * Both letters are needed: the group is Los Verdes, and a lone V is not its
+ * mark. They are drawn as two open paths with round caps, sized so the ink
+ * clears the rounded corners and keeps about one stroke-width of air between
+ * the L and the V -- at 16 pixels that gap is under a pixel, and closing it
+ * any further reads as a single smudged glyph.
  *
  * SVG rather than ICO because it is a string, which means it bundles like
  * the stylesheet, scales to every size a browser asks for, and can be read
@@ -59,8 +66,10 @@ const FAVICON_MAX_AGE_SECONDS = 3_600;
  */
 export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <rect width="32" height="32" rx="7" fill="${VERDE}"/>
-  <path d="M9.5 9.5 16 22.5 22.5 9.5" fill="none" stroke="#fff" stroke-width="4"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.2 9.5V21.8H13.1"/>
+    <path d="M17.6 9.5L21.5 21.8L25.4 9.5"/>
+  </g>
 </svg>`;
 
 const assets = new Hono<{ Bindings: Env }>();
