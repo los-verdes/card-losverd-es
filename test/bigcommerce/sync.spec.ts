@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
 import {
+  BigCommerceAuthError,
   BigCommerceClient,
   MAX_CHAIN_MESSAGES,
   MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
@@ -1276,4 +1277,55 @@ describe("countMembershipUnits", () => {
       );
     },
   );
+});
+
+
+describe("a store that refuses our credentials", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([401, 403])(
+    "raises a distinguishable error on %d rather than a generic failure",
+    async (status) => {
+      // The queue has to tell this apart from a transient failure: retrying a
+      // refused token reaches the same refusal five times and then
+      // dead-letters with an alert that names the queue rather than the cause.
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response("Access denied", { status }),
+      );
+      const client = new BigCommerceClient("store123", "bad-token");
+
+      await expect(client.listOrdersPage(0)).rejects.toBeInstanceOf(
+        BigCommerceAuthError,
+      );
+    },
+  );
+
+  it("says what to go and check, and which store", async () => {
+    // The store hash belongs in the message because this is the logs, not
+    // Slack -- the alert built from it deliberately carries neither.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("Access denied", { status: 403 }),
+    );
+    const client = new BigCommerceClient("store123", "bad-token");
+
+    await expect(client.getOrderProducts(1)).rejects.toThrow(
+      /refused this environment's credentials: HTTP 403 for store store123/,
+    );
+  });
+
+  it("refuses before the 404-means-gone path, so a bad token is never read as a deleted order", async () => {
+    // getOrderIfPresent turns a 404 into null, which flags the order as
+    // missing from the store. A refused token must not take that route: it
+    // would mark orders missing for a credentials problem.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("Access denied", { status: 403 }),
+    );
+    const client = new BigCommerceClient("store123", "bad-token");
+
+    await expect(client.getOrderIfPresent(1)).rejects.toBeInstanceOf(
+      BigCommerceAuthError,
+    );
+  });
 });
