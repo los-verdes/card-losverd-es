@@ -419,13 +419,19 @@ own status marking can lag behind reality for a while.
 ### Which orders count
 
 **A BigCommerce order counts only when it is paid.** The statuses that count
-are `Awaiting Fulfillment`, `Awaiting Shipment`, `Shipped` and `Completed`
-(`PAID_BIGCOMMERCE_STATUSES`). Everything else is
+are `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`,
+`Shipped` and `Completed` (`PAID_BIGCOMMERCE_STATUSES`). Everything else is
 excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
 `Pending`, `Awaiting Payment`) and money returned or the sale undone
 (`Refunded`, `Cancelled`, `Declined`, `Disputed`, and any other status the
 store may report). The list is an allow-list, so an unfamiliar BigCommerce
 status does not confer membership.
+
+That last property is worth watching rather than trusting, because its cost
+falls on a member rather than on us. Checking the list against every status
+the old system ever recorded turned up `Partially Shipped` on four orders —
+paid, with part of it already sent — which the list was missing. A status
+nobody has thought of is the shape this failure takes.
 
 That is the rule for every order placed since February 2023, and so for every
 current membership. Orders from before then are scored differently, for
