@@ -40,6 +40,14 @@ psql "$LEGACY_DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 \
 `export.sql` sets the session read-only and emits a single JSON document
 (`-A -t` = no alignment/headers, `-q` suppresses command tags).
 
+Before the real run, `column-checks.sql` answers the questions the export's
+correctness rests on -- whether `order_id` carries the `_bc` suffix the
+export keys on, which statuses exist, how many rows the filters will emit.
+It runs in the BigQuery console through the project's federated connection
+and reads the Postgres columns directly, because the BigQuery *view* of
+`annual_membership` strips that suffix and has misled us once. Every result
+is a count, so the output can be pasted into an issue as-is.
+
 ## 2. Build the D1 import SQL
 
 ```bash
