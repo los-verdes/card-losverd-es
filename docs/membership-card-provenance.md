@@ -130,7 +130,10 @@ Each order carries its own expiry, fixed when the order is recorded: exactly
 365 days after the order was placed (`membershipExpiry()` in
 `src/bigcommerce/orders.ts`, `MEMBERSHIP_DURATION_DAYS = 365`, stored as
 `membership_orders.expires_on`), which is carried over deliberately from the
-old system's behaviour.
+behaviour of the previous membership site
+([`digital-membership`](https://github.com/los-verdes/digital-membership)).
+"The old system" below always means that application and the Postgres database
+behind it.
 
 The card's date is then the latest of those per-order expiries. Nothing is
 added up and nothing is stitched together: a second order does not extend the
@@ -486,9 +489,11 @@ or a change, not an open-ended design exercise.
 Los Verdes sold memberships through Squarespace until **February 2023**, which
 is the last month with Squarespace orders and the first with BigCommerce ones.
 An order's date is therefore enough to know which set of rules applies to it.
-Those older orders were recovered once, directly from the old application's
-database, and imported into the same `membership_orders` table the current
-store's orders land in (`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
+Those older orders were recovered once, directly from the Postgres database
+behind the previous site
+([`digital-membership`](https://github.com/los-verdes/digital-membership)),
+and imported into the same `membership_orders` table the current store's
+orders land in (`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
 
 **They cannot make anyone a current member.** Every one of them expired years
 ago, so nothing in this appendix affects who holds a valid card today. They
