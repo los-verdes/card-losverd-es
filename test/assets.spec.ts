@@ -179,6 +179,16 @@ describe("the bundled stylesheet and font", () => {
     expect(body).toContain(VERDE);
   });
 
+  it("draws both letters, not just the V", async () => {
+    // The first version of this mark was a lone V, which shipped and was
+    // spotted by eye rather than by anything here. The group is Los Verdes;
+    // one letter is not its mark. Two stroked paths, so a future tidy-up
+    // cannot quietly drop one.
+    const body = await (await get("/assets/favicon.svg")).text();
+
+    expect(body.match(/<path /g) ?? []).toHaveLength(2);
+  });
+
   it("sends /favicon.ico to it, rather than answering 404 on every visit", async () => {
     // Pages link the SVG, so a browser never asks. Crawlers do.
     const res = await get("/favicon.ico");
