@@ -1,44 +1,42 @@
-# Where Membership Card Information Comes From
+# Where everything on a membership card comes from
 
-This document is written for the Merch Team, who administer the storefront and
-answer the questions that arrive at `merchteam@losverdesatx.org`. It explains,
-in plain language, where every piece of information printed on a Los Verdes
-membership card comes from, and exactly how the software decides whether
-someone counts as a current member today. When a member writes in to say their
-card is wrong, this is the document that says which of these rules produced
-what they are looking at.
+This one is for the Merch Team — the people who run the storefront and answer
+whatever turns up at `merchteam@losverdesatx.org`. It covers where every bit
+of information on a Los Verdes membership card comes from, and how the
+software works out whether somebody counts as a member today. When a member
+writes in to say their card looks wrong, this is the page that tells you which
+rule produced what they're looking at.
 
-The Membership Committee is consulted on all of it. These rules describe how
-membership works, which is their remit whoever administers it day to day, and
-a change to any of them is worth their input. A smaller number of decisions
-are theirs outright -- anything that settles a person's standing in the group,
-such as whether a membership can be withdrawn before it expires. Those are
-marked where they appear.
+The Membership Committee is consulted on all of it. These rules are how
+membership actually works, which is their business no matter who runs the
+storefront day to day, so any change to them is worth their input. A few calls
+are theirs outright — anything that settles a person's standing in the group,
+like whether a membership can be withdrawn before it expires. Those are
+flagged where they come up.
 
-This is a description of what the code does right now. It documents the
-current implementation explicitly, for reference, _and also_ to invite
-feedback and proposals to change that implementation. Code and database names
-appear in `backticks` after each plain-English statement, for anyone who wants
-to check a claim against the source.
+This describes what the code does right now. It's here for reference _and_ to
+invite feedback and proposals to change any of it. Code and database names
+turn up in `backticks` after each plain-English statement, so anyone who wants
+to check a claim against the source can go and do that.
 
-Because it is how the group's stakeholders see the way membership works, this
-document is the specification the rest of the repository follows. Where it and
-the code disagree, that is a defect rather than a documentation lag, and every
-other document here is written to agree with this one.
+Because this is how the group sees membership working, it's the spec the rest
+of the repository follows. Where this and the code disagree, that's a bug —
+not the docs lagging behind — and every other document here is written to
+agree with this one.
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
-gathers the places where the software had to pick a rule and where a different
-policy would be equally easy to implement. That is the most useful section to
-take to the Membership Committee, though feedback on any part of this is
+rounds up the places where the software had to pick a rule and where a
+different call would have been just as easy to build. That's the one to take
+to the Membership Committee, though feedback on any part of this is very
 welcome.
 
 ## 1. The short version
 
-* Orders are the only raw material. Every card is rebuilt from a person's
-  order history; the card itself stores no independent state.
-* Only orders containing a membership product are recorded at all. Merch
-  never reaches this system, and BigCommerce remains the authoritative record
-  of what was bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
+* Orders are the only raw material. Every card gets rebuilt from a person's
+  order history, and the card itself remembers nothing on its own.
+* Only orders with a membership on them get recorded at all. Merch never
+  reaches this system, and BigCommerce stays the real record of what somebody
+  bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
 * Not every order counts. A BigCommerce order counts only once it is paid.
 * Orders from before February 2023, when Los Verdes moved to BigCommerce, are
   described in [the appendix](#appendix-orders-from-before-bigcommerce).
@@ -87,8 +85,8 @@ order is in the first place is the next section.
 
 ## 3. What an order is, and where it comes from
 
-Everything on a card is derived from orders, so it matters exactly what counts
-as one, and how far our list of them can be trusted to match the storefront's.
+Everything on a card comes from orders, so it matters quite a lot what counts
+as one — and how far our list of them can be trusted to match the store's.
 
 ### What makes an order a membership order
 
@@ -107,10 +105,10 @@ two.
 
 One consequence is worth stating plainly: **a membership sold under a SKU that
 is not on that list is invisible to this software.** It produces no card and
-appears in no report. Adding a new membership product to the storefront
-therefore means adding its SKU here too, which is a code change rather than a
-store setting, and is the first thing to check if a new product's buyers say
-they never received a card.
+appears in no report. So adding a new membership product to the storefront
+means adding its SKU here too — that's a code change, not a store setting,
+and it's the first thing to check if buyers of a new product say they never
+got a card.
 
 ### BigCommerce is the record; this is a copy
 
@@ -190,10 +188,10 @@ store is the first thing to try, and it cannot make matters worse.
 
 ## 4. Each field on the card
 
-The stored membership record (`members`) is what all card formats read from.
-Apple Wallet passes, the "Save to Google Wallet" card, the emailed card image,
-and the QR verification page all draw on the same record, so they cannot
-disagree with each other.
+Every version of the card reads from the same stored membership record
+(`members`). Apple Wallet passes, the "Save to Google Wallet" card, the
+emailed card image and the QR verification page all pull from that one place,
+so they can't end up contradicting each other.
 
 ### Holder's name
 
@@ -311,7 +309,7 @@ those dates was established (2026-09-18).
 
 ## 5. How the software decides who is a current member
 
-Two separate questions are involved, and they are answered in different
+There are two questions tangled up here, and they get answered in different
 places.
 
 **Does an individual order count as a membership?** This is
@@ -407,8 +405,8 @@ current rule does not rank them by reliability, only by origin:
 * The order-derived date is the most auditable — it points at a specific
   order that counts today.
 * The imported date was computed over *every* historical membership row for
-  that person, without excluding cancelled or test orders. It can therefore be
-  slightly earlier than the order history would justify.
+  that person, without excluding cancelled or test orders. So it can land
+  slightly earlier than the order history alone would justify.
 * A manual date is as good as the judgement behind it, and is the right tool
   when a member's history genuinely predates the records.
 
@@ -425,7 +423,7 @@ pushed immediately.
 
 ## 7. Several orders, one membership, one card
 
-One person's whole order history collapses into one membership record and one
+One person's whole order history folds down into one membership record and one
 card. The mechanics live in `refreshMemberFromOrders()` in
 `src/bigcommerce/sync.ts`:
 
@@ -513,10 +511,10 @@ This is listed as a question below.
 
 ## 9. Decisions worth confirming
 
-Each of these is a point where the software had to choose a rule and where a
-different policy would be straightforward to implement. The current
-behaviour is stated alongside each question, so the answer is a confirmation
-or a change, not an open-ended design exercise.
+Each of these is somewhere the software had to pick a rule, and where picking
+a different one would have been just as easy. What it does today is written
+next to every question, so answering one means saying "yep, that's right" or
+"change it" — nobody is being handed a blank page.
 
 1. **Should a paid-but-unshipped order confer membership immediately, or only
    once the order ships?** Currently membership starts as soon as the store
@@ -625,7 +623,7 @@ or a change, not an open-ended design exercise.
 
 Los Verdes sold memberships through Squarespace until **February 2023**, which
 is the last month with Squarespace orders and the first with BigCommerce ones.
-An order's date is therefore enough to know which set of rules applies to it.
+An order's date is all you need to know which set of rules applies to it.
 Those older orders were recovered once, directly from the Postgres database
 behind the previous site
 ([`digital-membership`](https://github.com/los-verdes/digital-membership)),
