@@ -13,22 +13,24 @@
 -- that knew better is destroyed shortly afterwards. There is no second chance
 -- at this one.
 --
--- Migration 0014 constrained `source` to 'member' or 'admin'. SQLite cannot
--- alter a CHECK in place, so the table is rebuilt. That is free here: it was
--- added hours ago and holds nothing yet in either environment. The rows are
--- copied rather than dropped anyway, so this stays correct if that stops
--- being true between writing and running it.
-CREATE TABLE member_display_names_new (
-    email TEXT PRIMARY KEY,
-    display_name TEXT NOT NULL,
+-- Migration 0014 constrained `source` to 'member' or 'admin' and SQLite
+-- cannot alter a CHECK in place, so the table is replaced rather than
+-- altered. Dropped and recreated rather than copied through a temporary
+-- name: `member_display_names` was created hours ago and holds nothing in
+-- either environment, so there is nothing to preserve, and saying that
+-- plainly is better than carrying the machinery for a case that does not
+-- exist. If a name had been set on staging in the meantime, setting it again
+-- is the whole of the recovery.
+DROP TABLE IF EXISTS member_display_names;
+
+CREATE TABLE member_display_names (
+    email TEXT PRIMARY KEY,                   -- lower-cased, matching members.email
+    display_name TEXT NOT NULL,               -- wins over the name derived from orders
+    -- Who set it. Any of them may; the last to write wins, and this records
+    -- which it was so a surprised member can be told where the name came from.
+    -- `legacy_postgres` is the one-time import, carrying across a name the
+    -- member set on the old site.
     source TEXT NOT NULL CHECK (source IN ('member', 'admin', 'legacy_postgres')),
     note TEXT,
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
-
-INSERT INTO member_display_names_new (email, display_name, source, note, updated_at)
-SELECT email, display_name, source, note, updated_at FROM member_display_names;
-
-DROP TABLE member_display_names;
-
-ALTER TABLE member_display_names_new RENAME TO member_display_names;
