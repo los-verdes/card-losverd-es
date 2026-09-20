@@ -240,8 +240,48 @@ ul.checklist input:checked + span {
   color: var(--muted);
 }
 
+/*
+ * The admin navigation. Eleven links in one middot-separated run were
+ * unreadable -- every destination looked equally important and finding one
+ * meant reading all of them. Grouped instead, with the group's name carrying
+ * the shared word so each link only has to say what makes it different:
+ * "Active" under Reports rather than "Active memberships" among everything
+ * else.
+ *
+ * Flex with wrapping rather than a fixed row, because the admin pages are
+ * read on a phone at a match as often as at a desk, and a group is the right
+ * unit to wrap at.
+ */
 nav.admin-nav {
-  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  align-items: baseline;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+nav.admin-nav .nav-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  align-items: baseline;
+}
+
+/*
+ * Small and quiet: it labels the group rather than competing with the links
+ * inside it, and it is not itself a destination.
+ */
+nav.admin-nav .nav-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+nav.admin-nav a {
+  white-space: nowrap;
 }
 `;
 
