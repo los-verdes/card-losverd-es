@@ -30,12 +30,13 @@ Membership Committee.
 
 * Orders are the only raw material. Every card is rebuilt from a person's
   order history; the card itself stores no independent state.
-* Two eras of orders feed the history: current BigCommerce orders, and
-  Squarespace-era orders recovered once from the old system's database. Both
-  land in the same table (`membership_orders`).
-* Not every order counts. A BigCommerce order counts only once it is paid; a
-  Squarespace-era order counts unless it was cancelled. Test orders never
-  count.
+* Not every order counts. A BigCommerce order counts only once it is paid.
+  Test orders never count.
+* A smaller set of much older orders, imported once from the system Los Verdes
+  used before BigCommerce, sits in the same table and is scored by a different
+  rule. They matter only for long-standing members' join dates and cannot make
+  anyone a current member, so they are kept out of the way in
+  [the appendix](#appendix-orders-from-before-bigcommerce).
 * All of one person's counted orders collapse into a single membership and a
   single card. The card's "good through" date is the furthest expiry among
   them; "member since" is the earliest order, unless a recorded override says
@@ -48,11 +49,11 @@ Membership Committee.
 ```mermaid
 flowchart TD
     BC["BigCommerce order<br/>(store webhook, or scheduled resync)"] --> HIST
-    SQ["Squarespace-era order<br/>(one-time import from the old system)"] --> HIST
+    SQ["Order from before BigCommerce<br/>(imported once; see appendix)"] --> HIST
     HIST["Order history — one row per order, ever<br/>membership_orders"]
     HIST --> COUNT{"Does this order count<br/>as a membership?"}
     COUNT -->|"BigCommerce: only if paid —<br/>Awaiting Fulfillment, Awaiting Shipment,<br/>Shipped, Completed"| KEEP
-    COUNT -->|"Squarespace-era: yes, unless<br/>cancelled, refunded or declined"| KEEP
+    COUNT -->|"Imported historical order:<br/>counts unless cancelled"| KEEP
     COUNT -->|"Unpaid, refunded, cancelled,<br/>declined, or a test order"| DROP["Ignored — affects no card"]
     KEEP["Counted orders, grouped by the<br/>address the order is attributed to"]
     KEEP --> CARD["One person, one membership, one card"]
@@ -87,8 +88,8 @@ name joined with a space — the large field on the front of the pass
 (`buildPassJson()` in `src/passkit/generator.ts`) and the card image
 (`src/cardimage/template.ts`).
 
-If that order carries no name — common for Squarespace-era rows, where the old
-export did not always have one — the name already on file is kept, and for a
+If that order carries no name — which happens for some imported historical
+rows — the name already on file is kept, and for a
 brand-new record the name from the order currently being processed is used
 instead.
 
@@ -108,9 +109,8 @@ Today that table has exactly one entry — SKU `LOSV-MEM-0001` means the
 order containing no recognised membership SKU is not treated as a membership
 order at all and is skipped entirely.
 
-A Squarespace-era order whose SKU is not in that table leaves the tier as
-whatever is already on file, or `standard` for a record being created from
-scratch. The tier is printed on the card exactly as stored, so it currently
+An order whose SKU is not in that table leaves the tier as whatever is already
+on file, or `standard` for a record being created from scratch. The tier is printed on the card exactly as stored, so it currently
 appears in lowercase.
 
 ### Member since
@@ -132,9 +132,8 @@ date (for example "Feb 17, 2024", via `formatShortDate()`).
 Each order carries its own expiry, fixed when the order is recorded: exactly
 365 days after the order was placed (`membershipExpiry()` in
 `src/bigcommerce/orders.ts`, `MEMBERSHIP_DURATION_DAYS = 365`, stored as
-`membership_orders.expires_on`). The same 365-day rule was applied to the
-imported Squarespace-era orders (`src/legacy/import-sql.ts`), and it is
-carried over deliberately from the old system's behaviour.
+`membership_orders.expires_on`), which is carried over deliberately from the
+old system's behaviour.
 
 The card's date is then the latest of those per-order expiries. Nothing is
 added up and nothing is stitched together: a second order does not extend the
@@ -166,8 +165,8 @@ The QR code encodes a signed verification link for that card number. Scanning
 it (and signing in) shows the holder's name and whether their membership is
 current *right now* — computed live, not read off the card
 (`src/member/verify-pass.tsx`, `lookupPassHolder()` in
-`src/member/passHolder.ts`). Old Squarespace-era cards still in circulation
-resolve the same way: the old card's serial is looked up
+`src/member/passHolder.ts`). Cards issued by the old system and still in
+circulation resolve the same way: the old card's serial is looked up
 (`legacy_membership_cards`) to find the holder, and then the holder's current
 membership is shown, not the dates printed on that old card. If that holder
 has no current membership record at all, the old card's own dates are shown as
@@ -218,46 +217,31 @@ keep an `active` label until the next sync. The expiry date printed on the
 card is still correct, and every access check still refuses — but the pass's
 own status marking can lag behind reality for a while.
 
-### The per-source counting rule
+### Which orders count
 
-Order statuses are stored exactly as each store reported them, and the two
-stores do not mean the same things by similar words. So the rule is applied
-per source rather than as one list.
-
-**BigCommerce orders count only when paid.** The statuses that count are
-`Awaiting Fulfillment`, `Awaiting Shipment`, `Shipped` and `Completed`
+**A BigCommerce order counts only when it is paid.** The statuses that count
+are `Awaiting Fulfillment`, `Awaiting Shipment`, `Shipped` and `Completed`
 (`PAID_BIGCOMMERCE_STATUSES`, decided 2026-09-17). Everything else is
-excluded, and the exclusions fall into two groups: not yet paid
-(`Incomplete`, `Pending`, `Awaiting Payment`) and money returned or the sale
-undone (`Refunded`, `Cancelled`, `Declined`, `Disputed`, and any other status
-the store may report). The list is an allow-list, so an unfamiliar BigCommerce
+excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
+`Pending`, `Awaiting Payment`) and money returned or the sale undone
+(`Refunded`, `Cancelled`, `Declined`, `Disputed`, and any other status the
+store may report). The list is an allow-list, so an unfamiliar BigCommerce
 status does not confer membership.
 
-**Squarespace-era orders count unless they were cancelled.** The statuses that
-void one of these are `canceled`, `cancelled`, `refunded` and `declined`
-(`VOID_LEGACY_STATUSES`); anything else counts, including a blank status,
-which many imported rows have.
-
-The reason the rules differ is specific rather than an oversight.
-Squarespace's own vocabulary was `FULFILLED`, `PENDING` and `CANCELED`, and its
-`PENDING` meant **paid but not yet shipped** — not BigCommerce's "we are still
-waiting for payment". Applying BigCommerce's allow-list to those rows would
-silently drop real historical members, and applying the Squarespace rule to
-BigCommerce orders would hand out cards for orders nobody had paid for. The
-Squarespace-era side also keeps the old system's rule, which was simply "count
-it unless it was cancelled".
-
-These orders are closed history: Squarespace is no longer accessible and those
-rows will never change again.
+That is the rule for every order anyone has placed since Los Verdes moved to
+BigCommerce, and so for every current membership. Orders imported from the
+system used before that are scored differently, for reasons set out in
+[the appendix](#appendix-orders-from-before-bigcommerce); statuses are stored
+exactly as each system reported them, and the two did not mean the same things
+by similar words.
 
 ### Test orders
 
 A separate flag excludes test orders regardless of status (`test_mode = 0` is
-required in every case). This came from Squarespace, which marked test
-transactions; the imported rows carry the flag through
-(`src/legacy/import-sql.ts`). BigCommerce orders recorded by the current sync
-are always marked as not-test, so today the flag only ever excludes
-Squarespace-era test transactions.
+required in every case). BigCommerce orders recorded by the current sync are
+always marked as not-test, so in practice this flag only ever excludes a
+handful of imported historical rows
+([appendix](#appendix-orders-from-before-bigcommerce)).
 
 ## 5. "Member since" and its precedence chain
 
@@ -276,8 +260,8 @@ flowchart TD
 
 **The order-derived value.** Each time a membership is rebuilt, the earliest
 counted order's date is stored on the record (`members.member_since`). This
-includes Squarespace-era orders, so once the one-time import had loaded, this
-value alone is often already correct.
+includes the imported historical orders, so once that one-time import had
+loaded, this value alone is often already correct.
 
 **The override, which wins.** A separate table
 (`member_since_overrides`, added in
@@ -481,10 +465,11 @@ or a change, not an open-ended design exercise.
 
 9. **Should a historical order with no recorded status still count?**
    It depends on which era it came from, and that asymmetry needs a decision
-   before cutover. A Squarespace-era row with no status counts, because many
-   imported rows have none and excluding them would drop real historical
-   members. But the same blank status on a **BigCommerce-era** row does not
-   count, because that side requires a positively paid status.
+   before cutover. A blank status on an imported pre-BigCommerce order counts
+   ([appendix](#appendix-orders-from-before-bigcommerce)), because many of
+   those rows have none and excluding them would drop real historical members.
+   The same blank status on a **BigCommerce** order does not count, because
+   that side requires a positively paid status.
 
    This matters because the one-time import classifies any order whose id ends
    in `_bc` as a BigCommerce order and fills its status from the old system's
@@ -500,3 +485,58 @@ or a change, not an open-ended design exercise.
    from one whose status was simply never recorded. The data already supports
    that distinction — every order records whether it arrived through the store
    sync or the historical import (`membership_orders.first_seen_via`).
+
+
+## Appendix: orders from before BigCommerce
+
+Los Verdes sold memberships through Squarespace until 2023. Those orders were
+recovered once, directly from the old application's database, and imported
+into the same `membership_orders` table the current store's orders land in
+(`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
+
+**They cannot make anyone a current member.** Every one of them expired years
+ago, so nothing in this appendix affects who holds a valid card today. They
+are kept because they are the only surviving record of when long-standing
+members joined, and because cards issued in that era are still in wallets and
+still have QR codes people scan. Squarespace itself is no longer accessible,
+so these rows will never change again.
+
+That is why they are here rather than woven through the document: for every
+question about a current membership, the rules above are the whole answer.
+
+### They count unless they were cancelled
+
+The statuses that void one of these orders are `canceled`, `cancelled`,
+`refunded` and `declined` (`VOID_LEGACY_STATUSES`). Anything else counts,
+including a blank status, which many of the imported rows have.
+
+That is the opposite shape to the BigCommerce rule, which counts an order only
+on a positively paid status, and the difference is deliberate. Squarespace's
+vocabulary was `FULFILLED`, `PENDING` and `CANCELED`, and its `PENDING` meant
+**paid but not yet shipped** — not BigCommerce's "we are still waiting for
+payment". Applying the paid-only allow-list to these rows would silently drop
+real historical members. Applying this rule to BigCommerce orders would hand
+out cards for orders nobody had paid for. The rule here is also simply what
+the old system did: count it unless it was cancelled.
+
+### The smaller differences
+
+* **Names are often missing.** The export did not always carry one, so an
+  imported order frequently leaves the name already on file untouched.
+* **Tiers are often missing.** An imported order whose SKU is not in the
+  current store's mapping leaves the tier as whatever is on file, or
+  `standard` for a record created from scratch.
+* **The same 365-day expiry was applied** to imported orders at import time,
+  matching the old system's behaviour.
+* **Test orders were marked as such by Squarespace**, and the import carries
+  that flag through. Since the current sync always records orders as not-test,
+  this is the only place the test-order exclusion ever does anything.
+
+### Cards from that era still resolve
+
+A card issued by the old system carries a serial this software does not
+generate. Scanning one still works: the serial is looked up
+(`legacy_membership_cards`) to find the holder, and the holder's membership is
+then computed live by exactly the rules above. The old card is a pointer to a
+person, not a record of their membership, which is why it stays correct as
+their membership changes.
