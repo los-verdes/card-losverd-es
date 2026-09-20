@@ -134,6 +134,13 @@ when they ask why they never got one.
 as well as renewing their own should place separate orders, and the gift order
 is then re-attributed to the recipient.
 
+That is a constraint of how orders are stored rather than a law of nature, and
+there is a proposal to lift it
+([#198](https://github.com/los-verdes/card-losverd-es/issues/198)): give every
+membership line item its own row, so an order carrying two produces two
+memberships and the spare can be re-attributed like any gift. It would turn
+the case below from something unrecoverable into an ordinary correction.
+
 **This is checked.** Each time an order is read from the store, the
 memberships on it are counted across every line item, quantities included, and
 the number is recorded against the order
