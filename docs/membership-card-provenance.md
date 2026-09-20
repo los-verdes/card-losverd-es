@@ -101,9 +101,46 @@ storefront sells passes by untouched: an order for a scarf creates no record,
 and an order containing both a scarf and a membership is recorded as the
 membership it contains.
 
-If an order somehow carried two membership products, the first match decides
-the tier and the order still counts once. One order is one membership, never
-two.
+### One order, one membership
+
+This software depends on an arrangement it does not control and does not
+enforce: **a single order never carries more than one membership.** That is
+maintained in the storefront's own configuration, which is the Merch Team's
+side of the boundary rather than this software's.
+
+The dependency is not a detail of one function. Order history is keyed on the
+order's own id (`membership_orders.order_id` is the primary key), so an order
+has exactly one row and one membership to give. Attribution works at the same
+grain: re-pointing a gift moves the whole order to the recipient
+([section 8](#8-gift-purchases-and-re-attributed-orders)), because an order is
+the smallest thing that can be pointed at anybody.
+
+There are two ways an order could carry a second membership, and neither is
+handled:
+
+* **Two membership line items on one order.** The first one found sets the
+  tier; the second is ignored.
+* **One membership line item with a quantity above one.** BigCommerce does
+  report the quantity; this software simply never looks at it, so an order for
+  two memberships looks exactly like an order for one.
+
+Both end the same way, and this is the part worth holding on to: one
+membership is recorded, attributed to whoever paid, and the second leaves no
+trace anywhere. No error, no warning, no row on any report. Somebody has paid
+for a membership that no card exists for, and the first anyone hears of it is
+when they ask why they never got one.
+
+**So two memberships mean two orders.** A member buying one for someone else
+as well as renewing their own should place separate orders, and the gift order
+is then re-attributed to the recipient.
+
+Nothing currently checks that this holds, though the information to check it
+does arrive: the quantity is in what BigCommerce sends back and is discarded.
+A units-sold comparison — how many memberships the storefront sold against how
+many this system recorded — would catch a breach, and no report does that
+today. If the storefront is ever configured in a way that lets a membership be
+bought in twos, this is the assumption that would be breaking, and it would
+break quietly.
 
 One consequence is worth stating plainly: **a membership sold under a SKU that
 is not on that list is invisible to this software.** It produces no card and
@@ -178,6 +215,8 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   ones that have gone, so an order archived in BigCommerce keeps its
   last-known copy here. Deletion is noticed; archival is not.
 * **Memberships sold under an unlisted SKU**, as above.
+* **A second membership bought on the same order**, as above — invisible, and
+  not detectable from anything this system stores.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
   deferred until after the migration (decided 2026-09-17), so a MiniBC renewal
