@@ -299,6 +299,39 @@ describe("handleEtlSyncBatch", () => {
     );
   });
 
+  it("fails dlq_drill on purpose, which is the whole point of it", async () => {
+    // `scripts/queue-dlq-drill.mjs` proves the dead-letter alert reaches
+    // Slack by sending this and waiting for it to exhaust its retries. It is
+    // a named type rather than an unrecognised one so that the drill depends
+    // on something declared, and so this test constrains only the drill --
+    // `default:` is free to do whatever is right for a genuinely unknown
+    // message without breaking it.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const message = makeMessage({ type: "dlq_drill", sentAt: "2026-09-19T00:00:00.000Z" });
+
+    await handleEtlSyncBatch(makeBatch([message]), env);
+
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledWith(
+      "etl-sync handler failed",
+      expect.objectContaining({ type: "dlq_drill" }),
+    );
+  });
+
+  it("says in the error that the failure was deliberate", async () => {
+    // A dlq_drill in the logs at an awkward hour should identify itself
+    // rather than look like something to investigate.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await handleEtlSyncBatch(makeBatch([makeMessage({ type: "dlq_drill" })]), env);
+
+    // The Error is logged as an object, and JSON.stringify flattens an
+    // Error to {}, so read the thrown value rather than the serialised call.
+    const logged = errors.mock.calls[0][1] as { err: unknown };
+    expect(String((logged.err as Error)?.message)).toContain("deliberate failure");
+  });
+
   it("routes run_readiness_check to the readiness check and acks", async () => {
     // Enqueued weekly by `scheduled()` (#95). It runs the same checks the
     // readiness page does and posts to Slack only when one has failed, so in

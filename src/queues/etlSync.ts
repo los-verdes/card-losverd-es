@@ -26,7 +26,16 @@ export type EtlSyncMessage =
   | { type: "sync_customers_etl" }
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" }
-  | { type: "run_readiness_check" };
+  | { type: "run_readiness_check" }
+  /**
+   * Fails on purpose, so the dead-letter path can be exercised in a real
+   * environment (`scripts/queue-dlq-drill.mjs`). Nothing produces it but that
+   * script, and it is named rather than relying on an unrecognised type so
+   * that the drill does not quietly depend on what `default:` happens to do
+   * -- and so a `dlq_drill` in the logs or in Slack is obviously a drill
+   * rather than something to investigate at two in the morning.
+   */
+  | { type: "dlq_drill"; sentAt?: string };
 
 /** Enqueue a message onto the `etl-sync` queue (the single typed send site). */
 export async function enqueueEtlSync(
@@ -72,6 +81,13 @@ async function dispatchEtlSyncMessage(
     case "run_readiness_check":
       await runReadinessCheck(env);
       return;
+    case "dlq_drill":
+      // The one message whose failure is the point. Throwing takes it
+      // through exactly what a real failure takes: the retries, the
+      // dead-letter queue, and the alert that consumer posts.
+      throw new Error(
+        `etl-sync: dlq_drill is a deliberate failure${message.sentAt ? `, sent ${message.sentAt}` : ""} (scripts/queue-dlq-drill.mjs)`,
+      );
     default: {
       // The same reasoning `handleQueueBatch` applies one file over, for the
       // same reason: acking a message nothing understands throws the work
