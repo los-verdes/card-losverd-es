@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
-import { APP_CSS, VERDE } from "../src/styles";
+import { APP_CSS, VERDE, VERDE_INK } from "../src/styles";
 
 /**
  * WCAG 2.1 relative luminance and contrast. Worth the dozen lines: dark mode
@@ -53,7 +53,7 @@ const LIGHT = tokensIn(rootBlock(APP_CSS));
 const DARK = { ...LIGHT, ...tokensIn(darkBlock(APP_CSS)) };
 
 /** Everything that renders as text on the page background. */
-const TEXT_TOKENS = ["--ink", "--muted", "--danger", "--success", "--warn"];
+const TEXT_TOKENS = ["--ink", "--muted", "--danger", "--success", "--warn", "--verde-ink"];
 
 describe("the colour tokens", () => {
   it("resolve to plain hex, so contrast can be reasoned about at all", () => {
@@ -101,12 +101,39 @@ describe("contrast against the page background", () => {
     }
   });
 
-  it("the group's green reads on dark, where on white it does not (#143)", () => {
-    // Recorded rather than asserted both ways round: #00B140 on white is
-    // 2.85:1, below every WCAG threshold, and it is the brand colour --
-    // changing it is not a decision this stylesheet gets to make alone.
-    expect(contrast(DARK["--verde"], DARK["--bg"])).toBeGreaterThanOrEqual(4.5);
+  it("keeps Bright Verde for artwork and a verde that reads for text (#143)", () => {
+    // #00B140 on white is 2.85:1, below every WCAG threshold, and it is the
+    // brand colour, so it stays -- for the card tint -- and text gets the
+    // darker verde the card image already borders it with. Asserted both
+    // ways so that a later tidy-up cannot quietly point text back at it.
     expect(contrast(VERDE, "#ffffff")).toBeLessThan(3);
+    expect(contrast(LIGHT["--verde-ink"], LIGHT["--bg"])).toBeGreaterThanOrEqual(4.5);
+    expect(LIGHT["--verde-ink"].toLowerCase()).toBe(VERDE_INK.toLowerCase());
+    // On a dark page Bright Verde itself reads, so the text token becomes it
+    // rather than keeping a shade that would fail there.
+    expect(DARK["--verde-ink"].toLowerCase()).toBe(VERDE.toLowerCase());
+    expect(contrast(DARK["--verde-ink"], DARK["--bg"])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("button labels read on the button in both modes", () => {
+    // The label is var(--bg): white on the dark verde by day, near-black on
+    // Bright Verde by night. White on Bright Verde would be the 2.85:1 case.
+    for (const palette of [LIGHT, DARK]) {
+      expect(contrast(palette["--bg"], palette["--verde-ink"])).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("nothing that has to be read is drawn in Bright Verde on a light page", () => {
+    // The rules that carry text or a control outline all use --verde-ink;
+    // --verde is left to the card tint. Checked on the CSS text so a new
+    // rule cannot reach for the brand colour out of habit.
+    for (const selector of ["h1, h2, h3", "a", "button", ".action", "ul.checklist input"]) {
+      const at = APP_CSS.indexOf("\n" + selector + " {");
+      expect(at, selector).toBeGreaterThan(-1);
+      const block = APP_CSS.slice(at, APP_CSS.indexOf("}", at));
+      expect(block, selector).not.toContain("var(--verde)");
+      expect(block, selector).toContain("var(--verde-ink)");
+    }
   });
 });
 

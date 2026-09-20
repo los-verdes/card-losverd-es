@@ -30,8 +30,21 @@
  * stay inline and light on purpose.
  */
 
-/** The group's green, matching the pass and the card image. */
+/** Bright Verde, matching the pass and the card image. Artwork only on a
+ * light page: at 2.85:1 on white it clears no WCAG threshold, so anything
+ * that has to be read uses VERDE_INK instead (#143). */
 export const VERDE = "#00B140";
+
+/**
+ * The verde that carries text and controls on a light page: headings,
+ * links, button fills, the outlines of the member's actions. The same hue
+ * as Bright Verde, darkened until it reads -- 6.78:1 on white -- and not a
+ * new colour: it is the border the card image already draws around Bright
+ * Verde (`BORDER_VERDE` in src/cardimage/template.ts), so the pair has been
+ * seen together on every card. On a dark page Bright Verde itself reads
+ * (6.24:1), so the token falls back to it there.
+ */
+export const VERDE_INK = "#046a29";
 
 export const APP_CSS = `:root {
   /* Every colour on the site is one of these, so honouring a dark device is
@@ -39,6 +52,7 @@ export const APP_CSS = `:root {
      name them by meaning (--danger, not a particular red) for the same
      reason: a red legible on white is not the red legible on near-black. */
   --verde: ${VERDE};
+  --verde-ink: ${VERDE_INK};
   --ink: #14181f;
   --bg: #fff;
   --muted: #555;
@@ -63,14 +77,16 @@ export const APP_CSS = `:root {
    lighter, less saturated versions of the same hues rather than the same
    values reused.
 
-   --verde is deliberately absent: #00B140 measures 6.24:1 here, better than
-   the 2.69 it manages on white, so the brand colour needs no dark variant
-   (the white case is #143, and not this file's decision to make). */
+   --verde stays as it is: #00B140 measures 6.24:1 here, better than the
+   2.85 it manages on white, which is why --verde-ink can simply become it --
+   the darker shade exists for the light page, and here it would be the one
+   that fails (2.63:1). */
 @media (prefers-color-scheme: dark) {
   :root {
     /* Near-black rather than #000: pure black behind light text haloes on
        OLED, and the page reads as harsher than the light one. */
     --bg: #14181f;
+    --verde-ink: ${VERDE};
     --ink: #e7eaee;
     --muted: #a7b0bd;
     --rule: #2b323c;
@@ -122,7 +138,7 @@ img {
 
 h1, h2, h3 {
   font-family: "Bungee", system-ui, sans-serif;
-  color: var(--verde);
+  color: var(--verde-ink);
   line-height: 1.2;
 }
 
@@ -131,13 +147,17 @@ body.member h1 {
 }
 
 a {
-  color: var(--verde);
+  color: var(--verde-ink);
 }
 
+/* The label is the page background's colour rather than white: on a light
+   page that is white on the darker verde, on a dark page near-black on
+   Bright Verde -- the legacy site's own button -- and both read, where white
+   on Bright Verde does not. */
 button {
   font: inherit;
-  color: #fff;
-  background: var(--verde);
+  color: var(--bg);
+  background: var(--verde-ink);
   border: 0;
   border-radius: 0.5rem;
   padding: 0.6rem 1.2rem;
@@ -151,7 +171,7 @@ button {
   display: block;
   margin: 0.75rem 0;
   padding: 0.75rem;
-  border: 1px solid var(--verde);
+  border: 1px solid var(--verde-ink);
   border-radius: 0.5rem;
   color: inherit;
   text-decoration: none;
@@ -211,7 +231,7 @@ ul.checklist label {
 }
 
 ul.checklist input {
-  accent-color: var(--verde);
+  accent-color: var(--verde-ink);
   flex: none;
 }
 
