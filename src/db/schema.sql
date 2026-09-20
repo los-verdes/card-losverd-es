@@ -184,6 +184,11 @@ CREATE TABLE IF NOT EXISTS membership_orders (
     -- When BigCommerce stopped returning this order (see migrations/0011).
     -- Flags it for a person; does not stop it counting as a membership.
     missing_since INTEGER,
+    -- How many memberships the order contained (see migrations/0013). 1 is
+    -- the invariant the storefront maintains; above 1 means someone paid for
+    -- a membership no card exists for. NULL = never counted (legacy import).
+    -- Flags it for a person; does not stop it counting as a membership.
+    membership_units INTEGER,
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
@@ -191,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_membership_orders_order_email ON membership_order
 CREATE INDEX IF NOT EXISTS idx_membership_orders_member_email ON membership_orders(member_email);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_window ON membership_orders(created_on, expires_on);
 CREATE INDEX IF NOT EXISTS idx_membership_orders_missing ON membership_orders(missing_since);
+CREATE INDEX IF NOT EXISTS idx_membership_orders_units ON membership_orders(membership_units);
 
 -- Admin attributions of membership orders (see migrations/0009_membership_order_attributions.sql)
 CREATE TABLE IF NOT EXISTS membership_order_attributions (

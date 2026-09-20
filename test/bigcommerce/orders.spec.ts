@@ -69,13 +69,13 @@ describe("recordMembershipOrder", () => {
     // Nothing enforces that but `member_email`'s absence from the upsert's
     // SET list, which is an easy thing to "complete" while adding a column
     // next to it. Hence this test rather than a comment.
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
     const orderId = bigCommerceOrderKey(ORDER.id);
     await env.DB.prepare("UPDATE membership_orders SET member_email = ? WHERE order_id = ?")
       .bind("recipient@example.com", orderId)
       .run();
 
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
 
     const [row] = await orderRows();
     expect(row.member_email).toBe("recipient@example.com");
@@ -86,19 +86,19 @@ describe("recordMembershipOrder", () => {
   it("clears the missing flag when the store returns the order again", async () => {
     // A 404 during a BigCommerce incident shouldn't leave a permanent mark;
     // the next successful sync is evidence the order is fine (#105).
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
     await env.DB.prepare("UPDATE membership_orders SET missing_since = 1000 WHERE order_id = ?")
       .bind(bigCommerceOrderKey(ORDER.id))
       .run();
 
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
 
     const [row] = await orderRows();
     expect(row.missing_since).toBeNull();
   });
 
   it("stores the order with legacy-compatible identifiers and a lowercased email", async () => {
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
 
     expect(await orderRows()).toEqual([
       expect.objectContaining({
@@ -127,6 +127,7 @@ describe("recordMembershipOrder", () => {
       env,
       { ...ORDER, cart_id: null, order_source: undefined, date_modified: "" },
       PRODUCT,
+      1,
     );
 
     expect((await orderRows())[0]).toMatchObject({
@@ -137,8 +138,8 @@ describe("recordMembershipOrder", () => {
   });
 
   it("refreshes the store's fields on a resync (a refund must land) without duplicating", async () => {
-    await recordMembershipOrder(env, ORDER, PRODUCT);
-    await recordMembershipOrder(env, { ...ORDER, status: "Refunded" }, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
+    await recordMembershipOrder(env, { ...ORDER, status: "Refunded" }, PRODUCT, 1);
 
     const rows = await orderRows();
     expect(rows).toHaveLength(1);
@@ -152,7 +153,7 @@ describe("recordMembershipOrder", () => {
     ).run();
 
     // Returns the member the order belongs to, not its billing email.
-    expect(await recordMembershipOrder(env, ORDER, PRODUCT)).toBe("sam.new@example.com");
+    expect(await recordMembershipOrder(env, ORDER, PRODUCT, 1)).toBe("sam.new@example.com");
 
     const rows = await orderRows();
     expect(rows).toHaveLength(1);
@@ -165,7 +166,7 @@ describe("recordMembershipOrder", () => {
   });
 
   it("answers 'who was a member on a given date' with a plain range query", async () => {
-    await recordMembershipOrder(env, ORDER, PRODUCT);
+    await recordMembershipOrder(env, ORDER, PRODUCT, 1);
     const memberOn = async (instant: string) =>
       (
         await env.DB.prepare(

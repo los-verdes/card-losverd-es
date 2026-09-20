@@ -21,11 +21,13 @@ import {
   expiredMemberships,
   listChannels,
   missingOrders,
+  ordersWithExtraMemberships,
   ordersByMonth,
   slackCrossReference,
   type AttributedOrderRow,
   type DuplicateNameRow,
   type MembershipOrderRow,
+  type ExtraMembershipOrderRow,
   type MissingOrderRow,
   type ReportFilters,
   type SlackCrossReference,
@@ -292,6 +294,10 @@ reports.get("/", (c) =>
         <li>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
           Slack accounts, and Slack users who never bought a membership.
+        </li>
+        <li>
+          <a href="/admin/reports/extra-memberships">More than one membership</a>: orders that carried more than
+          one membership. Only one was recorded, so somebody paid for a card that does not exist.
         </li>
         <li>
           <a href="/admin/reports/missing">Missing from BigCommerce</a>: orders the store no longer returns. They
@@ -632,6 +638,86 @@ reports.get("/missing", async (c) => {
       )}
       <p>
         <a href="/admin/reports/missing?format=csv">Download CSV</a>
+      </p>
+    </AdminPage>,
+  );
+});
+
+const EXTRA_MEMBERSHIP_COLUMNS = [
+  "order_id",
+  "member_email",
+  "first_name",
+  "last_name",
+  "status",
+  "created_on",
+  "expires_on",
+  "membership_units",
+] as const;
+
+/**
+ * Orders carrying more than one membership (#188).
+ *
+ * Read this the same way as the missing-orders page: a question rather than
+ * a defect list. Nothing has been taken from anyone -- the order still
+ * confers the membership it is recorded as. What it shows is the opposite
+ * problem, somebody who paid and got nothing, which no amount of syncing
+ * will fix by itself because there is nowhere for a second membership to go.
+ */
+reports.get("/extra-memberships", async (c) => {
+  const rows = await ordersWithExtraMemberships(c.env.DB);
+  if (c.req.query("format") === "csv") {
+    return new Response(toCsv([...EXTRA_MEMBERSHIP_COLUMNS], rows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="extra-memberships-${toIsoSeconds(new Date()).slice(0, 10)}.csv"`,
+      },
+    });
+  }
+  return c.html(
+    <AdminPage title="More than one membership">
+      <p>
+        The storefront is set up so an order never carries more than one membership, and this system depends on it:
+        an order holds one membership and can be attributed to one person. Anything listed here broke that, which
+        means <strong>somebody paid for a membership that no card exists for</strong>.
+      </p>
+      <p>
+        The order still counts for the one membership it is recorded as -- nothing has been withdrawn. Putting the
+        rest right is a person&#39;s job: refund the extra, or place the membership under the right address. An order
+        corrected in BigCommerce drops off this list on the next sync.
+      </p>
+      {rows.length === 0 ? (
+        <p>No order carries more than one membership.</p>
+      ) : (
+        <div style="overflow-x: auto">
+          <table style="border-collapse: collapse; font-size: 0.9rem">
+            <thead>
+              <tr>
+                {["Order", "Member", "Name", "Status", "Membership", "Memberships on order"].map((heading) => (
+                  <th style={cellStyle}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: ExtraMembershipOrderRow) => (
+                <tr>
+                  <td style={cellStyle}>
+                    <a href={orderPath(row.order_id)}>{row.order_id}</a>
+                  </td>
+                  <td style={cellStyle}>{row.member_email}</td>
+                  <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+                  <td style={cellStyle}>{row.status ?? ""}</td>
+                  <td style={cellStyle}>
+                    {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
+                  </td>
+                  <td style={cellStyle}>{row.membership_units}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p>
+        <a href="/admin/reports/extra-memberships?format=csv">Download CSV</a>
       </p>
     </AdminPage>,
   );

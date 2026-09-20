@@ -134,13 +134,26 @@ when they ask why they never got one.
 as well as renewing their own should place separate orders, and the gift order
 is then re-attributed to the recipient.
 
-Nothing currently checks that this holds, though the information to check it
-does arrive: the quantity is in what BigCommerce sends back and is discarded.
-A units-sold comparison — how many memberships the storefront sold against how
-many this system recorded — would catch a breach, and no report does that
-today. If the storefront is ever configured in a way that lets a membership be
-bought in twos, this is the assumption that would be breaking, and it would
-break quietly.
+**This is checked.** Each time an order is read from the store, the
+memberships on it are counted across every line item, quantities included, and
+the number is recorded against the order
+(`membership_orders.membership_units`). An order carrying more than one is
+listed on the admin reports under "More than one membership", and the first
+time one is seen it is announced in Slack.
+
+What the check deliberately does not do is change who is a member. The order
+still confers the one membership it is recorded as, exactly as it did before —
+the same choice made for orders the store stops returning. Withdrawing
+somebody's membership is a decision a person makes, and a line item is not a
+good enough reason to make it automatically. What the report says is the
+opposite: somebody has paid and is owed something, which is a thing to put
+right rather than a thing to revoke.
+
+The count is taken fresh on every sync, so an order corrected in BigCommerce —
+the extra refunded, or the quantity put back to one — drops off the report by
+itself. Orders loaded by the one-time legacy import carry no count at all,
+because the export has no line-item detail to count; that is recorded as
+unknown rather than as one.
 
 One consequence is worth stating plainly: **a membership sold under a SKU that
 is not on that list is invisible to this software.** It produces no card and

@@ -42,6 +42,13 @@ export interface BigCommerceOrderProduct {
   product_id: number;
   sku: string;
   name: string;
+  /**
+   * How many of this line item were bought. BigCommerce has always sent
+   * this; it went unread until the one-membership-per-order invariant got a
+   * check (#188). Optional because the store's own responses are the only
+   * thing that fills it, and a response without it must not read as zero.
+   */
+  quantity?: number | string;
 }
 
 // BigCommerce's maximum `limit` for list endpoints
@@ -171,6 +178,64 @@ export class BigCommerceClient {
 interface MembershipLineItem {
   tier: string;
   product: BigCommerceOrderProduct;
+}
+
+/**
+ * How many memberships an order actually contains, across every line item.
+ *
+ * The storefront is configured so this is always 1, and much of this system
+ * assumes it: `membership_orders` is keyed on the order id, so an order has
+ * one row and one membership to give. Counting it is what turns that from an
+ * assumption into something we would notice being broken -- see the "One
+ * order, one membership" section of docs/membership-card-provenance.md.
+ *
+ * Only line items whose SKU is a membership count. Everything else the store
+ * sells is ignored here exactly as it is everywhere else.
+ */
+export function countMembershipUnits(
+  products: BigCommerceOrderProduct[],
+): number {
+  let units = 0;
+  for (const product of products) {
+    if (!MEMBERSHIP_SKU_TIER_MAP[product.sku]) continue;
+    units += membershipLineItemQuantity(product);
+  }
+  return units;
+}
+
+/**
+ * One membership line item's quantity, as a whole number of at least one.
+ *
+ * `quantity` is loosely typed because BigCommerce's v2 API has a history of
+ * returning numeric fields as strings, so this has to cope with being handed
+ * something other than a number.
+ *
+ * Anything present but unreadable is counted as one and logged, rather than
+ * treated as a breach. That direction is deliberate. The "More than one
+ * membership" report says somebody paid for a card that does not exist, and
+ * every row on it should be a case where that demonstrably happened; filling
+ * it with malformed responses would put ordinary-looking orders in front of
+ * whoever reads it and teach them to disbelieve the whole list. A report
+ * nobody trusts catches nothing, which costs more than the miss does -- and
+ * the miss is not silent, because the anomaly is still in the logs.
+ *
+ * An absent quantity is taken as one without comment: it means we were not
+ * told, rather than told something that makes no sense, and the field is
+ * optional on our own side.
+ */
+function membershipLineItemQuantity(
+  product: BigCommerceOrderProduct,
+): number {
+  const raw = product.quantity;
+  if (raw === undefined) return 1;
+  const quantity = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    console.warn(
+      `countMembershipUnits(): membership line item ${product.id} has an unreadable quantity ${JSON.stringify(raw)}, counting it as 1`,
+    );
+    return 1;
+  }
+  return quantity;
 }
 
 /** The order's first membership line item, if it has one. */
@@ -416,15 +481,59 @@ export async function refreshMemberFromOrders(
  * throws, the queue's retry simply rewrites the same row. The member updated
  * is the order's `member_email`, which can differ from its billing email.
  */
+/**
+ * Says so, once, when an order turns out to carry more than one membership.
+ *
+ * Deliberately not a failure: the order still confers the one membership it
+ * is recorded as, and a line item never withdraws anyone's membership by
+ * itself -- the same call made for orders the store stops returning (#105).
+ * What it costs is that somebody has paid for a membership no card exists
+ * for, which is a thing for a person to put right, not for a sync to decide.
+ *
+ * Reads the stored count first so a resync does not repeat the alert every
+ * time it revisits the order. That read only happens on the broken path; an
+ * ordinary order adds no query.
+ */
+async function alertOnNewExtraMemberships(
+  env: Env,
+  orderId: number | string,
+  units: number,
+): Promise<boolean> {
+  const previous = await env.DB.prepare(
+    "SELECT membership_units FROM membership_orders WHERE order_id = ?",
+  )
+    .bind(bigCommerceOrderKey(orderId))
+    .first<{ membership_units: number | null }>();
+  const known = previous?.membership_units ?? null;
+  if (known !== null && known > 1) return false;
+
+  console.warn(
+    `applyMembershipOrder(${bigCommerceOrderKey(orderId)}): order carries ${units} memberships, recording one`,
+  );
+  // No order id or address in the alert, for the same reason the missing-order
+  // and dead-letter alerts carry none: a Slack channel has a wider audience
+  // than our logs.
+  await postSlackAlert(
+    env,
+    ':busts_in_silhouette: An order was placed with more than one membership on it. Only one of them is recorded, so somebody has paid for a card that does not exist. The admin reports list these under "More than one membership".',
+  );
+  return true;
+}
+
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   membership: MembershipLineItem,
+  membershipUnits: number,
 ): Promise<string> {
+  if (membershipUnits > 1) {
+    await alertOnNewExtraMemberships(env, order.id, membershipUnits);
+  }
   const memberEmail = await recordMembershipOrder(
     env,
     order,
     membership.product,
+    membershipUnits,
   );
   const result = await refreshMemberFromOrders(env, memberEmail, {
     firstName: order.billing_address.first_name,
@@ -521,7 +630,12 @@ export async function syncBigCommerceOrder(
     return;
   }
 
-  const memberEmail = await applyMembershipOrder(env, order, membership);
+  const memberEmail = await applyMembershipOrder(
+    env,
+    order,
+    membership,
+    countMembershipUnits(products),
+  );
   // Webhook path only -- the resyncs call applyMembershipOrder directly
   // (src/email/newOrder.ts).
   await maybeEmailNewOrderCard(env, order, memberEmail);
@@ -673,7 +787,12 @@ export async function syncSubscriptionsEtl(
     const products = await client.getOrderProducts(order.id);
     const membership = resolveMembership(products);
     if (membership) {
-      await applyMembershipOrder(env, order, membership);
+      await applyMembershipOrder(
+        env,
+        order,
+        membership,
+        countMembershipUnits(products),
+      );
       ordersProcessed++;
     }
     afterId = order.id;

@@ -43,6 +43,7 @@ export async function recordMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   product: BigCommerceOrderProduct,
+  membershipUnits: number,
 ): Promise<string> {
   const createdOn = new Date(order.date_created);
   const email = order.billing_address.email.trim().toLowerCase();
@@ -50,8 +51,8 @@ export async function recordMembershipOrder(
     `INSERT INTO membership_orders (
        order_id, source, order_number, channel_name, order_email, member_email,
        first_name, last_name, customer_id, sku, product_name, status,
-       created_on, expires_on, modified_on, first_seen_via
-     ) VALUES (?1, 'bigcommerce', ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'sync')
+       created_on, expires_on, modified_on, membership_units, first_seen_via
+     ) VALUES (?1, 'bigcommerce', ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'sync')
      ON CONFLICT(order_id) DO UPDATE SET
        order_number = excluded.order_number,
        channel_name = excluded.channel_name,
@@ -65,6 +66,10 @@ export async function recordMembershipOrder(
        created_on = excluded.created_on,
        expires_on = excluded.expires_on,
        modified_on = excluded.modified_on,
+       -- Recounted from the store's line items every sync, so an order
+       -- corrected in BigCommerce stops being flagged (#188) the same way a
+       -- transient 404 heals itself below.
+       membership_units = excluded.membership_units,
        -- BigCommerce returned it, so whatever made it look missing is over
        -- (#105). A transient 404 therefore heals itself on the next sync.
        -- Deliberately absent from this list: member_email. It is the only
@@ -91,6 +96,7 @@ export async function recordMembershipOrder(
       toIsoSeconds(createdOn),
       toIsoSeconds(membershipExpiry(createdOn)),
       order.date_modified ? toIsoSeconds(new Date(order.date_modified)) : null,
+      membershipUnits,
     )
     .first<{ member_email: string }>();
   return row!.member_email;
