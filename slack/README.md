@@ -51,9 +51,10 @@ README's secrets section for why 1Password is the source of truth.
 
 ## Two environments
 
-Each environment needs **its own app**, and staging's must not be production's:
-a staging ETL holding production's bot token reads the real membership roll
-into a database meant for test data
+Each environment needs **its own app**, and staging's must not be
+production's: a staging ETL holding production's bot token would read the real
+membership roll into a database meant for test data. Staging has had its own
+since September 2026, which is what let its members sync be put on a schedule
 ([#133](https://github.com/los-verdes/card-losverd-es/issues/133)).
 
 Change `display_information.name` and `features.bot_user.display_name` so the

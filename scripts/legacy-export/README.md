@@ -9,6 +9,12 @@ Phase 2.2, `docs/legacy-pass-compatibility.md`):
   `members.member_since` wherever a pass is rendered.
 * **`legacy_membership_cards`**: every legacy card, so QR codes already out
   in the world (`/verify-pass/{uuid}?signature=...`) can still be resolved.
+* **`member_display_names`** (`source = 'legacy_postgres'`): names members
+  chose for themselves on the old site, which had its own name-change page.
+  Only the ones that differ from the name that member's latest order would
+  produce; elsewhere the old system simply copied the billing name, and
+  importing those would pin every member's name to whatever it was at
+  cutover instead of letting it keep following the store.
 * **`membership_orders`** (`first_seen_via = 'legacy_postgres'`): every
   membership order Postgres holds, Squarespace and BigCommerce alike. This
   is the order history behind admin reporting ("who was a member on a given

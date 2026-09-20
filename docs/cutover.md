@@ -43,7 +43,7 @@ populated before anyone is pointed at it.
 4. **Google Wallet**: `just google-wallet-ensure-class production`, and
    confirm the issuer has publishing access rather than demo-only.
 5. **Add a production `[triggers]` block** to `wrangler.toml`, with the same
-   schedules as `[env.staging.triggers]`, which is commented. Doing this now
+   schedules `[env.staging.triggers]` already runs. Doing this now
    means D1 is populated and syncing before any member sees the new stack.
 6. **Run the legacy Postgres export and import**
    ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
@@ -56,13 +56,22 @@ populated before anyone is pointed at it.
    > exists nowhere else -- the Squarespace account is gone. Take the export
    > early and carefully, and verify it before relying on it.
 
-   Two things to settle before the *real* load: what a legacy BigCommerce
-   order with no status counts as
-   ([#89](https://github.com/los-verdes/card-losverd-es/issues/89);
-   `/admin/preflight` counts the affected orders once an import has run),
-   and whether to empty production's `EMAIL_RECIPIENT_ALLOWLIST` for the
-   duration -- a fourth guard over the three in `src/email/newOrder.ts`, on
-   the one operation where a mistake reaches people.
+   Two things to settle before the *real* load. Whether a partially
+   refunded order still confers membership
+   ([#210](https://github.com/los-verdes/card-losverd-es/issues/210)): nine
+   of them count today under the old system's rule and would stop counting
+   here, and the status alone cannot say whether the membership or something
+   else on the same order was refunded. And whether to empty production's
+   `EMAIL_RECIPIENT_ALLOWLIST` for the duration -- a fourth guard over the
+   three in `src/email/newOrder.ts`, on the one operation where a mistake
+   reaches people.
+
+   `/admin/preflight` counts imported orders that count for nothing once an
+   import has run, which is the check to read after loading rather than a
+   question to answer before it. The statuses themselves were enumerated
+   against the real database before cutover
+   ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), so
+   nothing here should be a surprise.
 
 7. **Run a full BigCommerce resync**, then reconcile member counts against
    BigCommerce's own admin.
