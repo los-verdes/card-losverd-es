@@ -81,6 +81,7 @@ CSV cells that a spreadsheet would evaluate as formulas are neutralized
 | `/admin/reports/consolidations` | Two tables: orders whose membership is attributed to another address (with who changed it, when, and why), and billing names appearing under several addresses. Each order links to its admin page. | Membership Consolidations |
 | `/admin/reports/slack` | Four tables: current members in Slack, current members not in Slack, lapsed members in Slack, and Slack users with no membership orders. Current snapshot only; each table downloads separately (`?table=...&format=csv`). | Slack User Stuff |
 | `/admin/reports/missing` | Orders BigCommerce no longer returns, oldest sighting first. They still count towards membership; this is the list to decide about. | None -- the legacy app never noticed |
+| `/admin/reports/extra-memberships` | Orders carrying more than one membership, most first. Only one was recorded, so somebody paid for a card that does not exist. | None -- the legacy app never noticed |
 
 Common filters on the active and expired pages: `q` (matches either email
 or the billing name) and `channel`. SQL lives in
