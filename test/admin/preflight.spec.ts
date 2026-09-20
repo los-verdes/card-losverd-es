@@ -474,8 +474,8 @@ describe("the legacy import", () => {
   async function insertImportedOrder(orderId: string, status: string | null, email: string) {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-         status, test_mode, created_on, expires_on, first_seen_via)
-       VALUES (?, 'bigcommerce', ?, ?, 'Test', 'Member', ?, 0, '2019-04-01', '2020-04-01', 'legacy_postgres')`,
+         status, created_on, expires_on, first_seen_via)
+       VALUES (?, 'bigcommerce', ?, ?, 'Test', 'Member', ?, '2019-04-01', '2020-04-01', 'legacy_postgres')`,
     )
       .bind(orderId, email, email, status)
       .run();

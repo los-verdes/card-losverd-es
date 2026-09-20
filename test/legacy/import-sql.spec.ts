@@ -23,7 +23,6 @@ const SQUARESPACE_ORDER = {
   sku: "SQ0000001",
   product_name: "Test Membership",
   status: "FULFILLED",
-  test_mode: false,
   created_on: "2021-05-04T12:00:00Z",
   modified_on: "2021-05-05T01:02:03Z",
 };
@@ -41,7 +40,6 @@ const BIGCOMMERCE_ORDER = {
   sku: "LOSV-MEM-0001",
   product_name: "Los Verdes Annual Membership",
   status: "Completed",
-  test_mode: false,
   created_on: "2023-03-10T08:30:00Z",
   modified_on: null,
 };
@@ -52,7 +50,7 @@ function orderExport(order: Record<string, unknown>): Record<string, unknown> {
 
 function validExport(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    format_version: 2,
+    format_version: 3,
     exported_at: "2026-09-16T20:00:00Z",
     member_since: [
       { email: "early@example.com", member_since: "2018-03-01" },
@@ -141,8 +139,9 @@ describe("parseLegacyExport", () => {
 
   it.each<[string, unknown, RegExp]>([
     ["non-object", [], /\$: expected a JSON object/],
-    ["unknown format_version", validExport({ format_version: 3 }), /format_version/],
+    ["unknown format_version", validExport({ format_version: 4 }), /format_version/],
     ["a version 1 export, with a hint to re-export", validExport({ format_version: 1 }), /re-run scripts\/legacy-export\/export\.sql/],
+    ["a version 2 export, which still carries test orders", validExport({ format_version: 2 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["missing exported_at", validExport({ exported_at: "" }), /exported_at/],
     ["free-text exported_at", validExport({ exported_at: "now\nDROP TABLE members" }), /exported_at/],
     ["member_since not an array", validExport({ member_since: {} }), /member_since: expected an array/],
@@ -184,7 +183,6 @@ describe("parseLegacyExport", () => {
     ["missing member_email", orderExport({ ...SQUARESPACE_ORDER, member_email: null }), /member_email/],
     ["fractional customer_id", orderExport({ ...BIGCOMMERCE_ORDER, customer_id: 4.2 }), /customer_id: expected an integer/],
     ["string customer_id", orderExport({ ...BIGCOMMERCE_ORDER, customer_id: "42" }), /customer_id/],
-    ["non-boolean test_mode", orderExport({ ...SQUARESPACE_ORDER, test_mode: "f" }), /test_mode: expected a boolean/],
     ["date-only created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-06-26" }), /created_on: expected YYYY-MM-DDTHH:MM:SSZ/],
     ["impossible created_on", orderExport({ ...SQUARESPACE_ORDER, created_on: "2021-13-45T00:00:00Z" }), /created_on/],
     // Date.parse accepts these and silently rolls them forward -- 30 February
@@ -288,7 +286,6 @@ describe("buildImportStatements (executed against D1)", () => {
       last_name: "O'Brien",
       customer_id: null,
       status: "FULFILLED",
-      test_mode: 0,
       created_on: "2021-05-04T12:00:00Z",
       expires_on: "2022-05-04T12:00:00Z",
       modified_on: "2021-05-05T01:02:03Z",
@@ -304,7 +301,7 @@ describe("buildImportStatements (executed against D1)", () => {
     });
   });
 
-  it("treats missing optional order fields as null, and keeps the test-order flag", async () => {
+  it("treats missing optional order fields as null", async () => {
     await runImport(
       parseLegacyExport(
         orderExport({
@@ -312,7 +309,6 @@ describe("buildImportStatements (executed against D1)", () => {
           source: "squarespace",
           order_email: "a@example.com",
           member_email: "a@example.com",
-          test_mode: true,
           created_on: "2020-01-01T00:00:00Z",
         }),
       ),
@@ -325,7 +321,6 @@ describe("buildImportStatements (executed against D1)", () => {
       sku: null,
       status: null,
       modified_on: null,
-      test_mode: 1,
     });
   });
 

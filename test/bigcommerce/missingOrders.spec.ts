@@ -22,9 +22,9 @@ const SLACK_WEBHOOK = "https://hooks.slack.example/T/B/X";
 async function insertOrder(status: string | null = "Completed", missingSince: number | null = null) {
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-       status, test_mode, created_on, expires_on, first_seen_via, missing_since)
+       status, created_on, expires_on, first_seen_via, missing_since)
      VALUES (?, 'bigcommerce', 'someone@example.com', 'someone@example.com', 'Test', 'Member',
-       ?, 0, '2025-06-01', '2026-06-01', 'sync', ?)`,
+       ?, '2025-06-01', '2026-06-01', 'sync', ?)`,
   )
     .bind(ORDER_KEY, status, missingSince)
     .run();
@@ -161,9 +161,9 @@ describe("the missing-orders report", () => {
     await insertOrder("Completed", 2_000);
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-         status, test_mode, created_on, expires_on, first_seen_via, missing_since)
+         status, created_on, expires_on, first_seen_via, missing_since)
        VALUES ('4243_bc', 'bigcommerce', 'other@example.com', 'other@example.com', 'Test', 'Member',
-         'Completed', 0, '2025-06-01', '2026-06-01', 'sync', 1000)`,
+         'Completed', '2025-06-01', '2026-06-01', 'sync', 1000)`,
     ).run();
 
     expect((await missingOrders(env.DB)).map((row) => row.order_id)).toEqual([

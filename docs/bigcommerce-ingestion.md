@@ -98,7 +98,7 @@ the same row.
 member's (`membership_orders.member_email`, which may differ from the order's
 billing email) that **counts as a membership** -- the same rule the reports
 use (`COUNTS_AS_MEMBERSHIP` in `src/lib/membershipOrders.ts`: not refunded,
-cancelled, declined, or a Squarespace test order) -- and maps them to one
+cancelled, or declined) -- and maps them to one
 `members` row. Deriving from history is what lets a refund take effect (the
 refunded renewal simply stops counting), and it makes the result independent
 of the order in which orders sync: webhooks and the scheduled resync don't

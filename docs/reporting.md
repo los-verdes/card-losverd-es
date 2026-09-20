@@ -22,8 +22,7 @@ alive would be one more thing to maintain.
   address the membership is currently attributed to. They differ when a
   member has changed address, or when one person buys a membership for
   someone else. Reports group people by `member_email`.
-* **`status`**: the store's own order status, verbatim. **`test_mode`**:
-  Squarespace's test-order flag.
+* **`status`**: the store's own order status, verbatim.
 * **`first_seen_via`**: `sync` or `legacy_postgres`.
 
 Two writers fill it, and converge on the same rows because both use the
@@ -49,8 +48,8 @@ Squarespace):
 
 ### What counts as a membership
 
-Test orders never count. Otherwise the rule is per store, because the two
-don't mean the same things by their statuses (`src/lib/membershipOrders.ts`,
+The rule is per store, because the two don't mean the same things by their
+statuses (`src/lib/membershipOrders.ts`,
 decided 2026-09-17):
 
 * **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,

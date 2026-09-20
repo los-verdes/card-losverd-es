@@ -25,10 +25,9 @@ beforeEach(async () => {
   // Old order under an old address, renewed under the new one: NOT lapsed.
   await insertOrder({ id: "5_bc", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-01-01T00:00:00Z" });
   await insertOrder({ id: "6_bc", email: "moved@example.com", created: "2026-01-01T00:00:00Z" });
-  // Never memberships: refunded, cancelled (Squarespace spelling), a test order.
+  // Never memberships: refunded, and cancelled in the Squarespace spelling.
   await insertOrder({ id: "7_bc", email: "refunded@example.com", created: "2026-02-01T00:00:00Z", status: "Refunded" });
   await insertOrder({ id: "sq-void", source: "squarespace", email: "void@example.com", created: "2026-02-02T00:00:00Z", status: "CANCELED" });
-  await insertOrder({ id: "sq-test", source: "squarespace", email: "tester@example.com", created: "2026-02-03T00:00:00Z", testMode: true });
   // Not yet placed at AS_OF.
   await insertOrder({ id: "8_bc", email: "future@example.com", created: "2026-08-01T00:00:00Z" });
 });
@@ -40,7 +39,7 @@ afterEach(async () => {
 });
 
 describe("activeMemberships", () => {
-  it("lists orders in force at the instant, newest first, skipping voided and test orders", async () => {
+  it("lists orders in force at the instant, newest first, skipping voided ones", async () => {
     const result = await activeMemberships(env.DB, AS_OF);
 
     expect(result.rows.map((r) => r.order_id)).toEqual(["2_bc", "6_bc", "5f00000000000000000000b2", "1_bc"]);

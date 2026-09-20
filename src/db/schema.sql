@@ -177,7 +177,6 @@ CREATE TABLE IF NOT EXISTS membership_orders (
     sku TEXT,
     product_name TEXT,
     status TEXT,                               -- the store's own order status, verbatim (e.g. Completed, Refunded, CANCELED)
-    test_mode INTEGER NOT NULL DEFAULT 0,      -- Squarespace's test-order flag; always 0 for BigCommerce
     created_on TEXT NOT NULL,                  -- start of the membership period
     expires_on TEXT NOT NULL,                  -- created_on + 365 days, stored so date-window queries can use an index
     modified_on TEXT,

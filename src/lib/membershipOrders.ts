@@ -56,7 +56,7 @@ const list = (values: string[]) => values.map((value) => `'${value}'`).join(", "
  * count, so 0 is what the rule should say. NULL was only ever an artefact of
  * how `IN` treats NULL.
  */
-export const COUNTS_AS_MEMBERSHIP = `COALESCE(test_mode = 0 AND (CASE source
+export const COUNTS_AS_MEMBERSHIP = `COALESCE((CASE source
     WHEN 'bigcommerce' THEN lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)})
     ELSE (status IS NULL OR lower(status) NOT IN (${list(VOID_LEGACY_STATUSES)}))
   END), 0)`;
