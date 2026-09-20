@@ -32,11 +32,8 @@ Membership Committee.
   order history; the card itself stores no independent state.
 * Not every order counts. A BigCommerce order counts only once it is paid.
   Test orders never count.
-* A smaller set of much older orders, imported once from the system Los Verdes
-  used before BigCommerce, sits in the same table and is scored by a different
-  rule. They matter only for long-standing members' join dates and cannot make
-  anyone a current member, so they are kept out of the way in
-  [the appendix](#appendix-orders-from-before-bigcommerce).
+* Orders from before February 2023, when Los Verdes moved to BigCommerce, are
+  described in [the appendix](#appendix-orders-from-before-bigcommerce).
 * All of one person's counted orders collapse into a single membership and a
   single card. The card's "good through" date is the furthest expiry among
   them; "member since" is the earliest order, unless a recorded override says
@@ -228,12 +225,9 @@ excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
 store may report). The list is an allow-list, so an unfamiliar BigCommerce
 status does not confer membership.
 
-That is the rule for every order anyone has placed since Los Verdes moved to
-BigCommerce, and so for every current membership. Orders imported from the
-system used before that are scored differently, for reasons set out in
-[the appendix](#appendix-orders-from-before-bigcommerce); statuses are stored
-exactly as each system reported them, and the two did not mean the same things
-by similar words.
+That is the rule for every order placed since February 2023, and so for every
+current membership. Orders from before then are scored differently, for
+reasons set out in [the appendix](#appendix-orders-from-before-bigcommerce).
 
 ### Test orders
 
@@ -489,10 +483,12 @@ or a change, not an open-ended design exercise.
 
 ## Appendix: orders from before BigCommerce
 
-Los Verdes sold memberships through Squarespace until 2023. Those orders were
-recovered once, directly from the old application's database, and imported
-into the same `membership_orders` table the current store's orders land in
-(`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
+Los Verdes sold memberships through Squarespace until **February 2023**, which
+is the last month with Squarespace orders and the first with BigCommerce ones.
+An order's date is therefore enough to know which set of rules applies to it.
+Those older orders were recovered once, directly from the old application's
+database, and imported into the same `membership_orders` table the current
+store's orders land in (`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
 
 **They cannot make anyone a current member.** Every one of them expired years
 ago, so nothing in this appendix affects who holds a valid card today. They
