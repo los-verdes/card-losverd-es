@@ -283,10 +283,18 @@ name, which stays intact underneath the whole time, so nothing is lost by
 trying something. It is one free-text field rather than a first and last
 name, which suits a mononym or a name that does not split in two.
 
-This is why the name a card shows may not be the name on the orders behind
-it, and the admin member page shows both side by side for that reason. Names
-members set on the previous site are carried across by the one-time import,
-so somebody who renamed themselves there does not revert at cutover.
+**An admin can set one too**, from the member page in the admin area, for
+somebody who asks rather than does it themselves. It matters most for a
+gifted membership: attribution moves the membership to the person it was
+bought for, but the card keeps the buyer's billing name until the recipient
+orders something of their own, and they cannot fix that themselves if they
+never do.
+
+So a name can arrive three ways — the member, an admin, or the one-time
+import carrying across one they set on the previous site — and the admin page
+says which, alongside the name their orders give. That is why the name on a
+card may not match the orders behind it, and why "why does my card say this"
+has an answer rather than a shrug.
 
 Nothing checks what goes in that field. A membership card is a fun vanity
 item rather than an identity document and gets very little scrutiny in
@@ -653,11 +661,10 @@ or a change, not an open-ended design exercise.
    one: who counts as current, whether one can be withdrawn, and who gets
    emailed are all guarded much more carefully than what the card says.
 
-   Still to come is an admin able to set a name on somebody's behalf, which
-   the storage already allows for
-   ([#189](https://github.com/los-verdes/card-losverd-es/issues/189)). It
-   matters most for a gifted membership, where the card carries the giver's
-   name until the recipient buys something of their own.
+   Whoever writes last wins between a member and an admin, and the record
+   keeps which of them it was. Nobody has needed to overrule anybody yet, so
+   that is a simple rule rather than a considered one; if it ever matters,
+   it is a small thing to change.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
