@@ -34,11 +34,16 @@ const MAX_AGE_SECONDS = 86_400;
 /**
  * A year, for the font. Its bytes are fixed for a given file name -- a
  * different font would be a different file -- so there is nothing to
- * invalidate. The stylesheet gets an hour instead, since it changes with
- * deploys and an hour is a tolerable wait for a colour to be corrected.
+ * invalidate. The stylesheet earns the same treatment by carrying a hash of
+ * its contents in its path (src/styles.ts).
+ *
+ * The favicon keeps an hour. It could be versioned the same way, but a stale
+ * one costs an out-of-date square in a tab strip rather than an unstyled
+ * page, and it is linked from the same two shells that would have to change
+ * to version it -- not worth the machinery for that.
  */
 const IMMUTABLE_SECONDS = 31_536_000;
-const STYLESHEET_MAX_AGE_SECONDS = 3_600;
+const FAVICON_MAX_AGE_SECONDS = 3_600;
 
 /**
  * The favicon, authored here rather than bundled as a file.
@@ -74,16 +79,6 @@ assets.get(STYLESHEET_PATH.replace("/assets", ""), (c) =>
   }),
 );
 
-// The unversioned path stays as a fallback for anything still asking for it
-// -- a tab opened before this shipped, a bookmark, a copied link. Nothing
-// this app renders links it any more, so it is kept on the old short cache
-// rather than promoted.
-assets.get("/app.css", (c) =>
-  c.body(APP_CSS, 200, {
-    "Content-Type": "text/css; charset=utf-8",
-    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
-  }),
-);
 
 // The same face the card image is rendered with (src/cardimage/render.ts),
 // so a member's card and the page around it agree.
@@ -100,7 +95,7 @@ assets.get("/bungee.woff", (c) =>
 assets.get("/favicon.svg", (c) =>
   c.body(FAVICON_SVG, 200, {
     "Content-Type": "image/svg+xml",
-    "Cache-Control": `public, max-age=${STYLESHEET_MAX_AGE_SECONDS}`,
+    "Cache-Control": `public, max-age=${FAVICON_MAX_AGE_SECONDS}`,
   }),
 );
 

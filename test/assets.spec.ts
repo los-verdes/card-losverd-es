@@ -94,7 +94,7 @@ describe("GET /assets/:name", () => {
 
 describe("the bundled stylesheet and font", () => {
   it("serves the stylesheet without a session, as every page links it", async () => {
-    const res = await get("/assets/app.css");
+    const res = await get(STYLESHEET_PATH);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/css");
@@ -106,7 +106,7 @@ describe("the bundled stylesheet and font", () => {
   it("points the font-face at the font this Worker actually serves", async () => {
     // A stylesheet naming a URL nobody serves fails silently: headings just
     // render in the fallback face and nothing says why.
-    const css = await (await get("/assets/app.css")).text();
+    const css = await (await get(STYLESHEET_PATH)).text();
     const [, url] = css.match(/src: url\("([^"]+)"\)/) ?? [];
 
     expect(url).toBeDefined();
@@ -120,13 +120,6 @@ describe("the bundled stylesheet and font", () => {
     expect(res.headers.get("Content-Type")).toBe("font/woff");
     expect(res.headers.get("Cache-Control")).toContain("immutable");
     expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
-  });
-
-  it("doesn't cache the stylesheet as hard, since it changes with deploys", async () => {
-    const cacheControl = (await get("/assets/app.css")).headers.get("Cache-Control");
-
-    expect(cacheControl).toContain("max-age=3600");
-    expect(cacheControl).not.toContain("immutable");
   });
 
   it("serves the stylesheet at a path named after its contents, cached forever", async () => {
@@ -158,13 +151,14 @@ describe("the bundled stylesheet and font", () => {
     expect(stylesheetPathFor(APP_CSS + "/* a change */")).not.toBe(STYLESHEET_PATH);
   });
 
-  it("still answers the unversioned path, for anything that still asks", async () => {
-    // A tab opened before this shipped, or a copied link. Nothing renders it
-    // now, so it keeps the short cache rather than being promoted.
-    const res = await get("/assets/app.css");
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Cache-Control")).not.toContain("immutable");
+  it("no longer answers the unversioned path at all", async () => {
+    // Dropped once it was established nobody but the maintainer had ever
+    // loaded the site (2026-09-20). It was insurance against a browser
+    // holding a tab from before the versioned path shipped, and the only
+    // route left that could serve a stylesheet the HTML was not built
+    // against -- which is the whole thing this change exists to make
+    // impossible.
+    expect((await get("/assets/app.css")).status).toBe(404);
   });
 
   it("serves a favicon that is a real SVG, cached like the stylesheet", async () => {
