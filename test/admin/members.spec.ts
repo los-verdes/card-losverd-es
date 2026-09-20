@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { classify } from "../../src/admin/members";
-import { setDisplayName } from "../../src/member/displayName";
+import { getDisplayName, setDisplayName } from "../../src/member/displayName";
+import { cardNameText, getMemberByEmail } from "../../src/member/artifacts";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -32,6 +33,26 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
 });
+
+async function post(fields: Record<string, string>, asUser: number | null = ADMIN_ID) {
+  const headers = new Headers({ Origin: "https://card.losverd.es" });
+  if (asUser !== null) {
+    const token = await issueSessionToken(SESSION_KEY, { userId: asUser, isAdmin: true });
+    headers.set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+  }
+  const body = new FormData();
+  for (const [k, v] of Object.entries(fields)) body.append(k, v);
+  return worker.fetch(
+    new Request("https://card.losverd.es/admin/members", {
+      method: "POST",
+      headers,
+      body,
+      redirect: "manual",
+    }),
+    env,
+    createExecutionContext(),
+  );
+}
 
 async function get(path: string, asUser: number | null = ADMIN_ID) {
   const headers = new Headers();
@@ -140,5 +161,65 @@ describe("finding a member", () => {
     const res = await get(`/admin/members?q=${encodeURIComponent(CARD)}`);
 
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+describe("an admin setting the name on someone's card", () => {
+  it("sets a name on their behalf, recorded as the admin's doing", async () => {
+    // Matters most for a gifted membership: the card carries the buyer's name
+    // until the recipient orders something of their own.
+    const res = await post({ email: EMAIL, display_name: "Chuy" });
+
+    expect(res.status).toBe(303);
+    expect((await getMemberByEmail(env, EMAIL))!.display_name).toBe("Chuy");
+    expect((await getDisplayName(env, EMAIL))?.source).toBe("admin");
+  });
+
+  it("keeps the reason given, for whoever asks later", async () => {
+    await post({ email: EMAIL, display_name: "Chuy", note: "gift from a friend" });
+
+    const row = await env.DB.prepare("SELECT note FROM member_display_names WHERE email = ?")
+      .bind(EMAIL)
+      .first<{ note: string | null }>();
+    expect(row?.note).toBe("gift from a friend");
+  });
+
+  it("puts the card back to the derived name when cleared", async () => {
+    await setDisplayName(env, EMAIL, "Chuy", "admin");
+
+    const res = await post({ email: EMAIL, action: "clear" });
+
+    expect(res.status).toBe(303);
+    expect(cardNameText((await getMemberByEmail(env, EMAIL))!)).toBe("Jane Doe");
+  });
+
+  it("says so rather than pretending, when there was no name to clear", async () => {
+    const res = await post({ email: EMAIL, action: "clear" });
+
+    expect(res.headers.get("Location")).toContain("error=");
+  });
+
+  it("refuses an empty name rather than storing one", async () => {
+    const res = await post({ email: EMAIL, display_name: "   " });
+
+    expect(res.headers.get("Location")).toContain("error=");
+    expect((await getMemberByEmail(env, EMAIL))!.display_name).toBeNull();
+  });
+
+  it("says who set a name, so nobody has to guess", async () => {
+    await setDisplayName(env, EMAIL, "Chuy", "legacy_postgres");
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("came across from the previous site");
+  });
+
+  it("is admin-only", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, ?, 0)")
+      .bind("member@example.com")
+      .run();
+
+    expect((await post({ email: EMAIL, display_name: "Chuy" }, 9)).status).toBe(403);
+    expect((await getMemberByEmail(env, EMAIL))!.display_name).toBeNull();
   });
 });
