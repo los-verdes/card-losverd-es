@@ -125,7 +125,14 @@ export async function handleEtlSyncBatch(
       console.error("etl-sync handler failed", {
         type: message.body.type,
         attempts: message.attempts,
-        err,
+        // Not the Error itself. `message` and `stack` are non-enumerable, so
+        // an Error inside a structured log object serialises to `{}` and the
+        // log says nothing at all -- which is exactly what a dead-letter
+        // drill on staging produced (2026-09-20): five retries, five
+        // `err: {}`. The one log line that explains why a message is about to
+        // dead-letter has to carry the reason.
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
       });
       message.retry({
         delaySeconds: Math.min(300, 15 * 2 ** message.attempts),

@@ -90,6 +90,23 @@ describe("handleEtlSyncBatch", () => {
     );
   });
 
+  it("logs why a message failed, not an empty object", async () => {
+    // An Error's `message` and `stack` are non-enumerable, so logging the
+    // Error itself inside a structured object renders `{}` and tells whoever
+    // is reading a tail nothing whatsoever. A dead-letter drill on staging
+    // (2026-09-20) produced five retries and five `err: {}`; this is the one
+    // line that explains why a message is about to dead-letter.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const message = makeMessage({ type: "dlq_drill" });
+
+    await handleEtlSyncBatch(makeBatch([message]), env);
+
+    const logged = errors.mock.calls[0][1] as { error: string; stack?: string };
+    expect(logged.error).toEqual(expect.any(String));
+    expect(logged.error.length).toBeGreaterThan(0);
+    expect(JSON.stringify(logged)).not.toBe("{}");
+  });
+
   it("dispatches sync_bigcommerce_order and acks on success", async () => {
     const order = {
       id: 4242,
@@ -326,10 +343,12 @@ describe("handleEtlSyncBatch", () => {
 
     await handleEtlSyncBatch(makeBatch([makeMessage({ type: "dlq_drill" })]), env);
 
-    // The Error is logged as an object, and JSON.stringify flattens an
-    // Error to {}, so read the thrown value rather than the serialised call.
-    const logged = errors.mock.calls[0][1] as { err: unknown };
-    expect(String((logged.err as Error)?.message)).toContain("deliberate failure");
+    // The reason is logged as a string rather than as the Error, so this can
+    // read the log the way a person tailing it would. Reading the thrown
+    // value instead, as this test used to, was a way of working around the
+    // very defect that made the log useless.
+    const logged = errors.mock.calls[0][1] as { error: string };
+    expect(logged.error).toContain("deliberate failure");
   });
 
   it("routes run_readiness_check to the readiness check and acks", async () => {
