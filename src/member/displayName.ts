@@ -21,7 +21,11 @@ import { notifyWalletsUpdated } from "./walletUpdates";
  */
 export const MAX_DISPLAY_NAME_LENGTH = 64;
 
-export type DisplayNameSource = "member" | "admin";
+/**
+ * `legacy_postgres` is written only by the one-time import: the old site let
+ * a member change their own name, and those choices have to survive cutover.
+ */
+export type DisplayNameSource = "member" | "admin" | "legacy_postgres";
 
 /** What a submitted name becomes, or why it cannot be used. */
 export function normalizeDisplayName(

@@ -50,8 +50,9 @@ function orderExport(order: Record<string, unknown>): Record<string, unknown> {
 
 function validExport(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    format_version: 3,
+    format_version: 4,
     exported_at: "2026-09-16T20:00:00Z",
+    display_names: [],
     member_since: [
       { email: "early@example.com", member_since: "2018-03-01" },
       { email: "o'brien@example.com", member_since: "2021-07-04" },
@@ -99,6 +100,7 @@ async function overrides() {
 }
 
 afterEach(async () => {
+  await env.DB.exec("DELETE FROM member_display_names");
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM legacy_membership_cards");
@@ -139,9 +141,10 @@ describe("parseLegacyExport", () => {
 
   it.each<[string, unknown, RegExp]>([
     ["non-object", [], /\$: expected a JSON object/],
-    ["unknown format_version", validExport({ format_version: 4 }), /format_version/],
+    ["unknown format_version", validExport({ format_version: 5 }), /format_version/],
     ["a version 1 export, with a hint to re-export", validExport({ format_version: 1 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["a version 2 export, which still carries test orders", validExport({ format_version: 2 }), /re-run scripts\/legacy-export\/export\.sql/],
+    ["a version 3 export, which leaves behind chosen names", validExport({ format_version: 3 }), /re-run scripts\/legacy-export\/export\.sql/],
     ["missing exported_at", validExport({ exported_at: "" }), /exported_at/],
     ["free-text exported_at", validExport({ exported_at: "now\nDROP TABLE members" }), /exported_at/],
     ["member_since not an array", validExport({ member_since: {} }), /member_since: expected an array/],
@@ -368,6 +371,49 @@ describe("buildImportStatements (executed against D1)", () => {
   });
 });
 
+describe("names members chose on the old site", () => {
+  it("imports one as a display-name override", async () => {
+    // The old site had its own name-change page, and those names live only in
+    // its `users` table. Losing them at cutover would be silent and final.
+    await runImport(
+      parseLegacyExport(
+        validExport({ display_names: [{ email: "pat@example.com", display_name: "Chuy" }] }),
+      ),
+    );
+
+    const row = await env.DB.prepare(
+      "SELECT display_name, source FROM member_display_names WHERE email = ?",
+    )
+      .bind("pat@example.com")
+      .first<{ display_name: string; source: string }>();
+    expect(row).toEqual({ display_name: "Chuy", source: "legacy_postgres" });
+  });
+
+  it("does not undo a name the member has since chosen here", async () => {
+    // The import is rehearsable and may be run more than once. A member who
+    // has already set a name on the new site must not have it reverted by a
+    // re-run -- the same guard member_since_overrides carries.
+    await env.DB.prepare(
+      "INSERT INTO member_display_names (email, display_name, source) VALUES (?, ?, 'member')",
+    )
+      .bind("pat@example.com", "Chuy II")
+      .run();
+
+    await runImport(
+      parseLegacyExport(
+        validExport({ display_names: [{ email: "pat@example.com", display_name: "Chuy" }] }),
+      ),
+    );
+
+    const row = await env.DB.prepare(
+      "SELECT display_name, source FROM member_display_names WHERE email = ?",
+    )
+      .bind("pat@example.com")
+      .first<{ display_name: string; source: string }>();
+    expect(row).toEqual({ display_name: "Chuy II", source: "member" });
+  });
+});
+
 describe("member_since_overrides triggers", () => {
   it("bump the matching member's last_updated_at on insert, update, and delete", async () => {
     await insertMember("BC-1", "early@example.com", null);
@@ -419,7 +465,7 @@ describe("buildImportSql", () => {
     const sql = buildImportSql(parseLegacyExport(validExport()));
     const lines = sql.trimEnd().split("\n");
     expect(lines[0]).toBe("-- Generated from a legacy Postgres export taken at 2026-09-16T20:00:00Z.");
-    expect(lines[1]).toBe("-- 2 member_since rows, 1 membership cards, 2 of 3 membership orders.");
+    expect(lines[1]).toBe("-- 2 member_since rows, 0 chosen names, 1 membership cards, 2 of 3 membership orders.");
     expect(lines.slice(2)).toHaveLength(5);
     expect(lines.slice(2).every((l) => l.endsWith(";"))).toBe(true);
   });
