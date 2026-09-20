@@ -121,6 +121,15 @@ elsewhere.
 
 Wait at least one full reporting cycle, roughly two weeks.
 
+Then retire the migration framing
+([#186](https://github.com/los-verdes/card-losverd-es/issues/186)). This
+repository is written throughout as a migration in progress -- this runbook
+most of all -- and every one of those references stops being true on the day
+of the flip. Left alone they do not read as history; they read as a project
+that was abandoned midway. The issue separates what to sweep from the
+references to the old system that stay correct indefinitely, which are not
+the same thing and are easy to confuse.
+
 ## 5. Decommission GCP
 
 Through the legacy repository's own `terraform/` configuration -- `terraform
