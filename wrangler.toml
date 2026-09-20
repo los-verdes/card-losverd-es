@@ -211,13 +211,20 @@ max_retries = 0
 # resync (src/scheduled.ts maps the schedule to `sync_subscriptions_etl`) runs
 # here first, against the sandbox store, so the cron -> queue -> resync path
 # is exercised before production. Deliberately only that one job:
-#   - "0 */6 * * *" (Slack members) stays off until staging has its own Slack
-#     app (#133) -- today it holds production's bot token;
+#   - "0 */6 * * *" (Slack members) runs here since staging got its own Slack
+#     credentials (2026-09-19, #133) -- it previously held production's bot
+#     token, which would have read the real membership roll into a database
+#     meant for test data;
 #   - "30 * * * *" (customers) and "30 */12 * * *" (MiniBC) are stubs.
 # A resync never emails anyone (see src/email/newOrder.ts). Production gets
 # its own [triggers] block once its secrets are set, with the same schedules.
 [env.staging.triggers]
-# "15 */6 * * *" the BigCommerce resync; "0 9 * * 1" the weekly readiness
-# check, which posts to Slack only when a check has actually failed
-# (src/admin/readinessAlert.ts). Both map to a message in src/scheduled.ts.
-crons = ["15 */6 * * *", "0 9 * * 1"]
+# "0 */6 * * *" the Slack members sync; "15 */6 * * *" the BigCommerce resync;
+# "0 9 * * 1" the weekly readiness check, which posts to Slack only when a
+# check has actually failed. Each maps to a message in src/scheduled.ts.
+#
+# The Slack sync is offset a quarter-hour from the resync rather than sharing
+# its schedule: the queue runs one consumer at a time, so two jobs due
+# together would simply queue behind each other, and staggering them keeps a
+# slow run of one from delaying the other.
+crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
