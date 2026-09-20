@@ -14,6 +14,30 @@ Don't let warnings slide by unaddressed — whether they show up in CI logs, `wr
 - **workerd `Called .text() on an HTTP body which does not appear to be text ... "application/x-www-form-urlencoded"`** (seen in `test/auth/authjs.spec.ts` runs, and expected in production tail logs on Auth.js sign-in POSTs and Apple's `form_post` callback). Comes from `@auth/core`'s own `getBody()` (`lib/utils/web.js`) reading URL-encoded form bodies with `req.text()`. Harmless -- URL-encoded bodies are plain ASCII, and workerd's text-content-type heuristic just doesn't include that type. Not fixable in this repo; revisit if an `@auth/core` release reads form bodies via `formData()` instead.
 - **Vitest `Sourcemap for ".../node_modules/oauth4webapi/build/index.js" points to missing source files`** (test output only). `oauth4webapi` (an `@auth/core` dependency) publishes a sourcemap referencing sources it doesn't ship. Cosmetic; not ours to fix.
 
+## What to call things, and who to write for
+
+**Los Verdes is an independent supporters' group, never a "club".** Write "the
+group", "Los Verdes", or "supporters' group". The word is wrong twice over:
+Los Verdes is not one, and "the club" already means Austin FC, whom the group
+is independent of. Background:
+<https://www.losverdesatx.org/about-us>.
+
+Two internal bodies come up in this project, both proper nouns:
+
+- The **Membership Committee** is the group's conduct body -- effectively its
+  HR function: the Code of Conduct, keeping spaces inclusive, reviewing
+  reports, conflict resolution. They are **consulted on everything** the
+  membership rules touch, and **responsible** for the subset that settles a
+  person's standing, such as withdrawing a membership.
+- The **Merch Team** (`#team-merch`) administer the BigCommerce storefront and
+  answer `merchteam@losverdesatx.org`, where support requests about
+  memberships and orders arrive. They are the primary audience for
+  documentation about where card data comes from.
+
+Do not assume the Membership Committee administers memberships because of the
+name -- that is the Merch Team. Documentation written for the wrong one of
+these is documentation nobody reads.
+
 ## No real personal data in development
 
 This repository is public, and the members are real people. Never put real

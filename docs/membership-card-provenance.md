@@ -8,10 +8,12 @@ someone counts as a current member today. When a member writes in to say their
 card is wrong, this is the document that says which of these rules produced
 what they are looking at.
 
-The Membership Committee is named below where a decision is theirs rather than
-ours -- notably whether a membership can be withdrawn before it expires, which
-is a question about someone's standing in the group rather than about
-software.
+The Membership Committee is consulted on all of it. These rules describe how
+membership works, which is their remit whoever administers it day to day, and
+a change to any of them is worth their input. A smaller number of decisions
+are theirs outright -- anything that settles a person's standing in the group,
+such as whether a membership can be withdrawn before it expires. Those are
+marked where they appear.
 
 Nothing here is a proposal. It is a description of what the code does right
 now, so the rules can be confirmed or changed deliberately rather than
@@ -21,8 +23,8 @@ the source.
 
 The last section, [Decisions worth confirming](#8-decisions-worth-confirming),
 lists the places where the software had to pick a rule and where a different
-policy would be equally easy to implement. That is the part most likely to
-need someone's attention beyond the Merch Team.
+policy would be equally easy to implement. That is the section to take to the
+Membership Committee.
 
 ## 1. The short version
 
@@ -472,10 +474,10 @@ or a change, not an open-ended design exercise.
    routine order sync would overwrite it if it were set by hand. Revocation is
    already tracked as post-cutover work
    ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)); what it
-   should mean in practice is a question for the **Membership Committee**
-   rather than for whoever builds it, since withdrawing a membership is a
-   decision about someone's standing in the group and sits alongside the Code
-   of Conduct work they already own.
+   should mean in practice is the **Membership Committee's** decision rather
+   than the implementer's -- withdrawing a membership settles someone's
+   standing in the group, which sits with the Code of Conduct work they
+   already own.
 
 9. **Should a historical order with no recorded status still count?**
    It depends on which era it came from, and that asymmetry needs a decision
