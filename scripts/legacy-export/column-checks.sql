@@ -120,23 +120,26 @@ SELECT * FROM EXTERNAL_QUERY(
 -- 7. Which users have a chosen display name that differs from their latest
 --    order's billing name -- the count export.sql's `display_names` section
 --    will emit. A count only; the names themselves stay in Postgres.
+--    (Written with LATERAL rather than a correlated subquery: the federated
+--    connection failed to prepare the subquery form.)
 SELECT * FROM EXTERNAL_QUERY(
   'projects/lv-digital-membership/locations/us-central1/connections/lv-digital-membership',
   """
   SELECT count(*) AS users_with_chosen_name
   FROM users u
+  LEFT JOIN LATERAL (
+      SELECT btrim(concat_ws(' ',
+                 NULLIF(btrim(am.billing_address_first_name), ''),
+                 NULLIF(btrim(am.billing_address_last_name), ''))) AS billing_name
+      FROM annual_membership am
+      WHERE am.user_id = u.id
+        AND am.created_on IS NOT NULL
+        AND NOT COALESCE(am.test_mode, false)
+      ORDER BY am.created_on DESC
+      LIMIT 1
+  ) latest ON true
   WHERE u.email IS NOT NULL
     AND NULLIF(btrim(u.fullname), '') IS NOT NULL
     AND EXISTS (SELECT 1 FROM annual_membership o WHERE o.user_id = u.id)
-    AND btrim(u.fullname) IS DISTINCT FROM (
-        SELECT btrim(concat_ws(' ',
-                   NULLIF(btrim(am.billing_address_first_name), ''),
-                   NULLIF(btrim(am.billing_address_last_name), '')))
-        FROM annual_membership am
-        WHERE am.user_id = u.id
-          AND am.created_on IS NOT NULL
-          AND NOT COALESCE(am.test_mode, false)
-        ORDER BY am.created_on DESC
-        LIMIT 1
-    )
-""");
+    AND btrim(u.fullname) IS DISTINCT FROM latest.billing_name
+  """);

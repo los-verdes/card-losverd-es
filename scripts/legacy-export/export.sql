@@ -16,6 +16,14 @@
 --     Squarespace), for D1's `membership_orders` history table. This is the
 --     only surviving record of Squarespace-era orders. `member_email` is the
 --     linked user's current email, which can differ from the order's own.
+--     An order's era comes from `channel_name`, never from the shape of its
+--     id. The old app wrote `{id}_bc` for BigCommerce orders but its own
+--     views and responses strip that suffix (`split_part(order_id, '_', 1)`),
+--     so what the column holds and what a copy of it shows can differ; a
+--     test on the suffix was wrong against one of them and would have scored
+--     every order under the wrong rule. `order_id` is normalised for the same
+--     reason: stripped to the bare store id and re-suffixed, so the key is
+--     the live sync's whether or not the suffix was stored.
 --     Rows that can't be represented (no order id, date, or email), and
 --     Squarespace's test orders, are counted in `membership_orders_total`
 --     but not exported, so the importer can report how many were left
@@ -27,7 +35,7 @@
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 
 SELECT json_build_object(
-    'format_version', 4,
+    'format_version', 5,
     'exported_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     'member_since', COALESCE((
         SELECT json_agg(
@@ -95,15 +103,37 @@ SELECT json_build_object(
     'membership_orders', COALESCE((
         SELECT json_agg(
             json_build_object(
-                'order_id', am.order_id,
-                'source', CASE WHEN right(am.order_id, 3) = '_bc' THEN 'bigcommerce' ELSE 'squarespace' END,
+                -- The key the BigCommerce sync writes for the same order
+                -- (`bigCommerceOrderKey()`: `{store id}_bc`), so an imported
+                -- order and a synced one are one row rather than two. Built
+                -- from the bare store id rather than by appending to whatever
+                -- the column holds: if the suffix is stored, appending gives
+                -- `1234_bc_bc` and the sync never matches the row again; if
+                -- it is not, the bare id never matches either. Stripping and
+                -- re-suffixing is right in both cases.
+                'order_id', CASE
+                    WHEN am.channel_name LIKE 'bigcommerce%'
+                        THEN split_part(am.order_id, '_', 1) || '_bc'
+                    ELSE am.order_id
+                END,
+                -- Which era an order belongs to, and so which counting rule
+                -- applies. Taken from the channel, which the old system set
+                -- to `bigcommerce_{source}` or to `Squarespace`, and never
+                -- leaves null. Not from the shape of the order id: a suffix
+                -- test that is wrong for this database's actual contents
+                -- classifies every order as Squarespace and scores roughly
+                -- 1,400 abandoned carts as memberships.
+                'source', CASE
+                    WHEN am.channel_name LIKE 'bigcommerce%' THEN 'bigcommerce'
+                    ELSE 'squarespace'
+                END,
                 'order_number', am.order_number,
                 'channel_name', am.channel_name,
                 'order_email', lower(am.customer_email),
                 'member_email', lower(COALESCE(u.email, am.customer_email)),
                 'first_name', am.billing_address_first_name,
                 'last_name', am.billing_address_last_name,
-                'customer_id', CASE WHEN right(am.order_id, 3) = '_bc' THEN u.bigcommerce_id END,
+                'customer_id', CASE WHEN am.channel_name LIKE 'bigcommerce%' THEN u.bigcommerce_id END,
                 'sku', am.sku,
                 'product_name', am.product_name,
                 'status', am.fulfillment_status,

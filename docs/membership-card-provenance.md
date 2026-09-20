@@ -712,7 +712,10 @@ or a change, not an open-ended design exercise.
 
 Los Verdes sold memberships through Squarespace until **February 2023**, which
 is the last month with Squarespace orders and the first with BigCommerce ones.
-An order's date is therefore enough to know which set of rules applies to it.
+An order's date is therefore enough to know which set of rules applies to it,
+and each imported record also says which store it came from outright
+(`membership_orders.source`, taken from the old system's own channel rather
+than inferred from the shape of an order id).
 Those older orders were recovered once, directly from the Postgres database
 behind the previous site
 ([`digital-membership`](https://github.com/los-verdes/digital-membership)),
