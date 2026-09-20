@@ -41,7 +41,9 @@ function mockRemotes(orderStatus: number) {
       return new Response("ok");
     }
     if (url.includes("/v2/orders/")) {
-      return new Response(orderStatus === 200 ? "{}" : "", { status: orderStatus });
+      // `null`, not `""`: 204 is a null-body status, and constructing a
+      // Response with a zero-length body for one makes workerd warn.
+      return new Response(orderStatus === 200 ? "{}" : null, { status: orderStatus });
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
