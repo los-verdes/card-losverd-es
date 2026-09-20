@@ -14,12 +14,20 @@
  */
 
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
 import { isWellFormedEmail } from "../member/email-card";
 import { cardNameText, getMemberById, getMemberByEmail, type MemberRecord } from "../member/artifacts";
 import { getMemberOrderHistory, type MemberOrder } from "../member/orderHistory";
+import {
+  MAX_DISPLAY_NAME_LENGTH,
+  clearDisplayName,
+  getDisplayName,
+  normalizeDisplayName,
+  setDisplayName,
+} from "../member/displayName";
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
@@ -70,17 +78,24 @@ const SearchForm: FC<{ q: string }> = ({ q }) => (
   </form>
 );
 
-const Summary: FC<{ member: MemberRecord; footprint: EmailFootprint; orders: MemberOrder[] }> = ({
-  member,
-  footprint,
-  orders,
-}) => (
+const NAME_SET_BY: Record<string, string> = {
+  member: "They set that name themselves",
+  admin: "An admin set that name for them",
+  legacy_postgres: "That name came across from the previous site",
+};
+
+const Summary: FC<{
+  member: MemberRecord;
+  footprint: EmailFootprint;
+  orders: MemberOrder[];
+  nameSetBy: string | null;
+}> = ({ member, footprint, orders, nameSetBy }) => (
   <>
     <h2>{cardNameText(member)}</h2>
     {member.display_name && (
       <p class="muted">
-        They chose that name themselves; their orders say{" "}
-        {`${member.first_name} ${member.last_name}`.trim() || "nothing"}.
+        {(nameSetBy && NAME_SET_BY[nameSetBy]) ?? "That name was set for them"}; their
+        orders say {`${member.first_name} ${member.last_name}`.trim() || "nothing"}.
       </p>
     )}
     <table style="border-collapse: collapse; font-size: 0.9rem">
@@ -130,6 +145,36 @@ const Summary: FC<{ member: MemberRecord; footprint: EmailFootprint; orders: Mem
         Correct their &quot;member since&quot; date
       </a>
     </p>
+    <h3>The name on their card</h3>
+    <p>
+      Shown instead of the name their orders give. Useful for a gifted membership,
+      where the card carries the buyer's name until the recipient orders something
+      of their own -- and for anyone who asks for a correction rather than making it
+      themselves.
+    </p>
+    <form method="post" action={MEMBERS_PATH}>
+      <input type="hidden" name="email" value={member.email} />
+      <label for="display_name">Name to show</label>
+      <input
+        id="display_name"
+        name="display_name"
+        type="text"
+        value={member.display_name ?? ""}
+        maxlength={MAX_DISPLAY_NAME_LENGTH}
+        placeholder={`${member.first_name} ${member.last_name}`.trim()}
+        autocomplete="off"
+      />
+      <label for="note">Why (optional, kept for whoever asks later)</label>
+      <input id="note" name="note" type="text" maxlength={200} autocomplete="off" />
+      <button type="submit">Save</button>
+    </form>
+    {member.display_name && (
+      <form method="post" action={MEMBERS_PATH}>
+        <input type="hidden" name="email" value={member.email} />
+        <input type="hidden" name="action" value="clear" />
+        <button type="submit">Use the name from their orders instead</button>
+      </form>
+    )}
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
@@ -181,12 +226,13 @@ members.get("/", async (c) => {
     if (!member) notFound = "No membership carries that card number.";
   }
 
-  const [footprint, orders] = member
+  const [footprint, orders, override] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
+        getDisplayName(c.env, member.email),
       ])
-    : [null, []];
+    : [null, [], null];
 
   return c.html(
     <AdminPage title="Find a member">
@@ -195,10 +241,58 @@ members.get("/", async (c) => {
         always read out. An order number goes straight to that order.
       </p>
       <SearchForm q={c.req.query("q") ?? ""} />
+      {c.req.query("saved") === "set" && (
+        <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
+      )}
+      {c.req.query("saved") === "cleared" && (
+        <p style="color: var(--success)">
+          Name removed. Their card is back to the name their orders give.
+        </p>
+      )}
+      {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
       {notFound && <p style="color: var(--danger)">{notFound}</p>}
-      {member && footprint && <Summary member={member} footprint={footprint} orders={orders} />}
+      {member && footprint && (
+        <Summary
+          member={member}
+          footprint={footprint}
+          orders={orders}
+          nameSetBy={override?.source ?? null}
+        />
+      )}
     </AdminPage>,
   );
+});
+
+/**
+ * Setting a name on somebody's behalf. Redirects back to this member rather
+ * than rendering, so a refresh does not resubmit and the saved message is on
+ * the page the admin was already looking at.
+ */
+members.post("/", csrf(), async (c) => {
+  const form = await c.req.parseBody();
+  const email = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
+  const back = (params: Record<string, string>) =>
+    c.redirect(`${MEMBERS_PATH}?${new URLSearchParams({ q: email, ...params })}`, 303);
+
+  if (!email) return back({ error: "No member to set a name for." });
+
+  if (form.action === "clear") {
+    const existing = await getDisplayName(c.env, email);
+    if (!existing) return back({ error: "There was no name to remove." });
+    await clearDisplayName(c.env, email);
+    return back({ saved: "cleared" });
+  }
+
+  const result = normalizeDisplayName(
+    typeof form.display_name === "string" ? form.display_name : "",
+  );
+  if (!result.ok) return back({ error: result.reason });
+
+  const note = typeof form.note === "string" && form.note.trim() !== "" ? form.note.trim() : null;
+  // `source = 'admin'` rather than 'member': it records who to point at when
+  // somebody asks why their card says what it says.
+  await setDisplayName(c.env, email, result.value, "admin", note);
+  return back({ saved: "set" });
 });
 
 export default members;
