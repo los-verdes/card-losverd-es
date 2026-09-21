@@ -171,6 +171,37 @@ button {
   cursor: pointer;
 }
 
+/* A submitted form's button, while the next page loads (src/formBusy.ts).
+   Dimmed with a small spinner before the label; the spinner holds still for
+   anyone who has asked for less motion, and the label change still says it. */
+button[aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+button[aria-disabled="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.5em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: busy-spin 0.8s linear infinite;
+}
+
+@keyframes busy-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button[aria-disabled="true"]::before {
+    animation: none;
+  }
+}
+
 /* The member's actions -- wallet passes, emailing a card. Outlined rather
    than filled: there are several in a row, and a column of solid green
    blocks reads as a warning rather than as a menu. */

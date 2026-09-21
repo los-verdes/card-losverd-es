@@ -3,6 +3,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { strFromU8, unzipSync } from "fflate";
 import { exportPKCS8, generateKeyPair } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
 import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
@@ -110,6 +111,25 @@ function submit(fields: Record<string, string>, headers: Record<string, string> 
 const submitEmail = (email: string) => submit({ email, "cf-turnstile-response": "token-123" });
 
 describe("GET /email-card", () => {
+  it("starts the address field with a signed-in visitor's own address", async () => {
+    // Most likely the one their membership is under; still editable, and the
+    // page is unchanged for anyone not signed in.
+    env.SESSION_SIGNING_KEY = "test-session-signing-key-0123456789";
+    await env.DB.prepare("INSERT INTO users (id, email) VALUES (7, 'jane@example.com')").run();
+    const token = await issueSessionToken(env.SESSION_SIGNING_KEY, { userId: 7, isAdmin: false });
+
+    const signedIn = await request({ headers: { Cookie: `${SESSION_COOKIE_NAME}=${token}` } });
+    const anonymous = await request();
+    const forged = await request({ headers: { Cookie: `${SESSION_COOKIE_NAME}=not-a-session` } });
+    await env.DB.exec("DELETE FROM users");
+
+    expect(signedIn.body).toMatch(/name="email"[^>]*value="jane@example.com"/);
+    for (const page of [anonymous, forged]) {
+      expect(page.status).toBe(200);
+      expect(page.body).not.toContain('value="jane@example.com"');
+    }
+  });
+
   it("shows the form with the Turnstile widget", async () => {
     const { status, body } = await request();
 

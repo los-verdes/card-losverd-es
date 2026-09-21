@@ -21,9 +21,10 @@
  * guarantee.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
+import { readSessionCookie, verifySessionToken } from "../auth/session";
 import { sendMembershipCardEmail } from "../email/card";
 import {
   TURNSTILE_RESPONSE_FIELD,
@@ -205,13 +206,31 @@ export async function deliverCardByEmail(
   }
 }
 
+/**
+ * The address a signed-in visitor signed in with, to start the form with --
+ * the most likely one their membership is under. Only a convenience: the page
+ * stays public and works the same without a session, and the field is still
+ * theirs to change (a Hide My Email relay address, say, is rarely the one a
+ * membership was bought with).
+ */
+async function signedInEmail(c: Context<{ Bindings: Env }>): Promise<string | undefined> {
+  const token = readSessionCookie(c);
+  if (!token || !c.env.SESSION_SIGNING_KEY) return undefined;
+  const session = await verifySessionToken(c.env.SESSION_SIGNING_KEY, token);
+  if (!session) return undefined;
+  const user = await c.env.DB.prepare("SELECT email FROM users WHERE id = ?")
+    .bind(session.userId)
+    .first<{ email: string }>();
+  return user?.email;
+}
+
 const emailCard = new Hono<{ Bindings: Env }>();
 
-emailCard.get("/", (c) => {
+emailCard.get("/", async (c) => {
   if (!isConfigured(c.env)) {
     return c.html(<Unavailable />, 503);
   }
-  return c.html(<RequestForm siteKey={c.env.TURNSTILE_SITE_KEY!} />);
+  return c.html(<RequestForm siteKey={c.env.TURNSTILE_SITE_KEY!} email={await signedInEmail(c)} />);
 });
 
 emailCard.post("/", csrf(), async (c) => {
