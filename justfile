@@ -5,6 +5,22 @@ account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
 default:
     @just --list
 
+# `just` has no named arguments. Everything after the recipe name is
+# positional, so `just apple-pass-cert-csr dir=".apple-pass-cert"` hands the
+# recipe the literal string `dir=.apple-pass-cert` -- which is how a directory
+# by that name comes to exist. The mistake is an easy one because `just
+# --list` prints a defaulted parameter as `dir=".apple-pass-cert"`, which
+# reads exactly like the syntax for setting it.
+#
+# Every recipe below that takes a defaulted value checks it through here, so
+# the mistake fails immediately and says what to type instead, rather than
+# quietly operating on the wrong path. `*flags` parameters are not checked:
+# a flag may legitimately contain `=`.
+[private]
+check-arg name value:
+    @case "{{ value }}" in *=*)         echo "just: '{{ value }}' was read as the value of {{ name }}, not as a named argument -- just has none." >&2;         echo "      Everything after the recipe name is positional. Drop the '{{ name }}=' and pass the value on its own." >&2;         exit 1 ;;       esac
+
+
 # Install dependencies
 install:
     npm install
@@ -40,7 +56,7 @@ db-migrate-local:
 
 # Apply D1 migrations to an environment's remote database (production or
 # staging); CI runs this on deploy.
-db-migrate-remote env="production":
+db-migrate-remote env="production": (check-arg "env" env)
     npx wrangler d1 migrations apply DB --remote {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
 
 # Create R2 bucket locally for testing
@@ -52,14 +68,14 @@ r2-init-local:
 # (templates/**): the Apple pass icons/logos pass generation reads, and the
 # card image crest. Idempotent -- the Deploy workflow runs it on every deploy.
 # Pass `--local` as the target for local dev R2.
-r2-upload-templates env="production" target="--remote":
+r2-upload-templates env="production" target="--remote": (check-arg "env" env) (check-arg "target" target)
     cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets-{{ env }}/$key" --file "$key" --content-type image/png {{target}}; done
 
 # Deploy to Cloudflare Workers: `just deploy` (production) or `just deploy
 # staging`. CI normally does this (see .github/workflows/deploy.yml). The
 # explicit `--env=""` targets the top-level (production) config and avoids
 # Wrangler's "multiple environments defined, no target specified" warning.
-deploy env="production":
+deploy env="production": (check-arg "env" env)
     npx wrangler deploy {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
 
 # Fail if an environment's var/binding names drift from production's, or if it
@@ -88,6 +104,12 @@ worker_secrets_item := "lv-card-losverd-es-worker-"
 
 # Rotating a secret = edit it in 1Password, then push just that one, e.g.
 # `just secrets-push staging AUTH_SECRET`. Uploads in a single deploy.
+#
+# Leading and trailing whitespace is trimmed on the way through, and the
+# names it was trimmed from are printed. The exception is a value used as key
+# material, where trimming would change the key rather than tidy it: those are
+# refused instead, and named. See SIGNING_KEY_SECRETS in
+# scripts/worker-secrets.mjs.
 # Push Worker secrets from 1Password (all with values, or only NAMES)
 secrets-push env *names:
     payload="$(op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} {{ names }})" && printf '%s' "$payload" | npx wrangler secret bulk {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
@@ -120,7 +142,7 @@ etl-run env job *flags:
 # Defaults to staging; production needs --yes-production.
 #
 # Prove the dead-letter alert actually reaches Slack, in a real environment
-queue-dlq-drill env="staging" *flags:
+queue-dlq-drill env="staging" *flags: (check-arg "env" env)
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/queue-dlq-drill.mjs {{ env }} {{ flags }}
 
 # The two environments should share no secret values, so that a staging leak
@@ -149,11 +171,11 @@ google-wallet-check env *flags:
 # and the chain, stores all three PEMs in 1Password, reads them back to
 # confirm, pushes them, and deletes the local copies.
 # Generate a private key and CSR for a new Apple pass certificate
-apple-pass-cert-csr dir=".apple-pass-cert":
+apple-pass-cert-csr dir=".apple-pass-cert": (check-arg "dir" dir)
     node scripts/apple-pass-cert.mjs csr --dir {{ dir }}
 
 # Install the .cer Apple returned: verify it, store it, push it
-apple-pass-cert-install env cer dir=".apple-pass-cert":
+apple-pass-cert-install env cer dir=".apple-pass-cert": (check-arg "env" env) (check-arg "cer" cer) (check-arg "dir" dir)
     node scripts/apple-pass-cert.mjs install {{ cer }} --dir {{ dir }} --env {{ env }}
     op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APPLE_PASS_CERT_PEM[password]=$(cat {{ dir }}/pass-cert.pem)" "APPLE_PASS_KEY_PEM[password]=$(cat {{ dir }}/pass-key.pem)" "APPLE_WWDR_CERT_PEM[password]=$(cat {{ dir }}/wwdr.pem)" > /dev/null
     just apple-pass-cert-check {{ env }}
@@ -227,7 +249,7 @@ legacy-import-sql export_json out_sql:
 # Membership Committee to read and comment on. Upload the result to Drive, then
 # right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
 # the source of truth; re-run this and re-import whenever it changes.
-provenance-gdoc out=".provenance-gdoc.md":
+provenance-gdoc out=".provenance-gdoc.md": (check-arg "out" out)
     node scripts/provenance-gdoc.mjs {{out}}
 
 # Check an import landed: compares D1's counts against the export it came from.

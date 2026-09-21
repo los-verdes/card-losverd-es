@@ -16,6 +16,11 @@
 //   node scripts/worker-secrets.mjs <env> --status '<wrangler secret list JSON>'
 //     Prints which secrets 1Password and Cloudflare each have. Never values:
 //     only lengths and line counts (a PEM should span several lines).
+//
+// Leading and trailing whitespace is trimmed on the way past, and the names
+// it came off are printed -- a stray space survives a copy-paste invisibly
+// and then fails somewhere that gives no hint where it came from. Values used
+// as key material are the exception: see SIGNING_KEY_SECRETS below.
 
 import { unstable_readConfig } from "wrangler";
 import { WORKER_SECRETS } from "./lib/workerSecrets.ts";
@@ -103,6 +108,46 @@ function pemProblem(name, value) {
   return null;
 }
 
+/**
+ * Secrets whose exact bytes are key material, so trimming one would change
+ * the key rather than tidy it.
+ *
+ * These are HMAC keys: the value is fed to the signing function as-is, and a
+ * stray space is part of the key. Trimming would silently rotate it --
+ * invalidating every live session, or every QR verification link already
+ * printed on a card -- which is a decision for whoever is holding the
+ * console, not something a push should do on its way past. So these are
+ * refused with an explanation instead.
+ *
+ * Everything else is an identifier or a credential handed to somebody else's
+ * API: an address, a token, a key id, a PEM. Surrounding whitespace is never
+ * part of those, and leaving it in is how a leading space on
+ * GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL came to fail the preflight checks in
+ * ways that pointed nowhere near the paste that caused it.
+ */
+const SIGNING_KEY_SECRETS = [
+  "AUTH_SECRET",
+  "SESSION_SIGNING_KEY",
+  "PASS_SIGNATURE_KEY",
+  "PASS_SIGNATURE_KEY_PREVIOUS",
+  "BIGCOMMERCE_WEBHOOK_SIGNING_KEY",
+];
+
+/**
+ * Why `value`'s surrounding whitespace is a problem, or null if it is not
+ * (either because there is none, or because the push will trim it).
+ */
+function whitespaceProblem(name, value) {
+  if (value === value.trim()) return null;
+  if (!SIGNING_KEY_SECRETS.includes(name)) return null;
+  return "has leading or trailing whitespace and is used as key material, so it cannot be trimmed here -- that would change the key, not tidy it. Fix it in 1Password if the whitespace is a mistake, knowing that it rotates the key: live sessions or issued QR links signed with the old value stop verifying.";
+}
+
+/** The value to push: trimmed where trimming cannot change what it means. */
+function normalise(name, value) {
+  return SIGNING_KEY_SECRETS.includes(name) ? value : value.trim();
+}
+
 const [env, ...rest] = process.argv.slice(2);
 if (!ENVIRONMENTS.includes(env)) fail(`first argument must be one of: ${ENVIRONMENTS.join(", ")}`);
 
@@ -134,10 +179,17 @@ if (rest[0] === "--status") {
   for (const name of WORKER_SECRETS) {
     const value = secrets.get(name);
     const absent = OPTIONAL_SECRETS.includes(name) ? "not set (optional)" : "missing";
-    const inOnePassword = value ? `${value.length} chars, ${value.split("\n").length} line(s)` : absent;
-    const problem = value ? pemProblem(name, value) : null;
+    // Surrounding whitespace is invisible in a character count, and it is
+    // exactly what somebody staring at this table is trying to explain.
+    const willTrim = value && value !== normalise(name, value) ? ", will be trimmed" : "";
+    const inOnePassword = value
+      ? `${value.length} chars, ${value.split("\n").length} line(s)${willTrim}`
+      : absent;
+    const problem = value
+      ? (whitespaceProblem(name, value) ?? pemProblem(name, normalise(name, value)))
+      : null;
     console.log(
-      `  ${name.padEnd(36)} 1Password: ${inOnePassword.padEnd(24)} Cloudflare: ${cloudflare.has(name) ? "set" : "missing"}${problem ? `   !! ${problem}` : ""}`,
+      `  ${name.padEnd(36)} 1Password: ${inOnePassword.padEnd(40)} Cloudflare: ${cloudflare.has(name) ? "set" : "missing"}${problem ? `   !! ${problem}` : ""}`,
     );
   }
   const unexpected = [...cloudflare].filter((name) => !WORKER_SECRETS.includes(name));
@@ -149,7 +201,9 @@ const requested = rest.length ? rest : [...secrets.keys()];
 for (const name of requested) {
   if (!WORKER_SECRETS.includes(name)) fail(`"${name}" isn't a Worker secret name`);
   if (!secrets.has(name)) fail(`"${name}" has no value in 1Password item "${item.title}"`);
-  const problem = pemProblem(name, secrets.get(name));
+  const problem =
+    whitespaceProblem(name, secrets.get(name)) ??
+    pemProblem(name, normalise(name, secrets.get(name)));
   if (problem) fail(`"${name}" in 1Password item "${item.title}": ${problem}`);
 }
 if (!requested.length) fail(`1Password item "${item.title}" has no secret values yet`);
@@ -159,4 +213,12 @@ const missing = WORKER_SECRETS.filter(
 );
 console.error(`Pushing ${requested.length} secret(s) to ${env}: ${requested.join(", ")}`);
 if (missing.length && !rest.length) console.error(`Not in 1Password yet (skipped): ${missing.join(", ")}`);
-process.stdout.write(JSON.stringify(Object.fromEntries(requested.map((name) => [name, secrets.get(name)]))));
+// Named, never valued, and said out loud: a secret that needed trimming is
+// still wrong in 1Password, where the next person to read it will find it.
+const trimmed = requested.filter((name) => secrets.get(name) !== normalise(name, secrets.get(name)));
+if (trimmed.length) {
+  console.error(`Trimmed surrounding whitespace from: ${trimmed.join(", ")} -- worth correcting in 1Password too.`);
+}
+process.stdout.write(
+  JSON.stringify(Object.fromEntries(requested.map((name) => [name, normalise(name, secrets.get(name))]))),
+);
