@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCardTree, type MembershipCardMember, type SatoriElement } from "../../src/cardimage/template";
+import { buildCardTree, CREST_SIZE, type MembershipCardMember, type SatoriElement } from "../../src/cardimage/template";
+import CREST_PNG from "../../assets/templates/card/crest.png";
 
 const IMAGES = {
   logoDataUrl: "data:image/png;base64,AAAA",
@@ -73,5 +74,24 @@ describe("buildCardTree", () => {
 
     expect(json).toContain(IMAGES.logoDataUrl);
     expect(json).toContain(IMAGES.qrDataUrl);
+  });
+});
+
+describe("the crest", () => {
+  it("is drawn at CREST_SIZE", () => {
+    const tree = buildCardTree(makeMember(), { memberSince: null, expiration: null }, IMAGES);
+    const crest = (tree.props.children as SatoriElement[])[0].props.children as SatoriElement[];
+
+    expect(crest[0].props).toMatchObject({ src: IMAGES.logoDataUrl, width: CREST_SIZE, height: CREST_SIZE });
+  });
+
+  it("is never drawn larger than the crest image itself, which would blur it", () => {
+    // A PNG's width and height are the two big-endian words after the IHDR
+    // tag, at bytes 16 and 20.
+    const header = new DataView(CREST_PNG as ArrayBuffer);
+    const width = header.getUint32(16);
+    const height = header.getUint32(20);
+
+    expect(CREST_SIZE).toBeLessThanOrEqual(Math.min(width, height));
   });
 });
