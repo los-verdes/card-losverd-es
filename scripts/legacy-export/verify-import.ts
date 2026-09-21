@@ -10,6 +10,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { parseLegacyExport } from "../../src/legacy/import-sql";
 import {
   COUNTS_SQL,
@@ -18,6 +20,24 @@ import {
   formatComparison,
   type ActualCounts,
 } from "../../src/legacy/verify-import";
+
+/**
+ * Wrangler's own entry point, to be run with the Node already running this.
+ *
+ * Not `npx`: on Windows that is a `.cmd`, and a version manager may shim it
+ * with another one. Node cannot spawn a batch file without a shell, and the
+ * shim reported the multi-line SQL below as "batch file arguments are
+ * invalid" -- a message naming neither wrangler nor this script, on the step
+ * that confirms a one-way import landed.
+ *
+ * The package blocks `./bin/wrangler.js` in its `exports`, so the path comes
+ * from its own manifest rather than being spelled out here and going stale.
+ */
+function wranglerEntry(): string {
+  const pkgPath = createRequire(import.meta.url).resolve("wrangler/package.json");
+  const { bin } = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: { wrangler: string } };
+  return resolve(dirname(pkgPath), bin.wrangler);
+}
 
 const [envName, exportPath] = process.argv.slice(2);
 if (!envName || !exportPath) {
@@ -39,8 +59,21 @@ const envArgs = envName === "production" ? ["--env", ""] : ["--env", envName];
 let raw: string;
 try {
   raw = execFileSync(
-    "npx",
-    ["wrangler", "d1", "execute", database, "--remote", "--json", ...envArgs, "--command", COUNTS_SQL],
+    process.execPath,
+    [
+      wranglerEntry(),
+      "d1",
+      "execute",
+      database,
+      "--remote",
+      "--json",
+      ...envArgs,
+      // One line: the query is easier to read across several, but a newline
+      // inside a command-line argument is the kind of thing a platform
+      // mangles quietly.
+      "--command",
+      COUNTS_SQL.replace(/\s+/g, " ").trim(),
+    ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
   );
 } catch {
