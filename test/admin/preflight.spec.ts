@@ -392,6 +392,24 @@ describe("BigCommerce", () => {
     expect(result.detail).toContain("Orders read scope");
   });
 
+  it("still passes when fetching the store's name fails outright", async () => {
+    // The name is fetched separately and is a nicety: the verdict comes from
+    // the orders probe. A network failure on the way to it must leave the
+    // check passing, not turn a working token into a failure.
+    const spy = vi.mocked(globalThis.fetch);
+    const answering = spy.getMockImplementation()!;
+    spy.mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/v2/store")) throw new TypeError("network unreachable");
+      return answering(input, init);
+    });
+
+    const result = find(await check(), "Access token");
+
+    expect(result.status).toBe("ok");
+    expect(result.detail).not.toContain("Los Verdes");
+  });
+
   it("fails on a rejected token", async () => {
     remote.ordersStatus = 401;
     expect(find(await check(), "Access token").status).toBe("fail");

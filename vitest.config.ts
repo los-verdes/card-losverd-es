@@ -33,6 +33,9 @@ export default defineConfig(async () => {
 			// that cost is paid at least once per file and can exceed 5s on a
 			// loaded CI runner -- seen failing intermittently in test/passkit/signer.spec.ts.
 			testTimeout: 20000,
+			// Builds the pass-signing certificate chain once per run and
+			// provides it to every file -- see test/setup/global.ts.
+			globalSetup: ["./test/setup/global.ts"],
 			// Extends (not replaces) Vitest's own defaults, which don't cover
 			// `.claude/` -- without this, test files inside a background-agent
 			// worktree checked out under `.claude/worktrees/` (a separate,
@@ -42,6 +45,12 @@ export default defineConfig(async () => {
 			exclude: [...configDefaults.exclude, "**/.claude/**"],
 			coverage: {
 				provider: "istanbul",
+				// What the thresholds below are about. Without this, anything a
+				// test imports is counted -- test fixtures included -- so moving
+				// fixture work out of the workers (test/setup/global.ts) read as a
+				// fall in coverage when nothing in src/ had changed.
+				include: ["src/**/*.{ts,tsx}"],
+				exclude: ["src/**/*.d.ts", "test/**"],
 				reporter: ["text", "json", "html"],
 				thresholds: {
 					lines: 95,
