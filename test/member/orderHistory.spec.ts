@@ -13,8 +13,8 @@ describe("the order number a member sees", () => {
   });
 
   it("still reads a row carrying the previous site's `_bc` suffix as the bare id", () => {
-    // Migration 0002 rewrites these, and the sync and export no longer write
-    // them. This is the tolerance for anything that slipped past both: a
+    // Neither the sync nor the legacy export writes these any more. This is
+    // the tolerance for anything that slipped past both: a
     // member should never see an internal convention on their own history.
     expect(displayOrderNumber("1001_bc")).toBe("1001");
   });

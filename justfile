@@ -67,6 +67,46 @@ db-schema-compare env:
     npx wrangler d1 execute card-losverd-es-db-{{ env }} --remote {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }} --json --command "$query" > "$work/actual.json"
     node scripts/schema-compare.mjs "$work/expected.json" "$work/actual.json"
 
+# Empty an environment's database and rebuild it from the migrations -- the
+# second half of a migration squash (docs/cutover.md, "Squash the
+# migrations"). Drops every table, the migration log included, re-applies the
+# migrations, then runs db-schema-compare, which exits non-zero if the result
+# is not what the migrations build.
+#
+# Destroys everything in that database: members, orders, users and admin
+# grants, the audit log, Wallet device registrations. Lists the tables and
+# asks for the environment's name to be typed before touching anything. The
+# account id is pinned so a wrangler login still pointing at another
+# account cannot aim this at a different database of the same name.
+#
+# Afterwards it prints what has to be put back.
+#
+# Drop every table in an environment's database and rebuild it from the migrations
+db-rebuild env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'
+    envflag={{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
+    db="card-losverd-es-db-{{ env }}"
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    npx wrangler d1 execute "$db" --remote $envflag --json \
+      --command "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 4) != '_cf_' ORDER BY name" \
+      > "$work/tables.json"
+    node scripts/db-drop-sql.mjs "$work/tables.json" "$work/drop.sql"
+    echo
+    read -r -p "Type '{{ env }}' to drop every table above in $db: " answer
+    if [ "$answer" != "{{ env }}" ]; then echo "Not confirmed; nothing was changed."; exit 1; fi
+    npx wrangler d1 execute "$db" --remote $envflag --file "$work/drop.sql"
+    npx wrangler d1 migrations apply DB --remote $envflag
+    just db-schema-compare {{ env }}
+    echo
+    echo "Rebuilt $db. Put back what it held:"
+    echo "  - production: the legacy import (just legacy-import-sql, apply it, then just legacy-import-verify {{ env }} <export.json>)"
+    echo "  - orders: just etl-run {{ env }} full-resync{{ if env == "production" { " --yes-production" } else { "" } }}   (never emails anyone)"
+    echo "  - admins: sign in once, then just admin-grant {{ env }} <address>"
+    echo "  - Wallet passes already on phones: registrations are gone, so they get no updates until re-added"
+
 # Apply D1 migrations to an environment's remote database (production or
 # staging); CI runs this on deploy.
 db-migrate-remote env="production":
@@ -159,7 +199,7 @@ secrets-status env:
 # re-running one after fixing what broke it. Production needs
 # --yes-production.
 #
-# Run a scheduled job now: slack, resync or readiness
+# Run a scheduled job now: slack, resync, full-resync or readiness
 etl-run env job *flags:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/etl-run.mjs {{ env }} {{ job }} {{ flags }}
 
