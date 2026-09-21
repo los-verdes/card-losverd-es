@@ -1,4 +1,5 @@
 import { authHandler, initAuthConfig } from "@hono/auth-js";
+import type { SendEmailBinding } from "./email/cloudflare";
 import { Hono } from 'hono';
 import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
@@ -105,6 +106,12 @@ export interface Env {
   // only answers for its own hostnames. Production's is still empty, awaiting
   // a widget for card.losverd.es. Until all three are set, /email-card fails
   // closed with a "temporarily unavailable" page.
+  /**
+   * Cloudflare Email Service, when this environment has it (#244). Declared
+   * in wrangler.toml per environment; an environment without it falls back to
+   * SENDGRID_API_KEY, which is what lets them move across one at a time.
+   */
+  EMAIL?: SendEmailBinding;
   SENDGRID_API_KEY?: string;
   /**
    * Date (YYYY-MM-DD) from which a completed new order emails the member

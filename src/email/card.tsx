@@ -30,7 +30,7 @@ import {
   type MemberRecord,
   cardNameText,
 } from "../member/artifacts";
-import { sendEmail } from "./sendgrid";
+import { sendEmail } from "./send";
 
 export const EMAIL_SUBJECT = "Los Verdes Membership Card Details";
 export const CARD_IMAGE_FILENAME = "los-verdes-membership-card.png";

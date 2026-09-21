@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import {
   ALLOW_ANY_RECIPIENT,
-  SENDGRID_SEND_URL,
   allowsRecipient,
   parseRecipientAllowlist,
   sendEmail,
   type EmailMessage,
-} from "../../src/email/sendgrid";
+} from "../../src/email/send";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -83,10 +83,12 @@ describe("sendEmail", () => {
   });
 
   it.each([undefined, ""])("fails closed without calling SendGrid when the API key is %j", async (apiKey) => {
+    // With no binding either, there is nothing to send with, and the message
+    // names both rather than the one that happens to be missing.
     const fetchSpy = mockSendGrid(202);
     await expect(
       sendEmail({ SENDGRID_API_KEY: apiKey, EMAIL_RECIPIENT_ALLOWLIST: "*" }, MESSAGE),
-    ).rejects.toThrow("SENDGRID_API_KEY is not configured");
+    ).rejects.toThrow(/neither the Cloudflare Email Service binding nor SENDGRID_API_KEY/);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
