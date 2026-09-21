@@ -274,16 +274,38 @@ export function isAppleRelayAddress(email: string): boolean {
   return APPLE_RELAY_DOMAINS.some((domain) => address.endsWith(domain));
 }
 
-export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
-  email,
-  isAdmin,
-}) => (
+/**
+ * Shown when somebody signs in and holds no current membership.
+ *
+ * The orders are the point of the page when there are any. Without them it
+ * told a lapsed member to check they had used the right address -- advice
+ * that is wrong whenever their orders are right here, and that sends them to
+ * the merch team to be told what the page could have said itself. The history
+ * marks each order that does not count, which is the actual answer to "I
+ * bought one, where is it".
+ *
+ * With no orders at all the original wording stands: then a different address
+ * genuinely is the likeliest explanation, and an empty history under a line
+ * that already says nothing was found is just the same sentence twice.
+ */
+export const NoActiveMembership: FC<{
+  email: string;
+  isAdmin: boolean;
+  orders: MemberOrder[];
+}> = ({ email, isAdmin, orders }) => (
   <Page title="No Membership Found" nav={adminNav(isAdmin)}>
     <h1>No Active Membership Found</h1>
     <p>
       No current membership was found for <strong>{email}</strong>.
     </p>
-    {isAppleRelayAddress(email) ? (
+    {orders.length > 0 ? (
+      <p>
+        We do have {orders.length === 1 ? "an order" : `${orders.length} orders`} on
+        record under that address, but{" "}
+        {orders.length === 1 ? "it is not current" : "none of them is current"}. The
+        history below says what happened to each.
+      </p>
+    ) : isAppleRelayAddress(email) ? (
       <p>
         That is an Apple private relay address, which is what Apple sends us
         when you choose <strong>Hide My Email</strong>. It won't match the
@@ -298,12 +320,14 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
         you can confirm that address by email instead of signing in again.
       </p>
     )}
+    {orders.length > 0 && <MembershipHistory orders={orders} email={email} />}
     <a href={CLAIM_PATH} class="action">
       I bought my membership under a different address
     </a>
     <p>
-      Not a member yet, but would like to be? Grab a membership at the Los
-      Verdes store.
+      {orders.length > 0
+        ? "Ready to renew? Grab a membership at the Los Verdes store."
+        : "Not a member yet, but would like to be? Grab a membership at the Los Verdes store."}
     </p>
     <a href={MEMBERSHIP_STORE_URL} class="action">
       Visit Membership Store
@@ -472,8 +496,16 @@ portal.get(NO_ACTIVE_MEMBERSHIP_PATH, requireAuth, async (c) => {
   if (!user) {
     return c.redirect(LOGIN_PATH);
   }
+  // Keyed on the address they signed in with, which is the same column a
+  // membership would have been derived from -- so if anything is here, it is
+  // the explanation for why nothing was.
+  const orders = await getMemberOrderHistory(c.env, user.email);
   return c.html(
-    <NoActiveMembership email={user.email} isAdmin={user.is_admin === 1} />,
+    <NoActiveMembership
+      email={user.email}
+      isAdmin={user.is_admin === 1}
+      orders={orders}
+    />,
   );
 });
 
