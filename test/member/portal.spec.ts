@@ -515,6 +515,74 @@ describe("GET /no-active-membership", () => {
     expect(html).toMatch(/<form method="post" action="\/logout"/);
   });
 
+  it("shows the orders on record when there are any, and says why they don't count", async () => {
+    // The page used to tell a lapsed member to check the address they signed
+    // in with -- advice that is wrong whenever their orders are right here,
+    // and that sends them to the merch team to be told what the page could
+    // have said itself.
+    await insertUser("lapsed@example.com");
+    await insertOrder({
+      orderId: "1001_bc",
+      memberEmail: "lapsed@example.com",
+      productName: "Los Verdes Membership",
+      status: "Refunded",
+      createdOn: "2023-04-01",
+      expiresOn: "2024-04-01",
+    });
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("Membership history");
+    expect(html).toContain("Order #1001");
+    // Escaped in the rendered HTML, so match the part that is not.
+    expect(html).toContain("count towards membership");
+    expect(html).toContain("We do have an order on record under that address");
+    expect(html).not.toContain("Check that the email address you signed in with");
+  });
+
+  it("counts the orders it found rather than saying 'some'", async () => {
+    await insertUser("lapsed@example.com");
+    for (const orderId of ["1001_bc", "1002_bc"]) {
+      await insertOrder({ orderId, memberEmail: "lapsed@example.com", status: "Completed" });
+    }
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("We do have 2 orders on record under that address");
+    expect(html).toContain("none of them is current");
+  });
+
+  it("offers a renewal rather than a first purchase once there are orders", async () => {
+    await insertUser("lapsed@example.com");
+    await insertOrder({ orderId: "1001_bc", memberEmail: "lapsed@example.com" });
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("Ready to renew?");
+    expect(html).not.toContain("Not a member yet");
+  });
+
+  it("shows no history at all when there are no orders", async () => {
+    // "No current membership was found" followed by "no orders are on record"
+    // is the same sentence twice, and it crowds out the advice that is
+    // actually useful in that case.
+    await insertUser("nobody@example.com");
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).not.toContain("Membership history");
+    expect(html).toContain("Check that the email address you signed in with");
+  });
+
+  it("leaves the Apple relay explanation alone, since a relay never has orders", async () => {
+    await insertUser("abc123@privaterelay.appleid.com");
+
+    const html = await (await get("/no-active-membership")).text();
+
+    expect(html).toContain("Hide My Email");
+    expect(html).not.toContain("Membership history");
+  });
+
   it("sends a session whose user no longer exists back to login", async () => {
     const res = await get("/no-active-membership", 404);
     expect(res.status).toBe(302);
