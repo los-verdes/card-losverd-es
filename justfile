@@ -223,6 +223,13 @@ legacy-import-sql export_json out_sql:
     node .legacy-import-bundle.mjs {{export_json}} {{out_sql}}
     rm -f .legacy-import-bundle.mjs
 
+# Prepare the provenance doc for Google Docs, for the Merch Team and the
+# Membership Committee to read and comment on. Upload the result to Drive, then
+# right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
+# the source of truth; re-run this and re-import whenever it changes.
+provenance-gdoc out=".provenance-gdoc.md":
+    node scripts/provenance-gdoc.mjs {{out}}
+
 # Check an import landed: compares D1's counts against the export it came from.
 # Exits non-zero when they disagree, so it can gate the next step rather than
 # being read and nodded at. Counts only -- it never reads a member's data.
