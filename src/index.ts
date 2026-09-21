@@ -140,6 +140,9 @@ export interface Env {
   // can read every workspace member's email; this grants only "post to one
   // channel". Optional: alerts are skipped (with a warning) until it's set.
   SLACK_ALERT_WEBHOOK_URL?: string;
+  // Not secret -- "true" makes the weekly readiness check post an all-clear
+  // to Slack as well as its failures (src/admin/readinessAlert.ts).
+  READINESS_POST_WHEN_HEALTHY?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

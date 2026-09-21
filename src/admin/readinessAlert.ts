@@ -16,9 +16,12 @@
  *   - **A check that cannot run is not a failure.** An absent credential is
  *     a known state, not a regression. Only `fail` is worth waking anyone
  *     for; `warn` and `skip` are for the page to show.
- *   - **Silence when healthy.** A job that posts "all clear" weekly trains
- *     people to skim past it, and is indistinguishable from a job that has
- *     stopped noticing. Nothing is posted unless something is wrong.
+ *   - **Silence when healthy, by default.** A job that posts "all clear"
+ *     weekly trains people to skim past it, and is indistinguishable from a
+ *     job that has stopped noticing. `READINESS_POST_WHEN_HEALTHY = "true"`
+ *     turns on an all-clear post as well, which is useful while the job is
+ *     new and nobody yet trusts that it runs; without it, nothing is posted
+ *     unless something is wrong.
  */
 
 import { postSlackAlert } from "../slack/alert";
@@ -61,8 +64,28 @@ export function readinessAlertText(
   ].join("\n");
 }
 
+/** Whether a run with nothing failing should say so in Slack too. */
+export function postsWhenHealthy(env: Pick<Env, "READINESS_POST_WHEN_HEALTHY">): boolean {
+  return env.READINESS_POST_WHEN_HEALTHY?.trim().toLowerCase() === "true";
+}
+
 /**
- * Posts to Slack if any check failed, and returns how many did.
+ * The all-clear message. Counts what was not a pass, so a week that went
+ * from no warnings to three reads differently from one that did not.
+ */
+export function readinessAllClearText(groups: CheckGroup[], baseUrl: string | undefined): string {
+  const results = groups.flatMap((group) => group.results);
+  const count = (status: string) => results.filter((result) => result.status === status).length;
+  const where = baseUrl ? ` ${baseUrl.replace(/\/+$/, "")}/admin/preflight` : " /admin/preflight";
+  return [
+    `Readiness check: nothing failing (${results.length} checks; ${count("warn")} warnings, ${count("skip")} skipped).`,
+    `Full report:${where}`,
+  ].join("\n");
+}
+
+/**
+ * Posts to Slack if any check failed -- or, with READINESS_POST_WHEN_HEALTHY
+ * on, if none did -- and returns how many failed.
  *
  * Separate from running the checks so that "healthy means silence" can be
  * asserted against a known-healthy set of results. Building an environment
@@ -79,6 +102,9 @@ export async function reportReadiness(
     console.log("readiness check: nothing to report", {
       groups: groups.length,
     });
+    if (postsWhenHealthy(env)) {
+      await postSlackAlert(env, readinessAllClearText(groups, env.PUBLIC_BASE_URL));
+    }
     return 0;
   }
   console.warn("readiness check: failures found", {
