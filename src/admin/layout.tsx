@@ -1,6 +1,7 @@
 /** Shared shell for the admin pages (src/admin/). */
 
 import type { FC, PropsWithChildren } from "hono/jsx";
+import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { STYLESHEET_PATH } from "../styles";
 import { AdminNav } from "./nav";
 
@@ -20,6 +21,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <AdminNav />
       <h1>{title}</h1>
       {children}
+      <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
     </body>
   </html>
 );

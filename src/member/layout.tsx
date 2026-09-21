@@ -1,13 +1,15 @@
 /**
  * Shared page shell for server-rendered pages (Hono JSX). Still deliberately
- * minimal -- one narrow centred column, and no client-side JavaScript of our
- * own; the only script is the Web Analytics beacon (./webAnalytics.tsx) --
- * but the
+ * minimal -- one narrow centred column, and client-side JavaScript only for
+ * two small things: the busy state on submitted forms (src/formBusy.ts) and
+ * the Web Analytics beacon (./webAnalytics.tsx). Everything works without
+ * it. The
  * styling now comes from `/assets/app.css` rather than an inline attribute,
  * so the pages carry the group's colour and display face (#97).
  */
 
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
+import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { STYLESHEET_PATH } from "../styles";
 import { WebAnalyticsBeacon } from "./webAnalytics";
 
@@ -44,6 +46,7 @@ export const Page: FC<
     <body class="member">
       {nav}
       <main>{children}</main>
+      <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
       <WebAnalyticsBeacon />
     </body>
   </html>
