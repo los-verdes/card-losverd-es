@@ -5,6 +5,8 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { classify } from "../../src/admin/members";
 import { getDisplayName, setDisplayName } from "../../src/member/displayName";
+import { isBanned, banPerson } from "../../src/member/ban";
+import { isRevoked, revokeCard } from "../../src/member/revocation";
 import { cardNameText, getMemberByEmail } from "../../src/member/artifacts";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -28,6 +30,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Before `members`: both reference it, and D1 enforces the constraint, so
+  // the delete fails and the next test's fixtures collide with what is left.
+  await env.DB.exec("DELETE FROM revoked_cards");
+  await env.DB.exec("DELETE FROM banned_people");
   await env.DB.exec("DELETE FROM member_display_names");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
@@ -221,5 +227,92 @@ describe("an admin setting the name on someone's card", () => {
 
     expect((await post({ email: EMAIL, display_name: "Chuy" }, 9)).status).toBe(403);
     expect((await getMemberByEmail(env, EMAIL))!.display_name).toBeNull();
+  });
+});
+
+describe("withdrawing and barring from the member page", () => {
+  it("offers both actions on somebody in good standing", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("Withdraw this membership");
+    expect(body).toContain("Bar this person from the group");
+  });
+
+  it("withdraws a membership, with the reason kept", async () => {
+    const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct" });
+
+    expect(res.status).toBe(303);
+    expect(await isRevoked(env, CARD)).toBe(true);
+    const row = await env.DB.prepare("SELECT note FROM revoked_cards WHERE member_id = ?")
+      .bind(CARD)
+      .first<{ note: string | null }>();
+    expect(row?.note).toBe("conduct");
+  });
+
+  it("offers a restore once withdrawn, and says what state they are in", async () => {
+    await revokeCard(env, CARD, null, ADMIN_ID);
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("This membership has been withdrawn");
+    expect(body).toContain("Restore this membership");
+    expect(body).not.toContain("Withdraw this membership");
+  });
+
+  it("restores a withdrawn membership", async () => {
+    await revokeCard(env, CARD, null, ADMIN_ID);
+
+    const res = await post({ email: EMAIL, action: "restore" });
+
+    expect(res.headers.get("Location")).toContain("saved=restored");
+    expect(await isRevoked(env, CARD)).toBe(false);
+  });
+
+  it("bars a person, with the reason kept", async () => {
+    const res = await post({ email: EMAIL, action: "ban", ban_note: "a recorded reason" });
+
+    expect(res.headers.get("Location")).toContain("saved=banned");
+    expect(await isBanned(env, EMAIL)).toBe(true);
+  });
+
+  it("offers a lift once barred, and says what state they are in", async () => {
+    await banPerson(env, EMAIL, null, ADMIN_ID);
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("barred from Los Verdes");
+    expect(body).toContain("Lift this ban");
+    expect(body).not.toContain("Bar this person from the group");
+  });
+
+  it("lifts a ban", async () => {
+    await banPerson(env, EMAIL, null, ADMIN_ID);
+
+    const res = await post({ email: EMAIL, action: "unban" });
+
+    expect(res.headers.get("Location")).toContain("saved=unbanned");
+    expect(await isBanned(env, EMAIL)).toBe(false);
+  });
+
+  it.each([
+    ["restore", "was not withdrawn"],
+    ["unban", "was not barred"],
+  ])("says so rather than pretending, when %s has nothing to undo", async (action) => {
+    const res = await post({ email: EMAIL, action });
+
+    expect(res.headers.get("Location")).toContain("error=");
+  });
+
+  it("will not withdraw or bar an address with no membership", async () => {
+    const res = await post({ email: "nobody@example.com", action: "revoke" });
+
+    expect(res.headers.get("Location")).toContain("error=");
+  });
+
+  it("shows what just happened", async () => {
+    const banned = await (await get("/admin/members?saved=banned")).text();
+    expect(banned).toContain("Barred from the group");
+    const lifted = await (await get("/admin/members?saved=unbanned")).text();
+    expect(lifted).toContain("Ban lifted");
   });
 });
