@@ -125,6 +125,10 @@ ETL_SYNC_DLQ_NAME = "etl-sync-dlq-production"
 # the Slack alerts (src/slack/alert.ts). Spelled out rather than inferred from
 # a queue name or a URL, so it stays right if either changes.
 ENVIRONMENT = "production"
+# The weekly readiness check posts an all-clear too, not only failures, so a
+# run that happened is visible. Meant to go back to "" some while after
+# cutover, once the job has earned trust (src/admin/readinessAlert.ts).
+READINESS_POST_WHEN_HEALTHY = "true"
 
 # Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
 # terraform/queues.tf; bindings live here. src/index.ts's queue() handler
@@ -212,6 +216,10 @@ CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
 ENVIRONMENT = "staging"
+# The weekly readiness check posts an all-clear too, not only failures, so a
+# run that happened is visible. Meant to go back to "" some while after
+# cutover, once the job has earned trust (src/admin/readinessAlert.ts).
+READINESS_POST_WHEN_HEALTHY = "true"
 
 [[env.staging.queues.producers]]
 queue = "etl-sync-staging"
@@ -240,8 +248,9 @@ max_retries = 0
 # production's, so the real membership roll stays out of staging.
 [env.staging.triggers]
 # "0 */6 * * *" the Slack members sync; "15 */6 * * *" the BigCommerce resync;
-# "0 9 * * 1" the weekly readiness check, which posts to Slack only when a
-# check has actually failed. Each maps to a message in src/scheduled.ts.
+# "0 9 * * 1" the weekly readiness check, which posts failures to Slack, and
+# an all-clear while READINESS_POST_WHEN_HEALTHY is "true". Each maps to a
+# message in src/scheduled.ts.
 #
 # The Slack sync is offset a quarter-hour from the resync rather than sharing
 # its schedule: the queue runs one consumer at a time, so two jobs due

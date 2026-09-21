@@ -3,6 +3,8 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   failuresIn,
+  postsWhenHealthy,
+  readinessAllClearText,
   readinessAlertText,
   reportReadiness,
   runReadinessCheck,
@@ -39,6 +41,9 @@ beforeEach(() => {
   env.SLACK_ALERT_WEBHOOK_URL = SLACK_WEBHOOK;
   env.ENVIRONMENT = "staging";
   env.PUBLIC_BASE_URL = "https://card.losverd.es";
+  // Stated, not inherited: wrangler.toml turns the all-clear on for now,
+  // and the tests below say which behaviour each one is about.
+  env.READINESS_POST_WHEN_HEALTHY = "";
 });
 
 afterEach(() => {
@@ -78,6 +83,26 @@ describe("failuresIn", () => {
     ];
 
     expect(failuresIn(groups)).toEqual([]);
+  });
+});
+
+describe("postsWhenHealthy", () => {
+  it.each([
+    ["true", true],
+    [" TRUE ", true],
+    ["", false],
+    [undefined, false],
+    ["false", false],
+    ["1", false],
+  ])("reads %j as %s", (value, expected) => {
+    // Only the one spelling turns it on, so a typo leaves the quiet default.
+    expect(postsWhenHealthy({ READINESS_POST_WHEN_HEALTHY: value })).toBe(expected);
+  });
+});
+
+describe("readinessAllClearText", () => {
+  it("still says where to look when no base URL is configured", () => {
+    expect(readinessAllClearText([], undefined)).toContain(" /admin/preflight");
   });
 });
 
@@ -132,7 +157,7 @@ describe("a scheduled run cannot tell which side of cutover it is on", () => {
 });
 
 describe("runReadinessCheck", () => {
-  it("says nothing at all when nothing has failed", async () => {
+  it("says nothing at all when nothing has failed, unless asked to", async () => {
     // Silence when healthy is the whole point: a job that posts "all clear"
     // weekly trains people to skim past it, and then reads identically to a
     // job that has quietly stopped noticing.
@@ -149,6 +174,37 @@ describe("runReadinessCheck", () => {
 
     expect(posted).toBe(0);
     expect(fetchSpy.mock.calls.filter(([i]) => String(i) === SLACK_WEBHOOK)).toHaveLength(0);
+  });
+
+  it("posts an all-clear when asked to, counting warnings and skips", async () => {
+    env.READINESS_POST_WHEN_HEALTHY = "true";
+    const fetchSpy = mockSlack();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const failed = await reportReadiness(env, [
+      group("Storage", [
+        { name: "R2", status: "ok", detail: "fine" },
+        { name: "D1", status: "warn", detail: "nearly full" },
+      ]),
+      group("Google Wallet", [{ name: "Class", status: "skip", detail: "no credentials" }]),
+    ]);
+
+    expect(failed).toBe(0);
+    const text = postedText(fetchSpy);
+    expect(text).toContain("[staging]");
+    expect(text).toContain("nothing failing (3 checks; 1 warnings, 1 skipped)");
+    expect(text).toContain("https://card.losverd.es/admin/preflight");
+  });
+
+  it("posts only the failures, not an all-clear as well, when something is wrong", async () => {
+    env.READINESS_POST_WHEN_HEALTHY = "true";
+    const fetchSpy = mockSlack();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await reportReadiness(env, [group("Apple", [{ name: "Certificate", status: "fail", detail: "expired" }])]);
+
+    expect(fetchSpy.mock.calls.filter(([i]) => String(i) === SLACK_WEBHOOK)).toHaveLength(1);
+    expect(postedText(fetchSpy)).toContain("found a problem");
   });
 
   it("posts once for several failures, not once each", async () => {
