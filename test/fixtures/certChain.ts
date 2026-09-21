@@ -1,4 +1,5 @@
 import forge from 'node-forge';
+import { inject } from 'vitest';
 
 /**
  * A throwaway certificate chain for tests.
@@ -11,9 +12,12 @@ import forge from 'node-forge';
  * what isn't tested here is that the chain is trusted by Apple, which only a
  * real device install can show.
  *
- * Generation is memoized, but only within a test file: each file runs in its
- * own isolated worker, so the cost is paid once per file. That is why
- * vitest.config.ts raises testTimeout above the 5000ms default.
+ * Generated once per test run, in `test/setup/global.ts`, and handed to every
+ * file through Vitest's `provide`/`inject`. Each file runs in its own isolated
+ * worker, so memoizing here alone meant every file that signed a pass built
+ * its own pair of 2048-bit RSA keys -- in pure JavaScript, eight times per
+ * run, and most of the time a short spec spent. A file run on its own, with
+ * no global setup, still builds a chain for itself.
  */
 export interface TestCertChain {
   rootCertPem: string;
@@ -41,7 +45,27 @@ export function getTestCertChain(): TestCertChain {
   if (cached) {
     return cached;
   }
+  // `inject` throws outside a Vitest worker, and returns undefined when the
+  // global setup provided nothing -- either way, build one here instead.
+  try {
+    const provided = inject('testCertChain');
+    if (provided) {
+      cached = provided;
+      return cached;
+    }
+  } catch {
+    // Not running under Vitest's global setup.
+  }
+  cached = buildTestCertChain();
+  return cached;
+}
 
+/**
+ * The chain itself: a self-signed root and a leaf it signed. Separate from
+ * `getTestCertChain` so the global setup can build it in Node, once, where
+ * there is nothing to inject from.
+ */
+export function buildTestCertChain(): TestCertChain {
   const rootKeys = forge.pki.rsa.generateKeyPair(2048);
   const rootCert = forge.pki.createCertificate();
   rootCert.publicKey = rootKeys.publicKey;
@@ -73,10 +97,9 @@ export function getTestCertChain(): TestCertChain {
   ]);
   leafCert.sign(rootKeys.privateKey, forge.md.sha256.create());
 
-  cached = {
+  return {
     rootCertPem: forge.pki.certificateToPem(rootCert),
     leafCertPem: forge.pki.certificateToPem(leafCert),
     leafPrivateKeyPem: forge.pki.privateKeyToPem(leafKeys.privateKey),
   };
-  return cached;
 }

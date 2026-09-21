@@ -36,17 +36,30 @@ const TEMPLATE_KEYS = [
  * A stand-in for an Apple-issued chain, built per case so a test can choose
  * the pass type in the subject's `uid` and the expiry date. `certChain.ts`
  * can't serve here: it memoizes one chain, and every interesting case in this
- * file is about a chain being subtly wrong. RSA key generation dominates the
- * runtime, so the keys are made once and only the certificates re-signed.
+ * file is about a chain being subtly wrong.
+ *
+ * All of it is RSA, which is slow in pure JavaScript, so the expensive parts
+ * are made once per file rather than once per test: the keys, the healthy
+ * chain every test starts from, and the Google Wallet key. Each is a fixed
+ * input no test changes, so building it again only ever produced the same
+ * bytes. Before this the healthy chain was re-signed and a fresh 2048-bit key
+ * generated for every one of this file's tests, which made it more than half
+ * the time the whole suite spends in tests. A test that needs a chain that is
+ * subtly wrong still builds one with `appleChain(options)`.
  */
 let issuerKeys: forge.pki.rsa.KeyPair;
 let leafKeys: forge.pki.rsa.KeyPair;
 let otherKeys: forge.pki.rsa.KeyPair;
+let healthyChain: ReturnType<typeof appleChain>;
+let googleWalletKeyPem: string;
 
-beforeAll(() => {
+beforeAll(async () => {
   issuerKeys = forge.pki.rsa.generateKeyPair(2048);
   leafKeys = forge.pki.rsa.generateKeyPair(2048);
   otherKeys = forge.pki.rsa.generateKeyPair(2048);
+  healthyChain = appleChain();
+  const { privateKey } = await generateKeyPair("RS256", { extractable: true });
+  googleWalletKeyPem = await exportPKCS8(privateKey);
 });
 
 const ISSUER_CN = "Apple Worldwide Developer Relations Certification Authority (test stand-in)";
@@ -140,7 +153,7 @@ function mockRemotes() {
 
 /** Every check green, so a test only has to break the one thing it's about. */
 async function configureHealthyEnvironment() {
-  Object.assign(env, appleChain());
+  Object.assign(env, healthyChain);
   env.PUBLIC_BASE_URL = "https://card.losverd.es";
   env.PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit";
   env.PASSKIT_PASS_TYPE_IDENTIFIER = PASS_TYPE;
@@ -148,8 +161,7 @@ async function configureHealthyEnvironment() {
   env.APNS_KEY_ID = "ABCDE12345";
   env.APNS_PRIVATE_KEY_PEM = "-----BEGIN PRIVATE KEY-----";
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
-  const { privateKey } = await generateKeyPair("RS256", { extractable: true });
-  env.GOOGLE_WALLET_PRIVATE_KEY_PEM = await exportPKCS8(privateKey);
+  env.GOOGLE_WALLET_PRIVATE_KEY_PEM = googleWalletKeyPem;
   // Stated rather than inherited from wrangler.toml, which production
   // deliberately leaves empty until cutover. A "fully configured"
   // environment is one that can email somebody.
@@ -378,6 +390,24 @@ describe("BigCommerce", () => {
     const result = find(await check(), "Access token");
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("Orders read scope");
+  });
+
+  it("still passes when fetching the store's name fails outright", async () => {
+    // The name is fetched separately and is a nicety: the verdict comes from
+    // the orders probe. A network failure on the way to it must leave the
+    // check passing, not turn a working token into a failure.
+    const spy = vi.mocked(globalThis.fetch);
+    const answering = spy.getMockImplementation()!;
+    spy.mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/v2/store")) throw new TypeError("network unreachable");
+      return answering(input, init);
+    });
+
+    const result = find(await check(), "Access token");
+
+    expect(result.status).toBe("ok");
+    expect(result.detail).not.toContain("Los Verdes");
   });
 
   it("fails on a rejected token", async () => {
