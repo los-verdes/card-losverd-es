@@ -8,12 +8,13 @@ someone counts as a current member today. When a member writes in to say their
 card is wrong, this is the document that says which of these rules produced
 what they are looking at.
 
-The Membership Committee is consulted on all of it. These rules describe how
-membership works, which is their remit whoever administers it day to day, and
-a change to any of them is worth their input. A smaller number of decisions
-are theirs outright -- anything that settles a person's standing in the group,
-such as whether a membership can be withdrawn before it expires. Those are
-marked where they appear.
+The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
+These rules describe how membership works, which is their remit whoever
+administers it day to day, and a change to any of them is worth their input. A
+smaller number of decisions are theirs outright -- anything that settles a
+person's standing in the group, such as whether a membership is withdrawn
+before it expires or somebody is barred. Those are marked where they appear,
+and that address is who to hand one to.
 
 This is a description of what the code does right now. It documents the
 current implementation explicitly, for reference, _and also_ to invite

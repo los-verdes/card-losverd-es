@@ -89,6 +89,11 @@ describe("barring somebody from the group", () => {
 
     expect(body).toContain("cannot sign in");
     expect(body).toContain("Membership Committee");
+    // The Committee's own address, not the Merch Team's: they are the people
+    // who made the decision and the only ones who can lift it. Published on
+    // the group's Code of Conduct page, so it is safe to show to somebody who
+    // is not signed in -- which is exactly who reads this.
+    expect(body).toContain("mc@losverdesatx.org");
     expect(body).not.toContain("Trying again often works");
   });
 

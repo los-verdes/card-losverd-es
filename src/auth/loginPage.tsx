@@ -18,7 +18,7 @@
 
 import type { FC } from "hono/jsx";
 import { MEMBERSHIP_STORE_URL } from "../member/portal";
-import { Page, SUPPORT_EMAIL } from "../member/layout";
+import { MEMBERSHIP_COMMITTEE_EMAIL, Page, SUPPORT_EMAIL } from "../member/layout";
 
 export interface LoginPageProps {
   /** Auth.js's provider picker, with the callback already set. */
@@ -51,9 +51,12 @@ export const LoginPage: FC<LoginPageProps> = ({
       // decision rather than a fault, and who to take it up with.
       <p style="color: var(--danger)">
         This account cannot sign in. That is a decision of the Los Verdes
-        Membership Committee rather than a problem with the site, and{" "}
-        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> can put you in
-        touch with them.
+        Membership Committee rather than a problem with the site, and they are
+        the people to take it up with:{" "}
+        <a href={`mailto:${MEMBERSHIP_COMMITTEE_EMAIL}`}>
+          {MEMBERSHIP_COMMITTEE_EMAIL}
+        </a>
+        .
       </p>
     ) : (
       failed && (
