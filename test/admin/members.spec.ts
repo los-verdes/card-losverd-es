@@ -250,7 +250,7 @@ describe("an admin setting the name on someone's card", () => {
 
   it("records which admin did it, not just that an admin did", async () => {
     // A note nobody can attribute answers half the question. Revocations and
-    // bans have said who since they were built; names had not (migration 0019).
+    // bans have said who since they were built; names had not.
     await post({ email: EMAIL, display_name: "Chuy" });
 
     expect((await getDisplayName(env, EMAIL))?.set_by_email).toBe("admin@example.com");

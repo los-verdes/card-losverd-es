@@ -71,7 +71,7 @@ if (!env || !job || !JOBS[job]) {
 }
 if (env === "production" && !confirmedProduction) {
   // Running a job early against production is legitimate -- it is how the
-  // first full resync happens at cutover -- but it touches real member data
+  // first full resync happened at cutover -- but it touches real member data
   // and should never be a typo away.
   fail("refusing to run against production without --yes-production");
 }

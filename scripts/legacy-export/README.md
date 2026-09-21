@@ -1,5 +1,11 @@
 # Legacy Postgres export
 
+**Done: the production import ran and verified on 2026-09-21** (all five
+counts matched the export). This is kept as the record of what was imported
+and how, and because the export file it names is the only copy of the
+Squarespace-era history once Postgres is decommissioned. Re-running any of it
+against production now would overwrite live data; see "Starting over" below.
+
 One-time copy of the legacy data that exists nowhere else (migration plan
 Phase 2.2, `docs/legacy-pass-compatibility.md`):
 
@@ -14,7 +20,7 @@ Phase 2.2, `docs/legacy-pass-compatibility.md`):
   Only the ones that differ from the name that member's latest order would
   produce; elsewhere the old system simply copied the billing name, and
   importing those would pin every member's name to whatever it was at
-  cutover instead of letting it keep following the store.
+  the time of the import instead of letting it keep following the store.
 * **`membership_orders`** (`first_seen_via = 'legacy_postgres'`): every
   membership order Postgres holds, Squarespace and BigCommerce alike. This
   is the order history behind admin reporting ("who was a member on a given
@@ -68,8 +74,8 @@ order id, date, or email) -- look at those by hand before Postgres goes away.
 
 ## 3. Rehearse locally, then load into D1
 
-Migration `0005_legacy_export.sql` must already be applied (the Deploy
-workflow does this on merge).
+The schema must already be applied (the Deploy workflow applies
+`src/db/migrations/` on merge, and `just db-rebuild <env>` rebuilds it).
 
 ```bash
 # local rehearsal
@@ -114,24 +120,22 @@ Overrides are keyed by email and applied when a pass is read, so members
 created by BigCommerce sync after the import still pick up their legacy
 date. Re-running the import never overwrites a `manual` override.
 
-**The real load is rehearsable too, and worth rehearsing.** Until cutover the
-production database serves nobody -- `card.losverd.es` still points at the
-legacy stack -- so the import can be run against it, checked, the database
-emptied, and the whole thing run again, as many times as it takes. The
-one-shot step is the *export*: Postgres is decommissioned afterwards (plan
-Phase 8.3) and the Squarespace-era history in it exists nowhere else. So take
-the export early and carefully, and treat loading it as something to practise
-rather than to get right first time.
+**Starting over.** Before the cutover the production database served nobody,
+so the load was rehearsed: run, checked, emptied and run again. That is no
+longer safe -- production serves members now, and the statement below
+deletes their imported order history, legacy cards and "member since"
+dates. It is kept for the record and for a disposable database only. The
+one-shot step was always the *export*: once Postgres is decommissioned, the
+Squarespace-era history exists only in the export file and in production.
 
-To start over, drop what the import wrote and re-run it:
+What the rehearsals used to drop what the import wrote:
 
 ```bash
 npx wrangler d1 execute card-losverd-es-db-production --remote --command   "DELETE FROM membership_orders WHERE first_seen_via = 'legacy_postgres'; DELETE FROM legacy_membership_cards; DELETE FROM member_since_overrides WHERE source = 'legacy_postgres'"
 ```
 
 That leaves anything the BigCommerce sync recorded, and any `manual`
-override, alone. Doing it after cutover would not be safe, which is the
-reason for doing the rehearsing before.
+override, alone.
 
 ## 4. Check it landed
 

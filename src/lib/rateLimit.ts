@@ -1,5 +1,5 @@
 /**
- * Fixed-window rate limiting backed by D1 (migration 0006). Cloudflare's
+ * Fixed-window rate limiting backed by D1. Cloudflare's
  * built-in Workers Rate Limiting binding only supports 10- or 60-second
  * windows, too short for limits like "3 emails per address per day".
  *

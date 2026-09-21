@@ -9,7 +9,7 @@
 // and BIGCOMMERCE_WEBHOOK_SIGNING_KEY; the store hash, client id, and default
 // origin come from wrangler.toml. Never prints the token or any secret.
 //
-//   node scripts/bigcommerce-webhook.mjs <env> [--dry-run] [--origin https://...] [--cutover]
+//   node scripts/bigcommerce-webhook.mjs <env> [--dry-run] [--origin https://...]
 //
 // The token is computed by the Worker's own src/bigcommerce/webhookToken.ts
 // (imported directly; Node strips its types), so it can't drift from what
@@ -22,10 +22,6 @@ import { opField, readOpItemFromStdin } from "./lib/opItem.ts";
 const ENVIRONMENTS = ["production", "staging"];
 const SCOPE = "store/order/*";
 const WEBHOOK_PATH = "/bigcommerce/order-webhook";
-// Production's public origin is also where the *legacy* app's webhook points
-// until DNS cutover: re-registering it earlier would swap the legacy app's
-// token for ours and break its order syncs.
-const LEGACY_SHARED_ORIGIN = "https://card.losverd.es";
 // Overridable only to test against a local stub.
 const API_BASE = process.env.BIGCOMMERCE_API_BASE ?? "https://api.bigcommerce.com";
 
@@ -37,10 +33,9 @@ function fail(message) {
 function parseArgs(argv) {
   const [env, ...rest] = argv;
   if (!ENVIRONMENTS.includes(env)) fail(`first argument must be one of: ${ENVIRONMENTS.join(", ")}`);
-  const options = { env, dryRun: false, cutover: false, origin: undefined };
+  const options = { env, dryRun: false, origin: undefined };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--dry-run") options.dryRun = true;
-    else if (rest[i] === "--cutover") options.cutover = true;
     else if (rest[i] === "--origin" && rest[i + 1]) options.origin = rest[++i];
     else fail(`unknown argument "${rest[i]}"`);
   }
@@ -83,12 +78,6 @@ if (!storeHash || !clientId || String(clientId).startsWith("REPLACE_WITH")) {
 }
 
 const origin = (options.origin ?? vars.PUBLIC_BASE_URL).replace(/\/$/, "");
-if (options.env === "production" && origin === LEGACY_SHARED_ORIGIN && !options.cutover) {
-  fail(
-    `${LEGACY_SHARED_ORIGIN} is still the legacy app's webhook destination; re-registering it swaps in this Worker's token. ` +
-      `Before cutover pass --origin https://card-losverd-es-production.los-verdes.workers.dev; at cutover pass --cutover.`,
-  );
-}
 const destination = `${origin}${WEBHOOK_PATH}`;
 
 const accessToken = fieldValue(item, "BIGCOMMERCE_ACCESS_TOKEN");

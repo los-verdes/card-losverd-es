@@ -171,7 +171,7 @@ describe("saving a correction", () => {
   it("records which admin moved the date, and shows it back", async () => {
     // Moving the date the group has been told somebody joined is a decision
     // somebody will be asked about. A note nobody can attribute answers half
-    // the question (migration 0019).
+    // the question.
     await insertMember("pat@example.com", "2023-04-01");
 
     await post({ email: "pat@example.com", member_since: "2016-03-01", note: "paper records" });

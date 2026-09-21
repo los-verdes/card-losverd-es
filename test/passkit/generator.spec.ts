@@ -93,7 +93,7 @@ describe("buildPassJson", () => {
   });
 
   it("has no auxiliary fields, the tier having been the only one", () => {
-    // Omitted rather than empty (migration 0018). Wallet lays the front of
+    // Omitted rather than empty, the tier having been dropped. Wallet lays the front of
     // the card out from the keys present, and an installed pass picks this up
     // the next time it is rebuilt.
     const pass = parse(makeMember({}));

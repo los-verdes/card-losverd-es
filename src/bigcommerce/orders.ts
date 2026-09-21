@@ -1,6 +1,6 @@
 /**
  * Writes BigCommerce membership orders into `membership_orders`, the
- * comprehensive order history behind admin reporting (migration 0008).
+ * comprehensive order history behind admin reporting.
  * `members` only holds each member's current state; this is the per-order
  * record, a port of the legacy app's `annual_membership` table.
  */

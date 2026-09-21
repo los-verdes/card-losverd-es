@@ -1,6 +1,5 @@
 /**
- * Withdrawing a membership before it expires, and lifting that again (#31,
- * migration 0016).
+ * Withdrawing a membership before it expires, and lifting that again (#31).
  *
  * The reading half of this costs almost nothing: `revoked` was already a
  * legal `members.status`, already excluded by the access checks, already

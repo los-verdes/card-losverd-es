@@ -698,7 +698,7 @@ async function bigCommerceChecks(
           hook = here;
           return warn(
             "Order webhook",
-            `${WEBHOOK_SCOPE} delivers to ${here.destination} rather than ${expected}. Expected before cutover, while the legacy app still serves that origin; re-point it with \`just bigcommerce-ensure-webhook <env> --cutover\` as part of the flip.`,
+            `${WEBHOOK_SCOPE} delivers to ${here.destination} rather than ${expected}. Expected before cutover, while the legacy app still serves that origin; re-point it with \`just bigcommerce-ensure-webhook <env>\`.`,
           );
         }
         return fail(
@@ -722,7 +722,7 @@ async function bigCommerceChecks(
       return live
         ? fail(
             "Webhook token",
-            "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env> --cutover`.",
+            "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env>`.",
           )
         : warn(
             "Webhook token",

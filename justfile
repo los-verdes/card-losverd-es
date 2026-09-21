@@ -299,8 +299,7 @@ google-wallet-ensure-class env *flags:
 # Uses the access token and webhook signing key from the environment's
 # 1Password item and the store/client ids from wrangler.toml; re-run it after
 # rotating BIGCOMMERCE_WEBHOOK_SIGNING_KEY. Flags: --dry-run; --origin URL
-# (default PUBLIC_BASE_URL); --cutover (production's card.losverd.es origin is
-# refused until then, since the legacy app's webhook lives there).
+# (default PUBLIC_BASE_URL).
 # Hooks outlive what they point at: after an account move, one registered
 # against the old workers.dev hostname keeps being delivered to -- into an old
 # deployment if it still runs, nowhere if not -- and nothing on the store's

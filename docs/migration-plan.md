@@ -6,9 +6,10 @@ an index. Dozens of comments cite a phase number, so the numbering is
 preserved and each entry says what that phase covered and where its detail
 lives now.
 
-The decisions that shaped the whole project are in
-[`architecture-decisions.md`](architecture-decisions.md). The one phase that
-is still ahead of us, Phase 8, is [`cutover.md`](cutover.md).
+The migration is complete: Phase 8, the cutover, happened on 2026-09-21
+([`cutover.md`](cutover.md)). This index is kept because the code's `Phase N`
+comments still cite it. The decisions that shaped the whole project are in
+[`architecture-decisions.md`](architecture-decisions.md).
 
 ## Phase 0 -- Repository archiving and state baseline
 
@@ -22,7 +23,7 @@ because the legacy app never sent pushes at all.
 
 **0.3** An inventory of every integration holding a URL or credential
 registered with a third party, rather than resolved through DNS. Those are
-the things a DNS cutover does *not* move, and they are now steps in
+the things a DNS cutover does *not* move, and they were steps in
 [`cutover.md`](cutover.md).
 
 ## Phase 1 -- Tooling and local development
@@ -126,4 +127,5 @@ needs to be ordered against a schema change.
 
 ## Phase 8 -- Cutover
 
-Still ahead. See [`cutover.md`](cutover.md).
+Done on 2026-09-21. See [`cutover.md`](cutover.md) for the record, and for
+decommissioning GCP, which is still ahead.

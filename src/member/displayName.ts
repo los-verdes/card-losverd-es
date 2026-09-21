@@ -1,6 +1,5 @@
 /**
- * Setting and clearing the name a member wants on their card (#189,
- * migration 0014).
+ * Setting and clearing the name a member wants on their card (#189).
  *
  * Kept out of `members.first_name`/`last_name` deliberately:
  * `deriveMembershipState()` recomputes those from the member's latest
@@ -24,7 +23,7 @@ export const MAX_DISPLAY_NAME_LENGTH = 64;
 
 /**
  * `legacy_postgres` is written only by the one-time import: the old site let
- * a member change their own name, and those choices have to survive cutover.
+ * a member change their own name, and those choices had to survive the cutover.
  */
 export type DisplayNameSource = "member" | "admin" | "legacy_postgres";
 

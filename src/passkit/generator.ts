@@ -58,7 +58,7 @@ interface PassJson {
     secondaryFields: PassField[];
     /**
      * Omitted entirely rather than sent empty: the only auxiliary field this
-     * pass ever had was the membership tier, dropped in migration 0018.
+     * pass ever had was the membership tier, since dropped from the schema.
      * Wallet lays the front of the card out from the keys that are present.
      */
     auxiliaryFields?: PassField[];

@@ -28,7 +28,7 @@ The minimum this token needs, derived from what Terraform and the Deploy workflo
 | Account > **Queues** > Edit | `cloudflare_queue`; `wrangler deploy` configuring queue consumers |
 | Account > **Workers Scripts** > Edit | `wrangler deploy` |
 
-Zone-level permissions are not needed until the Phase 8 DNS cutover.
+Plus zone-level access to `losverd.es` for Workers routes, which is what `wrangler deploy` uses to attach the `card.losverd.es` Custom Domain. The token has no DNS-records permission and needs none: Cloudflare creates the Custom Domain's record itself.
 
 `just cloudflare-token-check` checks a token against that list before it is swapped in. It is read-only -- it lists each resource type rather than creating anything -- so it is safe to run against a candidate token at any time, and it names the group to add for anything missing. It proves each group is *granted*; it cannot prove the group is scoped to Edit rather than Read, because only a write does that. Deploy to staging to prove the rest.
 
@@ -44,4 +44,4 @@ The endpoint URL in `_config.tf` contains the account id. Moving accounts means 
 
 ## DNS
 
-The `card.losverd.es` DNS record is intentionally **not** defined here yet -- that's the actual cutover step (see the migration plan's Phase 8) and shouldn't be something a routine `terraform apply` could trigger by accident.
+`card.losverd.es` is not defined here. It is a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`), and Cloudflare manages its DNS record and certificate as part of the Worker deploy.

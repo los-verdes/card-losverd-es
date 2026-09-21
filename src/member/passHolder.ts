@@ -50,7 +50,7 @@ export async function lookupPassHolder(
 
   const member = await env.DB.prepare(
     // Joined rather than selected from `members` alone: the verification page
-    // must show the same name as the card it is verifying (migration 0014),
+    // must show the same name as the card it is verifying,
     // and must not call a withdrawn membership merely expired (0016) -- which
     // a ban produces as surely as a withdrawn card does (0017).
     `SELECT m.first_name, m.last_name, m.status, m.expiration_date, d.display_name,

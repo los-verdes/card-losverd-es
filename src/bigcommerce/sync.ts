@@ -13,7 +13,7 @@ const BC_API_BASE = "https://api.bigcommerce.com/stores";
 // additional membership product is one line here. This is the same job the
 // previous site's `BIGCOMMERCE_MEMBERSHIP_SKUS` did; Los Verdes sells one
 // membership and draws no distinction between kinds of member, so there is
-// nothing for a SKU to map *to* (migration 0018).
+// nothing for a SKU to map *to*.
 export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set(["LOSV-MEM-0001"]);
 
 export interface BigCommerceAddress {

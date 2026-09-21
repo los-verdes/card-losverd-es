@@ -122,7 +122,7 @@ describe("buildGenericObject", () => {
   });
 
   it("carries no tier module, which said the same word to every member", () => {
-    // Guards migration 0018 from coming back by accident: a Wallet object is
+    // Guards the dropped membership tier from coming back by accident: a Wallet object is
     // rebuilt from this on renewal, so a field reintroduced here reappears on
     // passes people already hold.
     const object = buildGenericObject(makeMember({}), CONFIG);
