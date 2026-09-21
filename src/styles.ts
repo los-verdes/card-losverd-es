@@ -117,10 +117,17 @@ body {
 }
 
 /* The member's own pages: one narrow centred column, which is the shape that
-   works on a phone held at a gate. */
+   works on a phone held at a gate.
+   The measure is on the column rather than the body so that anything outside
+   it -- today only the admin nav, shown to admins on their own card -- can be
+   as wide as it needs without widening the card for everyone else. */
 body.member {
-  max-width: 28rem;
   text-align: center;
+}
+
+body.member main {
+  max-width: 28rem;
+  margin: 0 auto;
 }
 
 /* Admin pages are tables, and tables want room. */
@@ -195,13 +202,6 @@ button {
   border: 1px solid var(--rule);
   border-radius: 0.5rem;
   text-align: left;
-}
-
-/* The admins' way through to their own pages. Set apart from the member's
-   actions above it, and smaller, because it is an aside on someone's card. */
-.admin-link {
-  margin-top: 2rem;
-  font-size: 0.9rem;
 }
 
 .muted {
@@ -282,6 +282,21 @@ nav.admin-nav .nav-label {
 
 nav.admin-nav a {
   white-space: nowrap;
+}
+
+/* On a member page the nav is the one wide thing on a narrow page, and the
+   only left-aligned one. */
+body.member nav.admin-nav {
+  max-width: 72rem;
+  margin: 0 auto 1.25rem;
+  text-align: left;
+}
+
+/* The page you are already on: still in its place in the nav, so the shape
+   of the list doesn't change as you move around it, but not offering to take
+   you where you are. */
+nav.admin-nav .nav-here {
+  color: var(--muted);
 }
 `;
 
