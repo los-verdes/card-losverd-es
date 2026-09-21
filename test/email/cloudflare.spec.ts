@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBindingMessage, formatAddress } from "../../src/email/cloudflare";
+import { buildBindingMessage, toBindingAddress } from "../../src/email/cloudflare";
 import type { EmailMessage } from "../../src/email/send";
 
 const MESSAGE: EmailMessage = {
@@ -11,11 +11,29 @@ const MESSAGE: EmailMessage = {
 };
 
 describe("the message handed to the binding", () => {
-  it("folds a display name into the address, which the binding takes as one string", () => {
-    expect(formatAddress({ email: "a@example.test", name: "Los Verdes" })).toBe(
-      "Los Verdes <a@example.test>",
-    );
-    expect(formatAddress({ email: "a@example.test" })).toBe("a@example.test");
+  it("hands the binding an address in parts, never folded into one string", () => {
+    expect(toBindingAddress({ email: "a@example.test", name: "Los Verdes" })).toEqual({
+      email: "a@example.test",
+      name: "Los Verdes",
+    });
+    // No name is no `name` key, rather than an empty one to be rendered.
+    expect(toBindingAddress({ email: "a@example.test" })).toEqual({ email: "a@example.test" });
+  });
+
+  it("passes a name with parentheses through untouched", () => {
+    // Staging's sender name. Folded into `Name <address>` unquoted, the
+    // parentheses read as an address comment and the first real send failed
+    // with "Invalid email address: Invalid email user".
+    const built = buildBindingMessage({
+      ...MESSAGE,
+      from: { email: "verde-bot@example.test", name: "Los Verdes (verde-bot staging)" },
+    });
+
+    expect(built.from).toEqual({
+      email: "verde-bot@example.test",
+      name: "Los Verdes (verde-bot staging)",
+    });
+    expect(built.to).toEqual({ email: "member@example.com", name: "Jane Doe" });
   });
 
   it("base64-encodes attachments and marks them as attachments", () => {

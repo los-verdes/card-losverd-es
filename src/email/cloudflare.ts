@@ -14,10 +14,14 @@
  *    for that is defensible -- there is nothing to unsubscribe from -- but it
  *    is a decision rather than an oversight, and `List-Unsubscribe` would need
  *    somewhere to point before it could be added.
- * 2. **The display name is folded into the address.** The binding takes one
- *    string, so the name goes in as `Name <address>`. That is the RFC 5322
- *    form and should be read correctly, but it is the first thing to check on
- *    a real send.
+ * 2. **Addresses go in structured, never as `Name <address>`.** The binding
+ *    accepts `{ email, name }` for `from` and `to`, and that is what it gets.
+ *    Folding the name into one string was tried first and failed on the first
+ *    real send -- "Invalid email address: Invalid email user" -- because
+ *    staging's name, `Los Verdes (verde-bot staging)`, carries parentheses,
+ *    which are comment syntax in an address unless the name is quoted. Handing
+ *    the parts over separately leaves nothing to quote or parse.
+ *    https://developers.cloudflare.com/email-service/api/send-emails/workers-api/
  */
 
 import { bytesToBase64 } from "../lib/base64";
@@ -44,24 +48,30 @@ interface BindingAttachment {
   disposition: "attachment";
 }
 
+/** The binding's own address shape; a bare string is also accepted. */
+export interface BindingAddress {
+  email: string;
+  name?: string;
+}
+
 export interface BindingMessage {
-  from: string;
-  to: string;
+  from: BindingAddress;
+  to: BindingAddress;
   subject: string;
   text: string;
   html: string;
   attachments?: BindingAttachment[];
 }
 
-/** `Name <address>`, or the bare address when there is no name. */
-export function formatAddress(address: EmailAddress): string {
-  return address.name ? `${address.name} <${address.email}>` : address.email;
+/** The address as the binding takes it, with `name` left off when there is none. */
+export function toBindingAddress(address: EmailAddress): BindingAddress {
+  return address.name ? { email: address.email, name: address.name } : { email: address.email };
 }
 
 export function buildBindingMessage(message: EmailMessage): BindingMessage {
   return {
-    from: formatAddress(message.from),
-    to: formatAddress(message.to),
+    from: toBindingAddress(message.from),
+    to: toBindingAddress(message.to),
     subject: message.subject,
     text: message.text,
     html: message.html,
