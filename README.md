@@ -334,6 +334,13 @@ Two properties it keeps: it never reports a secret's value (presence, shape, exp
 
 The steps no code can take — installing a pass on a real iPhone, saving one on Android, comparing the admin reports against the legacy report — are listed on the same page, so there is one list to work down instead of a separate runbook to keep current.
 
+## What we record about visits
+
+Two things, neither of which identifies anybody:
+
+- **Cloudflare Web Analytics** on member-facing pages (not admin ones): page views by path, referrer, country, browser, OS and device, plus load times. It sets no cookie. The site token is the public `WEB_ANALYTICS_TOKEN` var per environment; empty turns the beacon off. Read it in the Cloudflare dashboard under Web Analytics.
+- **Outcome lines** in Workers Logs: one structured line wherever the Worker decides something about a visitor -- sign-in completed or refused (and through which provider), card shown or "no membership" (with or without orders, Apple relay address or not), pass downloaded, `/email-card` and claim results, and what a QR scan found (including whether the card was minted by the previous site). The names are a closed list in `src/lib/outcome.ts`. Categories only: no address, name, order number or serial, and the tests fail if an address appears in one. Query them in the dashboard's Workers Logs by the `outcome` field; they are kept for seven days.
+
 ## Status
 
 Feature-complete enough to exercise end to end on staging; **not yet cut over**. `digital-membership` on GCP is still production. What remains, in order, is [`docs/cutover.md`](docs/cutover.md); what is blocked and on what is the issue tracker, where every open issue carries one of five labels: [`ready`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3Aready) for work with nothing in its way, [`waiting: decision`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+decision%22), [`waiting: credential or console`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+credential+or+console%22), [`cutover step`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22cutover+step%22) for work the runbook schedules, or [`after cutover`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22after+cutover%22).

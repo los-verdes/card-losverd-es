@@ -36,6 +36,7 @@ import {
 } from "../lib/rateLimit";
 import { requireAuth } from "../middleware/auth";
 import { getMemberByEmail, isMembershipCurrent } from "./artifacts";
+import { recordOutcome } from "../lib/outcome";
 import { issueClaimToken, verifyClaimToken } from "./claimToken";
 import { isAppleRelayAddress } from "./portal";
 import { isWellFormedEmail } from "./email-card";
@@ -164,10 +165,12 @@ export async function sendClaimLink(
     );
     if (!limit.allowed) {
       console.warn("Claim membership: recipient rate limit reached; not sending");
+      recordOutcome("claim.requested", { result: "recipient_rate_limited" });
       return;
     }
     const member = await getMemberByEmail(env, email);
     if (!member || !isMembershipCurrent(member)) {
+      recordOutcome("claim.requested", { result: member ? "not_current" : "not_a_member" });
       return;
     }
     const token = await issueClaimToken(env.SESSION_SIGNING_KEY, {
@@ -178,8 +181,10 @@ export async function sendClaimLink(
     const url = `${base}${CLAIM_PATH}/confirm?token=${encodeURIComponent(token)}`;
     await sendClaimLinkEmail(env, member.email, url);
     console.log("Claim link sent", { memberId: member.member_id, userId });
+    recordOutcome("claim.requested", { result: "link_sent" });
   } catch (err) {
     console.error("Claim link delivery failed", { error: String(err) });
+    recordOutcome("claim.requested", { result: "failed" });
   }
 }
 
@@ -221,6 +226,7 @@ claim.get("/confirm", requireAuth, async (c) => {
   const token = c.req.query("token") ?? "";
   const claimed = await verifyClaimToken(c.env.SESSION_SIGNING_KEY, token);
   if (!claimed) {
+    recordOutcome("claim.confirmed", { result: "invalid_or_expired" });
     return c.html(
       <ClaimFailed reason="It may have expired, or been used in a different browser. Links last 30 minutes." />,
       400,
@@ -233,6 +239,7 @@ claim.get("/confirm", requireAuth, async (c) => {
       tokenUserId: claimed.userId,
       sessionUserId: c.get("session").userId,
     });
+    recordOutcome("claim.confirmed", { result: "wrong_account" });
     return c.html(
       <ClaimFailed reason="That link was meant for a different account. Sign in as the account you started from, then try again." />,
       403,
@@ -249,6 +256,7 @@ claim.get("/confirm", requireAuth, async (c) => {
     .bind(claimed.userId, claimed.memberId, claimed.userId)
     .run();
   if (!linked.meta.changes) {
+    recordOutcome("claim.confirmed", { result: "already_linked_elsewhere" });
     return c.html(
       <ClaimFailed reason="That membership is already linked to another account. Contact us and we'll sort it out." />,
       409,
@@ -259,6 +267,7 @@ claim.get("/confirm", requireAuth, async (c) => {
     memberId: claimed.memberId,
     userId: claimed.userId,
   });
+  recordOutcome("claim.confirmed", { result: "linked" });
   return c.redirect("/?claimed=1");
 });
 

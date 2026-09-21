@@ -5,7 +5,9 @@ import { csrf } from "hono/csrf";
 import type { Env } from "../index";
 import { BANNED_REASON, LOGIN_PATH } from "../middleware/auth";
 import { isUserBanned } from "../member/ban";
-import { LV_USER_ID_CLAIM, authConfig } from "./authjs";
+import { recordOutcome } from "../lib/outcome";
+import { isAppleRelayAddress } from "../member/portal";
+import { LV_PROVIDER_CLAIM, LV_USER_ID_CLAIM, authConfig } from "./authjs";
 import { configuredProviders, renderLoginPage } from "./loginPage";
 import {
   clearSessionCookie,
@@ -59,9 +61,9 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
   const userId = authUser?.token?.[LV_USER_ID_CLAIM];
   const user =
     typeof userId === "number"
-      ? await c.env.DB.prepare("SELECT id, is_admin FROM users WHERE id = ?")
+      ? await c.env.DB.prepare("SELECT id, email, is_admin FROM users WHERE id = ?")
           .bind(userId)
-          .first<{ id: number; is_admin: number }>()
+          .first<{ id: number; email: string; is_admin: number }>()
       : null;
   if (!user) {
     // Three different things end up here, and they used to be one silent
@@ -84,6 +86,7 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
         : // Linked to a user id that no longer exists.
           "linked-user-missing";
     console.warn("login bridge: not completing sign-in", { reason });
+    recordOutcome("signin.refused", { reason });
     return c.redirect(`${LOGIN_PATH}?error=${reason}`);
   }
 
@@ -92,6 +95,7 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
   // already issued.
   if (await isUserBanned(c.env, user.id)) {
     console.warn("login bridge: not completing sign-in", { reason: BANNED_REASON });
+    recordOutcome("signin.refused", { reason: BANNED_REASON });
     return c.redirect(`${LOGIN_PATH}?error=${BANNED_REASON}`);
   }
 
@@ -100,6 +104,11 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
     isAdmin: user.is_admin === 1,
   });
   setSessionCookie(c, token);
+  const provider = authUser?.token?.[LV_PROVIDER_CLAIM];
+  recordOutcome("signin.completed", {
+    provider: typeof provider === "string" ? provider : "unknown",
+    apple_relay: isAppleRelayAddress(user.email),
+  });
   for (const name of AUTHJS_SESSION_COOKIES) {
     deleteCookie(c, name, {
       path: "/",

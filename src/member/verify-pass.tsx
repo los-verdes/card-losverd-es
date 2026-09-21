@@ -11,6 +11,7 @@
 import { Hono } from "hono";
 import type { FC } from "hono/jsx";
 import { formatShortDate } from "../lib/dateFormat";
+import { recordOutcome } from "../lib/outcome";
 import {
   passSignatureKeys,
   verifyPassSerialSignature,
@@ -52,6 +53,10 @@ const verifyPass = new Hono<AuthEnv>();
 
 verifyPass.get("/:serial", requireAuth, async (c) => {
   const serial = c.req.param("serial");
+  // Whether the scanned card was minted by the previous site, which matters
+  // most in the weeks after cutover: those QR codes are the oldest thing
+  // still in circulation. New serials are `LV-` plus a UUID.
+  const card = serial.startsWith("LV-") ? "current" : "legacy";
   const keyUsed = await verifyPassSerialSignature(
     passSignatureKeys(c.env),
     serial,
@@ -67,6 +72,7 @@ verifyPass.get("/:serial", requireAuth, async (c) => {
     );
   }
   if (!keyUsed) {
+    recordOutcome("pass.verified", { result: "bad_signature", card });
     return c.html(
       <Page title="Card Verification">
         <h1>Unable to verify signature!</h1>
@@ -78,6 +84,7 @@ verifyPass.get("/:serial", requireAuth, async (c) => {
   const today = new Date().toISOString().slice(0, 10);
   const holder = await lookupPassHolder(c.env, serial, today);
   if (!holder) {
+    recordOutcome("pass.verified", { result: "not_found", card, key: keyUsed });
     return c.html(
       <Page title="Card Verification">
         <h1>Card not found</h1>
@@ -85,6 +92,11 @@ verifyPass.get("/:serial", requireAuth, async (c) => {
       404,
     );
   }
+  recordOutcome("pass.verified", {
+    result: holder.revoked ? "revoked" : holder.active ? "active" : "expired",
+    card,
+    key: keyUsed,
+  });
   return c.html(<VerificationResult holder={holder} />);
 });
 
