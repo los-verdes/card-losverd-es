@@ -5,24 +5,11 @@ account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
 default:
     @just --list
 
-# A parameter is positional unless it is declared an option with
-# `[arg(..., long)]` (just 1.46+), so a bare `name=value` after a recipe name
-# is only ever a value. `just deploy env=staging` deploys an environment
-# literally called "env=staging", and `just apple-pass-cert-csr
-# dir=".apple-pass-cert"` is how a directory of that name comes to exist in
-# the repository root. `just --list` printing a defaulted parameter as
-# `dir=".apple-pass-cert"` is what makes the mistake easy: it reads exactly
-# like the syntax for setting it.
-#
-# The two path parameters below are declared as options, so `--dir` and
-# `--out` work and just rejects the `name=value` form itself. The rest stay
-# positional, because `just deploy staging` is the interface the docs and CI
-# already use, and they check their value through here instead. `*flags`
-# parameters are not checked: a flag may legitimately contain `=`.
-[private]
-check-arg name value:
-    @case "{{ value }}" in *=*)         echo "just: '{{ value }}' was read as the value of {{ name }}, not as a named argument." >&2;         echo "      This parameter is positional -- drop the '{{ name }}=' and pass the value on its own." >&2;         exit 1 ;;       esac
-
+# `--dir` and `--out` below are real options (`[arg(..., long)]`, just 1.46+).
+# Every other parameter is positional, which is what `just --list` shows but
+# not what its `dir=".apple-pass-cert"` rendering looks like: written that way
+# on the command line it is a value, not an assignment, and a directory of
+# that name appears in the repository root.
 
 # Install dependencies
 install:
@@ -59,7 +46,7 @@ db-migrate-local:
 
 # Apply D1 migrations to an environment's remote database (production or
 # staging); CI runs this on deploy.
-db-migrate-remote env="production": (check-arg "env" env)
+db-migrate-remote env="production":
     npx wrangler d1 migrations apply DB --remote {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
 
 # Create R2 bucket locally for testing
@@ -71,14 +58,14 @@ r2-init-local:
 # (templates/**): the Apple pass icons/logos pass generation reads, and the
 # card image crest. Idempotent -- the Deploy workflow runs it on every deploy.
 # Pass `--local` as the target for local dev R2.
-r2-upload-templates env="production" target="--remote": (check-arg "env" env) (check-arg "target" target)
+r2-upload-templates env="production" target="--remote":
     cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets-{{ env }}/$key" --file "$key" --content-type image/png {{target}}; done
 
 # Deploy to Cloudflare Workers: `just deploy` (production) or `just deploy
 # staging`. CI normally does this (see .github/workflows/deploy.yml). The
 # explicit `--env=""` targets the top-level (production) config and avoids
 # Wrangler's "multiple environments defined, no target specified" warning.
-deploy env="production": (check-arg "env" env)
+deploy env="production":
     npx wrangler deploy {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
 
 # Fail if an environment's var/binding names drift from production's, or if it
@@ -145,7 +132,7 @@ etl-run env job *flags:
 # Defaults to staging; production needs --yes-production.
 #
 # Prove the dead-letter alert actually reaches Slack, in a real environment
-queue-dlq-drill env="staging" *flags: (check-arg "env" env)
+queue-dlq-drill env="staging" *flags:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/queue-dlq-drill.mjs {{ env }} {{ flags }}
 
 # The two environments should share no secret values, so that a staging leak
@@ -180,7 +167,7 @@ apple-pass-cert-csr dir=".apple-pass-cert":
 
 # Install the .cer Apple returned: verify it, store it, push it
 [arg("dir", long)]
-apple-pass-cert-install env cer dir=".apple-pass-cert": (check-arg "env" env) (check-arg "cer" cer)
+apple-pass-cert-install env cer dir=".apple-pass-cert":
     node scripts/apple-pass-cert.mjs install {{ cer }} --dir {{ dir }} --env {{ env }}
     op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APPLE_PASS_CERT_PEM[password]=$(cat {{ dir }}/pass-cert.pem)" "APPLE_PASS_KEY_PEM[password]=$(cat {{ dir }}/pass-key.pem)" "APPLE_WWDR_CERT_PEM[password]=$(cat {{ dir }}/wwdr.pem)" > /dev/null
     just apple-pass-cert-check {{ env }}
