@@ -16,6 +16,15 @@
 export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
+/**
+ * The crest's rendered size, in px. It was 120, which left it small against a
+ * mostly empty top-left of the card; 240 fills that space, still clears the
+ * QR code, and stays just under the crest image's own 256x256
+ * (`templates/card/crest.png`) -- larger than that and it would be scaled up
+ * past its pixels and blur.
+ */
+export const CREST_SIZE = 240;
+
 const BRIGHT_VERDE = '#00b140';
 const BORDER_VERDE = '#046a29';
 const WHITE = '#ffffff';
@@ -80,8 +89,8 @@ export function buildCardTree(
     type: 'img',
     props: {
       src: images.logoDataUrl,
-      width: 120,
-      height: 120,
+      width: CREST_SIZE,
+      height: CREST_SIZE,
       style: { borderRadius: 999 },
     },
   };
