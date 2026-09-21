@@ -270,6 +270,22 @@ just bigcommerce-ensure-webhook staging
 
 It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es-production.los-verdes.workers.dev`.
 
+### Finding webhooks that no longer belong
+
+Hooks outlive what they point at. After the move to the Los Verdes Cloudflare account, one registered against the old `workers.dev` hostname keeps being delivered to -- into the old deployment's database if it still runs, nowhere if it does not -- and nothing on the store's side looks wrong.
+
+```bash
+just bigcommerce-webhooks production
+```
+
+lists every hook on the store with a verdict: **current** (delivers here), **stale** (a `workers.dev` deployment that is not this environment's), **not-ours** (on the public hostname but another path -- before cutover, the previous site's), or **other**. For anything not current it also says whether the destination still answers, since a stale hook that answers is putting orders somewhere other than this environment's database. It prints the command to remove each stale one:
+
+```bash
+just bigcommerce-webhooks production --delete <id>
+```
+
+Deletion takes one id, chosen by a person, and refuses the hook that delivers to the environment itself. There is deliberately no sweep: before cutover a hook on `card.losverd.es` belongs to the previous site, which is still serving members.
+
 ## Making someone an admin
 
 Admin is a flag in D1, checked on every admin request. The person signs in once so their `users` row exists, then:
