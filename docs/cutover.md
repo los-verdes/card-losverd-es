@@ -185,6 +185,16 @@ that was abandoned midway. The issue separates what to sweep from the
 references to the old system that stay correct indefinitely, which are not
 the same thing and are easy to confuse.
 
+Sweeping Squarespace out of the code
+([#215](https://github.com/los-verdes/card-losverd-es/issues/215)) belongs to
+the same pass, with one ordering rule: **freeze each imported order's verdict
+first**. The freeze runs the current counting rule, era branch included, over
+the imported rows once and records the result in a column the reports read
+for closed years. Delete the era branch before that and there is nothing
+left to freeze -- the BigCommerce rule would rescore almost every Squarespace
+order, and the 2019--2022 figures would change without anyone deciding they
+should.
+
 ## 5. Decommission GCP
 
 Through the legacy repository's own `terraform/` configuration -- `terraform
