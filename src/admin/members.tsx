@@ -270,29 +270,115 @@ const Summary: FC<{
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
     ) : (
-      <table style="border-collapse: collapse; font-size: 0.9rem">
-        <thead>
-          <tr>
-            {["Order", "Product", "Status", "Placed", "Counts"].map((h) => (
-              <th style={cellStyle}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr>
-              <td style={cellStyle}>
-                <a href={orderPath(order.order_id)}>{order.order_id}</a>
-              </td>
-              <td style={cellStyle}>{order.product_name ?? ""}</td>
-              <td style={cellStyle}>{order.status ?? ""}</td>
-              <td style={cellStyle}>{order.created_on.slice(0, 10)}</td>
-              <td style={cellStyle}>{order.counts ? "yes" : "no"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <OrdersTable orders={orders} />
     )}
+  </>
+);
+
+const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
+  <table style="border-collapse: collapse; font-size: 0.9rem">
+    <thead>
+      <tr>
+        {["Order", "Product", "Status", "Placed", "Counts"].map((h) => (
+          <th style={cellStyle}>{h}</th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {orders.map((order) => (
+        <tr>
+          <td style={cellStyle}>
+            <a href={orderPath(order.order_id)}>{order.order_id}</a>
+          </td>
+          <td style={cellStyle}>{order.product_name ?? ""}</td>
+          <td style={cellStyle}>{order.status ?? ""}</td>
+          <td style={cellStyle}>{order.created_on.slice(0, 10)}</td>
+          <td style={cellStyle}>{order.counts ? "yes" : "no"}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
+/** An order placed with an address and since pointed at somebody else. */
+interface MovedOrder {
+  order_id: string;
+  member_email: string;
+}
+
+async function ordersMovedAway(db: D1Database, email: string): Promise<MovedOrder[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT order_id, member_email FROM membership_orders
+       WHERE order_email = ?1 AND member_email != ?1
+       ORDER BY created_on DESC, order_id DESC`,
+    )
+    .bind(email)
+    .all<MovedOrder>();
+  return results;
+}
+
+/**
+ * An address that holds orders and no membership
+ * (los-verdes/card-losverd-es#241). "No membership is held under that
+ * address" is true of it and tells whoever is answering the member nothing
+ * they can act on, and it is exactly the state somebody writes in about:
+ * every order refunded, an order pointed at somebody else, or -- before an
+ * environment's first full resync -- orders that count whose membership has
+ * simply not been built yet.
+ */
+const OrdersWithoutMember: FC<{
+  email: string;
+  footprint: EmailFootprint;
+  orders: MemberOrder[];
+  moved: MovedOrder[];
+}> = ({ email, footprint, orders, moved }) => (
+  <>
+    <h2>{email}</h2>
+    <p>
+      <strong>No membership is held under this address</strong>, but it is not unknown.
+      Orders attributed to it: {footprint.memberOrders.total}. Counting towards a
+      membership: {footprint.memberOrders.counted}.
+    </p>
+    {footprint.memberOrders.counted > 0 ? (
+      <p>
+        An order that counts and no membership means the membership has not been built
+        yet. That happens for orders loaded by the one-time import until the order sync
+        next reads this person's orders, and it puts itself right when it does.
+      </p>
+    ) : (
+      footprint.memberOrders.total > 0 && (
+        <p>
+          None of them counts, which is why there is no card. The status beside each says
+          why: only a paid order confers a membership, and a refunded or cancelled one
+          stops conferring it.
+        </p>
+      )
+    )}
+    {orders.length > 0 && <OrdersTable orders={orders} />}
+    {moved.length > 0 && (
+      <>
+        <h3>Placed with this address, and since pointed at somebody else</h3>
+        <p>
+          These feed another person's card now -- a gift, or an address they no longer
+          use. The order page says who moved it and when.
+        </p>
+        <ul>
+          {moved.map((order) => (
+            <li>
+              <a href={orderPath(order.order_id)}>{order.order_id}</a>, now attributed to{" "}
+              <a href={`${MEMBERS_PATH}?q=${encodeURIComponent(order.member_email)}`}>
+                {order.member_email}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+    <p class="muted">
+      Signed in before: {footprint.login ? "yes" : "no"}. Slack:{" "}
+      {footprint.slack ? (footprint.slack.deleted ? "account deactivated" : "yes") : "no match"}.
+    </p>
   </>
 );
 
@@ -311,7 +397,6 @@ members.get("/", async (c) => {
     member = isWellFormedEmail(lookup.value)
       ? await getMemberByEmail(c.env, lookup.value)
       : null;
-    if (!member) notFound = "No membership is held under that address.";
   } else if (lookup.kind === "card") {
     member = await getMemberById(c.env, lookup.value);
     if (!member) notFound = "No membership carries that card number.";
@@ -325,6 +410,24 @@ members.get("/", async (c) => {
         isBanned(c.env, member.email),
       ])
     : [null, [], null, false];
+
+  // An address can hold orders and no membership, and that is a real answer
+  // rather than a dead end (#241). Only when there is nothing at all does the
+  // page fall back to saying so.
+  let orphan: { email: string; footprint: EmailFootprint; orders: MemberOrder[]; moved: MovedOrder[] } | null = null;
+  if (lookup.kind === "email" && !member) {
+    if (isWellFormedEmail(lookup.value)) {
+      const [orphanFootprint, orphanOrders, moved] = await Promise.all([
+        emailFootprint(c.env.DB, lookup.value),
+        getMemberOrderHistory(c.env, lookup.value),
+        ordersMovedAway(c.env.DB, lookup.value),
+      ]);
+      if (orphanOrders.length > 0 || moved.length > 0) {
+        orphan = { email: lookup.value, footprint: orphanFootprint, orders: orphanOrders, moved };
+      }
+    }
+    if (!orphan) notFound = "No membership is held under that address, and no orders either.";
+  }
 
   return c.html(
     <AdminPage title="Find a member">
@@ -364,6 +467,7 @@ members.get("/", async (c) => {
       )}
       {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
       {notFound && <p style="color: var(--danger)">{notFound}</p>}
+      {orphan && <OrdersWithoutMember {...orphan} />}
       {member && footprint && (
         <Summary
           member={member}

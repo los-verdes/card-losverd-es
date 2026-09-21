@@ -73,7 +73,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
-| `/admin/members` | Find a member by the card number on their pass, their email, or an order number; set the name their card shows (`src/admin/members.tsx`) | Admin |
+| `/admin/members` | Find a member by the card number on their pass, their email, or an order number; set the name their card shows. An address with orders and no membership shows those orders and why none makes one (`src/admin/members.tsx`) | Admin |
 | `/admin/revocations` | Memberships revoked before they expired, and people expelled from the group; lifting either (`src/admin/revocations.tsx`) | Admin |
 | `/admin/audit` | What has been done to memberships and by whom -- including decisions since undone, which no other page shows (`src/admin/audit.tsx`) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |

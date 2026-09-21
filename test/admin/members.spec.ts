@@ -141,7 +141,13 @@ describe("finding a member", () => {
   it("says so plainly when an address matches nothing", async () => {
     const body = await (await get("/admin/members?q=nobody@example.com")).text();
 
-    expect(body).toContain("No membership is held under that address");
+    expect(body).toContain("No membership is held under that address, and no orders either");
+  });
+
+  it("says so for something that is not an address at all, without looking anything up", async () => {
+    const body = await (await get("/admin/members?q=not%20an%40address")).text();
+
+    expect(body).toContain("No membership is held under that address, and no orders either");
   });
 
   it("shows just the search box with nothing typed", async () => {
@@ -167,6 +173,67 @@ describe("finding a member", () => {
     const res = await get(`/admin/members?q=${encodeURIComponent(CARD)}`);
 
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+describe("an address with orders and no membership", () => {
+  // The state #241 is about. Real after a refund or a re-attribution, and the
+  // state of almost every address between the one-time import and the first
+  // full resync.
+  async function insertOrder(
+    orderId: string,
+    orderEmail: string,
+    memberEmail: string,
+    status: string,
+  ) {
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, status,
+         product_name, created_on, expires_on, first_seen_via)
+       VALUES (?, 'bigcommerce', ?, ?, ?, 'Annual Membership', '2026-03-01T10:00:00Z',
+         '2027-03-01T10:00:00Z', 'legacy_postgres')`,
+    )
+      .bind(orderId, orderEmail, memberEmail, status)
+      .run();
+  }
+
+  it("shows the orders and why none of them makes a membership", async () => {
+    await insertOrder("1001", "sam.rivera@example.com", "sam.rivera@example.com", "Refunded");
+
+    const body = await (await get("/admin/members?q=sam.rivera@example.com")).text();
+
+    expect(body).toContain("No membership is held under this address");
+    expect(body).toContain("Orders attributed to it: 1");
+    expect(body).toContain("membership: 0");
+    expect(body).toContain("None of them counts");
+    expect(body).toContain('href="/admin/orders/1001"');
+    expect(body).toContain("Refunded");
+    // Not the dead-end message, and none of the actions that need a member.
+    expect(body).not.toContain("no orders either");
+    expect(body).not.toContain("Revoke this membership");
+  });
+
+  it("says the membership has not been built yet when an order does count", async () => {
+    await insertOrder("1002", "sam.rivera@example.com", "sam.rivera@example.com", "Shipped");
+
+    const body = await (await get("/admin/members?q=Sam.Rivera@example.com")).text();
+
+    expect(body).toContain("membership: 1");
+    expect(body).toContain("has not been built");
+    expect(body).not.toContain("None of them counts");
+  });
+
+  it("shows an order placed with the address and since pointed at somebody else", async () => {
+    await insertOrder("1003", "sam.rivera@example.com", "alex.chen@example.com", "Shipped");
+
+    const body = await (await get("/admin/members?q=sam.rivera@example.com")).text();
+
+    expect(body).toContain("since pointed at somebody else");
+    expect(body).toContain('href="/admin/orders/1003"');
+    expect(body).toContain("/admin/members?q=alex.chen%40example.com");
+    // Nothing is attributed here any more, so neither explanation applies.
+    expect(body).toContain("Orders attributed to it: 0");
+    expect(body).not.toContain("None of them counts");
+    expect(body).not.toContain("has not been built");
   });
 });
 
