@@ -12,12 +12,11 @@
 // Reads the environment's 1Password Worker secrets item as JSON on stdin, for
 // BIGCOMMERCE_ACCESS_TOKEN; the store hash and PUBLIC_BASE_URL come from
 // wrangler.toml. `--origin` names another origin that is current for this
-// environment -- the recipe passes its workers.dev one.
+// environment, for the rare case one Worker answers on two.
 //
 // Deletion takes one id, chosen by a person. There is deliberately no "delete
-// everything stale": before cutover a hook on `card.losverd.es` belongs to the
-// previous site, which is still serving members, and a rule that swept it
-// would break their order syncs.
+// everything stale": the store can hold hooks for things other than this
+// project, and a rule that swept them would break whatever relied on them.
 //
 // Never prints a hook's headers: they carry the token the Worker verifies.
 
@@ -75,10 +74,6 @@ async function probe(destination) {
   }
 }
 
-function onWorkersDev(origin) {
-  return new URL(origin).hostname.endsWith(".workers.dev");
-}
-
 /** One of `current`, `not-ours`, `stale`, or `other`, with a sentence. */
 function verdictFor(hook, currentOrigins, publicOrigin) {
   let url;
@@ -88,30 +83,15 @@ function verdictFor(hook, currentOrigins, publicOrigin) {
     return { kind: "other", why: "the destination is not a URL" };
   }
   if (currentOrigins.includes(url.origin) && url.pathname === WEBHOOK_PATH) {
-    // On the public hostname this cannot be told apart from the previous
-    // site's own hook, which uses the same path: before cutover that hostname
-    // is still the previous site. Treated as current either way, which is the
-    // safe reading -- it can never be deleted from here.
-    // Only a hostname of the group's own can belong to the previous site. An
-    // environment whose public hostname is its workers.dev one (staging) has
-    // never been anything but this Worker.
-    const where =
-      url.origin === publicOrigin && !onWorkersDev(publicOrigin)
-        ? `delivers to ${publicOrigin}, this environment's public hostname -- which before cutover is still the previous site`
-        : "delivers to this environment";
+    const where = `delivers to this environment (${url.origin})`;
     return hook.is_active
       ? { kind: "current", why: where }
       : { kind: "current", why: `${where}, but BigCommerce has switched it off -- usually after repeated delivery failures` };
   }
   if (url.origin === publicOrigin) {
-    // Before cutover the public origin is the previous site's, and so is any
-    // hook on it that is not ours. Leave it alone.
-    return {
-      kind: "not-ours",
-      why: onWorkersDev(publicOrigin)
-        ? "on this environment's hostname but not this Worker's path"
-        : "on this environment's public hostname but not this Worker's path -- the previous site's, until cutover",
-    };
+    // Same hostname, different path: nothing in this Worker answers it, but
+    // it is not ours to judge either -- left for a person to look at.
+    return { kind: "not-ours", why: "on this environment's hostname but not this Worker's path" };
   }
   if (url.hostname.endsWith(".workers.dev")) {
     return { kind: "stale", why: "a workers.dev deployment that is not this environment's -- left over from an old account or an old name" };

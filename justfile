@@ -3,7 +3,6 @@ account_id := "42988f13a6daf00814bced22aff46f4e"
 # The account's workers.dev subdomain. Per account, like the id above, so the
 # two change together: each environment's Worker is reachable at
 # `card-losverd-es-<env>.<this>.workers.dev`.
-workers_subdomain := "los-verdes"
 
 # Default task: list available commands
 default:
@@ -307,12 +306,14 @@ google-wallet-ensure-class env *flags:
 # deployment if it still runs, nowhere if not -- and nothing on the store's
 # side looks wrong. This lists every hook with a verdict and, for anything not
 # current, whether its destination still answers. `--delete <id>` removes one,
-# chosen by a person; there is no sweep, because before cutover a hook on
-# card.losverd.es belongs to the previous site, which is still serving members.
+# chosen by a person; there is no sweep, because the store can hold hooks for
+# things other than this project. The environment's own hostname comes from
+# PUBLIC_BASE_URL; a hook on any other workers.dev host -- production's own
+# included, since the flip -- is flagged stale.
 #
 # List the store's webhooks and flag any that no longer belong
 bigcommerce-webhooks env *flags:
-    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/bigcommerce-webhooks.mjs {{ env }} --origin https://card-losverd-es-{{ env }}.{{ workers_subdomain }}.workers.dev {{ flags }}
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/bigcommerce-webhooks.mjs {{ env }} {{ flags }}
 
 # Create or update the store's order webhook, with the header the Worker checks
 bigcommerce-ensure-webhook env *flags:
