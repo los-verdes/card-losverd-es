@@ -1,5 +1,9 @@
 set shell := ["bash", "-c"]
 account_id := "42988f13a6daf00814bced22aff46f4e"
+# The account's workers.dev subdomain. Per account, like the id above, so the
+# two change together: each environment's Worker is reachable at
+# `card-losverd-es-<env>.<this>.workers.dev`.
+workers_subdomain := "los-verdes"
 
 # Default task: list available commands
 default:
@@ -102,6 +106,27 @@ check-wrangler-envs:
 # Check the Cloudflare API token has every permission Terraform and Deploy need
 cloudflare-token-check:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
+
+# Admin is a flag on the person's `users` row, checked on every admin request,
+# so a grant or a revocation takes effect on their next page load. They have to
+# have signed in once first, or there is no row to change -- which is refused
+# with that reason rather than quietly matching nothing. Each grant and
+# revocation is recorded in the audit log (/admin/audit).
+#
+# The account id is pinned so these never depend on which account wrangler
+# happens to be logged into.
+#
+# List who has admin access in an environment
+admin-list env:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} list
+
+# Give someone admin access (they must have signed in once)
+admin-grant env email:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} grant {{ email }}
+
+# Take someone's admin access away
+admin-revoke env email:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} revoke {{ email }}
 
 # Worker secrets: 1Password is the source of truth, since Cloudflare never
 # returns a secret's value. One item per environment in the "Los Verdes" vault,
@@ -233,6 +258,18 @@ google-wallet-ensure-class env *flags:
 # rotating BIGCOMMERCE_WEBHOOK_SIGNING_KEY. Flags: --dry-run; --origin URL
 # (default PUBLIC_BASE_URL); --cutover (production's card.losverd.es origin is
 # refused until then, since the legacy app's webhook lives there).
+# Hooks outlive what they point at: after an account move, one registered
+# against the old workers.dev hostname keeps being delivered to -- into an old
+# deployment if it still runs, nowhere if not -- and nothing on the store's
+# side looks wrong. This lists every hook with a verdict and, for anything not
+# current, whether its destination still answers. `--delete <id>` removes one,
+# chosen by a person; there is no sweep, because before cutover a hook on
+# card.losverd.es belongs to the previous site, which is still serving members.
+#
+# List the store's webhooks and flag any that no longer belong
+bigcommerce-webhooks env *flags:
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/bigcommerce-webhooks.mjs {{ env }} --origin https://card-losverd-es-{{ env }}.{{ workers_subdomain }}.workers.dev {{ flags }}
+
 # Create or update the store's order webhook, with the header the Worker checks
 bigcommerce-ensure-webhook env *flags:
     op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/bigcommerce-webhook.mjs {{ env }} {{ flags }}

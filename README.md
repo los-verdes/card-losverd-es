@@ -74,7 +74,8 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/members` | Find a member by the card number on their pass, their email, or an order number; set the name their card shows (`src/admin/members.tsx`) | Admin |
-| `/admin/revocations` | Memberships withdrawn before they expired, and people barred from the group; lifting either (`src/admin/revocations.tsx`) | Admin |
+| `/admin/revocations` | Memberships revoked before they expired, and people expelled from the group; lifting either (`src/admin/revocations.tsx`) | Admin |
+| `/admin/audit` | What has been done to memberships and by whom -- including decisions since undone, which no other page shows (`src/admin/audit.tsx`) | Admin |
 | `/admin/orders/:id` | One membership order; attribute it to someone other than its purchaser, with an audit trail (`src/admin/orders.tsx`) | Admin |
 | `/admin/member-since` | Correct a member's "member since" date when their orders don't show when they really joined (`src/admin/memberSince.tsx`) | Admin |
 | `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |
@@ -270,16 +271,33 @@ just bigcommerce-ensure-webhook staging
 
 It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es-production.los-verdes.workers.dev`.
 
-## Making someone an admin
+### Finding webhooks that no longer belong
 
-Admin is a flag in D1, checked on every admin request. The person logs in once so their `users` row exists, then:
+Hooks outlive what they point at. After the move to the Los Verdes Cloudflare account, one registered against the old `workers.dev` hostname keeps being delivered to -- into the old deployment's database if it still runs, nowhere if it does not -- and nothing on the store's side looks wrong.
 
 ```bash
-npx wrangler d1 execute DB --remote --env="" --command \
-  "UPDATE users SET is_admin = 1 WHERE email = 'someone@example.com'"
+just bigcommerce-webhooks production
 ```
 
-`--env=""` is production; use `--env staging` for staging. Set it back to `0` to revoke; it takes effect immediately.
+lists every hook on the store with a verdict: **current** (delivers here), **stale** (a `workers.dev` deployment that is not this environment's), **not-ours** (on the public hostname but another path -- before cutover, the previous site's), or **other**. For anything not current it also says whether the destination still answers, since a stale hook that answers is putting orders somewhere other than this environment's database. It prints the command to remove each stale one:
+
+```bash
+just bigcommerce-webhooks production --delete <id>
+```
+
+Deletion takes one id, chosen by a person, and refuses the hook that delivers to the environment itself. There is deliberately no sweep: before cutover a hook on `card.losverd.es` belongs to the previous site, which is still serving members.
+
+## Making someone an admin
+
+Admin is a flag in D1, checked on every admin request. The person signs in once so their `users` row exists, then:
+
+```bash
+just admin-grant production someone@example.com
+just admin-revoke production someone@example.com
+just admin-list production
+```
+
+Either takes effect on their next request. The hand-written `UPDATE` this replaces failed silently in two ways, both handled now: an address typed with a capital letter never matched, because addresses are stored lower-cased, and is now lower-cased first; and someone who has never signed in has no row to change, which is now refused with that reason instead of appearing to succeed. Grants and revocations are recorded in the audit log.
 
 Worth doing early on a new environment rather than last: the readiness page below is admin-gated, and it is most useful while an environment is still being set up.
 
