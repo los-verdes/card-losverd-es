@@ -94,6 +94,11 @@ populated before anyone is pointed at it.
    describe anything current. If members write in afterwards, that is the
    moment to work out what produces the status -- not before, on nine rows.
 
+   Check the load with `just legacy-import-verify production <export.json>`
+   before going on. It compares D1's counts against the export they came from
+   and exits non-zero if they disagree, which is the difference between
+   knowing the import landed and assuming it.
+
    `/admin/preflight` counts imported orders that count for nothing once an
    import has run, which is the check to read after loading rather than a
    question to answer before it. The statuses themselves were enumerated
