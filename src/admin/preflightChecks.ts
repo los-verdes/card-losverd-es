@@ -385,7 +385,7 @@ async function googleWalletChecks(env: Env): Promise<CheckGroup> {
   return { title: "Google Wallet", results: [result] };
 }
 
-function deliveryChecks(env: Env): CheckGroup {
+function deliveryChecks(env: Env, live: boolean): CheckGroup {
   const results: CheckResult[] = [];
 
   // Reported on the page because "no email arrived" is otherwise a puzzle
@@ -396,9 +396,14 @@ function deliveryChecks(env: Env): CheckGroup {
     allowlist.includes(ALLOW_ANY_RECIPIENT)
       ? ok("Who we may email", "Any address (EMAIL_RECIPIENT_ALLOWLIST is `*`).")
       : allowlist.length === 0
-        ? warn(
+        ? // Empty is a deliberate guard before cutover and a broken service
+          // after it: this Worker is answering members, and /email-card is
+          // replying to every one of them with silence.
+          (live ? fail : warn)(
             "Who we may email",
-            "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty, so every send is suppressed and logged. Set it to `*` to email anyone, or to the addresses and domains this environment may reach.",
+            live
+              ? "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty while this Worker is serving members, so every card anyone asks for is suppressed. Set it to `*`."
+              : "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty, so every send is suppressed and logged. Deliberate before cutover; set it to `*` at the flip.",
           )
         : warn(
             "Who we may email",
@@ -814,7 +819,7 @@ export async function runPreflightChecks(
     await applePassChecks(env, now),
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live, requestUrl),
-    deliveryChecks(env),
+    deliveryChecks(env, live),
     await queueChecks(env, now),
   ];
 }

@@ -101,10 +101,11 @@ populated before anyone is pointed at it.
    > exists nowhere else -- the Squarespace account is gone. Take the export
    > early and carefully, and verify it before relying on it.
 
-   One thing to settle before the *real* load: whether to empty production's
-   `EMAIL_RECIPIENT_ALLOWLIST` for the duration -- a fourth guard over the
-   three in `src/email/newOrder.ts`, on the one operation where a mistake
-   reaches people.
+   Production's `EMAIL_RECIPIENT_ALLOWLIST` is empty until the flip, so the
+   environment can email nobody at all. That is a fourth guard over the three
+   in `src/email/newOrder.ts`, and the only one that does not depend on the
+   send path being reached by the route we expect. It is restored in
+   [section 3](#3-the-flip).
 
    No member loses a card they hold today. This was measured against the
    full export once it was loaded, rather than assumed
@@ -164,7 +165,13 @@ the Cloudflare-hosted `losverd.es` zone.
    record and the certificate. A Custom Domain cannot be created while
    another record exists for the hostname, so expect a few minutes of
    downtime between the two steps.
-2. **Update the production store's `store/order/*` webhook header** to the
+2. **Restore `EMAIL_RECIPIENT_ALLOWLIST` to `*`** in `wrangler.toml` and
+   deploy. It has been empty since before the import, so until this is done
+   production can email nobody: a member using /email-card gets a page saying
+   their card is on its way and nothing arrives. `/admin/preflight` fails on
+   this once the Worker is serving `card.losverd.es`, which is the safety net
+   rather than the plan.
+3. **Update the production store's `store/order/*` webhook header** to the
    token computed from the new `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`:
    `just bigcommerce-ensure-webhook production --cutover`. The existing
    subscription carries the legacy app's token, so until this is done the
@@ -172,10 +179,10 @@ the Cloudflare-hosted `losverd.es` zone.
    because nothing looks broken -- BigCommerce retries for a while and the
    scheduled resync covers what is missed, so the symptom is delay rather
    than error. `/admin/preflight` checks it explicitly.
-3. **Leave GCP running, including its Cloud Scheduler jobs.** Legacy stops
+4. **Leave GCP running, including its Cloud Scheduler jobs.** Legacy stops
    receiving webhooks after the flip, but its scheduled sync keeps Postgres
    current, which is what keeps a rollback lossless for orders.
-4. Watch `npx wrangler tail --env=""`: TLS works, both logins complete,
+5. Watch `npx wrangler tail --env=""`: TLS works, both logins complete,
    webhooks arrive and sync, Apple devices poll. Failed-auth requests from
    installed *legacy* passes are expected and are not a problem -- those
    passes were never migrated.

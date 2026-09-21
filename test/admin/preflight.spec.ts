@@ -150,6 +150,10 @@ async function configureHealthyEnvironment() {
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
   const { privateKey } = await generateKeyPair("RS256", { extractable: true });
   env.GOOGLE_WALLET_PRIVATE_KEY_PEM = await exportPKCS8(privateKey);
+  // Stated rather than inherited from wrangler.toml, which production
+  // deliberately leaves empty until cutover. A "fully configured"
+  // environment is one that can email somebody.
+  env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.SENDGRID_API_KEY = "SG.test";
   env.TURNSTILE_SITE_KEY = "0x000";
   env.TURNSTILE_SECRET_KEY = "0x111";
@@ -634,6 +638,46 @@ describe("the legacy import", () => {
   it("ignores orders that arrived through the store sync", async () => {
     await insertOrder({ id: "201_bc", email: "sync@example.com", created: "2025-01-01", status: null });
     expect(find(await check(), CHECK).status).toBe("skip");
+  });
+});
+
+describe("who we may email", () => {
+  const PRE_CUTOVER = "https://card-losverd-es.jeff-hogan1.workers.dev/admin/preflight";
+
+  it("reports an empty list as a deliberate guard before cutover", async () => {
+    // Which is what it is: production holds every member's real address, and
+    // the steps left before the flip each touch all of them at once.
+    env.EMAIL_RECIPIENT_ALLOWLIST = "";
+
+    const result = find(await check(PRE_CUTOVER), "Who we may email");
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("at the flip");
+  });
+
+  it("fails on an empty list once the Worker is serving members", async () => {
+    // The same setting, now a broken service: /email-card answers everyone
+    // who asks with silence. This is the safety net for forgetting to put it
+    // back, which is the one mistake emptying it invites.
+    env.EMAIL_RECIPIENT_ALLOWLIST = "";
+
+    const result = find(await check(), "Who we may email");
+
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("serving members");
+  });
+
+  it("is content either way once it permits anybody", async () => {
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    expect(find(await check(), "Who we may email").status).toBe("ok");
+    expect(find(await check(PRE_CUTOVER), "Who we may email").status).toBe("ok");
+  });
+
+  it("names the addresses a restricted environment may reach", async () => {
+    env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+    const result = find(await check(), "Who we may email");
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("losverd.es");
   });
 });
 

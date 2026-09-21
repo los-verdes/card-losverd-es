@@ -59,6 +59,9 @@ beforeEach(async () => {
   const chain = getTestCertChain();
   env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
   env.CARD_EMAIL_NEW_ORDERS_SINCE = CUTOFF;
+  // Stated, not inherited: production leaves this empty until cutover, and
+  // a test about delivery must not turn on what that happens to say today.
+  env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.SENDGRID_API_KEY = "SG.test-key";
   env.PUBLIC_BASE_URL = ORIGIN;
   env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";

@@ -25,6 +25,9 @@ beforeEach(async () => {
   env.PASS_SIGNATURE_KEY = "test-pass-signature-key".repeat(5);
   env.TURNSTILE_SITE_KEY = "0x4AAAAAAA-test-site-key";
   env.TURNSTILE_SECRET_KEY = "0x4AAAAAAA-test-secret";
+  // Stated, not inherited: production leaves this empty until cutover, and
+  // a test about delivery must not turn on what that happens to say today.
+  env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.SENDGRID_API_KEY = "SG.test-key";
   env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631";
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = undefined;

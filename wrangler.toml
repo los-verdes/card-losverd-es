@@ -81,9 +81,23 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # settings.py). SENDGRID_API_KEY and TURNSTILE_SECRET_KEY are secrets with no
 # placeholder here.
 # Who this environment may email (#155). `*` is the only value that permits
-# anyone, and production says so explicitly rather than inheriting it from an
-# empty default -- an environment that loses this var sends to nobody.
-EMAIL_RECIPIENT_ALLOWLIST = "*"
+# anyone; empty permits nobody. Production says whichever it means explicitly
+# rather than inheriting one from a default -- an environment that loses this
+# var sends to nobody.
+#
+# Empty until cutover, on purpose. Production now holds every member's real
+# address, and the steps left before the flip -- reloading the legacy import,
+# a full resync, a squash and reload -- each touch every member at once. The
+# three guards in src/email/newOrder.ts already stop a bulk send, and any one
+# of them is sufficient; this is the fourth, and the only one that does not
+# depend on the send path being reached by the route we expect.
+#
+# **Restore it to `*` at the flip.** Until then /email-card answers a member
+# with silence, which is fine while the legacy app is still serving them and
+# a broken service the moment it is not. `/admin/preflight` fails on an empty
+# list once this Worker is serving PUBLIC_BASE_URL, so the mistake is caught
+# rather than remembered.
+EMAIL_RECIPIENT_ALLOWLIST = ""
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 # A Turnstile site key is public -- it's rendered into the /email-card form --

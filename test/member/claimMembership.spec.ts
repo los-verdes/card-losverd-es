@@ -23,6 +23,9 @@ const OTHER_USER_ID = 8;
 beforeEach(async () => {
   env.SESSION_SIGNING_KEY = SESSION_KEY;
   env.PUBLIC_BASE_URL = ORIGIN;
+  // Stated, not inherited: production leaves this empty until cutover, and
+  // a test about delivery must not turn on what that happens to say today.
+  env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.SENDGRID_API_KEY = "SG.test-key";
   env.EMAIL_FROM_ADDRESS = "cards@losverdesatx.org";
   env.EMAIL_FROM_NAME = "Los Verdes";

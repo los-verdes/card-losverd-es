@@ -156,6 +156,9 @@ describe("emailMemberCard", () => {
   // The route only calls this for a member it just gave a card, so these are
   // the belt-and-braces checks: nothing is emailed without a current card.
   beforeEach(() => {
+    // Stated, not inherited: production leaves this empty until cutover, and
+    // a test about delivery must not turn on what that happens to say today.
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
     env.SENDGRID_API_KEY = "SG.test-key";
   });
 
