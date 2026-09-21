@@ -25,7 +25,7 @@ fallthrough = true
 [[d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-production"
-database_id = "5fdb69dd-7bac-4770-a33e-1f58eadbf987"
+database_id = "2205f64b-4273-45b7-91e3-a544b686392c"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
 # ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
 # d1 migrations apply` fails with "No migrations present at .../migrations"
@@ -168,7 +168,7 @@ name = "card-losverd-es-staging"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-staging"
-database_id = "de087994-608c-4839-828b-51f5d1077a26"
+database_id = "c40987a2-5d2b-430b-a78e-31e64c666854"
 migrations_dir = "src/db/migrations"
 
 [[env.staging.r2_buckets]]
