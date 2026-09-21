@@ -70,6 +70,12 @@ const { vars } = unstable_readConfig(
   { config: "wrangler.toml", env: options.env === "production" ? undefined : options.env },
   { hideWarnings: true },
 );
+// `op` is piping the 1Password item into stdin, so drain it before any check
+// that can exit. Exiting first closes the pipe under them, and their own
+// "write /dev/stdout: The pipe is being closed" arrives after our message
+// and reads like a second, unrelated failure.
+const item = await readItem();
+
 const storeHash = vars.BIGCOMMERCE_STORE_HASH;
 const clientId = vars.BIGCOMMERCE_CLIENT_ID;
 if (!storeHash || !clientId || String(clientId).startsWith("REPLACE_WITH")) {
@@ -85,7 +91,6 @@ if (options.env === "production" && origin === LEGACY_SHARED_ORIGIN && !options.
 }
 const destination = `${origin}${WEBHOOK_PATH}`;
 
-const item = await readItem();
 const accessToken = fieldValue(item, "BIGCOMMERCE_ACCESS_TOKEN");
 const token = await signWebhookToken(fieldValue(item, "BIGCOMMERCE_WEBHOOK_SIGNING_KEY"), storeHash, clientId);
 

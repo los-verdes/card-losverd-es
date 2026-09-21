@@ -579,6 +579,26 @@ interface BigCommerceHook {
  * `PUBLIC_BASE_URL`. Before cutover a token mismatch is the expected state
  * and only worth noting; after it, it means orders are being dropped.
  */
+/**
+ * ` ("Shop Name")` when the token carries the "Information & Settings" scope,
+ * and an empty string when it does not. Never fails the check it decorates:
+ * the Worker never reads this endpoint, so a token without the scope is
+ * correctly configured, not broken.
+ */
+async function storeLabel(
+  storeHash: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  try {
+    const res = await fetch(`${BC_API_BASE}/${storeHash}/v2/store`, { headers });
+    if (!res.ok) return "";
+    const store = await res.json<{ name?: string }>();
+    return store.name ? ` ("${store.name}")` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function bigCommerceChecks(
   env: Env,
   live: boolean,
@@ -598,13 +618,33 @@ async function bigCommerceChecks(
 
   results.push(
     await attempt("Access token", async () => {
-      // Confirms the credential works *and* which store it opens, which is
-      // worth seeing on a page that exists to catch an environment pointed at
-      // the wrong one.
-      const res = await fetch(`${BC_API_BASE}/${storeHash}/v2/store`, { headers });
-      if (!res.ok) return fail("Access token", `BigCommerce answered ${res.status} for store ${storeHash}.`);
-      const store = await res.json<{ name?: string; domain?: string }>();
-      return ok("Access token", `Accepted for "${store.name ?? storeHash}" (${store.domain ?? storeHash}).`);
+      // Probes the capability this Worker actually needs. Everything it asks
+      // BigCommerce for is an order (`/v2/orders*` in src/bigcommerce/sync.ts),
+      // and BigCommerce scopes its tokens per resource.
+      //
+      // This used to probe `/v2/store`, which reads as the more natural "does
+      // this credential work" question but needs the separate "Information &
+      // Settings" scope. A token granted exactly what the Worker needs does
+      // not carry it, so BigCommerce answered 403 and this reported a working
+      // token as broken -- while `just bigcommerce-ensure-webhook`, on the
+      // same token, succeeded. A check that fails on a capability nothing
+      // uses teaches whoever reads it to disbelieve the page.
+      const res = await fetch(`${BC_API_BASE}/${storeHash}/v2/orders/count`, { headers });
+      if (!res.ok) {
+        return fail(
+          "Access token",
+          res.status === 401 || res.status === 403
+            ? `BigCommerce answered ${res.status} for store ${storeHash}. The token is rejected, or lacks the Orders read scope.`
+            : `BigCommerce answered ${res.status} for store ${storeHash}.`,
+        );
+      }
+      const { count } = await res.json<{ count?: number }>();
+      const orders = typeof count === "number" ? `, ${count} order(s) visible` : "";
+      // The store's name is worth seeing on a page that exists to catch an
+      // environment pointed at the wrong shop, but it is a nicety rather than
+      // the verdict: it needs a scope of its own, so it is shown when the
+      // token happens to carry one and passed over in silence when it does not.
+      return ok("Access token", `Accepted for store ${storeHash}${await storeLabel(storeHash, headers)}${orders}.`);
     }),
   );
 
