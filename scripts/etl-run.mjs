@@ -14,6 +14,7 @@
 // Usage:
 //   just etl-run staging slack        # the Slack members sync
 //   just etl-run staging resync       # the BigCommerce order resync
+//   just etl-run staging full-resync  # the same, over the whole store
 //   just etl-run staging readiness    # the readiness checks
 //   just etl-run production slack --yes-production
 
@@ -42,6 +43,10 @@ const JOBS = {
   resync: {
     message: { type: "sync_subscriptions_etl" },
     does: "Re-reads recent BigCommerce orders and rebuilds any membership they touch. Never emails anyone.",
+  },
+  "full-resync": {
+    message: { type: "sync_subscriptions_etl", loadAll: true },
+    does: "Re-reads every order in the BigCommerce store, not just recent ones, and rebuilds every membership. For a database that was just rebuilt or imported (docs/cutover.md step 8). Never emails anyone.",
   },
   readiness: {
     message: { type: "run_readiness_check" },

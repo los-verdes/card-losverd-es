@@ -1,4 +1,6 @@
--- The schema, whole. This file replaces the first twenty migrations.
+-- The schema, whole. This file replaces the first twenty migrations, and a
+-- later one that only rewrote `_bc`-suffixed order ids in existing rows -- data
+-- a rebuilt database never holds, since the legacy export strips the suffix.
 --
 -- Several of those existed only to correct earlier ones -- a column added and
 -- dropped again, a table replaced hours after it was created -- and none of

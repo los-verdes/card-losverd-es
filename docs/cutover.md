@@ -98,11 +98,13 @@ populated before anyone is pointed at it.
    breaks; what is lost is being able to recreate the database from the
    migrations, which is the thing the migrations are for.
 
-   So after squashing, for each environment: drop every table, apply the
-   migrations, and reload. `just db-schema-compare <env>` says whether it
-   worked, by building a throwaway database from the migrations and comparing
-   the two object by object. It exits non-zero while they differ, so it can
-   gate the step rather than be read and nodded at.
+   So after squashing, for each environment: `just db-rebuild <env>` drops
+   every table (children before parents, the migration log included), applies
+   the migrations, and ends with `just db-schema-compare <env>`, which builds a
+   throwaway database from the migrations and compares the two object by
+   object. It exits non-zero while they differ, so it can gate the step rather
+   than be read and nodded at. Then reload what the database held; the recipe
+   prints the list.
 
    For production that reload is the legacy import below, which is why the
    export file has to still be around.
@@ -153,8 +155,9 @@ populated before anyone is pointed at it.
    ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), so
    nothing here should be a surprise.
 
-8. **Run a full BigCommerce resync**, then reconcile member counts against
-   BigCommerce's own admin.
+8. **Run a full BigCommerce resync** (`just etl-run production full-resync
+   --yes-production`), then reconcile member counts against BigCommerce's
+   own admin.
 
    > **Order matters.** This must come *after* the legacy import. The import
    > sets orders' `member_email`, and cards are derived from it, so a resync
