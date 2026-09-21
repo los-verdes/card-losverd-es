@@ -29,7 +29,11 @@ Two internal bodies come up in this project, both proper nouns:
   HR function: the Code of Conduct, keeping spaces inclusive, reviewing
   reports, conflict resolution. They are **consulted on everything** the
   membership rules touch, and **responsible** for the subset that settles a
-  person's standing, such as withdrawing a membership.
+  person's standing, such as revoking a membership or expelling somebody.
+  Use the [code of conduct](https://www.losverdesatx.org/code-of-conduct)'s
+  own words for those two: it says the Committee may "revoke or temporarily
+  suspend that person's membership", and names expulsion from Los Verdes as
+  the heaviest outcome of its sanction process. Do not coin a synonym.
 - The **Merch Team** (`#team-merch`) administer the BigCommerce storefront and
   answer `merchteam@losverdesatx.org`, where support requests about
   memberships and orders arrive. They are the primary audience for
@@ -131,8 +135,12 @@ tag.
 **Writing for other people to read.** Pull request descriptions are short
 and telegraphic: what changed, anything surprising, anything the reviewer
 must do. Everything in the repository and on GitHub -- issues, comments,
-code comments, docs -- is written in the project's collective voice, which
-records a decision and its date rather than naming an individual. Assign
+code comments, docs -- is written in the project's collective voice, without
+naming an individual. Documentation describes what is implemented rather
+than framing a question as closed: these documents exist to collect
+feedback, and wording that sounds settled discourages it. A date still earns
+its place in an issue or a code comment recording when something was
+checked. Assign
 `@jeffwecan` to any issue whose next step is his: a credential, a console
 action, or an answer to a question the issue poses.
 
