@@ -180,12 +180,17 @@ and the admin reports agree with the legacy report.
 `card.losverd.es` is currently a DNS-only CNAME to `ghs.googlehosted.com` in
 the Cloudflare-hosted `losverd.es` zone.
 
-1. Delete the `card` CNAME, then attach `card.losverd.es` to the production
-   Worker as a Custom Domain -- preferably in `wrangler.toml` so it is
-   deployed by merge rather than clicked. Cloudflare creates the proxied
-   record and the certificate. A Custom Domain cannot be created while
-   another record exists for the hostname, so expect a few minutes of
-   downtime between the two steps.
+1. **Delete the `card` CNAME** in the dashboard (the `losverd.es` zone's DNS
+   records), then **merge the pull request that adds `card.losverd.es` to
+   `wrangler.toml`** as a Custom Domain. It is prepared in advance and waits
+   as a draft. The Deploy workflow attaches the hostname, and Cloudflare
+   creates the proxied record and the certificate. The first half is a click
+   because the deploy token has no DNS permission, and it has to come first:
+   a Custom Domain cannot be created while another record exists for the
+   hostname. Expect a few minutes of downtime between the two. `curl
+   https://card.losverd.es/healthz` answering `{"status":"ok"}` says it
+   landed. From here production no longer answers on its `workers.dev`
+   hostname.
 2. **Restore `EMAIL_RECIPIENT_ALLOWLIST` to `*`** in `wrangler.toml` and
    deploy. It has been empty since before the import, so until this is done
    production can email nobody: a member using /email-card gets a page saying
@@ -208,7 +213,10 @@ the Cloudflare-hosted `losverd.es` zone.
    installed *legacy* passes are expected and are not a problem -- those
    passes were never migrated.
 
-**Rollback**: revert the route change and recreate the `card` CNAME to
+**Rollback**: revert the route change. If `card.losverd.es` is still listed
+under the production Worker's Settings -> Domains & Routes once that has
+deployed, remove it there -- a Custom Domain is not guaranteed to be detached
+just because it left the config. Then recreate the `card` CNAME to
 `ghs.googlehosted.com`, DNS-only. Orders are unaffected, since BigCommerce
 is the source and legacy kept syncing. What is lost is whatever happened
 only on this side -- new logins, pass registrations, emails sent. Acceptable
