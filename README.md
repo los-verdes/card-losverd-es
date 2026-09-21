@@ -230,11 +230,23 @@ mangled in transit, and no test here can check it.
 Who may receive mail is decided separately, and in code: see
 `EMAIL_RECIPIENT_ALLOWLIST`. The binding does not replace that check.
 
-Two things about what goes out. There is no unsubscribe link or preference
-page -- the previous site sent under a SendGrid unsubscribe group, and there
-is no equivalent here, which is defensible for a card somebody asked for but
-is a decision rather than an oversight. And the sender's display name travels
-inside the address, as `Name <address>`, because the binding takes one string.
+Card emails carry **no unsubscribe link**. Each one is transactional --
+somebody asked for it at `/email-card`, bought a membership, or had an order
+attributed to them -- so there is no ongoing mailing to leave. The case that
+would otherwise call for one, somebody requesting cards to a member's address
+over and over, is bounded by Turnstile and the three-a-day per-recipient limit
+on `/email-card`. Hard bounces and spam reports go onto the Cloudflare
+account's Email Sending suppression list on their own, and the binding refuses
+to send to anything on it; an address can also be added there by hand in the
+dashboard. The previous site's SendGrid unsubscribe group was specific to
+card emails and holds a handful of addresses; copy them onto that list by hand
+(SendGrid: Suppressions; Cloudflare: Email Sending, Suppressions) before
+SendGrid's key and account are retired. If card emails ever grow into
+something people could reasonably want to stop, this is the part to revisit.
+
+Sender and recipient go to the binding as separate address and name, never
+folded into `Name <address>` -- see the comment at the top of
+`src/email/cloudflare.ts` for the send that failed before that changed.
 
 ### Provisioning the APNs auth key
 
