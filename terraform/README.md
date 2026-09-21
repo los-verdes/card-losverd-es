@@ -15,9 +15,9 @@ Local runs go through the `just tf` wrapper, which shells out via `op run` to pu
 
 ## API token permissions
 
-`.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret and this Terraform config's `CLOUDFLARE_API_TOKEN` env var are the same token. As of 2026-09-16, this is a new account-wide token with deliberately broad ("ample") permissions, replacing an earlier, more narrowly-scoped one that was missing `Workers R2 Storage:Edit` (which blocked `terraform apply` on the R2 bucket resource until then).
+`.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret and this Terraform config's `CLOUDFLARE_API_TOKEN` env var are the same token. In the Los Verdes account it is **`github-actions-terraform-applier`**, an account-owned API token set to expire annually.
 
-**This broad scope is intentional for now, not a final state.** Tightening every credential in this project (this token, the R2/S3 remote-state `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair below, and anything else) down to least-privilege is a tracked, must-do-before-considering-this-migration-done task -- see [issue #15](https://github.com/los-verdes/card-losverd-es/issues/15) (and the migration plan's Open Items).
+Account-owned rather than user-owned is the point of it. A user-owned token belongs to whoever created it and stops working when they leave or lose access; this one belongs to the account, which is why the project moved to one ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Least privilege for every credential here is tracked on [#15](https://github.com/los-verdes/card-losverd-es/issues/15).
 
 The minimum this token needs, derived from what Terraform and the Deploy workflow actually call:
 
