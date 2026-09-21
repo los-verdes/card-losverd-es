@@ -261,6 +261,11 @@ const Summary: FC<{
         </form>
       </>
     )}
+    <p class="muted">
+      <a href={`/admin/audit?email=${encodeURIComponent(member.email)}`}>
+        Everything that has been done to this membership
+      </a>
+    </p>
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
@@ -388,7 +393,7 @@ members.post("/", csrf(), async (c) => {
 
   if (form.action === "ban" || form.action === "unban") {
     if (form.action === "unban") {
-      return (await liftBan(c.env, email))
+      return (await liftBan(c.env, email, c.get("session").userId))
         ? back({ saved: "unbanned" })
         : back({ error: "That person has not been expelled." });
     }
@@ -406,7 +411,7 @@ members.post("/", csrf(), async (c) => {
     if (!member) return back({ error: "No membership is held under that address." });
 
     if (form.action === "restore") {
-      return (await restoreCard(c.env, member.member_id))
+      return (await restoreCard(c.env, member.member_id, c.get("session").userId))
         ? back({ saved: "restored" })
         : back({ error: "That membership has not been revoked." });
     }
@@ -423,7 +428,7 @@ members.post("/", csrf(), async (c) => {
   if (form.action === "clear") {
     const existing = await getDisplayName(c.env, email);
     if (!existing) return back({ error: "There was no name to remove." });
-    await clearDisplayName(c.env, email);
+    await clearDisplayName(c.env, email, c.get("session").userId);
     return back({ saved: "cleared" });
   }
 

@@ -14,6 +14,7 @@ import {
   type MemberUpsertResult,
 } from "../bigcommerce/sync";
 import type { Env } from "../index";
+import { actorEmail, recordAuditEvent } from "../audit/log";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyWalletsUpdated } from "../member/walletUpdates";
 
@@ -151,6 +152,14 @@ export async function attributeOrder(
     firstName: order.first_name ?? "",
     lastName: order.last_name ?? "",
   };
+  await recordAuditEvent(env, {
+    action: "order.reattributed",
+    subjectEmail: memberEmail,
+    actorEmail: await actorEmail(env, adminUserId),
+    detail:
+      `Order ${order.order_id} moved from ${previousMemberEmail}` +
+      (note ? ` -- ${note}` : ""),
+  });
   const previous = await refreshMemberFromOrders(env, previousMemberEmail, fallback);
   const current = await refreshMemberFromOrders(env, memberEmail, fallback);
   for (const result of [previous, current]) {

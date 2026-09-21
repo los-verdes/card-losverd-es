@@ -11,6 +11,7 @@
 
 import type { Env } from "../index";
 import { getMemberByEmail } from "./artifacts";
+import { actorEmail, recordAuditEvent } from "../audit/log";
 import { notifyWalletsUpdated } from "./walletUpdates";
 
 /**
@@ -64,6 +65,9 @@ export async function setDisplayName(
   setBy: number | null = null,
 ): Promise<void> {
   const key = email.trim().toLowerCase();
+  // Read before the write, because the row is overwritten in place and this
+  // is the only moment the previous name still exists anywhere.
+  const previous = await getDisplayName(env, key);
   await env.DB.prepare(
     `INSERT INTO member_display_names (email, display_name, source, note, set_by, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, unixepoch('subsec') * 1000)
@@ -76,15 +80,44 @@ export async function setDisplayName(
   )
     .bind(key, displayName, source, note, setBy)
     .run();
+  await recordAuditEvent(env, {
+    action: "display_name.set",
+    subjectEmail: key,
+    // `legacy_postgres` has no actor: nobody made that decision here.
+    actorEmail: source === "legacy_postgres" ? null : await actorEmail(env, setBy),
+    detail:
+      `"${displayName}"` +
+      (previous ? ` (was "${previous.display_name}")` : "") +
+      (source === "member" ? ", set by the member themselves" : "") +
+      (note ? ` -- ${note}` : ""),
+  });
   await touchAndNotify(env, key);
 }
 
-/** Removes the override, putting the card back to the name from their orders. */
-export async function clearDisplayName(env: Env, email: string): Promise<void> {
+/**
+ * Removes the override, putting the card back to the name from their orders.
+ *
+ * `clearedBy` reaches the audit log only: the row goes, so nothing else keeps
+ * any account of the name having been there at all.
+ */
+export async function clearDisplayName(
+  env: Env,
+  email: string,
+  clearedBy: number | null = null,
+): Promise<void> {
   const key = email.trim().toLowerCase();
-  await env.DB.prepare("DELETE FROM member_display_names WHERE email = ?")
+  const previous = await getDisplayName(env, key);
+  const result = await env.DB.prepare("DELETE FROM member_display_names WHERE email = ?")
     .bind(key)
     .run();
+  if ((result.meta.changes ?? 0) > 0) {
+    await recordAuditEvent(env, {
+      action: "display_name.cleared",
+      subjectEmail: key,
+      actorEmail: await actorEmail(env, clearedBy),
+      detail: previous ? `Was "${previous.display_name}"` : "Card name cleared",
+    });
+  }
   await touchAndNotify(env, key);
 }
 

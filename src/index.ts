@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
 import adminRevocations from "./admin/revocations";
+import adminAudit from "./admin/audit";
 import adminOrders from "./admin/orders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
@@ -178,6 +179,7 @@ app.route("/admin/member-since", adminMemberSince);
 app.route("/admin/members", adminMembers);
 
 app.route("/admin/revocations", adminRevocations);
+app.route("/admin/audit", adminAudit);
 // Admin readiness page: what this environment's deployment is missing.
 app.route("/admin/preflight", adminPreflight);
 app.route("/", portal);

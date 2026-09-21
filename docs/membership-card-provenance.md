@@ -712,6 +712,12 @@ or a change, not an open-ended design exercise.
    nothing underneath was altered. Everything currently revoked sits on one
    page, deliberately short.
 
+   Lifting one does not erase it. The record of a decision and its reversal
+   is kept separately and permanently -- see [the history
+   below](#what-is-kept-about-what-people-did) -- because the question "who
+   decided this, and why" is asked most often about a decision that has since
+   been undone.
+
    Two choices inside that are worth a look rather than assumed.
 
    **It follows the card, not the address.** A revocation is keyed on the
@@ -762,6 +768,33 @@ or a change, not an open-ended design exercise.
    a question for them. The same goes for an appeal: the code of conduct
    provides for one, and lifting a revocation or an expulsion here is the
    same single action whatever prompted it.
+
+## What is kept about what people did
+
+Alongside the records of what is true now, there is a permanent record of what
+was done: every revocation and expulsion and the lifting of either, every card
+name set or cleared, every "member since" correction, every re-attributed
+order, and every card email sent. Each line says when, what, who it was about,
+who did it, and one sentence of detail -- including the value that was
+replaced, where there was one. An admin can read it for one person or as a
+recent-activity list (`/admin/audit`).
+
+**Nothing is ever removed from it**, and that is the whole point. The tables
+holding the current state answer "what is true now" by keeping only the
+latest answer: lifting an expulsion deletes the row, clearing a chosen name
+deletes the row, a new "member since" overwrites the old one. The reason
+somebody gave, and the person who decided, go with them. But the questions
+this record exists for -- "why does their card say that", "who decided this"
+-- are asked about things that are no longer true at least as often as things
+that are, and most often precisely when a decision is being appealed.
+
+Two things it deliberately does not do. It does not record what the software
+did on its own: an order syncing, an import running, a pass being rebuilt are
+all routine, and a log that included them would bury the handful of entries
+that represent a decision somebody made. And it does not record a card email
+as a decision -- nobody chose to send it, a member asked or an order completed
+-- but it does record that one went out, because "has anything been sent to
+this person, and when" has no other answer.
 
 ## Appendix: orders from before BigCommerce
 

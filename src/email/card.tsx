@@ -17,6 +17,7 @@
 
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
+import { recordAuditEventBestEffort } from "../audit/log";
 import { formatShortDate } from "../lib/dateFormat";
 import { SUPPORT_EMAIL } from "../member/layout";
 import {
@@ -40,6 +41,13 @@ export type CardEmailReason =
   | { kind: "request"; submittedOn: string }
   | { kind: "attribution" }
   | { kind: "new-order" };
+
+/** Why a card went out, as the audit log reports it. */
+const EMAIL_REASONS: Record<CardEmailReason["kind"], string> = {
+  request: "They asked for it from /email-card",
+  attribution: "An order was re-attributed to them",
+  "new-order": "Their new order completed",
+};
 
 interface CardEmailProps {
   name: string;
@@ -237,6 +245,17 @@ export async function emailCardTo(
   try {
     await sendMembershipCardEmail(env, member, reason);
     console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
+    // Best effort, and deliberately after the send: the message has left, so
+    // throwing here would leave the caller's only move being to send it
+    // again. Every card email in the system passes through this function, so
+    // this is the one place that can answer "has anything been sent to this
+    // person, and when" -- `card_emails` is keyed on the order and cannot.
+    await recordAuditEventBestEffort(env, {
+      action: "card.emailed",
+      subjectEmail: member.email,
+      actorEmail: null,
+      detail: EMAIL_REASONS[reason.kind],
+    });
     return true;
   } catch (err) {
     console.error("Card email failed", { reason: reason.kind, error: String(err) });
