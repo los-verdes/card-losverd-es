@@ -233,7 +233,7 @@ describe("originVerdict", () => {
     // only reachable at its workers.dev host until DNS moves.
     const result = originVerdict(
       "https://card.losverd.es",
-      "https://card-losverd-es.jeff-hogan1.workers.dev",
+      "https://card-losverd-es-production.los-verdes.workers.dev",
     );
     expect(result.status).toBe("warn");
     expect(result.detail).toContain("card.losverd.es");
@@ -243,14 +243,14 @@ describe("originVerdict", () => {
     // Being served at the custom domain is proof cutover happened, so the
     // configuration disagreeing with it is the mistake this check exists for.
     const result = originVerdict(
-      "https://card-losverd-es.jeff-hogan1.workers.dev",
+      "https://card-losverd-es-production.los-verdes.workers.dev",
       "https://card.losverd.es",
     );
     expect(result.status).toBe("fail");
   });
 
   it("leaves staging green, since it is configured for its own workers.dev host", () => {
-    const staging = "https://card-losverd-es-staging.jeff-hogan1.workers.dev";
+    const staging = "https://card-losverd-es-staging.los-verdes.workers.dev";
     expect(originVerdict(staging, staging).status).toBe("ok");
   });
 
@@ -349,7 +349,7 @@ describe("Google Wallet", () => {
 
 describe("BigCommerce", () => {
   /** The pre-cutover view: reachable at workers.dev, configured for the real domain. */
-  const PRE_CUTOVER = "https://card-losverd-es.jeff-hogan1.workers.dev/admin/preflight";
+  const PRE_CUTOVER = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
 
   it("names the store the token opens, so a misaimed environment shows up", async () => {
     const result = find(await check(), "Access token");
@@ -421,7 +421,7 @@ describe("BigCommerce", () => {
     remote.hooks = [
       {
         scope: "store/order/*",
-        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        destination: "https://card-losverd-es-production.los-verdes.workers.dev/bigcommerce/order-webhook",
         is_active: true,
         headers: { Authorization: await registeredAuthorization() },
       },
@@ -439,7 +439,7 @@ describe("BigCommerce", () => {
     remote.hooks = [
       {
         scope: "store/order/*",
-        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        destination: "https://card-losverd-es-production.los-verdes.workers.dev/bigcommerce/order-webhook",
         is_active: true,
         headers: { Authorization: await registeredAuthorization() },
       },
@@ -452,7 +452,7 @@ describe("BigCommerce", () => {
     remote.hooks = [
       {
         scope: "store/order/*",
-        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        destination: "https://card-losverd-es-production.los-verdes.workers.dev/bigcommerce/order-webhook",
         is_active: true,
         headers: {},
       },
@@ -642,7 +642,7 @@ describe("the legacy import", () => {
 });
 
 describe("who we may email", () => {
-  const PRE_CUTOVER = "https://card-losverd-es.jeff-hogan1.workers.dev/admin/preflight";
+  const PRE_CUTOVER = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
 
   it("reports an empty list as a deliberate guard before cutover", async () => {
     // Which is what it is: production holds every member's real address, and
@@ -698,7 +698,7 @@ describe("configuration", () => {
   });
 
   it("catches a pass web service URL on a different origin", async () => {
-    env.PASSKIT_WEB_SERVICE_URL = "https://card-losverd-es.jeff-hogan1.workers.dev/passkit";
+    env.PASSKIT_WEB_SERVICE_URL = "https://card-losverd-es-production.los-verdes.workers.dev/passkit";
     const result = find(await check(), "Pass web service URL");
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("poll a different host");

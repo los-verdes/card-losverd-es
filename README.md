@@ -34,8 +34,8 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 
 | Environment | Worker | BigCommerce store | URL |
 | :--- | :--- | :--- | :--- |
-| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://card-losverd-es-staging.jeff-hogan1.workers.dev |
-| **production** | `card-losverd-es` (top-level `wrangler.toml`) | production store | https://card-losverd-es.jeff-hogan1.workers.dev (until `card.losverd.es` DNS cutover) |
+| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://card-losverd-es-staging.los-verdes.workers.dev |
+| **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card-losverd-es-production.los-verdes.workers.dev (until `card.losverd.es` DNS cutover) |
 
 `.github/workflows/deploy.yml`:
 
@@ -268,7 +268,7 @@ just bigcommerce-ensure-webhook staging --dry-run   # show what would change
 just bigcommerce-ensure-webhook staging
 ```
 
-It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es.jeff-hogan1.workers.dev`.
+It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es-production.los-verdes.workers.dev`.
 
 ## Making someone an admin
 

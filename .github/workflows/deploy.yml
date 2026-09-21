@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://card-losverd-es-staging.jeff-hogan1.workers.dev
+      url: https://card-losverd-es-staging.los-verdes.workers.dev
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@v4
@@ -93,7 +93,7 @@ jobs:
     environment:
       name: production
       # TODO: https://card.losverd.es once DNS is cut over (Phase 8).
-      url: https://card-losverd-es.jeff-hogan1.workers.dev
+      url: https://card-losverd-es-production.los-verdes.workers.dev
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@v4

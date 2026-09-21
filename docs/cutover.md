@@ -33,7 +33,7 @@ called out where they appear.
 
 ## 1. Validate on staging
 
-Staging (`card-losverd-es-staging.jeff-hogan1.workers.dev`, BigCommerce
+Staging (`card-losverd-es-staging.los-verdes.workers.dev`, BigCommerce
 sandbox store `kouyh8feen`) is where every path gets exercised first:
 webhook delivery, order sync, login with Google and with Apple, the portal,
 the card image, both wallet passes, `/email-card`, `/verify-pass`, and the
