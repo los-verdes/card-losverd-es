@@ -168,10 +168,13 @@ queue = "etl-sync-dlq-production"
 max_batch_size = 10
 max_retries = 0
 
-# No production [triggers] crons yet: the scheduled ETL jobs (src/scheduled.ts)
-# would call BigCommerce with placeholder credentials until real secrets are
-# set. Staging, whose secrets are complete, runs the BigCommerce resync on a
-# schedule -- see [env.staging.triggers] at the end of this file.
+# The scheduled jobs (src/scheduled.ts), on the same schedules as staging: the
+# Slack members sync, the BigCommerce resync that repairs anything a webhook
+# missed, and the weekly readiness check. See [env.staging.triggers] at the end
+# of this file for why each runs when it does. A resync never emails anyone
+# (src/email/newOrder.ts).
+[triggers]
+crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
 
 # =============================================================================
 # Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
@@ -262,12 +265,11 @@ queue = "etl-sync-dlq-staging"
 max_batch_size = 10
 max_retries = 0
 
-# Cron triggers, staging only for now: every scheduled job that does
-# something runs here first, so the cron -> queue -> job path soaks before
-# production gets the same block. Two mapped schedules are left out because
-# they would only log that they are not implemented: "30 * * * *" (customers)
-# and "30 */12 * * *" (MiniBC, which docs/membership-card-provenance.md
-# places after cutover). A resync never emails anyone (src/email/newOrder.ts).
+# Cron triggers, the same schedules as production's [triggers] block. Two
+# mapped schedules are left out of both because they would only log that they
+# are not implemented: "30 * * * *" (customers) and "30 */12 * * *" (MiniBC,
+# not built -- docs/membership-card-provenance.md). A resync never emails
+# anyone (src/email/newOrder.ts).
 # The Slack sync reads staging's own Slack credentials (#133), never
 # production's, so the real membership roll stays out of staging.
 [env.staging.triggers]
