@@ -115,14 +115,9 @@ deliver them chronologically.
 | `last_updated_at` | `Date.now()`, only when a pass-visible field changed | Cache-validation timestamp Apple's polling endpoint (`Phase 4.2`) compares against. |
 | `created_at` | DB default | Untouched on update. |
 
-Nothing here records whether a membership is active or expired. That depends on
-the day somebody asks, so it is answered from `expiration_date` at that moment
-(`effectiveStatus()` and `isMembershipCurrent()` in `src/member/artifacts.ts`),
-and revocation lives in its own tables, which the sync never touches. The
-previous site stored the answer (`AnnualMembership.is_active`), and so did an
-earlier version of this one, in a `members.status` column that only moved when
-a sync happened to touch the row
-([#224](https://github.com/los-verdes/card-losverd-es/issues/224)).
+Whether a membership is active or expired is not stored: it is answered from
+`expiration_date` when somebody asks (`effectiveStatus()` in
+`src/member/artifacts.ts`).
 
 A member whose orders all stop counting (every one refunded, say) keeps their
 row -- and so their `member_id`, auth token, and device registrations, should

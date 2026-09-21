@@ -146,9 +146,7 @@ export function isMembershipCurrent(
  *
  * Nothing stores this. Revocation is a stored decision and arrives as
  * `revoked`; the rest is derived from the expiry date against `today`, which
- * is a parameter so a test can pin it. A stored label used to exist and only
- * moved when a sync touched the row, so a rebuilt pass could show "active"
- * for a membership that had expired months earlier (#224).
+ * is a parameter so a test can pin it.
  *
  * Note the limit of this: a pass already on a device or cached in R2 is not
  * rebuilt just because a date passed. It fixes what a pass says when it *is*
