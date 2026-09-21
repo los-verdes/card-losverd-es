@@ -274,6 +274,9 @@ describe("emailing the new member their card", () => {
   // Everything the card image and Apple pass need, as in email-card.spec.ts.
   beforeEach(async () => {
     const chain = getTestCertChain();
+    // Stated, not inherited: production leaves this empty until cutover, and
+    // a test about delivery must not turn on what that happens to say today.
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
     env.SENDGRID_API_KEY = "SG.test-key";
     env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631";
     env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";
