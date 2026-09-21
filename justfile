@@ -174,6 +174,30 @@ apple-pass-cert-install env cer dir=".apple-pass-cert":
     just secrets-push {{ env }} APPLE_PASS_CERT_PEM APPLE_PASS_KEY_PEM APPLE_WWDR_CERT_PEM
     rm -rf {{ dir }}
 
+# The key that tells an already-installed Wallet pass to come back for a new
+# version. Without it a member who renews keeps seeing their old expiry until
+# something else makes their phone re-fetch the pass, which is the one part of
+# this that re-issuing cannot repair.
+#
+# Create the key in the Apple Developer portal (Certificates, Identifiers &
+# Profiles -> Keys -> +), enabled for Apple Push Notifications service, scoped
+# to this project's pass type identifier, with Production among its
+# environments -- pass updates are only ever delivered from production APNs.
+# Apple's .p8 downloads exactly once and is never recoverable, so this checks
+# it before storing it, then removes the local copy.
+#
+# Store an APNs auth key and push it to an environment
+apns-key-install env key_id p8:
+    node scripts/apns-key.mjs check {{ p8 }} --key-id {{ key_id }}
+    op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APNS_KEY_ID[password]={{ key_id }}" "APNS_PRIVATE_KEY_PEM[password]=$(cat {{ p8 }})" > /dev/null
+    just secrets-push {{ env }} APNS_KEY_ID APNS_PRIVATE_KEY_PEM
+    just apns-key-status {{ env }}
+    rm -f {{ p8 }}
+
+# Report which APNs key an environment has, if any
+apns-key-status env:
+    op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/apns-key.mjs status
+
 # Report what pass certificate an environment has and how long it has left
 apple-pass-cert-check env:
     op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/apple-pass-cert.mjs check --env {{ env }}

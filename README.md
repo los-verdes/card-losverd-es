@@ -212,6 +212,53 @@ To see what an environment currently has, and how long is left on it:
 just apple-pass-cert-check staging
 ```
 
+### Provisioning the APNs auth key
+
+This is the key that tells an already-installed Wallet pass to come back for a
+new version. Without it a member who renews keeps seeing their old expiry until
+something else makes their phone re-fetch the pass, and that is the one part of
+the Wallet experience that re-issuing a card cannot repair. Everything else
+still works, which is why `/admin/preflight` reports it missing as a warning
+rather than a failure.
+
+Only the console part is manual. In the Apple Developer portal, under
+**Certificates, Identifiers & Profiles -> Keys**, create a key with **Apple
+Push Notifications service (APNs)** enabled. Two of its settings matter:
+
+- **Environment** must include **Production**. Wallet pass updates are only
+  ever delivered from production APNs, and the Worker talks to
+  `api.push.apple.com` and nothing else (`src/passkit/apns.ts`).
+- **Key type**, if offered, is better as **Topic Specific** scoped to
+  `pass.es.losverd.card` than Team Scoped. A team-scoped key can push to every
+  topic the team owns; this one only ever needs the one.
+
+Apple's `.p8` downloads **exactly once** and is not recoverable afterwards, so
+check it before it goes anywhere:
+
+```bash
+just apns-key-install staging <KEY_ID> ~/Downloads/AuthKey_<KEY_ID>.p8
+```
+
+That parses the key, signs a provider token with it exactly as the Worker does,
+stores both values in the environment's 1Password item, pushes them to
+Cloudflare, reports what landed, and deletes the local file. `just
+apns-key-status <env>` says what an environment has.
+
+What none of it can prove is that Apple will accept the key: the provider token
+is signed locally, so a revoked key or one scoped to another topic looks
+identical until the first push. Confirm on a real device -- install a pass,
+change the membership, and watch it update.
+
+One decision to make before starting, because it affects how many keys to
+create: staging and production use the **same** pass type identifier and team,
+so a key for one can push to the other's passes either way. A separate key per
+environment therefore buys independent revocation, not independent authority.
+It is still worth having if the account has room for it; if it does not, one
+key used by both is the better trade, since rotation headroom matters more than
+a distinction the topic does not make. Using one key for both means adding both
+secret names to `SHARED_BY_NECESSITY` in `scripts/secrets-compare.mjs`, or
+`just secrets-compare` will report them as an accident.
+
 ### Registering the BigCommerce order webhook
 
 BigCommerce doesn't sign webhooks, so each store's `store/order/*` webhook is registered with an `Authorization: bearer <token>` header the Worker recomputes from `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, the store hash, and `BIGCOMMERCE_CLIENT_ID`. Create or update it (and again after rotating the key) with:
