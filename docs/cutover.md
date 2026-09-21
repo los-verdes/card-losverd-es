@@ -4,11 +4,20 @@ Moving `card.losverd.es` from the legacy GCP stack to this one, and retiring
 GCP afterwards.
 
 **The hostname is settled and is `card.losverd.es`.** Moving the card site
-under the group's main domain was considered and deliberately deferred: it
-would need `losverdesatx.org`'s DNS moved to Cloudflare, which is the group's
-main site and mail, and blocking the migration on that is not a trade worth
-making. A move can happen later without touching anybody's installed pass,
-because `card.losverd.es` would redirect.
+under the group's main domain was considered and deliberately deferred.
+
+The obvious way to do it would be to delegate just the subdomain: leave
+`losverdesatx.org` where it is and hand `card.losverdesatx.org` to Cloudflare
+with an `NS` record. Cloudflare supports exactly that, and calls it a
+subdomain setup -- but only on Enterprise plans, which is not where this
+project lives. Without it, a Workers Custom Domain needs the hostname to sit
+in an active zone on the account, so the alternative is moving
+`losverdesatx.org`'s DNS to Cloudflare wholesale. That zone carries the
+group's main site and its mail, and blocking the migration on moving it is
+not a trade worth making.
+
+None of that is lost by waiting. A move can happen later without touching
+anybody's installed pass, because `card.losverd.es` would redirect.
 
 That redirect is the part with no end date. Every QR code already printed or
 installed encodes `card.losverd.es`, and every Apple pass stores its update
