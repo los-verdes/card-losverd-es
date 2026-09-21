@@ -208,8 +208,8 @@ describe("the card image", () => {
   });
 });
 
-describe("the admin breadcrumb", () => {
-  const ADMIN_LINK = /<a href="\/admin\/reports">Admin/;
+describe("the admin nav on a member page", () => {
+  const ADMIN_NAV = /<nav class="admin-nav">/;
 
   async function makeAdmin(id = USER_ID) {
     await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").bind(id).run();
@@ -218,14 +218,42 @@ describe("the admin breadcrumb", () => {
   it("is absent for an ordinary member", async () => {
     await seedCurrentMember();
 
-    expect(await (await get("/")).text()).not.toMatch(ADMIN_LINK);
+    expect(await (await get("/")).text()).not.toMatch(ADMIN_NAV);
   });
 
-  it("appears on the card page for an admin", async () => {
+  it("appears on the card page for an admin, with everything it links", async () => {
+    // The whole point of the change: one quiet line at the foot of the page
+    // named one destination out of thirteen and was easy to miss entirely.
     await seedCurrentMember();
     await makeAdmin();
 
-    expect(await (await get("/")).text()).toMatch(ADMIN_LINK);
+    const html = await (await get("/")).text();
+
+    expect(html).toMatch(ADMIN_NAV);
+    expect(html).toContain('href="/admin/members"');
+    expect(html).toContain('href="/admin/audit"');
+    expect(html).toContain('href="/admin/preflight"');
+  });
+
+  it("does not offer to take an admin to the page they are on", async () => {
+    await seedCurrentMember();
+    await makeAdmin();
+
+    const html = await (await get("/")).text();
+
+    expect(html).toContain('<span class="nav-here" aria-current="page">My card</span>');
+    expect(html).not.toContain('<a href="/">My card</a>');
+  });
+
+  it("renders outside the card's column, so the card is unchanged for everyone", async () => {
+    // The nav is wider than the 28rem member column. Putting it inside would
+    // have meant widening the card page for every member to suit admins.
+    await seedCurrentMember();
+    await makeAdmin();
+
+    const html = await (await get("/")).text();
+
+    expect(html.indexOf('class="admin-nav"')).toBeLessThan(html.indexOf("<main>"));
   });
 
   it("follows the database rather than the session cookie", async () => {
@@ -234,11 +262,11 @@ describe("the admin breadcrumb", () => {
     // most every thirty days. Reading `users` is what stops a newly granted
     // admin waiting a month for a way in.
     await seedCurrentMember();
-    expect(await (await get("/")).text()).not.toMatch(ADMIN_LINK);
+    expect(await (await get("/")).text()).not.toMatch(ADMIN_NAV);
 
     await makeAdmin();
 
-    expect(await (await get("/")).text()).toMatch(ADMIN_LINK);
+    expect(await (await get("/")).text()).toMatch(ADMIN_NAV);
   });
 
   it("is offered to an admin who has no membership at all", async () => {
@@ -249,13 +277,13 @@ describe("the admin breadcrumb", () => {
 
     const html = await (await get("/no-active-membership")).text();
 
-    expect(html).toMatch(ADMIN_LINK);
+    expect(html).toMatch(ADMIN_NAV);
   });
 
   it("is absent on the no-membership page for an ordinary user", async () => {
     await insertUser();
 
-    expect(await (await get("/no-active-membership")).text()).not.toMatch(ADMIN_LINK);
+    expect(await (await get("/no-active-membership")).text()).not.toMatch(ADMIN_NAV);
   });
 });
 

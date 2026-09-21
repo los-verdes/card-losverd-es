@@ -13,6 +13,7 @@ import { createMiddleware } from "hono/factory";
 import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import type { Env } from "../index";
+import { AdminNav } from "../admin/nav";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { CLAIM_PATH } from "./claimMembership";
 import {
@@ -110,9 +111,6 @@ const LogoutButton: FC = () => (
   </form>
 );
 
-/** Where the admin pages start; their own nav links the rest. */
-export const ADMIN_HOME = "/admin/reports";
-
 /**
  * Whether this user is an admin, read from D1 rather than taken from the
  * session cookie's `isAdmin` claim.
@@ -131,18 +129,22 @@ export async function isCurrentAdmin(env: Env, userId: number): Promise<boolean>
 }
 
 /**
- * A way through to the admin pages for the people who have them, kept
- * deliberately quiet: a plain line rather than another bordered action, since
- * this page belongs to the member's own card and the admin tools are an
- * aside. Shown on the no-membership page too -- an admin who has never bought
- * a membership never reaches the card page at all, and would otherwise have
- * to know the URL.
+ * The way through to the admin pages, for the people who have them.
+ *
+ * This used to be one quiet line at the foot of the page, on the reasoning
+ * that the page belongs to the member's own card and the admin tools are an
+ * aside. In practice it was easy to miss entirely, and it named one
+ * destination out of thirteen. An admin now gets the same nav here as on the
+ * admin pages themselves, above the card rather than below it.
+ *
+ * It renders outside the card's narrow column (see `Page`), so the card looks
+ * exactly as it does for everybody else.
+ *
+ * Shown on the no-membership page too: an admin who has never bought a
+ * membership never reaches the card page at all, and would otherwise have to
+ * know the URL.
  */
-const AdminLink: FC = () => (
-  <p class="admin-link">
-    <a href={ADMIN_HOME}>Admin: membership reports and orders</a>
-  </p>
-);
+const adminNav = (isAdmin: boolean) => (isAdmin ? <AdminNav current="/" /> : null);
 
 /**
  * Every order on record for this member, counting or not. An order that does
@@ -188,7 +190,7 @@ export const MemberCard: FC<{
   orders: MemberOrder[];
   isAdmin: boolean;
 }> = ({ member, orders, isAdmin }) => (
-  <Page title="Membership Card">
+  <Page title="Membership Card" nav={adminNav(isAdmin)}>
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
       {`${member.first_name} ${member.last_name}`.trim()}
@@ -232,7 +234,6 @@ export const MemberCard: FC<{
       Change the name on my card
     </a>
     <MembershipHistory orders={orders} email={member.email} />
-    {isAdmin && <AdminLink />}
     <LogoutButton />
   </Page>
 );
@@ -277,7 +278,7 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
   email,
   isAdmin,
 }) => (
-  <Page title="No Membership Found">
+  <Page title="No Membership Found" nav={adminNav(isAdmin)}>
     <h1>No Active Membership Found</h1>
     <p>
       No current membership was found for <strong>{email}</strong>.
@@ -311,7 +312,6 @@ export const NoActiveMembership: FC<{ email: string; isAdmin: boolean }> = ({
       Otherwise, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>{" "}
       for help.
     </p>
-    {isAdmin && <AdminLink />}
     <LogoutButton />
   </Page>
 );
