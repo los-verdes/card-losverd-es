@@ -1,0 +1,14 @@
+-- `members.status` was written by the order sync and read by nothing (#224).
+-- Whether a card is good is answered from `expiration_date`, and from
+-- `revoked_cards` and `banned_people`, at the moment somebody asks
+-- (`effectiveStatus()` in src/member/artifacts.ts). A stored label that only
+-- moved when a sync happened to touch the row looked authoritative and was
+-- not, which is how somebody later comes to trust it.
+--
+-- This must not reach an environment before the Worker that stopped naming
+-- the column (#281): the deploy applies migrations first, and the Worker still
+-- running would be selecting a column that is gone.
+--
+-- The column is not indexed and no trigger or view names it, so SQLite drops
+-- it in place.
+ALTER TABLE members DROP COLUMN status;
