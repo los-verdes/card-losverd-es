@@ -23,9 +23,9 @@ beforeEach(async () => {
     .bind("admin@example.com")
     .run();
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status,
+    `INSERT INTO members (member_id, first_name, last_name, email,
        expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-03-04', '2021-07-15', 'token', 1)`,
+     VALUES (?, 'Jane', 'Doe', ?, '2099-03-04', '2021-07-15', 'token', 1)`,
   )
     .bind(CARD, EMAIL)
     .run();
@@ -58,7 +58,7 @@ describe("revoking a membership", () => {
     await revokeCard(env, CARD, "conduct", 1);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
-    expect(member.status).toBe("revoked");
+    expect(effectiveStatus(member, TODAY)).toBe("revoked");
     expect(member.expiration_date).toBeNull();
     expect(effectiveStatus(member, TODAY)).toBe("revoked");
     expect(isMembershipCurrent(member, TODAY)).toBe(false);
@@ -67,23 +67,23 @@ describe("revoking a membership", () => {
   it("resolves the same by card number as by address", async () => {
     await revokeCard(env, CARD, null, 1);
 
-    expect((await getMemberById(env, CARD))!.status).toBe("revoked");
+    expect(effectiveStatus((await getMemberById(env, CARD))!, TODAY)).toBe("revoked");
   });
 
   it("leaves the orders underneath untouched", async () => {
-    // The whole reason a withdrawal is its own table: lifting it has to put
+    // The whole reason a revocation is its own table: lifting it has to put
     // the membership back to whatever the orders say, without remembering
     // what it used to be.
     await revokeCard(env, CARD, null, 1);
     await restoreCard(env, CARD);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
-    expect(member.status).toBe("active");
+    expect(effectiveStatus(member, TODAY)).toBe("active");
     expect(member.expiration_date).toBe("2099-03-04");
   });
 
   it("survives a sync that rewrites the member's derived state", async () => {
-    // `deriveMembershipState()` recomputes `status` from orders and the
+    // `deriveMembershipState()` recomputes the row from orders and the
     // upsert writes it unconditionally, so a revocation stored on `members`
     // would be undone at the member's next order sync -- silently.
     await revokeCard(env, CARD, null, 1);
@@ -93,7 +93,7 @@ describe("revoking a membership", () => {
       lastName: "Doe",
     });
 
-    expect((await getMemberByEmail(env, EMAIL))!.status).toBe("revoked");
+    expect(effectiveStatus((await getMemberByEmail(env, EMAIL))!, TODAY)).toBe("revoked");
   });
 
   it("moves last_updated_at, so installed passes are told", async () => {

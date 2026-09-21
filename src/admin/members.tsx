@@ -181,7 +181,7 @@ const Summary: FC<{
       </form>
     )}
     <h3>Membership standing</h3>
-    {member.status === "revoked" ? (
+    {member.revoked ? (
       <>
         <p class="danger">
           <strong>This membership has been revoked.</strong> Their card reads as

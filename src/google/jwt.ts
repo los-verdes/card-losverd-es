@@ -172,7 +172,7 @@ function localizedString(value: string): LocalizedString {
 }
 
 /**
- * Maps this project's `members.status` (Phase 2.1) to Google Wallet's
+ * Maps a member's effective status (`effectiveStatus()`) to Google Wallet's
  * `GenericObject.state` enum. There's no dedicated "revoked" state in
  * Google's model -- `INACTIVE` is the closest fit (hides the pass from the
  * holder's default Wallet view), distinct from `EXPIRED`'s date-based UI

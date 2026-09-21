@@ -37,8 +37,8 @@ function mockGoogle(objectStatus = 200): Call[] {
 
 async function insertMember(memberId = MEMBER_ID) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', 'jane@example.com', 'active', '2099-01-15', '2024-01-15', 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', 'jane@example.com', '2099-01-15', '2024-01-15', 'token', 1)`,
   )
     .bind(memberId)
     .run();

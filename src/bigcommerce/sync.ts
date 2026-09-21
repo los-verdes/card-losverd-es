@@ -271,16 +271,6 @@ function resolveMembership(
   return products.find((product) => MEMBERSHIP_SKUS.has(product.sku)) ?? null;
 }
 
-function computeStatus(
-  expirationDate: string | null,
-  now: Date,
-): "active" | "expired" {
-  return expirationDate !== null &&
-    expirationDate >= now.toISOString().slice(0, 10)
-    ? "active"
-    : "expired";
-}
-
 /** The `membership_orders` columns a member's card is derived from. */
 export interface CountedMembershipOrder {
   created_on: string;
@@ -291,7 +281,6 @@ export interface CountedMembershipOrder {
 }
 
 export interface MembershipState {
-  status: "active" | "expired";
   /** `YYYY-MM-DD`; null when no order counts (e.g. every order was refunded). */
   expirationDate: string | null;
   memberSince: string | null;
@@ -311,20 +300,19 @@ export interface MembershipState {
  * - `member_since` is the earliest counted order (Squarespace-era orders from
  *   the legacy import included); `member_since_overrides` still wins when a
  *   pass is rendered.
- * - `expiration_date` is the latest counted order's expiry, and `status` is
- *   derived from it -- mirroring the Python app's "any membership still
- *   active" semantics.
+ * - `expiration_date` is the latest counted order's expiry -- mirroring the
+ *   Python app's "any membership still active" semantics. Whether that makes
+ *   the membership active or expired is not stored: it depends on the day
+ *   somebody asks (`effectiveStatus()` in src/member/artifacts.ts).
  * - The name comes from the latest counted order.
  *
  * ISO timestamps sort chronologically, so plain string comparison is correct.
  */
 export function deriveMembershipState(
   orders: CountedMembershipOrder[],
-  now: Date = new Date(),
 ): MembershipState {
   if (orders.length === 0) {
     return {
-      status: "expired",
       expirationDate: null,
       memberSince: null,
       firstName: null,
@@ -341,7 +329,6 @@ export function deriveMembershipState(
   }
   const expirationDate = expiresOn.slice(0, 10);
   return {
-    status: computeStatus(expirationDate, now),
     expirationDate,
     memberSince: earliest.created_on.slice(0, 10),
     firstName: latest.first_name || null,
@@ -400,7 +387,7 @@ export async function refreshMemberFromOrders(
   const state = deriveMembershipState(orders);
 
   const existing = await env.DB.prepare(
-    `SELECT member_id, first_name, last_name, status, expiration_date, member_since
+    `SELECT member_id, first_name, last_name, expiration_date, member_since
      FROM members WHERE email = ?`,
   )
     .bind(email)
@@ -408,7 +395,6 @@ export async function refreshMemberFromOrders(
       member_id: string;
       first_name: string;
       last_name: string;
-      status: string;
       expiration_date: string | null;
       member_since: string | null;
     }>();
@@ -419,7 +405,6 @@ export async function refreshMemberFromOrders(
     const unchanged =
       existing.first_name === firstName &&
       existing.last_name === lastName &&
-      existing.status === state.status &&
       existing.expiration_date === state.expirationDate &&
       existing.member_since === state.memberSince;
     if (unchanged) {
@@ -427,13 +412,12 @@ export async function refreshMemberFromOrders(
     }
     await env.DB.prepare(
       `UPDATE members
-       SET first_name = ?, last_name = ?, status = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
+       SET first_name = ?, last_name = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
        WHERE member_id = ?`,
     )
       .bind(
         firstName,
         lastName,
-        state.status,
         state.expirationDate,
         state.memberSince,
         now,
@@ -457,12 +441,11 @@ export async function refreshMemberFromOrders(
   // that got there first keeps its member_id and auth token, and takes this
   // state, which was derived from the same email's history.
   const inserted = await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        first_name = excluded.first_name,
        last_name = excluded.last_name,
-       status = excluded.status,
        expiration_date = excluded.expiration_date,
        member_since = excluded.member_since,
        last_updated_at = excluded.last_updated_at
@@ -473,7 +456,6 @@ export async function refreshMemberFromOrders(
       state.firstName ?? fallback.firstName,
       state.lastName ?? fallback.lastName,
       email,
-      state.status,
       state.expirationDate,
       state.memberSince,
       authToken,

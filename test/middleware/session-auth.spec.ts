@@ -42,17 +42,15 @@ async function insertMember(fields: {
   memberId: string;
   email: string;
   userId?: number | null;
-  status?: string;
   expirationDate: string;
 }) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, user_id, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, ?, ?, ?, 'token', 0)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, user_id, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', ?, ?, ?, 'token', 0)`,
   )
     .bind(
       fields.memberId,
       fields.email,
-      fields.status ?? "active",
       fields.expirationDate,
       fields.userId ?? null,
     )
@@ -71,6 +69,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.useRealTimers();
+  // Before `members`, which `revoked_cards` references.
+  await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
 });
@@ -186,9 +186,9 @@ describe("requireActiveMembership", () => {
     expect((await cardRequestFor(1)).status).toBe(200);
   });
 
-  it("redirects when the only membership has lapsed, even if status still says active", async () => {
+  it("redirects when the only membership has lapsed", async () => {
     await insertUser(1, "jane@example.com");
-    await insertMember({ memberId: "BC-1", email: "jane@example.com", status: "active", expirationDate: "2026-09-15" });
+    await insertMember({ memberId: "BC-1", email: "jane@example.com", expirationDate: "2026-09-15" });
     const res = await cardRequestFor(1);
     expect(res.status).toBe(302);
     expect(res.headers.get("Location")).toBe(NO_ACTIVE_MEMBERSHIP_PATH);
@@ -196,7 +196,8 @@ describe("requireActiveMembership", () => {
 
   it("redirects when the membership is revoked", async () => {
     await insertUser(1, "jane@example.com");
-    await insertMember({ memberId: "BC-1", email: "jane@example.com", status: "revoked", expirationDate: "2099-01-01" });
+    await insertMember({ memberId: "BC-1", email: "jane@example.com", expirationDate: "2099-01-01" });
+    await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES ('BC-1')").run();
     expect((await cardRequestFor(1)).headers.get("Location")).toBe(NO_ACTIVE_MEMBERSHIP_PATH);
   });
 

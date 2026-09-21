@@ -13,6 +13,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
+import { isMembershipCurrent } from "../member/artifacts";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { emailMemberCard } from "../email/card";
@@ -62,7 +63,7 @@ const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, fo
         <li>
           {!member
             ? "No member card"
-            : member.expiration_date && member.status === "active"
+            : member.expiration_date && isMembershipCurrent(member)
               ? `Member card, current through ${formatShortDate(member.expiration_date)}`
               : "Member card, but no current membership"}
         </li>

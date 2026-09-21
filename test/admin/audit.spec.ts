@@ -24,9 +24,9 @@ beforeEach(async () => {
     .bind(OTHER_ADMIN_ID, "second.admin@example.com")
     .run();
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status,
+    `INSERT INTO members (member_id, first_name, last_name, email,
        expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-03-04', '2021-07-15', 'token', 1)`,
+     VALUES (?, 'Jane', 'Doe', ?, '2099-03-04', '2021-07-15', 'token', 1)`,
   )
     .bind(CARD, EMAIL)
     .run();

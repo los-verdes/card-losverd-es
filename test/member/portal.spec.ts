@@ -72,8 +72,8 @@ async function insertMember(fields: {
   memberSince?: string | null;
 }) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, user_id, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, user_id, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'token', 1)`,
   )
     .bind(
       fields.memberId ?? "BC-1",

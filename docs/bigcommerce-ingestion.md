@@ -109,12 +109,20 @@ deliver them chronologically.
 | `member_id` | A random `LV-{uuid}` if inserting a brand-new row | It's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so it must identify exactly one member and never change: a row matched by email keeps its **existing** `member_id`. Not derived from the BigCommerce customer id (#66): guest checkouts all have `customer_id` 0, and an order attributed to someone else carries the buyer's. Rows are always found by email, so the id never needs to be reproducible. |
 | `first_name` / `last_name` | Billing name on the member's latest counted order | Same field the Python `insert_order_as_membership()` uses. Falls back to the stored name (or, for a new row, the synced order's) when that order has none, e.g. a Squarespace-era row. |
 | `email` | `membership_orders.member_email` (lower-cased; the billing email unless re-pointed) | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
-| `status` | `'active'` if `expiration_date >= today`, else `'expired'` | Mirrors `AnnualMembership.is_active` (created_on within the last 365 days) across *all* of a member's orders. The sync never sets `'revoked'`, and doesn't preserve it either: the legacy app has no revocation concept, so a sync re-derives status like any other row. Nothing reads this column -- revocation lives in `revoked_cards`, and whether a card is good is answered from `expiration_date` ([#224](https://github.com/los-verdes/card-losverd-es/issues/224) drops it). |
 | `expiration_date` | Latest counted order's `created_on + 365 days`, `YYYY-MM-DD`; `NULL` if no order counts | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Can move earlier, when a renewal is refunded. |
 | `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders once the legacy export has loaded them. `member_since_overrides` still wins when a pass is rendered. |
 | `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data — a resync must never rotate it out from under an already-installed pass. |
 | `last_updated_at` | `Date.now()`, only when a pass-visible field changed | Cache-validation timestamp Apple's polling endpoint (`Phase 4.2`) compares against. |
 | `created_at` | DB default | Untouched on update. |
+
+Nothing here records whether a membership is active or expired. That depends on
+the day somebody asks, so it is answered from `expiration_date` at that moment
+(`effectiveStatus()` and `isMembershipCurrent()` in `src/member/artifacts.ts`),
+and revocation lives in its own tables, which the sync never touches. The
+previous site stored the answer (`AnnualMembership.is_active`), and so did an
+earlier version of this one, in a `members.status` column that only moved when
+a sync happened to touch the row
+([#224](https://github.com/los-verdes/card-losverd-es/issues/224)).
 
 A member whose orders all stop counting (every one refunded, say) keeps their
 row -- and so their `member_id`, auth token, and device registrations, should

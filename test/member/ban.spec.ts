@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { banPerson, bannedPeople, isBanned, isUserBanned, liftBan } from "../../src/member/ban";
 import { revokeCard, restoreCard } from "../../src/member/revocation";
-import { getMemberByEmail, isMembershipCurrent } from "../../src/member/artifacts";
+import { effectiveStatus, getMemberByEmail, isMembershipCurrent } from "../../src/member/artifacts";
 import { lookupPassHolder } from "../../src/member/passHolder";
 import { activeMemberships } from "../../src/admin/reportQueries";
 
@@ -23,9 +23,9 @@ beforeEach(async () => {
     .bind(USER_ID, EMAIL)
     .run();
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status,
+    `INSERT INTO members (member_id, first_name, last_name, email,
        expiration_date, member_since, user_id, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-03-04', '2021-07-15', ?, 'token', 1)`,
+     VALUES (?, 'Jane', 'Doe', ?, '2099-03-04', '2021-07-15', ?, 'token', 1)`,
   )
     .bind(CARD, EMAIL, USER_ID)
     .run();
@@ -60,12 +60,12 @@ async function getAs(path: string, userId: number | null = USER_ID) {
   );
 }
 
-describe("barring somebody from the group", () => {
+describe("expelling somebody from the group", () => {
   it("takes their membership away, like a revoked card does", async () => {
     await banPerson(env, EMAIL, "conduct", null);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
-    expect(member.status).toBe("revoked");
+    expect(effectiveStatus(member, TODAY)).toBe("revoked");
     expect(member.expiration_date).toBeNull();
     expect(isMembershipCurrent(member, TODAY)).toBe(false);
   });
@@ -102,12 +102,12 @@ describe("barring somebody from the group", () => {
     await liftBan(env, EMAIL);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
-    expect(member.status).toBe("active");
+    expect(effectiveStatus(member, TODAY)).toBe("active");
     expect(member.expiration_date).toBe("2099-03-04");
     expect((await getAs("/")).status).toBe(200);
   });
 
-  it("leaves a separate card withdrawal standing when the ban is lifted", async () => {
+  it("leaves a separate card revocation standing when the ban is lifted", async () => {
     // Two independent decisions. Resolving a ban into `revoked` rather than
     // writing a revocation row is what keeps them independent.
     await revokeCard(env, CARD, "a separate matter", null);
@@ -115,9 +115,9 @@ describe("barring somebody from the group", () => {
 
     await liftBan(env, EMAIL);
 
-    expect((await getMemberByEmail(env, EMAIL))!.status).toBe("revoked");
+    expect(effectiveStatus((await getMemberByEmail(env, EMAIL))!, TODAY)).toBe("revoked");
     await restoreCard(env, CARD);
-    expect((await getMemberByEmail(env, EMAIL))!.status).toBe("active");
+    expect(effectiveStatus((await getMemberByEmail(env, EMAIL))!, TODAY)).toBe("active");
   });
 
   it("says a scanned card is not valid", async () => {

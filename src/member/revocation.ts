@@ -1,12 +1,11 @@
 /**
  * Revoking a membership before it expires, and lifting that again (#31).
  *
- * The reading half of this costs almost nothing: `revoked` was already a
- * legal `members.status`, already excluded by the access checks, already
- * carried on the Apple pass and already mapped to Google's `INACTIVE`. All
- * that was missing was a way for it to arrive, which `MEMBER_SELECT`
- * resolves from this table. So the code here is only about writing it down
- * and making sure the passes already in people's phones hear about it.
+ * The reading half of this costs almost nothing: `MEMBER_SELECT` resolves a
+ * row in this table into `revoked` on the member, which the access checks
+ * refuse, the Apple pass carries and Google's `INACTIVE` maps from. So the
+ * code here is only about writing it down and making sure the passes already
+ * in people's phones hear about it.
  */
 
 import type { Env } from "../index";
