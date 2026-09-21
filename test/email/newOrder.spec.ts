@@ -83,12 +83,31 @@ afterEach(async () => {
   env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
   env.EMAIL = undefined;
   await env.DB.exec("DELETE FROM card_emails");
+  await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM etl_sync_state");
 });
 
 describe("a new order reaching Completed", () => {
+  it("records a suppressed address in the audit log instead of a card emailed", async () => {
+    // Nothing reached them, so "Card emailed" would be a false line; the
+    // order's one send is still spent, which is right -- trying again would
+    // meet the same list.
+    env.EMAIL = fakeEmailBinding({ suppressed: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const order = makeOrder();
+    mockUpstreams([order]);
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    const { results } = await env.DB.prepare("SELECT action, detail FROM audit_log").all();
+    expect(results).toEqual([
+      { action: "card.suppressed", detail: expect.stringMatching(/^Their new order completed, but the address is on the email suppression list/) },
+    ]);
+    expect(await cardEmailRows()).toHaveLength(1);
+  });
+
   it("emails the member their card and records the send", async () => {
     const order = makeOrder();
     mockUpstreams([order]);

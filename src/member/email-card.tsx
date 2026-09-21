@@ -25,7 +25,7 @@ import { Hono, type Context } from "hono";
 import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import { readSessionCookie, verifySessionToken } from "../auth/session";
-import { sendMembershipCardEmail } from "../email/card";
+import { recordCardSend, sendMembershipCardEmail } from "../email/card";
 import {
   TURNSTILE_RESPONSE_FIELD,
   verifyTurnstileToken,
@@ -197,9 +197,13 @@ export async function deliverCardByEmail(
     }
     // Non-null: isMembershipCurrent() requires an expiration date.
     const current = { ...member, expiration_date: member.expiration_date! };
-    await sendMembershipCardEmail(env, current, { kind: "request", submittedOn });
-    console.log("Email card sent", { memberId: member.member_id });
-    recordOutcome("email_card.delivery", { result: "sent" });
+    const reason = { kind: "request", submittedOn } as const;
+    const outcome = await sendMembershipCardEmail(env, current, reason);
+    // Recorded here too: this path does not go through `emailCardTo`, and
+    // until it did this, cards somebody asked for never reached the audit log.
+    await recordCardSend(env, current.email, reason, outcome);
+    if (outcome === "sent") console.log("Email card sent", { memberId: member.member_id });
+    recordOutcome("email_card.delivery", { result: outcome });
   } catch (err) {
     console.error("Email card delivery failed", { error: String(err) });
     recordOutcome("email_card.delivery", { result: "failed" });

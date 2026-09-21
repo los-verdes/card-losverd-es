@@ -13,7 +13,7 @@
  */
 
 import type { Env } from "../index";
-import { sendEmail } from "./send";
+import { sendEmail, type SendOutcome } from "./send";
 
 export const CLAIM_EMAIL_SUBJECT = "Confirm your Los Verdes membership";
 
@@ -55,8 +55,8 @@ export async function sendClaimLinkEmail(
   env: Env,
   recipient: string,
   confirmUrl: string,
-): Promise<void> {
-  await sendEmail(env, {
+): Promise<SendOutcome> {
+  return sendEmail(env, {
     from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
     to: { email: recipient },
     subject: CLAIM_EMAIL_SUBJECT,

@@ -50,6 +50,7 @@ export const AUDIT_ACTIONS = [
   "member_since.cleared",
   "order.reattributed",
   "card.emailed",
+  "card.suppressed",
   "admin.granted",
   "admin.revoked",
 ] as const;
@@ -68,6 +69,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "member_since.cleared": "Member since correction removed",
   "order.reattributed": "Order re-attributed",
   "card.emailed": "Card emailed",
+  "card.suppressed": "Card not sent (suppressed)",
   "admin.granted": "Admin access granted",
   "admin.revoked": "Admin access revoked",
 };

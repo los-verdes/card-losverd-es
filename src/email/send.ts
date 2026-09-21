@@ -86,14 +86,22 @@ export function allowsRecipient(
 }
 
 /**
+ * What became of a message: sent; `not-allowed`, withheld by this
+ * environment's allow-list; or `suppressed`, refused by Cloudflare because the
+ * address is on the account's suppression list.
+ */
+export type SendOutcome = "sent" | "not-allowed" | "suppressed";
+
+/**
  * Sends one message, unless this environment isn't allowed to email that
- * recipient. Throws (without retrying) if the binding is missing, or if it
- * rejects the message.
+ * recipient or Cloudflare has the address suppressed; says which. Throws
+ * (without retrying) if the binding is missing, or if it rejects the message
+ * for any other reason.
  */
 export async function sendEmail(
   env: EmailEnv,
   message: EmailMessage,
-): Promise<void> {
+): Promise<SendOutcome> {
   if (!allowsRecipient(env.EMAIL_RECIPIENT_ALLOWLIST, message.to.email)) {
     // Always logged, never silent. The case this is written for is someone
     // testing delivery from staging long after this was added, finding that
@@ -109,12 +117,20 @@ export async function sendEmail(
       allowlist: env.EMAIL_RECIPIENT_ALLOWLIST || "(empty -- nobody)",
       subject: message.subject,
     });
-    return;
+    return "not-allowed";
   }
   if (!env.EMAIL) {
     throw new Error(
       "No email transport: this environment has no Cloudflare Email Service binding (`send_email` named EMAIL in wrangler.toml)",
     );
   }
-  return sendViaBinding(env.EMAIL, message);
+  const outcome = await sendViaBinding(env.EMAIL, message);
+  if (outcome === "suppressed") {
+    // Logged like the allow-list case above, and for the same reason: without
+    // the address, which is exactly the one somebody asked not to be mailed.
+    console.warn("Email suppressed: recipient is on the account's suppression list", {
+      subject: message.subject,
+    });
+  }
+  return outcome;
 }

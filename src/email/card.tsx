@@ -30,7 +30,8 @@ import {
   type MemberRecord,
   cardNameText,
 } from "../member/artifacts";
-import { sendEmail } from "./send";
+import { recordOutcome } from "../lib/outcome";
+import { sendEmail, type SendOutcome } from "./send";
 
 export const EMAIL_SUBJECT = "Los Verdes Membership Card Details";
 export const CARD_IMAGE_FILENAME = "los-verdes-membership-card.png";
@@ -164,13 +165,14 @@ async function googleWalletLink(
 /**
  * Emails `member` their card. The caller decides whether this member should
  * be emailed at all; this throws on failure, so a caller inside `waitUntil`
- * should catch.
+ * should catch. Says whether it was sent, withheld by the allow-list, or
+ * refused because the address is on the suppression list.
  */
 export async function sendMembershipCardEmail(
   env: Env,
   member: MemberRecord & { expiration_date: string },
   reason: CardEmailReason,
-): Promise<void> {
+): Promise<SendOutcome> {
   // Sequential: rendering and signing are CPU-bound, so running them
   // concurrently wouldn't finish sooner, and a failure in one would leave
   // the others running on after this function returns.
@@ -185,7 +187,7 @@ export async function sendMembershipCardEmail(
     reason,
     baseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ""),
   };
-  await sendEmail(env, {
+  return sendEmail(env, {
     from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
     to: { email: member.email, name: props.name },
     subject: EMAIL_SUBJECT,
@@ -230,6 +232,42 @@ export async function findCardRecipient(
 }
 
 /**
+ * What a card send leaves in the audit log, so "has anything been sent to
+ * this person, and when" has one answer -- including "we tried, and
+ * Cloudflare would not deliver it". Every path that sends a card calls this;
+ * `card_emails` is keyed on the order and cannot answer it.
+ *
+ * Best effort, and after the send: the message has left (or been refused),
+ * so throwing here would leave the caller's only move being to try again.
+ * An environment's allow-list withholding a message is not recorded -- that
+ * is configuration, not something that happened to this person.
+ */
+export async function recordCardSend(
+  env: Env,
+  email: string,
+  reason: CardEmailReason,
+  outcome: SendOutcome,
+): Promise<void> {
+  if (outcome === "not-allowed") return;
+  if (outcome === "suppressed") {
+    recordOutcome("card.suppressed", { reason: reason.kind });
+    await recordAuditEventBestEffort(env, {
+      action: "card.suppressed",
+      subjectEmail: email,
+      actorEmail: null,
+      detail: `${EMAIL_REASONS[reason.kind]}, but the address is on the email suppression list (a bounce, a spam report, or added by hand), so nothing was sent.`,
+    });
+    return;
+  }
+  await recordAuditEventBestEffort(env, {
+    action: "card.emailed",
+    subjectEmail: email,
+    actorEmail: null,
+    detail: EMAIL_REASONS[reason.kind],
+  });
+}
+
+/**
  * Emails `member` their card, logging rather than throwing on failure --
  * callers are a `waitUntil` or a queue consumer that must not fail over an
  * email. Returns whether a message was sent.
@@ -240,19 +278,10 @@ export async function emailCardTo(
   reason: CardEmailReason,
 ): Promise<boolean> {
   try {
-    await sendMembershipCardEmail(env, member, reason);
+    const outcome = await sendMembershipCardEmail(env, member, reason);
+    await recordCardSend(env, member.email, reason, outcome);
+    if (outcome !== "sent") return false;
     console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
-    // Best effort, and deliberately after the send: the message has left, so
-    // throwing here would leave the caller's only move being to send it
-    // again. Every card email in the system passes through this function, so
-    // this is the one place that can answer "has anything been sent to this
-    // person, and when" -- `card_emails` is keyed on the order and cannot.
-    await recordAuditEventBestEffort(env, {
-      action: "card.emailed",
-      subjectEmail: member.email,
-      actorEmail: null,
-      detail: EMAIL_REASONS[reason.kind],
-    });
     return true;
   } catch (err) {
     console.error("Card email failed", { reason: reason.kind, error: String(err) });

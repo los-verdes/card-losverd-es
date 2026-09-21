@@ -90,13 +90,29 @@ export function buildBindingMessage(message: EmailMessage): BindingMessage {
  * Sends one message. Throws if the binding rejects it, with the service named
  * in the error, so a log line says where the failure came from.
  */
+/**
+ * The binding's code for an address on the account's suppression list -- a
+ * hard bounce, a spam report, or an address added by hand in the dashboard.
+ * https://developers.cloudflare.com/email-service/api/send-emails/workers-api/
+ */
+const RECIPIENT_SUPPRESSED = "E_RECIPIENT_SUPPRESSED";
+
+/**
+ * Sends one message. An address on the suppression list is an outcome, not a
+ * failure: nothing is broken, Cloudflare is declining on purpose, and callers
+ * record it differently. Anything else the binding rejects throws.
+ */
 export async function sendViaBinding(
   binding: SendEmailBinding,
   message: EmailMessage,
-): Promise<void> {
+): Promise<"sent" | "suppressed"> {
   try {
     await binding.send(buildBindingMessage(message));
+    return "sent";
   } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === RECIPIENT_SUPPRESSED) {
+      return "suppressed";
+    }
     // The binding throws rather than returning a status, so this is where the
     // reason is legible. Naming the transport matters while there are two:
     // "mail send failed" alone would leave a reader guessing which.
