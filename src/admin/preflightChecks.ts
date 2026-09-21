@@ -838,7 +838,7 @@ export const MANUAL_STEPS = [
   "Sign in with Google, and with Apple, from a browser that has never held a session here.",
   "Scan a QR code from a legacy pass or an emailed card image and confirm /verify-pass accepts it.",
   "Send yourself a card from /email-card and confirm it arrives.",
-  "Compare the admin reports against the legacy report; they gate decommissioning, not just cutover.",
+  "Compare the admin reports against the legacy report; decommissioning the previous stack waits on it.",
   "Spot-check a few early members' \"member since\" dates against the legacy import.",
   "Reconcile the member count above against BigCommerce's own admin, after the legacy import and a full resync.",
 ];

@@ -137,8 +137,8 @@ async function touchAndNotify(env: Env, email: string): Promise<void> {
  *
  * `set_by_email` is resolved here rather than by the caller: every screen
  * that shows a name somebody else chose wants to say who, and a user id on
- * its own answers nobody's question. Null where the row predates migration
- * 0019, or came from the one-time legacy import.
+ * its own answers nobody's question. Null where no signed-in person set the
+ * name, as with one carried across by the one-time legacy import.
  */
 export async function getDisplayName(
   env: Env,

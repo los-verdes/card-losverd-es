@@ -7,7 +7,7 @@ export interface PassHolder {
   expirationDate: string | null;
   active: boolean;
   /**
-   * Withdrawn rather than lapsed. Distinguished because the card is genuine
+   * Revoked rather than lapsed. Distinguished because the card is genuine
    * either way, and somebody holding it up at a gate is owed a straight
    * answer about which it is -- a card that says only "expired" invites an
    * argument about renewing.
@@ -51,8 +51,8 @@ export async function lookupPassHolder(
   const member = await env.DB.prepare(
     // Joined rather than selected from `members` alone: the verification page
     // must show the same name as the card it is verifying,
-    // and must not call a withdrawn membership merely expired (0016) -- which
-    // a ban produces as surely as a withdrawn card does (0017).
+    // and must not call a revoked membership merely expired -- which
+    // a ban produces as surely as a revoked card does.
     `SELECT m.first_name, m.last_name, m.status, m.expiration_date, d.display_name,
             COALESCE(r.member_id, b.email) AS revoked_card
        FROM members m
@@ -80,7 +80,7 @@ export async function lookupPassHolder(
       name: legacyCard!.full_name,
       expirationDate,
       active: expirationDate !== null && expirationDate >= today,
-      // Nothing to withdraw: a revocation is keyed on a `members` row, and
+      // Nothing to revoke: a revocation is keyed on a `members` row, and
       // this branch is the case where there is none.
       revoked: false,
     };
@@ -89,7 +89,7 @@ export async function lookupPassHolder(
   const revoked = member.revoked_card !== null;
   return {
     name: cardNameText(member) || null,
-    // Nothing to be good through once it is withdrawn.
+    // Nothing to be good through once it is revoked.
     expirationDate: revoked ? null : member.expiration_date,
     active: !revoked && isMembershipCurrent(member, today),
     revoked,

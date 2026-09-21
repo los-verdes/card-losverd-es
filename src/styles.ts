@@ -203,7 +203,7 @@ button[aria-disabled="true"]::before {
 }
 
 /* The member's actions -- wallet passes, emailing a card. Outlined rather
-   than filled: there are several in a row, and a column of solid green
+   than filled: there are several in a row, and a column of solid verde
    blocks reads as a warning rather than as a menu. */
 .action {
   display: block;

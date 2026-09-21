@@ -277,7 +277,7 @@ describe("emailing the new member their card", () => {
   // Everything the card image and Apple pass need, as in email-card.spec.ts.
   beforeEach(async () => {
     const chain = getTestCertChain();
-    // Stated, not inherited: production leaves this empty until cutover, and
+    // Stated, not inherited: wrangler.toml sets this per environment, and
     // a test about delivery must not turn on what that happens to say today.
     env.EMAIL_RECIPIENT_ALLOWLIST = "*";
     email = fakeEmailBinding();

@@ -26,7 +26,7 @@ export const VerificationResult: FC<{ holder: PassHolder }> = ({ holder }) => (
       {holder.active
         ? "MEMBERSHIP VALID"
         : holder.revoked
-          ? "MEMBERSHIP WITHDRAWN"
+          ? "MEMBERSHIP REVOKED"
           : "MEMBERSHIP EXPIRED"}
     </h1>
     {holder.revoked ? (

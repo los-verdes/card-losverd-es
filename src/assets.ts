@@ -50,7 +50,7 @@ const FAVICON_MAX_AGE_SECONDS = 3_600;
  *
  * A crest does not survive 16 pixels -- `templates/card/crest.png` is 53 KB
  * of detail that becomes a smudge in a tab strip -- so this is a mark that
- * reads at that size: the group's green, and `LV` drawn as stroked paths
+ * reads at that size: the group's verde, and `LV` drawn as stroked paths
  * rather than set as text, so there is no font to resolve and no hinting to
  * go wrong at 16 pixels.
  *

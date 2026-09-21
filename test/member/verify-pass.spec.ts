@@ -19,6 +19,8 @@ beforeEach(() => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await env.DB.exec("DELETE FROM legacy_membership_cards");
+  // Before `members`, which it references.
+  await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM members");
 });
 
@@ -125,6 +127,19 @@ describe("GET /verify-pass/:serial", () => {
   it("treats a revoked member as not current", async () => {
     await insertMember({ memberId: "BC-1", email: "jane@example.com", status: "revoked", expirationDate: "2099-01-01" });
     expect(await (await signedVerify("BC-1")).text()).toContain("MEMBERSHIP EXPIRED");
+  });
+
+  it("says a revoked card is revoked, in the code of conduct's word", async () => {
+    await insertMember({ memberId: "BC-1", email: "jane@example.com", expirationDate: "2099-01-01" });
+    await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES (?)").bind("BC-1").run();
+
+    const html = await (await signedVerify("BC-1")).text();
+
+    expect(html).toContain("MEMBERSHIP REVOKED");
+    expect(html).toContain("this membership has been revoked");
+    // Nothing to be good through, and not something renewing would fix.
+    expect(html).not.toContain("Good through");
+    expect(html).not.toContain("MEMBERSHIP EXPIRED");
   });
 
   it("verifies a new-stack card by member_id", async () => {

@@ -49,7 +49,7 @@ export const LOGIN_PATH = "/login";
 /**
  * Why the login page is refusing. Named rather than generic: "that sign-in
  * didn't complete, try again" is the wrong thing to tell somebody who has
- * been barred, and they would keep trying.
+ * been expelled, and they would keep trying.
  */
 export const BANNED_REASON = "account-blocked";
 export const NO_ACTIVE_MEMBERSHIP_PATH = "/no-active-membership";

@@ -157,7 +157,7 @@ revocations.post("/", csrf(), async (c) => {
 
   if (form.action === "unban") {
     const email = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
-    if (!email) return back({ error: "No ban to lift." });
+    if (!email) return back({ error: "No expulsion to lift." });
     return (await liftBan(c.env, email, c.get("session").userId))
       ? back({ saved: "unbanned" })
       : back({ error: "That person has not been expelled." });

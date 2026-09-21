@@ -112,9 +112,9 @@ the pass *class*), so nothing is lost if the id changes.
 (§3.1), so installed passes simply keep displaying until the member gets a
 new pass, which is the status quo. Consequence: the plan's Phase 2.2
 **pass-state migration (`auth_token` / `devices` / `registrations`) is
-dropped**, since it only existed to keep installed passes updating. Working
-pass updates for passes issued by the new stack (Phase 4.7 APNs) are still
-wanted.
+dropped**, since it only existed to keep installed passes updating. Passes
+issued by this stack do receive updates (Phase 4.7 APNs), confirmed on a real
+device against production.
 
 **D2 — QR signature key: reuse the legacy key.** `PASS_SIGNATURE_KEY` is set
 to the legacy `SECRET_KEY * 5` value, so existing QR codes keep verifying.

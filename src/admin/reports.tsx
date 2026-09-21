@@ -583,7 +583,7 @@ const MISSING_ORDER_COLUMNS = [
  * Read this page as a question, not a defect list. Nothing here has been
  * taken away from anyone: each order still counts towards its member's
  * membership, exactly as it did before it went missing. The flag is here
- * because deciding to withdraw somebody's membership is a judgement, and a
+ * because deciding to revoke somebody's membership is a judgement, and a
  * 404 from an API is not a good enough reason to make it automatically.
  */
 reports.get("/missing", async (c) => {
@@ -601,7 +601,7 @@ reports.get("/missing", async (c) => {
       <p>
         Orders the store no longer returns, oldest sighting first. <strong>They still count towards membership</strong>
         {" "}
-        -- nothing has been withdrawn from anyone. An order can vanish because it was deleted or archived in
+        -- nobody's membership has been revoked. An order can vanish because it was deleted or archived in
         BigCommerce, and it can also vanish because the store had a bad day, so the flag clears itself if a later
         sync finds the order again.
       </p>
@@ -681,7 +681,7 @@ reports.get("/extra-memberships", async (c) => {
         means <strong>somebody paid for a membership that no card exists for</strong>.
       </p>
       <p>
-        The order still counts for the one membership it is recorded as -- nothing has been withdrawn. Putting the
+        The order still counts for the one membership it is recorded as -- nothing has been revoked. Putting the
         rest right is a person&#39;s job: refund the extra, or place the membership under the right address. An order
         corrected in BigCommerce drops off this list on the next sync.
       </p>

@@ -496,7 +496,7 @@ export async function refreshMemberFromOrders(
  * Says so, once, when an order turns out to carry more than one membership.
  *
  * Deliberately not a failure: the order still confers the one membership it
- * is recorded as, and a line item never withdraws anyone's membership by
+ * is recorded as, and a line item never revokes anyone's membership by
  * itself -- the same call made for orders the store stops returning (#105).
  * What it costs is that somebody has paid for a membership no card exists
  * for, which is a thing for a person to put right, not for a sync to decide.

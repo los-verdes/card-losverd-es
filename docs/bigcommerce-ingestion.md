@@ -109,7 +109,7 @@ deliver them chronologically.
 | `member_id` | A random `LV-{uuid}` if inserting a brand-new row | It's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so it must identify exactly one member and never change: a row matched by email keeps its **existing** `member_id`. Not derived from the BigCommerce customer id (#66): guest checkouts all have `customer_id` 0, and an order attributed to someone else carries the buyer's. Rows are always found by email, so the id never needs to be reproducible. |
 | `first_name` / `last_name` | Billing name on the member's latest counted order | Same field the Python `insert_order_as_membership()` uses. Falls back to the stored name (or, for a new row, the synced order's) when that order has none, e.g. a Squarespace-era row. |
 | `email` | `membership_orders.member_email` (lower-cased; the billing email unless re-pointed) | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
-| `status` | `'active'` if `expiration_date >= today`, else `'expired'` | Mirrors `AnnualMembership.is_active` (created_on within the last 365 days) across *all* of a member's orders. The sync never sets `'revoked'`, and doesn't preserve it either: the legacy app has no revocation concept, so a sync re-derives status like any other row. |
+| `status` | `'active'` if `expiration_date >= today`, else `'expired'` | Mirrors `AnnualMembership.is_active` (created_on within the last 365 days) across *all* of a member's orders. The sync never sets `'revoked'`, and doesn't preserve it either: the legacy app has no revocation concept, so a sync re-derives status like any other row. Nothing reads this column -- revocation lives in `revoked_cards`, and whether a card is good is answered from `expiration_date` ([#224](https://github.com/los-verdes/card-losverd-es/issues/224) drops it). |
 | `expiration_date` | Latest counted order's `created_on + 365 days`, `YYYY-MM-DD`; `NULL` if no order counts | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Can move earlier, when a renewal is refunded. |
 | `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders once the legacy export has loaded them. `member_since_overrides` still wins when a pass is rendered. |
 | `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data — a resync must never rotate it out from under an already-installed pass. |
@@ -140,7 +140,7 @@ same answer.
 
 **A flagged order still counts towards its member's membership**, and their
 card is untouched (decided 2026-09-18, los-verdes/card-losverd-es#105).
-Withdrawing a membership on the strength of one API response would turn a
+Revoking a membership on the strength of one API response would turn a
 BigCommerce incident into members losing their cards en masse; the flag
 raises it for a person instead, on the "Missing from BigCommerce" report.
 A later sync that finds the order again clears the flag, so a transient 404
@@ -242,9 +242,9 @@ one is implemented fully:
   fields (mirrors `member_card/bigcommerce.py::customer_etl`'s
   `map_customer_to_user_by_store_id`). Still a stub. In the legacy app this
   job is also what re-pointed a member at their current storefront email;
-  here that role belongs to `membership_orders.member_email`, and how it
-  gets updated is an open design point (see
-  [`reporting.md`](reporting.md), "Not built yet").
+  here that role belongs to `membership_orders.member_email`, which an
+  admin re-points by attributing the order (see the provenance document,
+  "Gift purchases and re-attributed orders").
 * **`sync_minibc_subscriptions_etl` — stubbed.** High-level: call
   MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
   per `member_card/minibc.py`) for recurring-subscription state that

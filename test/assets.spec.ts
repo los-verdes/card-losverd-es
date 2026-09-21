@@ -171,9 +171,9 @@ describe("the bundled stylesheet and font", () => {
     expect(body).toContain("viewBox");
   });
 
-  it("draws the mark in the group's own green, not a hardcoded copy of it", async () => {
+  it("draws the mark in the group's own verde, not a hardcoded copy of it", async () => {
     // Shares the constant with the stylesheet and the card image, so the
-    // three cannot drift into three slightly different greens.
+    // three cannot drift into three slightly different shades of verde.
     const body = await (await get("/assets/favicon.svg")).text();
 
     expect(body).toContain(VERDE);
