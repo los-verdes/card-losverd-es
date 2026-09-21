@@ -197,10 +197,10 @@ describe("POST /email-card", () => {
 
       expect(email.send).toHaveBeenCalledOnce();
       const [message] = email.sent;
-      // One string each, name and address together: the binding takes the
-      // RFC 5322 form rather than separate fields.
-      expect(message.from).toBe("Los Verdes (verde-bot) <verde-bot@losverd.es>");
-      expect(message.to).toBe("Jane Doe <jane@example.com>");
+      // Name and address as separate fields. Folded into one string, the
+      // parentheses in the sender's name made the real binding refuse it.
+      expect(message.from).toEqual({ email: "verde-bot@losverd.es", name: "Los Verdes (verde-bot)" });
+      expect(message.to).toEqual({ email: "jane@example.com", name: "Jane Doe" });
       expect(message.subject).toBe("Los Verdes Membership Card Details");
 
       const attachments = message.attachments!;

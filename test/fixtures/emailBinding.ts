@@ -29,8 +29,16 @@ export interface FakeEmailBinding extends SendEmailBinding {
  * message -- the equivalent of a mail service answering with an error.
  */
 export function fakeEmailBinding(options: { failWith?: string } = {}): FakeEmailBinding {
-  const send = vi.fn<(message: BindingMessage) => Promise<unknown>>(async () => {
+  const send = vi.fn<(message: BindingMessage) => Promise<unknown>>(async (message) => {
     if (options.failWith) throw new Error(options.failWith);
+    // The real binding refuses anything but a bare address in `email`, and
+    // says so in these words. Refusing it here too is what would have caught
+    // a display name folded into the address before a real send did.
+    for (const { email } of [message.from, message.to]) {
+      if (!/^[^\s<>()]+@[^\s<>()]+$/.test(email)) {
+        throw new Error("Invalid email address: Invalid email user");
+      }
+    }
     return undefined;
   });
   return {
@@ -43,5 +51,5 @@ export function fakeEmailBinding(options: { failWith?: string } = {}): FakeEmail
 
 /** The bare address a message went to, whether or not a name was attached. */
 export function recipientOf(message: BindingMessage): string {
-  return message.to.match(/<([^>]+)>$/)?.[1] ?? message.to;
+  return message.to.email;
 }
