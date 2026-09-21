@@ -5,20 +5,23 @@ account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
 default:
     @just --list
 
-# `just` has no named arguments. Everything after the recipe name is
-# positional, so `just apple-pass-cert-csr dir=".apple-pass-cert"` hands the
-# recipe the literal string `dir=.apple-pass-cert` -- which is how a directory
-# by that name comes to exist. The mistake is an easy one because `just
-# --list` prints a defaulted parameter as `dir=".apple-pass-cert"`, which
-# reads exactly like the syntax for setting it.
+# A parameter is positional unless it is declared an option with
+# `[arg(..., long)]` (just 1.46+), so a bare `name=value` after a recipe name
+# is only ever a value. `just deploy env=staging` deploys an environment
+# literally called "env=staging", and `just apple-pass-cert-csr
+# dir=".apple-pass-cert"` is how a directory of that name comes to exist in
+# the repository root. `just --list` printing a defaulted parameter as
+# `dir=".apple-pass-cert"` is what makes the mistake easy: it reads exactly
+# like the syntax for setting it.
 #
-# Every recipe below that takes a defaulted value checks it through here, so
-# the mistake fails immediately and says what to type instead, rather than
-# quietly operating on the wrong path. `*flags` parameters are not checked:
-# a flag may legitimately contain `=`.
+# The two path parameters below are declared as options, so `--dir` and
+# `--out` work and just rejects the `name=value` form itself. The rest stay
+# positional, because `just deploy staging` is the interface the docs and CI
+# already use, and they check their value through here instead. `*flags`
+# parameters are not checked: a flag may legitimately contain `=`.
 [private]
 check-arg name value:
-    @case "{{ value }}" in *=*)         echo "just: '{{ value }}' was read as the value of {{ name }}, not as a named argument -- just has none." >&2;         echo "      Everything after the recipe name is positional. Drop the '{{ name }}=' and pass the value on its own." >&2;         exit 1 ;;       esac
+    @case "{{ value }}" in *=*)         echo "just: '{{ value }}' was read as the value of {{ name }}, not as a named argument." >&2;         echo "      This parameter is positional -- drop the '{{ name }}=' and pass the value on its own." >&2;         exit 1 ;;       esac
 
 
 # Install dependencies
@@ -171,11 +174,13 @@ google-wallet-check env *flags:
 # and the chain, stores all three PEMs in 1Password, reads them back to
 # confirm, pushes them, and deletes the local copies.
 # Generate a private key and CSR for a new Apple pass certificate
-apple-pass-cert-csr dir=".apple-pass-cert": (check-arg "dir" dir)
+[arg("dir", long)]
+apple-pass-cert-csr dir=".apple-pass-cert":
     node scripts/apple-pass-cert.mjs csr --dir {{ dir }}
 
 # Install the .cer Apple returned: verify it, store it, push it
-apple-pass-cert-install env cer dir=".apple-pass-cert": (check-arg "env" env) (check-arg "cer" cer) (check-arg "dir" dir)
+[arg("dir", long)]
+apple-pass-cert-install env cer dir=".apple-pass-cert": (check-arg "env" env) (check-arg "cer" cer)
     node scripts/apple-pass-cert.mjs install {{ cer }} --dir {{ dir }} --env {{ env }}
     op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APPLE_PASS_CERT_PEM[password]=$(cat {{ dir }}/pass-cert.pem)" "APPLE_PASS_KEY_PEM[password]=$(cat {{ dir }}/pass-key.pem)" "APPLE_WWDR_CERT_PEM[password]=$(cat {{ dir }}/wwdr.pem)" > /dev/null
     just apple-pass-cert-check {{ env }}
@@ -249,7 +254,8 @@ legacy-import-sql export_json out_sql:
 # Membership Committee to read and comment on. Upload the result to Drive, then
 # right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
 # the source of truth; re-run this and re-import whenever it changes.
-provenance-gdoc out=".provenance-gdoc.md": (check-arg "out" out)
+[arg("out", long)]
+provenance-gdoc out=".provenance-gdoc.md":
     node scripts/provenance-gdoc.mjs {{out}}
 
 # Check an import landed: compares D1's counts against the export it came from.
