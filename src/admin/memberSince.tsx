@@ -44,7 +44,13 @@ export interface MemberSinceSubject {
   /** What the orders say, which is what an override replaces. */
   derived: string | null;
   /** The override in force, if any. */
-  override: { member_since: string; source: string; note: string | null; updated_at: number } | null;
+  override: {
+    member_since: string;
+    source: string;
+    note: string | null;
+    set_by_email: string | null;
+    updated_at: number;
+  } | null;
 }
 
 /**
@@ -63,10 +69,21 @@ export async function lookupMemberSince(
       .bind(email)
       .first<{ member_id: string; first_name: string; last_name: string; member_since: string | null }>(),
     env.DB.prepare(
-      "SELECT member_since, source, note, updated_at FROM member_since_overrides WHERE email = ?",
+      // `set_by` is resolved to an address here: a user id on the screen
+      // answers nobody's question about who moved somebody's join date.
+      `SELECT o.member_since, o.source, o.note, o.updated_at, u.email AS set_by_email
+         FROM member_since_overrides o
+              LEFT JOIN users u ON u.id = o.set_by
+        WHERE o.email = ?`,
     )
       .bind(email)
-      .first<{ member_since: string; source: string; note: string | null; updated_at: number }>(),
+      .first<{
+        member_since: string;
+        source: string;
+        note: string | null;
+        set_by_email: string | null;
+        updated_at: number;
+      }>(),
   ]);
   return {
     email,
@@ -157,6 +174,7 @@ const Subject: FC<{ subject: MemberSinceSubject; today: string; error?: string }
                 {formatShortDate(override.member_since)} — set{" "}
                 {new Date(override.updated_at).toISOString().slice(0, 10)}
                 {override.source === "legacy_postgres" ? ", imported from the old site" : ""}
+                {override.set_by_email ? ` by ${override.set_by_email}` : ""}
                 {override.note ? ` — ${override.note}` : ""}
               </td>
             </tr>
@@ -260,15 +278,16 @@ memberSince.post("/", csrf(), async (c) => {
   // `source = 'manual'` is what makes this survive a re-run of the legacy
   // import, which only ever overwrites its own rows.
   await c.env.DB.prepare(
-    `INSERT INTO member_since_overrides (email, member_since, source, note)
-     VALUES (?, ?, 'manual', ?)
+    `INSERT INTO member_since_overrides (email, member_since, source, note, set_by)
+     VALUES (?, ?, 'manual', ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        member_since = excluded.member_since,
        source = 'manual',
        note = excluded.note,
+       set_by = excluded.set_by,
        updated_at = unixepoch('subsec') * 1000`,
   )
-    .bind(input.email, input.date, input.note)
+    .bind(input.email, input.date, input.note, c.get("session").userId)
     .run();
   // No pass push needed: the table's triggers bump the member's
   // `last_updated_at`, so their card and pass are rebuilt on next fetch.

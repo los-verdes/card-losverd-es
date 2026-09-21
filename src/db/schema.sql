@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS member_display_names (
     display_name TEXT NOT NULL,
     source TEXT NOT NULL CHECK (source IN ('member', 'admin', 'legacy_postgres')),
     note TEXT,
+    set_by INTEGER REFERENCES users(id) ON DELETE SET NULL, -- who set the name; see migrations/0019
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
@@ -118,6 +119,7 @@ CREATE TABLE IF NOT EXISTS member_since_overrides (
     member_since TEXT NOT NULL,               -- ISO8601 date (YYYY-MM-DD); wins over members.member_since
     source TEXT NOT NULL CHECK (source IN ('legacy_postgres', 'manual')),
     note TEXT,
+    set_by INTEGER REFERENCES users(id) ON DELETE SET NULL, -- who made the correction; see migrations/0019
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 

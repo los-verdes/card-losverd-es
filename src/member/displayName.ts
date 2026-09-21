@@ -61,18 +61,20 @@ export async function setDisplayName(
   displayName: string,
   source: DisplayNameSource,
   note: string | null = null,
+  setBy: number | null = null,
 ): Promise<void> {
   const key = email.trim().toLowerCase();
   await env.DB.prepare(
-    `INSERT INTO member_display_names (email, display_name, source, note, updated_at)
-     VALUES (?1, ?2, ?3, ?4, unixepoch('subsec') * 1000)
+    `INSERT INTO member_display_names (email, display_name, source, note, set_by, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, unixepoch('subsec') * 1000)
      ON CONFLICT(email) DO UPDATE SET
        display_name = excluded.display_name,
        source = excluded.source,
        note = excluded.note,
+       set_by = excluded.set_by,
        updated_at = excluded.updated_at`,
   )
-    .bind(key, displayName, source, note)
+    .bind(key, displayName, source, note, setBy)
     .run();
   await touchAndNotify(env, key);
 }
@@ -98,14 +100,28 @@ async function touchAndNotify(env: Env, email: string): Promise<void> {
   if (member) await notifyWalletsUpdated(env, member.member_id);
 }
 
-/** The current override, if any, for showing on a form. */
+/**
+ * The current override, if any, for showing on a form.
+ *
+ * `set_by_email` is resolved here rather than by the caller: every screen
+ * that shows a name somebody else chose wants to say who, and a user id on
+ * its own answers nobody's question. Null where the row predates migration
+ * 0019, or came from the one-time legacy import.
+ */
 export async function getDisplayName(
   env: Env,
   email: string,
-): Promise<{ display_name: string; source: DisplayNameSource } | null> {
+): Promise<{
+  display_name: string;
+  source: DisplayNameSource;
+  set_by_email: string | null;
+} | null> {
   return env.DB.prepare(
-    "SELECT display_name, source FROM member_display_names WHERE email = ?",
+    `SELECT d.display_name, d.source, u.email AS set_by_email
+       FROM member_display_names d
+            LEFT JOIN users u ON u.id = d.set_by
+      WHERE d.email = ?`,
   )
     .bind(email.trim().toLowerCase())
-    .first<{ display_name: string; source: DisplayNameSource }>();
+    .first<{ display_name: string; source: DisplayNameSource; set_by_email: string | null }>();
 }

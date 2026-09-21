@@ -168,6 +168,21 @@ describe("saving a correction", () => {
     });
   });
 
+  it("records which admin moved the date, and shows it back", async () => {
+    // Moving the date the group has been told somebody joined is a decision
+    // somebody will be asked about. A note nobody can attribute answers half
+    // the question (migration 0019).
+    await insertMember("pat@example.com", "2023-04-01");
+
+    await post({ email: "pat@example.com", member_since: "2016-03-01", note: "paper records" });
+
+    const row = await env.DB.prepare("SELECT set_by FROM member_since_overrides").first<{ set_by: number | null }>();
+    expect(row?.set_by).toBe(ADMIN_ID);
+
+    const html = await (await request(`${PATH}?email=pat@example.com`)).text();
+    expect(html).toContain("by admin@example.com");
+  });
+
   it("rebuilds the member's pass, via the table's trigger rather than a push", async () => {
     await insertMember("pat@example.com", "2023-04-01");
 

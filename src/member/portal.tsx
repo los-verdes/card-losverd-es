@@ -414,7 +414,7 @@ portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
     );
   }
 
-  await setDisplayName(c.env, member.email, result.value, "member");
+  await setDisplayName(c.env, member.email, result.value, "member", null, c.get("session").userId);
   return c.redirect(`${NAME_PATH}?saved=1`, 303);
 });
 

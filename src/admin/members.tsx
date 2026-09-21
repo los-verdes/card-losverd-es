@@ -95,14 +95,16 @@ const Summary: FC<{
   footprint: EmailFootprint;
   orders: MemberOrder[];
   nameSetBy: string | null;
+  nameSetByEmail: string | null;
   banned: boolean;
-}> = ({ member, footprint, orders, nameSetBy, banned }) => (
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, banned }) => (
   <>
     <h2>{cardNameText(member)}</h2>
     {member.display_name && (
       <p class="muted">
-        {(nameSetBy && NAME_SET_BY[nameSetBy]) ?? "That name was set for them"}; their
-        orders say {`${member.first_name} ${member.last_name}`.trim() || "nothing"}.
+        {(nameSetBy && NAME_SET_BY[nameSetBy]) ?? "That name was set for them"}
+        {nameSetByEmail ? ` (${nameSetByEmail})` : ""}; their orders say{" "}
+        {`${member.first_name} ${member.last_name}`.trim() || "nothing"}.
       </p>
     )}
     <table style="border-collapse: collapse; font-size: 0.9rem">
@@ -363,6 +365,7 @@ members.get("/", async (c) => {
           footprint={footprint}
           orders={orders}
           nameSetBy={override?.source ?? null}
+          nameSetByEmail={override?.set_by_email ?? null}
           banned={banned}
         />
       )}
@@ -432,7 +435,7 @@ members.post("/", csrf(), async (c) => {
   const note = typeof form.note === "string" && form.note.trim() !== "" ? form.note.trim() : null;
   // `source = 'admin'` rather than 'member': it records who to point at when
   // somebody asks why their card says what it says.
-  await setDisplayName(c.env, email, result.value, "admin", note);
+  await setDisplayName(c.env, email, result.value, "admin", note, c.get("session").userId);
   return back({ saved: "set" });
 });
 
