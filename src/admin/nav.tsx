@@ -64,6 +64,7 @@ export const ADMIN_NAV: NavGroup[] = [
     label: "This environment",
     links: [
       { href: "/admin/preflight", label: "Readiness" },
+      { href: "/admin/admins", label: "Admins" },
       { href: "/", label: "My card" },
     ],
   },

@@ -164,10 +164,11 @@ populated before anyone is pointed at it.
    > run first leaves members who have changed address holding cards under
    > their old one.
 
-9. **Grant an admin**: log in once so the `users` row exists, then set
-   `is_admin` (see the README). Worth doing as soon as login works rather
-   than last, since `/admin/preflight` is admin-gated and is most useful
-   while the rest of this list is still outstanding.
+9. **Grant admins**: `just admin-grant production <address> [<address> ...]`
+   (see the README). Nobody needs to have signed in first, so this can be
+   done for the whole group at once, and early rather than last:
+   `/admin/preflight` is admin-gated and is most useful while the rest of
+   this list is still outstanding.
 
 Before moving on, confirm on a real device: a `.pkpass` installs on an
 iPhone and a membership change wakes it via APNs; a pass saves to Google

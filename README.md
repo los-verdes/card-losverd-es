@@ -312,15 +312,15 @@ Deletion takes one id, chosen by a person, and refuses the hook that delivers to
 
 ## Making someone an admin
 
-Admin is a flag in D1, checked on every admin request. The person signs in once so their `users` row exists, then:
+Admin is a flag in D1, checked on every admin request. An admin can manage the others at **`/admin/admins`**: paste one address or several to grant, remove anyone but themselves. From a terminal, which works straight against D1 and so also when nobody can reach that page:
 
 ```bash
-just admin-grant production someone@example.com
+just admin-grant production first@example.com second@example.com
 just admin-revoke production someone@example.com
 just admin-list production
 ```
 
-Either takes effect on their next request. The hand-written `UPDATE` this replaces failed silently in two ways, both handled now: an address typed with a capital letter never matched, because addresses are stored lower-cased, and is now lower-cased first; and someone who has never signed in has no row to change, which is now refused with that reason instead of appearing to succeed. Grants and revocations are recorded in the audit log.
+Nobody has to have signed in first. A grant creates the account if it does not exist, and the person's first sign-in with that address picks it up, admin flag included -- so a group can be set up in one go. It must be the address they will sign in with; for someone using Apple's Hide My Email, that is their relay address. Addresses are lower-cased before use, since that is how they are stored. Every change takes effect on the person's next request and is recorded in the audit log.
 
 Worth doing early on a new environment rather than last: the readiness page below is admin-gated, and it is most useful while an environment is still being set up.
 

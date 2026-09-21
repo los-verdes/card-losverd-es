@@ -38,11 +38,13 @@ export async function linkOAuthUser(
   }
 
   const email = login.email.toLowerCase();
-  // The no-op `DO UPDATE` (rather than `DO NOTHING`) is what makes
-  // `RETURNING` yield the existing row on an email match.
+  // `DO UPDATE` (rather than `DO NOTHING`) is what makes `RETURNING` yield
+  // the existing row on an email match. It also fills in the name of a row
+  // an admin grant created before this person had ever signed in
+  // (src/admin/adminAccess.ts), without overwriting one already there.
   const user = (await env.DB.prepare(
     `INSERT INTO users (email, full_name) VALUES (?, ?)
-     ON CONFLICT(email) DO UPDATE SET email = excluded.email
+     ON CONFLICT(email) DO UPDATE SET full_name = COALESCE(users.full_name, excluded.full_name)
      RETURNING id, is_admin`,
   )
     .bind(email, login.fullName)
