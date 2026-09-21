@@ -1,7 +1,22 @@
 # Cutover runbook
 
 Moving `card.losverd.es` from the legacy GCP stack to this one, and retiring
-GCP afterwards. Ordered: each section assumes the one before it is done.
+GCP afterwards.
+
+**The hostname is settled and is `card.losverd.es`.** Moving the card site
+under the group's main domain was considered and deliberately deferred: it
+would need `losverdesatx.org`'s DNS moved to Cloudflare, which is the group's
+main site and mail, and blocking the migration on that is not a trade worth
+making. A move can happen later without touching anybody's installed pass,
+because `card.losverd.es` would redirect.
+
+That redirect is the part with no end date. Every QR code already printed or
+installed encodes `card.losverd.es`, and every Apple pass stores its update
+URL at issuance -- a pass never learns a new one, it just stops updating. So
+whatever else changes, **that hostname has to keep resolving for as long as
+any of those cards exist**, which is why the domain is on the list of things
+that must belong to the group rather than to a person
+([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Ordered: each section assumes the one before it is done.
 Nothing here touches DNS until "The flip".
 
 The ordering is not arbitrary and two steps in it are one-way. Those are
