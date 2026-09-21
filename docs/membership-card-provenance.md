@@ -12,8 +12,8 @@ The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
 These rules describe how membership works, which is their remit whoever
 administers it day to day, and a change to any of them is worth their input. A
 smaller number of decisions are theirs outright -- anything that settles a
-person's standing in the group, such as whether a membership is withdrawn
-before it expires or somebody is barred. Those are marked where they appear,
+person's standing in the group, such as whether a membership is revoked
+before it expires or somebody is expelled. Those are marked where they appear,
 and that address is who to hand one to.
 
 This is a description of what the code does right now. It documents the
@@ -141,11 +141,11 @@ time one is seen it is announced in Slack.
 
 What the check deliberately does not do is change who is a member. The order
 still confers the one membership it is recorded as, exactly as it did before —
-the same choice made for orders the store stops returning. Withdrawing
+the same choice made for orders the store stops returning. Revoking
 somebody's membership is a decision a person makes, and a line item is not a
 good enough reason to make it automatically. What the report says is the
 opposite: somebody has paid and is owed something, which is a thing to put
-right rather than a thing to revoke.
+right rather than a thing to take away.
 
 The count is taken fresh on every sync, so an order corrected in BigCommerce —
 the extra refunded, or the quantity put back to one — drops off the report by
@@ -217,7 +217,7 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
   alone. If the order reappears, the flag clears itself.
-  Withdrawing memberships on the strength of one unanswered request would
+  Revoking memberships on the strength of one unanswered request would
   turn a storefront incident into members losing their cards en masse.
 
 ### What this does not catch
@@ -400,31 +400,50 @@ page — checks the expiry date directly rather than trusting a stored
 active/expired label, because that label is only recalculated when an order
 sync happens to touch the record.
 
-**A membership can also be withdrawn or the person barred**, which are the
-two ways of stopping being a current member that have nothing to do with
-orders. A ban is the heavier of the two and rarer: as well as taking the
+**A membership can also be revoked, or the person expelled from the group**,
+which are the two ways of ceasing to be a current member that have nothing to
+do with orders. Both words are taken from the [code of
+conduct](https://www.losverdesatx.org/code-of-conduct): it gives the
+Membership Committee the power to "revoke or temporarily suspend that person's
+membership", and names expulsion from Los Verdes as the heaviest outcome of
+its sanction process. The software records an outcome; the code of conduct
+governs when one is appropriate, and how it is appealed.
+
+Expulsion is the heavier of the two, and the rarer. As well as taking the
 membership away it stops the person signing in at all, including on a session
-they already hold, and it carries no expiry date -- lifting it is a decision
-somebody makes rather than something that happens on its own
-(`banned_people`). A withdrawal is about a card; a ban is about a person, and
-so follows their address onto any membership they buy under it later.
+they already hold, and it carries no end date -- lifting it is a decision
+somebody makes rather than something that happens on its own (`banned_people`,
+a table named before this wording settled). A revocation is about a card; an
+expulsion is about a person, and so follows their address onto any membership
+they buy under it later.
 
-Withdrawal, in more detail: It is recorded
-against the card (`revoked_cards`) rather than on the membership record,
-because the order sync rebuilds that record and would undo it. While it is in
-force the card reads as withdrawn, carries no expiry, and its holder is
-refused everywhere a current membership is required -- see
-[question 8](#9-decisions-worth-confirming).
+**A temporary suspension has no form of its own here.** The code of conduct
+allows the Committee to suspend a membership as well as revoke it, and the
+software has only the one action, lifted by hand when the Committee decides it
+should be. That is a gap worth naming rather than a position the software
+takes -- see [question 8](#9-decisions-worth-confirming).
 
-The stored label (`members.status`) is no longer read directly by anything
-that matters: the "Expired" note on the back of an Apple pass and the state
-Google Wallet is told are both derived from the expiry date at the moment a
-pass is built (`effectiveStatus()` in `src/member/artifacts.ts`). The
-remaining limit is that a pass already on a phone is not rebuilt merely
-because a date passed. It is corrected the next time it is rebuilt — a
-renewal, an attribution, a re-download — so an installed pass can go on
-saying "active" for a while after the membership lapsed, even though every
-access check already refuses it.
+Revocation, in more detail: it is recorded against the card (`revoked_cards`)
+rather than on the membership record, because the order sync rebuilds that
+record and would undo it. While it is in force the card reads as revoked,
+carries no expiry, and its holder is refused everywhere a current membership
+is required.
+
+There is also a stored label, `members.status`, and **nothing reads it.**
+Whether a card is good is answered from the expiry date and from those two
+tables, never from that column; the "Expired" note on the back of an Apple
+pass and the state Google Wallet is told are both worked out at the moment a
+pass is built (`effectiveStatus()` in `src/member/artifacts.ts`). The order
+sync still writes the column, so it is on its way out rather than gone
+([#224](https://github.com/los-verdes/card-losverd-es/issues/224)); a stored
+value that looks authoritative and is not is how somebody later comes to
+trust it.
+
+One real limit sits underneath all of this: a pass already on a phone is not
+rebuilt merely because a date passed. It is corrected the next time it is
+rebuilt — a renewal, an attribution, a re-download — so an installed pass can
+go on saying "active" for a while after the membership lapsed, even though
+every access check already refuses it.
 
 ### Which orders count
 
@@ -663,7 +682,7 @@ or a change, not an open-ended design exercise.
    a modest change.
 
    The membership behind the card is a separate matter, guarded much more
-   carefully: who counts as current, whether one can be withdrawn, who gets
+   carefully: who counts as current, whether one can be revoked, who gets
    emailed. Between a member and an admin, whoever writes last wins and the
    record keeps which; nobody has needed to overrule anybody yet, so that is
    a simple rule rather than a considered one.
@@ -674,54 +693,66 @@ or a change, not an open-ended design exercise.
    recorded "member since" override follows the old address rather than the
    person.
 
-8. **Is withdrawing a membership shaped the way the group wants it?** It
-   exists now. An admin withdraws one from that member's page and the card
-   stops working: it reads as withdrawn rather than expired, the "good
+8. **Are revocation and expulsion shaped the way the group wants them?**
+   Both exist now. An admin revokes a membership from that member's page and
+   the card stops working: it reads as revoked rather than expired, the "good
    through" date goes away, the passes already installed are told, and the
    holder loses the member area. A short note is kept alongside it, because
    somebody will be asked to explain the decision later. Lifting it is one
    action and puts the membership back to whatever the orders say, since
-   nothing underneath was altered. Everything currently withdrawn sits on one
+   nothing underneath was altered. Everything currently revoked sits on one
    page, deliberately short.
 
    Two choices inside that are worth a look rather than assumed.
 
-   **It follows the card, not the address.** A withdrawal is keyed on the
+   **It follows the card, not the address.** A revocation is keyed on the
    card number, which never changes, so re-pointing an address does not lift
    it. But somebody who bought a fresh membership under a different address
    would get a new card, and this would not follow them to it. Whether that
    is a loophole or the right answer -- a new purchase being a genuinely new
-   membership -- is a question about what withdrawal means rather than about
+   membership -- is a question about what revocation means rather than about
    the software.
 
    **It does not change what was sold.** They stop being listed as a current
    member, but the order stays in the monthly sales figures and in the
    consolidations. That is deliberate: the money is still the group's, and
    the books should not move because somebody was asked to leave. If a
-   withdrawal should erase the sale too, that is a different thing and would
+   revocation should erase the sale too, that is a different thing and would
    need saying.
 
-   What it is *for* remains the **Membership Committee's** to settle. The
-   software makes no judgement about when this is appropriate and nothing in
-   it is limited to conduct cases; the note is the only record of why, and it
-   is free text.
+   What it is *for* remains the **Membership Committee's** to settle, as the
+   code of conduct already says it is. The software makes no judgement about
+   when this is appropriate and nothing in it is limited to conduct cases;
+   the note is the only record of why, and it is free text.
 
-   **Barring somebody from the group** is the heavier version of the same
+   **Expelling somebody from the group** is the heavier version of the same
    thing, and is theirs outright. It takes the membership away exactly as a
-   withdrawal does, and also stops the person signing in -- immediately,
+   revocation does, and also stops the person signing in -- immediately,
    including on a session they already hold. It is recorded with no end date.
    In practice these are understood to run a couple of years, and that
-   deliberately is not written into the software: a ban that expired on its
-   own would let somebody back in without anybody deciding they should be,
-   which is not a decision to automate. Lifting one is a single action and
-   restores whatever membership it was suppressing.
+   deliberately is not written into the software: an expulsion that lapsed on
+   its own would let somebody back in without anybody deciding they should
+   be, which is not a decision to automate. Lifting one is a single action
+   and restores whatever membership it was suppressing.
 
-   The limit worth knowing, because it is real rather than an oversight: a
-   ban follows an **email address**. It covers a membership bought under that
-   address later, and it does not follow somebody to a different one. Closing
-   that would mean identifying people by something more than an address,
-   which this system deliberately does not do
+   The limit worth knowing, because it is real rather than an oversight: an
+   expulsion follows an **email address**. It covers a membership bought
+   under that address later, and it does not follow somebody to a different
+   one. Closing that would mean identifying people by something more than an
+   address, which this system deliberately does not do
    ([question 7](#9-decisions-worth-confirming)).
+
+   **Two things the code of conduct describes that the software has no form
+   of.** The first is temporary suspension, which it names alongside
+   revocation; here there is one action, and it stays until somebody lifts
+   it. The second is the sanction ladder itself -- a verbal warning, then a
+   formal one, then direct disciplinary action. Only the last rung leaves a
+   mark here, so this is not a record of anybody's standing under that
+   process and should not be read as one. Whether either belongs in the
+   software, or is better kept wherever the Committee keeps its own notes, is
+   a question for them. The same goes for an appeal: the code of conduct
+   provides for one, and lifting a revocation or an expulsion here is the
+   same single action whatever prompted it.
 
 ## Appendix: orders from before BigCommerce
 
@@ -757,14 +788,23 @@ In practice none has one: every row in the old system's database carries a
 status, checked against that database directly before the import. The
 tolerance stays because it costs nothing.
 
-That is the opposite shape to the BigCommerce rule, which counts an order only
-on a positively paid status, and the difference is deliberate. Squarespace's
-vocabulary was `FULFILLED`, `PENDING` and `CANCELED`, and its `PENDING` meant
-**paid but not yet shipped** — not BigCommerce's "we are still waiting for
-payment". Applying the paid-only allow-list to these rows would silently drop
-real historical members. Applying this rule to BigCommerce orders would hand
-out cards for orders nobody had paid for. The rule here is also simply what
-the old system did: count it unless it was cancelled.
+**Why this rule is the opposite way round from the BigCommerce one.** A
+BigCommerce order has to appear on a list of paid statuses to count. A
+Squarespace order counts unless it appears on a list of cancelled ones. That
+difference is deliberate, and it comes down to the fact that the same word
+meant opposite things in the two stores.
+
+Squarespace used three statuses: `FULFILLED`, `PENDING` and `CANCELED`. Its
+`PENDING` meant **paid, but not yet shipped** — the membership had been bought
+and the money had arrived. BigCommerce's similar-looking `Pending` means
+roughly the reverse: **the payment has not come through yet.**
+
+So each store needs the rule that fits its own vocabulary. Judging these
+historical rows by the paid-only allow-list would throw away every `PENDING`
+one, all of them people who really did pay. Judging BigCommerce orders by this
+one would hand cards to people who never paid at all. Counting a Squarespace
+order unless it was cancelled is also simply what the old system did, so these
+rows keep the meaning they have always had.
 
 ### The smaller differences
 
