@@ -230,15 +230,15 @@ describe("an admin setting the name on someone's card", () => {
   });
 });
 
-describe("withdrawing and barring from the member page", () => {
+describe("revoking and expelling from the member page", () => {
   it("offers both actions on somebody in good standing", async () => {
     const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
 
-    expect(body).toContain("Withdraw this membership");
-    expect(body).toContain("Bar this person from the group");
+    expect(body).toContain("Revoke this membership");
+    expect(body).toContain("Expel this person from the group");
   });
 
-  it("withdraws a membership, with the reason kept", async () => {
+  it("revokes a membership, with the reason kept", async () => {
     const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct" });
 
     expect(res.status).toBe(303);
@@ -249,17 +249,17 @@ describe("withdrawing and barring from the member page", () => {
     expect(row?.note).toBe("conduct");
   });
 
-  it("offers a restore once withdrawn, and says what state they are in", async () => {
+  it("offers a restore once revoked, and says what state they are in", async () => {
     await revokeCard(env, CARD, null, ADMIN_ID);
 
     const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
 
-    expect(body).toContain("This membership has been withdrawn");
+    expect(body).toContain("This membership has been revoked");
     expect(body).toContain("Restore this membership");
-    expect(body).not.toContain("Withdraw this membership");
+    expect(body).not.toContain("Revoke this membership");
   });
 
-  it("restores a withdrawn membership", async () => {
+  it("restores a revoked membership", async () => {
     await revokeCard(env, CARD, null, ADMIN_ID);
 
     const res = await post({ email: EMAIL, action: "restore" });
@@ -268,21 +268,21 @@ describe("withdrawing and barring from the member page", () => {
     expect(await isRevoked(env, CARD)).toBe(false);
   });
 
-  it("bars a person, with the reason kept", async () => {
+  it("expels a person, with the reason kept", async () => {
     const res = await post({ email: EMAIL, action: "ban", ban_note: "a recorded reason" });
 
     expect(res.headers.get("Location")).toContain("saved=banned");
     expect(await isBanned(env, EMAIL)).toBe(true);
   });
 
-  it("offers a lift once barred, and says what state they are in", async () => {
+  it("offers a lift once expelled, and says what state they are in", async () => {
     await banPerson(env, EMAIL, null, ADMIN_ID);
 
     const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
 
-    expect(body).toContain("barred from Los Verdes");
-    expect(body).toContain("Lift this ban");
-    expect(body).not.toContain("Bar this person from the group");
+    expect(body).toContain("expelled from Los Verdes");
+    expect(body).toContain("Lift this expulsion");
+    expect(body).not.toContain("Expel this person from the group");
   });
 
   it("lifts a ban", async () => {
@@ -295,8 +295,8 @@ describe("withdrawing and barring from the member page", () => {
   });
 
   it.each([
-    ["restore", "was not withdrawn"],
-    ["unban", "was not barred"],
+    ["restore", "has not been revoked"],
+    ["unban", "has not been expelled"],
   ])("says so rather than pretending, when %s has nothing to undo", async (action) => {
     const res = await post({ email: EMAIL, action });
 
@@ -311,8 +311,8 @@ describe("withdrawing and barring from the member page", () => {
 
   it("shows what just happened", async () => {
     const banned = await (await get("/admin/members?saved=banned")).text();
-    expect(banned).toContain("Barred from the group");
+    expect(banned).toContain("Expelled from the group");
     const lifted = await (await get("/admin/members?saved=unbanned")).text();
-    expect(lifted).toContain("Ban lifted");
+    expect(lifted).toContain("Expulsion lifted");
   });
 });

@@ -47,7 +47,7 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM users");
 });
 
-describe("withdrawing a membership", () => {
+describe("revoking a membership", () => {
   it("is not in force beforehand", async () => {
     const member = (await getMemberByEmail(env, EMAIL))!;
     expect(effectiveStatus(member, TODAY)).toBe("active");
@@ -143,7 +143,7 @@ describe("withdrawing a membership", () => {
 });
 
 describe("what a scanned card says", () => {
-  it("calls a withdrawn membership withdrawn, not expired", async () => {
+  it("calls a revoked membership revoked, not expired", async () => {
     // The card is genuine either way. Somebody holding one up is owed an
     // answer that does not sound like renewing would fix it.
     await revokeCard(env, CARD, null, 1);

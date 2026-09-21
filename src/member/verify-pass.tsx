@@ -32,7 +32,7 @@ export const VerificationResult: FC<{ holder: PassHolder }> = ({ holder }) => (
       // Said plainly rather than left as "expired": the card is genuine
       // either way, and somebody holding one up is owed an answer that does
       // not sound like it could be fixed by renewing.
-      <p>This card is genuine, but this membership has been withdrawn.</p>
+      <p>This card is genuine, but this membership has been revoked.</p>
     ) : (
       !holder.active && (
         <p>This card is genuine, but its holder has no current membership.</p>

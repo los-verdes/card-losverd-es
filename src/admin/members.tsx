@@ -186,7 +186,7 @@ const Summary: FC<{
     {member.status === "revoked" ? (
       <>
         <p class="danger">
-          <strong>This membership has been withdrawn.</strong> Their card reads as
+          <strong>This membership has been revoked.</strong> Their card reads as
           expired, their passes have been told, and they cannot reach the member
           area. The orders behind it are untouched, so restoring puts the
           membership back to whatever those say.
@@ -200,7 +200,7 @@ const Summary: FC<{
     ) : (
       <>
         <p>
-          Withdrawing a membership takes the card away before it expires. It is a
+          Revoking a membership takes the card away before it expires. It is a
           decision about a person rather than about an order, so it sits with the
           Membership Committee -- see the provenance document. Everything they
           bought stays on the record, and this can be lifted again.
@@ -218,29 +218,29 @@ const Summary: FC<{
             maxlength={MAX_REVOCATION_NOTE_LENGTH}
             autocomplete="off"
           />
-          <button type="submit">Withdraw this membership</button>
+          <button type="submit">Revoke this membership</button>
         </form>
       </>
     )}
-    <h3>Barred from the group</h3>
+    <h3>Expelled from the group</h3>
     {banned ? (
       <>
         <p class="danger">
-          <strong>This person is barred from Los Verdes.</strong> They cannot sign
+          <strong>This person has been expelled from Los Verdes.</strong> They cannot sign
           in, any session they already had has stopped working, and their
-          membership is suppressed for as long as the ban stands. Lifting it
+          membership is suppressed for as long as the expulsion stands. Lifting it
           restores the membership by itself.
         </p>
         <form method="post" action={MEMBERS_PATH}>
           <input type="hidden" name="email" value={member.email} />
           <input type="hidden" name="action" value="unban" />
-          <button type="submit">Lift this ban</button>
+          <button type="submit">Lift this expulsion</button>
         </form>
       </>
     ) : (
       <>
         <p>
-          Heavier than withdrawing a card, and rarer. A ban stops them signing in
+          Heavier than revoking a card, and rarer. An expulsion stops them signing in
           at all as well as taking the membership away, and it is indefinite --
           there is no date on it, and lifting it is a decision somebody has to
           make. It follows the address, so it covers a membership bought under
@@ -259,7 +259,7 @@ const Summary: FC<{
             maxlength={MAX_BAN_NOTE_LENGTH}
             autocomplete="off"
           />
-          <button type="submit">Bar this person from the group</button>
+          <button type="submit">Expel this person from the group</button>
         </form>
       </>
     )}
@@ -335,18 +335,18 @@ members.get("/", async (c) => {
       )}
       {c.req.query("saved") === "revoked" && (
         <p style="color: var(--success)">
-          Membership withdrawn. Their passes have been told.
+          Membership revoked. Their passes have been told.
         </p>
       )}
       {c.req.query("saved") === "banned" && (
         <p style="color: var(--success)">
-          Barred from the group. They can no longer sign in, and their membership
+          Expelled from the group. They can no longer sign in, and their membership
           is suppressed.
         </p>
       )}
       {c.req.query("saved") === "unbanned" && (
         <p style="color: var(--success)">
-          Ban lifted. Any membership it was suppressing is back.
+          Expulsion lifted. Any membership it was suppressing is back.
         </p>
       )}
       {c.req.query("saved") === "restored" && (
@@ -391,7 +391,7 @@ members.post("/", csrf(), async (c) => {
     if (form.action === "unban") {
       return (await liftBan(c.env, email))
         ? back({ saved: "unbanned" })
-        : back({ error: "That person was not barred." });
+        : back({ error: "That person has not been expelled." });
     }
     const note =
       typeof form.ban_note === "string" && form.ban_note.trim() !== ""
@@ -399,7 +399,7 @@ members.post("/", csrf(), async (c) => {
         : null;
     return (await banPerson(c.env, email, note, c.get("session").userId))
       ? back({ saved: "banned" })
-      : back({ error: "That person was already barred." });
+      : back({ error: "That person has already been expelled." });
   }
 
   if (form.action === "revoke" || form.action === "restore") {
@@ -409,7 +409,7 @@ members.post("/", csrf(), async (c) => {
     if (form.action === "restore") {
       return (await restoreCard(c.env, member.member_id))
         ? back({ saved: "restored" })
-        : back({ error: "That membership was not withdrawn." });
+        : back({ error: "That membership has not been revoked." });
     }
 
     const note =
@@ -418,7 +418,7 @@ members.post("/", csrf(), async (c) => {
         : null;
     return (await revokeCard(c.env, member.member_id, note, c.get("session").userId))
       ? back({ saved: "revoked" })
-      : back({ error: "That membership was already withdrawn." });
+      : back({ error: "That membership has already been revoked." });
   }
 
   if (form.action === "clear") {

@@ -82,7 +82,7 @@ describe("flagOrderMissingFromStore", () => {
 
   it("leaves the order counting towards membership", async () => {
     // The decision this implements: a missing order is raised for a person,
-    // never withdrawn automatically.
+    // never revoked automatically.
     await insertOrder();
     mockRemotes(404);
 

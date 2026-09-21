@@ -142,7 +142,7 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain("nothing will be sent");
   });
 
-  it("says when the store no longer has the order, without implying it was withdrawn", async () => {
+  it("says when the store no longer has the order, without implying it was revoked", async () => {
     await env.DB.prepare("UPDATE membership_orders SET missing_since = ? WHERE order_id = '1001_bc'")
       .bind(Date.UTC(2026, 8, 17))
       .run();
