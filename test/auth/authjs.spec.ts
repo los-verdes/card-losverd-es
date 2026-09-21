@@ -11,6 +11,7 @@ import {
 } from "jose";
 import { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import {
   appleClientSecret,
   authConfig,
@@ -383,6 +384,15 @@ describe("/api/auth (Auth.js)", () => {
         );
       });
 
+      it("records which provider a completed sign-in came through, and nothing about who", async () => {
+        const { jar } = await runGoogleLogin({ email_verified: true }, `${ORIGIN}/login/complete`);
+        const spy = spyOnOutcomes();
+
+        await request("/login/complete", {}, jar);
+
+        expect(outcomesFrom(spy)).toEqual([{ outcome: "signin.completed", provider: "google", apple_relay: false }]);
+      });
+
       it("links to an existing user by email, preserving their admin flag", async () => {
         await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (77, 'jane@example.com', 1)").run();
 
@@ -398,10 +408,12 @@ describe("/api/auth (Auth.js)", () => {
 
       it("redirects to /login without a valid Auth.js session, saying which", async () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
+        const spy = spyOnOutcomes();
         const res = await request("/login/complete", { headers: { Cookie: "__Secure-authjs.session-token=forged" } });
         expect(res.status).toBe(302);
         expect(res.headers.get("Location")).toBe("/login?error=no-authjs-session");
         expect(lvSessionToken(res)).toBeUndefined();
+        expect(outcomesFrom(spy)).toEqual([{ outcome: "signin.refused", reason: "no-authjs-session" }]);
       });
 
       it("redirects to /login if the linked user was deleted before the bridge ran, saying which", async () => {

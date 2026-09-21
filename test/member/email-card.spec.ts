@@ -7,6 +7,7 @@ import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
 import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
 import { getTestCertChain } from "../fixtures/certChain";
+import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
@@ -154,6 +155,26 @@ describe("POST /email-card", () => {
       expect(callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL)).toHaveLength(3);
       expect(email.sent).toHaveLength(1);
       expect(recipientOf(email.sent[0])).toBe("jane@example.com");
+    });
+
+    it("records who was sent a card only in the logs, never in the response", async () => {
+      // The page is identical for everyone; the outcome lines are where the
+      // difference is allowed to live, and they carry no address.
+      mockUpstreams();
+      const spy = spyOnOutcomes();
+
+      await submitEmail("jane@example.com");
+      await submitEmail("lapsed@example.com");
+      await submitEmail("nobody@example.com");
+
+      expect(outcomesFrom(spy)).toEqual([
+        { outcome: "email_card.requested", result: "accepted" },
+        { outcome: "email_card.delivery", result: "sent" },
+        { outcome: "email_card.requested", result: "accepted" },
+        { outcome: "email_card.delivery", result: "not_current" },
+        { outcome: "email_card.requested", result: "accepted" },
+        { outcome: "email_card.delivery", result: "not_a_member" },
+      ]);
     });
 
     it("treats a revoked member as a non-member", async () => {

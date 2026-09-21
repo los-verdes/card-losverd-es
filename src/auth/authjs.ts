@@ -81,6 +81,13 @@ const APPLE_CLIENT_SECRET_TTL_SECONDS = 5 * 60;
 export const LV_USER_ID_CLAIM = "lvUserId";
 
 /**
+ * Claim carrying which provider the sign-in came through (`google`, `apple`),
+ * so the session bridge can say so in its outcome line -- the bridge sees the
+ * finished session, not the OAuth exchange that produced it.
+ */
+export const LV_PROVIDER_CLAIM = "lvProvider";
+
+/**
  * Apple has no static client secret: it's an ES256 JWT signed with the Sign
  * in with Apple key. Auth.js expects a pre-generated one (valid for at most
  * six months); minting a short-lived one per request instead avoids a
@@ -196,6 +203,7 @@ export async function authConfig(
             fullName: providerFullName(user),
           });
           token[LV_USER_ID_CLAIM] = linked.id;
+          token[LV_PROVIDER_CLAIM] = account.provider;
         }
         return token;
       },

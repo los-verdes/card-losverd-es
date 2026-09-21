@@ -1,9 +1,10 @@
 import "../setup/d1";
 import { createExecutionContext, env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { signPassSerial } from "../../src/lib/passSignature";
+import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
 const PASS_KEY = "test-pass-signature-key".repeat(5);
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -16,6 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await env.DB.exec("DELETE FROM legacy_membership_cards");
   await env.DB.exec("DELETE FROM members");
 });
@@ -235,5 +237,27 @@ describe("GET /verify-pass/:serial", () => {
       const res = await verify(LEGACY_SERIAL, await signPassSerial(RETIRED_KEY, LEGACY_SERIAL));
       expect(res.status).toBe(403);
     });
+  });
+});
+
+describe("what a scan records", () => {
+  it("says whether the card came from the previous site, and how the check went", async () => {
+    // Legacy QR codes are the oldest thing still in circulation at cutover;
+    // how often they are scanned, and how they fare, is the question.
+    await insertLegacyCard("jane@example.com", "2020-01-01");
+    await insertMember({ memberId: "LV-00000000-0000-4000-8000-000000000001", email: "jane@example.com", expirationDate: "2099-01-01" });
+    const spy = spyOnOutcomes();
+
+    await signedVerify(LEGACY_SERIAL);
+    await signedVerify("LV-00000000-0000-4000-8000-000000000001");
+    await verify("LV-00000000-0000-4000-8000-000000000001", "forged");
+    await signedVerify("LV-no-such-card");
+
+    expect(outcomesFrom(spy)).toEqual([
+      { outcome: "pass.verified", result: "active", card: "legacy", key: "current" },
+      { outcome: "pass.verified", result: "active", card: "current", key: "current" },
+      { outcome: "pass.verified", result: "bad_signature", card: "current" },
+      { outcome: "pass.verified", result: "not_found", card: "current", key: "current" },
+    ]);
   });
 });

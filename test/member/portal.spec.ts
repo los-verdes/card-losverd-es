@@ -9,6 +9,7 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../src/member/portal";
 import { getTestCertChain } from "../fixtures/certChain";
+import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import { CARD_WIDTH, CARD_HEIGHT } from "../../src/cardimage/template";
 import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
@@ -650,5 +651,21 @@ describe("the no-membership page", () => {
     await insertUser("abc123def@private.icloud.com");
 
     expect(await (await get("/no-active-membership")).text()).toContain("Hide My Email");
+  });
+});
+
+describe("what the no-membership page records", () => {
+  it("says whether the address has orders, and whether it is an Apple relay address", async () => {
+    // The two things that tell apart the surprises this page will see after
+    // cutover: a lapsed member, and one signed in under Hide My Email whose
+    // orders are under their real address.
+    await insertUser("abc123@privaterelay.appleid.com");
+    const spy = spyOnOutcomes();
+
+    await get("/no-active-membership");
+
+    expect(outcomesFrom(spy)).toEqual([
+      { outcome: "membership.none", has_orders: false, counting_orders: 0, apple_relay: true },
+    ]);
   });
 });

@@ -14,6 +14,7 @@ import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import type { Env } from "../index";
 import { AdminNav } from "../admin/nav";
+import { recordOutcome } from "../lib/outcome";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { CLAIM_PATH } from "./claimMembership";
 import {
@@ -348,6 +349,7 @@ portal.get("/", requireCurrentMember, async (c) => {
     getMemberOrderHistory(c.env, member.email),
     isCurrentAdmin(c.env, c.get("session").userId),
   ]);
+  recordOutcome("card.viewed", { admin: isAdmin });
   return c.html(<MemberCard member={member} orders={orders} isAdmin={isAdmin} />);
 });
 
@@ -421,11 +423,13 @@ portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
 
   if (form.get("clear")) {
     await clearDisplayName(c.env, member.email, c.get("session").userId);
+    recordOutcome("display_name.saved", { result: "cleared" });
     return c.redirect(`${NAME_PATH}?saved=1`, 303);
   }
 
   const result = normalizeDisplayName(String(form.get("display_name") ?? ""));
   if (!result.ok) {
+    recordOutcome("display_name.saved", { result: "rejected" });
     const override = await getDisplayName(c.env, member.email);
     return c.html(
       <NameForm
@@ -439,6 +443,7 @@ portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
   }
 
   await setDisplayName(c.env, member.email, result.value, "member", null, c.get("session").userId);
+  recordOutcome("display_name.saved", { result: "set" });
   return c.redirect(`${NAME_PATH}?saved=1`, 303);
 });
 
@@ -455,6 +460,7 @@ portal.get("/card.png", requireCurrentMember, async (c) => {
 
 portal.get("/passes/apple.pkpass", requireCurrentMember, async (c) => {
   const bundle = await getApplePassBundle(c.env, c.get("member"));
+  recordOutcome("pass.downloaded", { wallet: "apple" });
   return new Response(bundle as Uint8Array<ArrayBuffer>, {
     headers: {
       "Content-Type": "application/vnd.apple.pkpass",
@@ -470,6 +476,7 @@ portal.get("/passes/google", requireCurrentMember, async (c) => {
     saveUrl = await buildGoogleWalletSaveUrl(c.env, c.get("member"));
   } catch (err) {
     console.error("Google Wallet save link unavailable:", err);
+    recordOutcome("pass.downloaded", { wallet: "google", result: "unavailable" });
     return c.html(
       <Page title="Google Wallet Unavailable">
         <h1>Google Wallet is unavailable</h1>
@@ -484,6 +491,7 @@ portal.get("/passes/google", requireCurrentMember, async (c) => {
       503,
     );
   }
+  recordOutcome("pass.downloaded", { wallet: "google", result: "ok" });
   return c.redirect(saveUrl);
 });
 
@@ -500,6 +508,15 @@ portal.get(NO_ACTIVE_MEMBERSHIP_PATH, requireAuth, async (c) => {
   // membership would have been derived from -- so if anything is here, it is
   // the explanation for why nothing was.
   const orders = await getMemberOrderHistory(c.env, user.email);
+  // The page most likely to hold the surprises: signed in, no card. Whether
+  // they have orders under this address, and whether it is an Apple relay
+  // address (whose orders would be under another), are the two things that
+  // say which kind of surprise it is.
+  recordOutcome("membership.none", {
+    has_orders: orders.length > 0,
+    counting_orders: orders.filter((order) => order.counts).length,
+    apple_relay: isAppleRelayAddress(user.email),
+  });
   return c.html(
     <NoActiveMembership
       email={user.email}

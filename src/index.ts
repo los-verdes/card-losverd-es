@@ -143,6 +143,10 @@ export interface Env {
   // Not secret -- "true" makes the weekly readiness check post an all-clear
   // to Slack as well as its failures (src/admin/readinessAlert.ts).
   READINESS_POST_WHEN_HEALTHY?: string;
+  // Not secret -- the Cloudflare Web Analytics site token for this
+  // environment's member pages (src/member/webAnalytics.tsx); empty means no
+  // beacon. It is rendered into every page, so it is public by design.
+  WEB_ANALYTICS_TOKEN?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

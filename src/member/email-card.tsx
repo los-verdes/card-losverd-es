@@ -30,6 +30,7 @@ import {
   verifyTurnstileToken,
 } from "../email/turnstile";
 import type { Env } from "../index";
+import { recordOutcome } from "../lib/outcome";
 import {
   consumeRateLimit,
   purgeExpiredRateLimits,
@@ -184,18 +185,23 @@ export async function deliverCardByEmail(
     );
     if (!recipientLimit.allowed) {
       console.warn("Email card: recipient rate limit reached; not sending");
+      recordOutcome("email_card.delivery", { result: "recipient_rate_limited" });
       return;
     }
     const member = await getMemberByEmail(env, email);
     if (!member || !isMembershipCurrent(member)) {
+      // Only ever logged, never shown: the page is identical either way.
+      recordOutcome("email_card.delivery", { result: member ? "not_current" : "not_a_member" });
       return;
     }
     // Non-null: isMembershipCurrent() requires an expiration date.
     const current = { ...member, expiration_date: member.expiration_date! };
     await sendMembershipCardEmail(env, current, { kind: "request", submittedOn });
     console.log("Email card sent", { memberId: member.member_id });
+    recordOutcome("email_card.delivery", { result: "sent" });
   } catch (err) {
     console.error("Email card delivery failed", { error: String(err) });
+    recordOutcome("email_card.delivery", { result: "failed" });
   }
 }
 
@@ -218,6 +224,7 @@ emailCard.post("/", csrf(), async (c) => {
     c.req.header("cf-connecting-ip") ?? "unknown",
   );
   if (!ipLimit.allowed) {
+    recordOutcome("email_card.requested", { result: "ip_rate_limited" });
     c.header("Retry-After", String(ipLimit.retryAfterSeconds));
     return c.html(<TooManyRequests />, 429);
   }
@@ -225,6 +232,7 @@ emailCard.post("/", csrf(), async (c) => {
   const form = await c.req.parseBody();
   const email = typeof form.email === "string" ? form.email.trim() : "";
   if (!isWellFormedEmail(email)) {
+    recordOutcome("email_card.requested", { result: "invalid_address" });
     return c.html(
       <RequestForm
         siteKey={siteKey}
@@ -242,6 +250,7 @@ emailCard.post("/", csrf(), async (c) => {
     c.req.header("cf-connecting-ip"),
   );
   if (!human) {
+    recordOutcome("email_card.requested", { result: "bot_check_failed" });
     return c.html(
       <RequestForm
         siteKey={siteKey}
@@ -252,6 +261,7 @@ emailCard.post("/", csrf(), async (c) => {
     );
   }
 
+  recordOutcome("email_card.requested", { result: "accepted" });
   c.executionCtx.waitUntil(
     deliverCardByEmail(c.env, email, new Date().toISOString()),
   );

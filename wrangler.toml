@@ -125,6 +125,9 @@ ETL_SYNC_DLQ_NAME = "etl-sync-dlq-production"
 # the Slack alerts (src/slack/alert.ts). Spelled out rather than inferred from
 # a queue name or a URL, so it stays right if either changes.
 ENVIRONMENT = "production"
+# Cloudflare Web Analytics site token for the member pages. Public: it is in
+# every page's source (src/member/webAnalytics.tsx). Empty means no beacon.
+WEB_ANALYTICS_TOKEN = "f90077d858e64cec9a68fadc25dd1d0d"
 # The weekly readiness check posts an all-clear too, not only failures, so a
 # run that happened is visible. Meant to go back to "" some while after
 # cutover, once the job has earned trust (src/admin/readinessAlert.ts).
@@ -216,6 +219,9 @@ CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
 ENVIRONMENT = "staging"
+# Cloudflare Web Analytics site token for the member pages. Public: it is in
+# every page's source (src/member/webAnalytics.tsx). Empty means no beacon.
+WEB_ANALYTICS_TOKEN = "b61d93fe2b704bd98f20d9e80c7c466b"
 # The weekly readiness check posts an all-clear too, not only failures, so a
 # run that happened is visible. Meant to go back to "" some while after
 # cutover, once the job has earned trust (src/admin/readinessAlert.ts).
