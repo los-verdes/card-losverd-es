@@ -209,6 +209,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const key of TEMPLATE_KEYS) await env.ASSETS.delete(key);
   await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM legacy_membership_cards");
   await env.DB.exec("DELETE FROM etl_sync_state");
   await env.DB.exec("DELETE FROM users");
 });
@@ -380,6 +381,56 @@ describe("BigCommerce", () => {
     expect(find(await check(PRE_CUTOVER), "Order webhook").status).toBe("ok");
   });
 
+  it("recognises the pre-cutover arrangement rather than calling it a failure", async () => {
+    // Before cutover the subscription belongs on this Worker's own origin:
+    // PUBLIC_BASE_URL is still the legacy app's host, and
+    // `bigcommerce-ensure-webhook` refuses to take that over until the flip.
+    // Reporting the intended arrangement as a failure teaches whoever reads
+    // this page to scroll past the state that really is broken.
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        is_active: true,
+        headers: { Authorization: await registeredAuthorization() },
+      },
+    ];
+
+    const result = find(await check(PRE_CUTOVER), "Order webhook");
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("--cutover");
+  });
+
+  it("checks the token on the pre-cutover subscription rather than skipping it", async () => {
+    // Worth knowing now that what we registered is what this Worker verifies.
+    // Finding out at the flip is finding out too late.
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        is_active: true,
+        headers: { Authorization: await registeredAuthorization() },
+      },
+    ];
+
+    expect(find(await check(PRE_CUTOVER), "Webhook token").status).toBe("ok");
+  });
+
+  it("still fails once cutover has happened and nothing delivers to the real origin", async () => {
+    remote.hooks = [
+      {
+        scope: "store/order/*",
+        destination: "https://card-losverd-es.jeff-hogan1.workers.dev/bigcommerce/order-webhook",
+        is_active: true,
+        headers: {},
+      },
+    ];
+
+    // Served from PUBLIC_BASE_URL, so cutover is done and this is real.
+    expect(find(await check(), "Order webhook").status).toBe("fail");
+  });
+
   it("only warns about a foreign webhook token before cutover", async () => {
     // The production subscription carries the legacy app's token until the
     // flip, so this is the expected state rather than a defect.
@@ -481,7 +532,16 @@ describe("the legacy import", () => {
       .run();
   }
 
-  const CHECK = "Imported orders that count for nothing";
+  async function insertLegacyCard(email: string) {
+    await env.DB.prepare(
+      `INSERT INTO legacy_membership_cards (serial_number, email, full_name, member_since, member_until)
+       VALUES (?, ?, 'Test Member', '2019-04-01', '2020-04-01')`,
+    )
+      .bind(`serial-${email}`, email)
+      .run();
+  }
+
+  const CHECK = "Members left behind by the import";
 
   it("says nothing either way before the import has run", async () => {
     expect(find(await check(), CHECK).status).toBe("skip");
@@ -495,25 +555,53 @@ describe("the legacy import", () => {
     expect(result.detail).toContain("All 2");
   });
 
-  it("counts the orders and the people a statusless import would drop", async () => {
-    // The #89 case: the export marks any `*_bc` order as a BigCommerce order,
-    // so an empty legacy fulfilment status meets a paid-only allow-list it
-    // cannot satisfy.
+  it("does not raise an alarm for somebody who also holds an order that counts", async () => {
+    // The common shape by a wide margin, and the reason a raw order count is
+    // the wrong number to publish: an abandoned cart next to a real purchase
+    // costs its owner nothing.
     await insertImportedOrder("101_bc", "Completed", "one@example.com");
-    await insertImportedOrder("102_bc", null, "two@example.com");
-    await insertImportedOrder("103_bc", "", "two@example.com");
+    await insertImportedOrder("102_bc", "Incomplete", "one@example.com");
+
     const result = find(await check(), CHECK);
-    expect(result.status).toBe("warn");
-    expect(result.detail).toContain("2 of 3");
-    // Both statusless orders belong to one address, so one member is at risk.
-    expect(result.detail).toContain("1 member address.");
-    expect(result.detail).toContain("#89");
+
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("1 of 2");
+    expect(result.detail).toContain("Nobody is left");
   });
 
-  it("pluralises the address count, since this page is read at a glance", async () => {
-    await insertImportedOrder("102_bc", null, "two@example.com");
-    await insertImportedOrder("103_bc", null, "three@example.com");
-    expect(find(await check(), CHECK).detail).toContain("2 member addresses");
+  it("clears somebody left with nothing whom the previous site never carded either", async () => {
+    // Then the allow-list agrees with the old system rather than diverging
+    // from it, which is the whole question #89 was asking.
+    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+
+    const result = find(await check(), CHECK);
+
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("never issued");
+  });
+
+  it("warns about somebody the previous site carded who now holds nothing", async () => {
+    // The one case that is a real regression: the old system treated them as
+    // a member, and this rule does not.
+    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+    await insertLegacyCard("two@example.com");
+
+    const result = find(await check(), CHECK);
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("1 person was");
+    expect(result.detail).toContain("the rule is what is wrong");
+  });
+
+  it("counts only the carded people, not everyone the allow-list excluded", async () => {
+    await insertImportedOrder("101_bc", "Incomplete", "one@example.com");
+    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+    await insertLegacyCard("two@example.com");
+
+    const result = find(await check(), CHECK);
+
+    expect(result.detail).toContain("2 addresses");
+    expect(result.detail).toContain("1 person was");
   });
 
   it("ignores orders that arrived through the store sync", async () => {

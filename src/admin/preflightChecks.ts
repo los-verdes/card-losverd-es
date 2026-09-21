@@ -461,55 +461,92 @@ function deliveryChecks(env: Env): CheckGroup {
 }
 
 /**
- * What the one-time legacy import brought in, and whether any of it is being
- * silently discarded.
+ * Whether the one-time legacy import left anybody without a membership they
+ * ought to have.
  *
- * The export classifies a historical order as `bigcommerce` whenever its id
- * ends in `_bc`, and takes its status from the old application's own
- * fulfilment field -- which is often empty. `COUNTS_AS_MEMBERSHIP` applies a
- * paid-only allow-list to `bigcommerce` rows, and an empty status satisfies
- * nothing, so those orders confer no membership. The scheduled resync works
- * forward from a cursor and never revisits orders that old, so nothing
- * repairs it later. See los-verdes/card-losverd-es#89.
+ * `COUNTS_AS_MEMBERSHIP` applies a paid-only allow-list to `bigcommerce`
+ * rows, and plenty of imported orders fail it -- abandoned carts, mostly.
+ * That on its own says nothing: somebody who abandoned a cart in 2024 and
+ * bought a membership in 2025 holds a card either way. What matters is the
+ * person left holding *no* counted order at all, and only that number is
+ * worth putting in front of a reader.
  *
- * That issue is blocked on exactly the number below, which can only be taken
- * after the import has run against the real database -- so the page takes it,
- * rather than leaving it to be remembered.
+ * Reporting the raw order count instead read as a crisis -- "1410 orders
+ * across 544 addresses" -- with an answer of zero underneath it, on a page
+ * whose value depends entirely on being believed.
+ *
+ * The last step is the one that makes this an answer rather than a prompt.
+ * Somebody left with no counted order is only a problem if the previous site
+ * thought they were a member, and whether it did is knowable here:
+ * `legacy_membership_cards` holds every card that site ever issued. So the
+ * check joins it rather than telling a reader to go and look. See
+ * los-verdes/card-losverd-es#89, which this measurement settled.
  */
 async function legacyImportChecks(env: Env): Promise<CheckGroup> {
-  const result = await attempt("Imported orders that count for nothing", async () => {
-    // Safe to negate because the shared rule is two-valued (#107). It was
-    // not always: while it could return NULL, this read `COALESCE(..., 0) =
-    // 0` to avoid `NOT` silently skipping the statusless orders that are the
-    // whole point of this check.
-    const doesNotCount = `NOT (${COUNTS_AS_MEMBERSHIP})`;
+  const label = "Members left behind by the import";
+  const result = await attempt(label, async () => {
+    // Evaluated once per row in a CTE: the shared rule reads unqualified
+    // `source` and `status`, so it has to sit against a bare
+    // `membership_orders` rather than an alias. Safe to compare against 0
+    // because the rule is two-valued (#107).
     const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS imported,
-              SUM(CASE WHEN ${doesNotCount} THEN 1 ELSE 0 END) AS discarded,
-              COUNT(DISTINCT CASE WHEN ${doesNotCount} THEN member_email END) AS people
-         FROM membership_orders
-        WHERE first_seen_via = 'legacy_postgres' AND source = 'bigcommerce'`,
-    ).first<{ imported: number; discarded: number | null; people: number }>();
+      `WITH counted AS (
+         SELECT member_email, first_seen_via, source, ${COUNTS_AS_MEMBERSHIP} AS counts
+           FROM membership_orders
+       ),
+       imported AS (
+         SELECT * FROM counted WHERE first_seen_via = 'legacy_postgres' AND source = 'bigcommerce'
+       ),
+       stranded AS (
+         SELECT DISTINCT member_email FROM imported i
+          WHERE i.counts = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM counted c
+               WHERE c.member_email = i.member_email AND c.counts = 1
+            )
+       )
+       SELECT (SELECT COUNT(*) FROM imported) AS imported,
+              (SELECT COUNT(*) FROM imported WHERE counts = 0) AS discarded,
+              (SELECT COUNT(DISTINCT member_email) FROM imported WHERE counts = 0) AS people,
+              (SELECT COUNT(*) FROM stranded) AS stranded,
+              (SELECT COUNT(*) FROM stranded
+                WHERE member_email IN (SELECT email FROM legacy_membership_cards)) AS strandedWithCard`,
+    ).first<{
+      imported: number;
+      discarded: number;
+      people: number;
+      stranded: number;
+      strandedWithCard: number;
+    }>();
+
     const imported = row?.imported ?? 0;
     if (imported === 0) {
-      return skip(
-        "Imported orders that count for nothing",
-        "No historical `*_bc` orders here yet -- run the legacy import before reading anything into this.",
-      );
+      return skip(label, "No historical `*_bc` orders here yet -- run the legacy import first.");
     }
     const discarded = row?.discarded ?? 0;
-    if (discarded === 0) {
+    const stranded = row?.stranded ?? 0;
+    const excluded =
+      discarded === 0
+        ? `All ${imported} imported \`*_bc\` orders carry a status that counts.`
+        : `${discarded} of ${imported} imported \`*_bc\` orders fail the paid-only allow-list (abandoned carts, mostly), across ${row?.people ?? 0} ${row?.people === 1 ? "address" : "addresses"}.`;
+
+    if (stranded === 0) {
+      return ok(label, `${excluded} Nobody is left holding no counted order at all.`);
+    }
+    const withCard = row?.strandedWithCard ?? 0;
+    if (withCard === 0) {
+      // The reassuring case, and the common one: these orders never conferred
+      // membership on the previous site either, so the rule agrees with it.
       return ok(
-        "Imported orders that count for nothing",
-        `All ${imported} imported \`*_bc\` orders carry a status that counts.`,
+        label,
+        `${excluded} ${stranded} ${stranded === 1 ? "address holds" : "addresses hold"} no counted order at all, but the previous site never issued ${stranded === 1 ? "that person" : "any of them"} a card either -- so this rule matches what they had.`,
       );
     }
     // A warning rather than a failure: the rule is working as written, and
-    // what to do about it is a decision (#89) rather than a fix.
-    const people = row?.people ?? 0;
+    // what to do about a given person is a judgement rather than a fix.
     return warn(
-      "Imported orders that count for nothing",
-      `${discarded} of ${imported} imported \`*_bc\` orders fail the paid-only allow-list, across ${people} member ${people === 1 ? "address" : "addresses"}. Settle #89 before cutover -- these are members who would quietly lose their card.`,
+      label,
+      `${excluded} ${withCard} ${withCard === 1 ? "person was" : "people were"} issued a card by the previous site and ${withCard === 1 ? "holds" : "hold"} no counted order here, so ${withCard === 1 ? "that card goes" : "those cards go"} away at cutover. Settle before cutover: if the previous site treated them as members, the rule is what is wrong.`,
     );
   });
   return { title: "Legacy import", results: [result] };
@@ -542,7 +579,11 @@ interface BigCommerceHook {
  * `PUBLIC_BASE_URL`. Before cutover a token mismatch is the expected state
  * and only worth noting; after it, it means orders are being dropped.
  */
-async function bigCommerceChecks(env: Env, live: boolean): Promise<CheckGroup> {
+async function bigCommerceChecks(
+  env: Env,
+  live: boolean,
+  requestUrl: string | null,
+): Promise<CheckGroup> {
   const results: CheckResult[] = [];
   const { BIGCOMMERCE_STORE_HASH: storeHash, BIGCOMMERCE_ACCESS_TOKEN: accessToken } = env;
 
@@ -591,12 +632,32 @@ async function bigCommerceChecks(env: Env, live: boolean): Promise<CheckGroup> {
       if (!res.ok) return fail("Order webhook", `Could not list webhooks: BigCommerce answered ${res.status}.`);
       listed = true;
       const { data = [] } = await res.json<{ data?: BigCommerceHook[] }>();
-      hook = data.find((each) => each.destination === expected && each.scope === WEBHOOK_SCOPE);
-      if (!hook)
+      const subscribedTo = (destination: string) =>
+        data.find((each) => each.destination === destination && each.scope === WEBHOOK_SCOPE);
+      hook = subscribedTo(expected);
+      if (!hook) {
+        // Before cutover the subscription belongs on this Worker's own
+        // origin, not on PUBLIC_BASE_URL: that is still the legacy app's
+        // host, and `bigcommerce-ensure-webhook` refuses to take it over
+        // until the flip. Finding it there is the arrangement working, so
+        // reporting it as a failure would train a reader to scroll past the
+        // one state that really is broken.
+        const servingOrigin = requestUrl ? new URL(requestUrl).origin : null;
+        const here = servingOrigin ? subscribedTo(`${servingOrigin}${WEBHOOK_PATH}`) : undefined;
+        if (here && !live) {
+          // Kept, so the token check below can still verify it. What that
+          // subscription carries is worth knowing now rather than at cutover.
+          hook = here;
+          return warn(
+            "Order webhook",
+            `${WEBHOOK_SCOPE} delivers to ${here.destination} rather than ${expected}. Expected before cutover, while the legacy app still serves that origin; re-point it with \`just bigcommerce-ensure-webhook <env> --cutover\` as part of the flip.`,
+          );
+        }
         return fail(
           "Order webhook",
           `No ${WEBHOOK_SCOPE} subscription delivering to ${expected}. Register one with \`just bigcommerce-ensure-webhook\`.`,
         );
+      }
       if (!hook.is_active) return fail("Order webhook", `The subscription for ${expected} exists but is inactive.`);
       return ok("Order webhook", `${WEBHOOK_SCOPE} delivers to ${expected}.`);
     }),
@@ -712,7 +773,7 @@ export async function runPreflightChecks(
     await legacyImportChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
-    await bigCommerceChecks(env, live),
+    await bigCommerceChecks(env, live, requestUrl),
     deliveryChecks(env),
     await queueChecks(env, now),
   ];
