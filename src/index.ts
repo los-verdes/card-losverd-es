@@ -1,6 +1,7 @@
 import { authHandler, initAuthConfig } from "@hono/auth-js";
 import type { SendEmailBinding } from "./email/cloudflare";
 import { Hono } from 'hono';
+import { contextStorage } from "hono/context-storage";
 import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
 import adminRevocations from "./admin/revocations";
@@ -142,6 +143,11 @@ export interface Env {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Makes the request reachable from components rendered deep inside a page,
+// such as the admin nav's counts (src/admin/nav.tsx), without passing it
+// through every page on the way.
+app.use(contextStorage());
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 

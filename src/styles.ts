@@ -298,6 +298,27 @@ body.member nav.admin-nav {
 nav.admin-nav .nav-here {
   color: var(--muted);
 }
+
+/* A report of things wanting action, with nothing in it: still a link, but
+   one that steps back so the ones with something in them stand out. */
+nav.admin-nav a.nav-quiet {
+  color: var(--muted);
+}
+
+/* How many rows such a report has. Warn rather than danger: these are
+   questions for a person, not failures. */
+nav.admin-nav .nav-count {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.4em;
+  border-radius: 0.7em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--bg);
+  background: var(--warn);
+}
 `;
 
 /**
