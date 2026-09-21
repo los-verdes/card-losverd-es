@@ -226,7 +226,7 @@ describe("GET /admin/orders/:orderId", () => {
 
 describe("POST /admin/orders/:orderId/member", () => {
   it("attributes the order, records who did it, and shows both members' cards", async () => {
-    await refreshMemberFromOrders(env, "buyer@example.com", { firstName: "Buy", lastName: "Er", membershipTier: "standard" });
+    await refreshMemberFromOrders(env, "buyer@example.com", { firstName: "Buy", lastName: "Er" });
 
     const res = await post("/admin/orders/1001_bc/member", { email: " Friend@Example.com ", note: " gift " });
 

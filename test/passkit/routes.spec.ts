@@ -25,15 +25,14 @@ async function seedMember(options: SeedMemberOptions = {}) {
   const memberId = options.memberId ?? "LV-10023";
   const authToken = options.authToken ?? "test-auth-token";
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       memberId,
       "Jane",
       "Doe",
       `${memberId.toLowerCase()}@example.com`,
-      "standard",
       options.status ?? "active",
       options.expirationDate ?? "2027-01-15",
       "2021-07-15",

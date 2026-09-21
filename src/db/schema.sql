@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS members (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    membership_tier TEXT NOT NULL DEFAULT 'standard', -- e.g. standard, los-pringles, cut-crew, etc.
     status TEXT NOT NULL DEFAULT 'active',    -- active, expired, revoked
     expiration_date TEXT,                     -- ISO8601 string (YYYY-MM-DD)
     member_since TEXT,                        -- ISO8601 string (YYYY-MM-DD); see migrations/0003_member_since.sql

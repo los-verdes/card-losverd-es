@@ -23,7 +23,6 @@ const WHITE = '#ffffff';
 export interface MembershipCardMember {
   firstName: string;
   lastName: string;
-  membershipTier: string;
   /** == the pass's serialNumber; shown under the QR code. */
   memberId: string;
   /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
@@ -114,7 +113,6 @@ export function buildCardTree(
 
   const memberInfoChildren: (SatoriElement | string)[] = [
     textNode(`${member.firstName} ${member.lastName}`.trim(), { fontSize: 46, color: WHITE }),
-    textNode(member.membershipTier, { fontSize: 26, color: '#e7fbef', marginTop: 10 }),
   ];
   for (const label of [labels.memberSince, labels.expiration]) {
     if (label) {

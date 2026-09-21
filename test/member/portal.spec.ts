@@ -67,20 +67,18 @@ async function insertMember(fields: {
   userId?: number | null;
   firstName?: string;
   lastName?: string;
-  tier?: string;
   expirationDate?: string;
   memberSince?: string | null;
 }) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, user_id, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, user_id, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'token', 1)`,
   )
     .bind(
       fields.memberId ?? "BC-1",
       fields.firstName ?? "Jane",
       fields.lastName ?? "Doe",
       fields.email ?? "jane@example.com",
-      fields.tier ?? "los-pringles",
       fields.expirationDate ?? "2099-03-04",
       fields.memberSince === undefined ? "2021-07-15" : fields.memberSince,
       fields.userId ?? null,
@@ -271,7 +269,6 @@ describe("GET /", () => {
     expect(res.headers.get("Content-Type")).toMatch(/^text\/html/);
     const html = await res.text();
     expect(html).toContain("Jane Doe");
-    expect(html).toContain("los-pringles");
     expect(html).toContain("Member since Jul 2021");
     expect(html).toContain("Good through Mar 4, 2099");
     // Attribute order is the renderer's business; that the card is on the

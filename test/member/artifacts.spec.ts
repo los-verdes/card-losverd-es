@@ -33,8 +33,8 @@ afterEach(async () => {
 
 async function insertMember(memberId = "BC-1", email = "jane@example.com") {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'standard', 'active', '2099-01-15', '2024-01-15', 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-01-15', '2024-01-15', 'token', 1)`,
   )
     .bind(memberId, email)
     .run();

@@ -63,7 +63,6 @@ const SAMPLE_MEMBER: MemberWalletInput = {
   memberId: "LV-00000000-0000-4000-8000-000000000000",
   firstName: "Casey",
   lastName: "Example",
-  membershipTier: "standard",
   status: "active",
   expirationDate: "2099-02-17",
   memberSince: "2021-07-01",

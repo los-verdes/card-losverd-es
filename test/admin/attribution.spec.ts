@@ -12,12 +12,12 @@ import { emailMemberCard } from "../../src/email/card";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
 const ADMIN_ID = 1;
-const FALLBACK = { firstName: "Test", lastName: "Member", membershipTier: "standard" };
+const FALLBACK = { firstName: "Test", lastName: "Member" };
 
 async function member(email: string) {
-  return env.DB.prepare("SELECT member_id, first_name, last_name, membership_tier, status, expiration_date FROM members WHERE email = ?")
+  return env.DB.prepare("SELECT member_id, first_name, last_name, status, expiration_date FROM members WHERE email = ?")
     .bind(email)
-    .first<{ member_id: string; first_name: string; last_name: string; membership_tier: string; status: string; expiration_date: string | null }>();
+    .first<{ member_id: string; first_name: string; last_name: string; status: string; expiration_date: string | null }>();
 }
 
 async function order(id: string) {
@@ -120,23 +120,23 @@ describe("attributeOrder", () => {
     expect((await listAttributions(env.DB, "1_bc")).map((a) => a.member_email)).toEqual(["second@example.com", "first@example.com"]);
   });
 
-  it("gives a new member the order's name and tier when their history has none, and skips a previous member with no card", async () => {
+  it("gives a new member the order's name when their history has none, and skips a previous member with no card", async () => {
     await insertOrder({ id: "sq-1", email: "legacy@example.com", source: "squarespace", created: "2098-01-15T00:00:00Z" });
     await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, sku = NULL");
 
     const result = await attributeOrder(env, await order("sq-1"), "current.address@example.com", ADMIN_ID, null);
 
     expect(result.previous).toBeNull();
-    expect(await member("current.address@example.com")).toMatchObject({ first_name: "", last_name: "", membership_tier: "standard" });
+    expect(await member("current.address@example.com")).toMatchObject({ first_name: "", last_name: "" });
   });
 
-  it("uses the order's tier for a known membership SKU", async () => {
+  it("gives the recipient a card when the order's SKU is a membership", async () => {
     await insertOrder({ id: "1_bc", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
     await env.DB.exec("UPDATE membership_orders SET sku = 'LOSV-MEM-0001', first_name = NULL");
 
     await attributeOrder(env, await order("1_bc"), "recipient@example.com", ADMIN_ID, null);
 
-    expect((await member("recipient@example.com"))?.membership_tier).toBe("standard");
+    expect((await member("recipient@example.com"))?.member_id).toMatch(/^LV-/);
   });
 
   it("creates no card for the recipient of an order that doesn't count, and pushes nothing for an unchanged card", async () => {
