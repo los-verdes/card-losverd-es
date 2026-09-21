@@ -2,7 +2,7 @@
 
 Digital membership card service for the [Los Verdes supporters group](https://www.losverdesatx.org/), serving `card.losverd.es`.
 
-This is the Cloudflare Workers + D1 + R2 rewrite of [`digital-membership`](https://github.com/los-verdes/digital-membership) (Python/Flask on GCP). The two run side by side during the migration: `digital-membership` stays live and authoritative in production until this one is fully built and validated, at which point cutover happens via a DNS repoint (see "Status" below for how close that is). Why that stack was chosen is in [`docs/architecture-decisions.md`](docs/architecture-decisions.md); how the switch happens is in [`docs/cutover.md`](docs/cutover.md).
+It runs on Cloudflare Workers, D1 and R2, and replaced [`digital-membership`](https://github.com/los-verdes/digital-membership) (Python/Flask on GCP) when `card.losverd.es` moved over on 2026-09-21. Cards and QR codes issued by that site keep working here. Why this stack was chosen is in [`docs/architecture-decisions.md`](docs/architecture-decisions.md).
 
 ## Stack
 
@@ -35,7 +35,7 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 | Environment | Worker | BigCommerce store | URL |
 | :--- | :--- | :--- | :--- |
 | **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://card-losverd-es-staging.los-verdes.workers.dev |
-| **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card-losverd-es-production.los-verdes.workers.dev (until `card.losverd.es` DNS cutover) |
+| **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card.losverd.es |
 
 `.github/workflows/deploy.yml`:
 
@@ -46,7 +46,7 @@ Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wr
 
 **Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
 
-The `card.losverd.es` DNS record is deliberately not managed here yet -- that's the cutover step itself, not something a routine `terraform apply` should be able to trigger.
+`card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Production no longer answers on its `workers.dev` hostname. Staging sets `routes = []`, because named environments inherit routes and staging deploys first.
 
 ## Keeping dependencies current
 
@@ -85,7 +85,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 Behind the routes:
 
 - **`etl-sync` queue** (`src/queues/`): one consumer at a time, five retries, then a dead-letter queue, whose consumer posts one Slack alert per batch. `just queue-dlq-drill [env]` proves that path in a real environment by sending a `dlq_drill` message, which fails on purpose. It takes about thirteen minutes, nearly all retry backoff, and proves the whole chain including the dead-letter binding; `--direct` posts straight to the dead-letter queue instead, answering "does the alert still reach Slack" in seconds while proving nothing about how a message gets there. Carries BigCommerce order syncs and the scheduled jobs below.
-- **Scheduled jobs** (`src/scheduled.ts`), which `just etl-run <env> <job>` can also trigger on demand -- it enqueues onto the same queue the cron uses, so the job runs exactly as it does on a timer: BigCommerce order resync, the Slack members sync, and a weekly readiness check that runs the `/admin/preflight` checks and posts its failures to Slack (`src/admin/readinessAlert.ts`), plus a weekly all-clear while `READINESS_POST_WHEN_HEALTHY` is `"true"` -- so a pass certificate nearing expiry is noticed without anyone opening the page. **Staging runs all three on a schedule** (`[env.staging.triggers]` in `wrangler.toml`): the resync every six hours against the sandbox store, the Slack sync against staging's own Slack app, and the readiness check weekly. **Production has no triggers yet**, until its BigCommerce credentials are in place.
+- **Scheduled jobs** (`src/scheduled.ts`), which `just etl-run <env> <job>` can also trigger on demand -- it enqueues onto the same queue the cron uses, so the job runs exactly as it does on a timer: BigCommerce order resync, the Slack members sync, and a weekly readiness check that runs the `/admin/preflight` checks and posts its failures to Slack (`src/admin/readinessAlert.ts`), plus a weekly all-clear while `READINESS_POST_WHEN_HEALTHY` is `"true"` -- so a pass certificate nearing expiry is noticed without anyone opening the page. **Both environments run all three on a schedule** (`[triggers]` and `[env.staging.triggers]` in `wrangler.toml`): the Slack sync and the resync every six hours, a quarter-hour apart, and the readiness check weekly. Staging's run against the sandbox store and staging's own Slack app.
 - **Apple pass updates** (`src/passkit/apns.ts`, `updates.ts`): when a sync changes something visible on a pass, registered devices get an APNs push.
 - **Who we may email** (`EMAIL_RECIPIENT_ALLOWLIST`, a plain var): `*` permits any address, an empty value permits none, and anything else is a comma- or space-separated list of addresses and domains. It means the same thing in every environment -- production carries `*` explicitly, so an environment that loses the var goes quiet rather than open. Enforced in `sendEmail`, which every outbound message passes through; a suppressed send is logged and never throws. Staging is limited to `losverd.es`, which is what makes realistic member data safe to hold there.
 - **New-order card emails** (`src/email/newOrder.ts`): when an order webhook reports an order has reached `Completed`, the member is emailed their card, once. **Off until `CARD_EMAIL_NEW_ORDERS_SINCE` is set** to a date -- see [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md).
@@ -117,7 +117,7 @@ just secrets-push staging                # push every secret the item has a valu
 just secrets-push staging AUTH_SECRET    # push only the named ones, e.g. after rotating
 ```
 
-Use a different value per environment. Random values (`openssl rand -hex 32`) work for `AUTH_SECRET`, `SESSION_SIGNING_KEY`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, and staging's `PASS_SIGNATURE_KEY`. Check `secrets-status` line counts after pasting a PEM: it should span several lines. None have placeholders in `wrangler.toml`; features that need a missing secret fail closed or skip themselves with a logged warning.
+Use a different value per environment. Random values (`openssl rand -hex 32`) work for `AUTH_SECRET`, `SESSION_SIGNING_KEY`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`, and staging's `PASS_SIGNATURE_KEY`. Production's `PASS_SIGNATURE_KEY` is not random: it is the previous site's `SECRET_KEY` repeated five times, which is what the QR codes on its cards were signed with ([`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md)). Check `secrets-status` line counts after pasting a PEM: it should span several lines. None have placeholders in `wrangler.toml`; features that need a missing secret fail closed or skip themselves with a logged warning.
 
 Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KEY` would break every QR code already issued, so it rotates through an overlap window ([`docs/pass-signature-rotation.md`](docs/pass-signature-rotation.md)), and changing `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` means re-registering the store's webhook, whose header carries a token derived from it.
 
@@ -239,9 +239,7 @@ on `/email-card`. Hard bounces and spam reports go onto the Cloudflare
 account's Email Sending suppression list on their own, and the binding refuses
 to send to anything on it; an address can also be added there by hand in the
 dashboard. The previous site's SendGrid unsubscribe group was specific to
-card emails and holds a handful of addresses; copy them onto that list by hand
-(SendGrid: Suppressions; Cloudflare: Email Sending, Suppressions) before
-SendGrid's key and account are retired. If card emails ever grow into
+card emails; its handful of addresses were copied onto that list by hand. If card emails ever grow into
 something people could reasonably want to stop, this is the part to revisit.
 
 Sender and recipient go to the binding as separate address and name, never
@@ -304,7 +302,7 @@ just bigcommerce-ensure-webhook staging --dry-run   # show what would change
 just bigcommerce-ensure-webhook staging
 ```
 
-It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). Production's default destination, `card.losverd.es`, is where the **legacy** app's webhook lives until cutover, so it's refused without `--cutover`; to test production before then, pass `--origin https://card-losverd-es-production.los-verdes.workers.dev`.
+It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). The destination is the environment's `PUBLIC_BASE_URL` unless `--origin` names another.
 
 ### Finding webhooks that no longer belong
 
@@ -314,13 +312,13 @@ Hooks outlive what they point at. After the move to the Los Verdes Cloudflare ac
 just bigcommerce-webhooks production
 ```
 
-lists every hook on the store with a verdict: **current** (delivers here), **stale** (a `workers.dev` deployment that is not this environment's), **not-ours** (on the public hostname but another path -- before cutover, the previous site's), or **other**. For anything not current it also says whether the destination still answers, since a stale hook that answers is putting orders somewhere other than this environment's database. It prints the command to remove each stale one:
+lists every hook on the store with a verdict: **current** (delivers here), **stale** (a `workers.dev` deployment that is not this environment's), **not-ours** (on the environment's hostname but another path), or **other**. For anything not current it also says whether the destination still answers, since a stale hook that answers is putting orders somewhere other than this environment's database. It prints the command to remove each stale one:
 
 ```bash
 just bigcommerce-webhooks production --delete <id>
 ```
 
-Deletion takes one id, chosen by a person, and refuses the hook that delivers to the environment itself. There is deliberately no sweep: before cutover a hook on `card.losverd.es` belongs to the previous site, which is still serving members.
+Deletion takes one id, chosen by a person, and refuses the hook that delivers to the environment itself. There is deliberately no sweep: the store can hold hooks for things other than this project.
 
 ## Making someone an admin
 
@@ -355,17 +353,17 @@ Two things, neither of which identifies anybody:
 
 ## Status
 
-Feature-complete enough to exercise end to end on staging; **not yet cut over**. `digital-membership` on GCP is still production. What remains, in order, is [`docs/cutover.md`](docs/cutover.md); what is blocked and on what is the issue tracker, where every open issue carries one of five labels: [`ready`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3Aready) for work with nothing in its way, [`waiting: decision`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+decision%22), [`waiting: credential or console`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+credential+or+console%22), [`cutover step`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22cutover+step%22) for work the runbook schedules, or [`after cutover`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22after+cutover%22).
+**In production** at `card.losverd.es` since 2026-09-21. Open work is in the issue tracker, where every open issue carries one of five labels: [`ready`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3Aready) for work with nothing in its way, [`waiting: decision`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+decision%22), [`waiting: credential or console`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+credential+or+console%22), [`after cutover`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22after+cutover%22) for work that was deliberately held until the move was done and is now simply next in line, or [`cutover step`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22cutover+step%22) for the move's own steps, none of which remain open.
 
-Deliberately dropped from the legacy app: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
+Deliberately dropped from the previous site: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
 
-After cutover: MiniBC renewal data, membership revocation ([#31](https://github.com/los-verdes/card-losverd-es/issues/31)), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
+Not built yet: MiniBC renewal data (see the provenance document), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
 
 ## More docs
 
-- [`docs/migration-plan.md`](docs/migration-plan.md): the phase index the code's `Phase N` comments refer to, and where each phase's detail lives now
+- [`docs/migration-plan.md`](docs/migration-plan.md): the phase index the code's `Phase N` comments refer to -- a record of how the rewrite was built, kept because those comments cite it
 - [`docs/architecture-decisions.md`](docs/architecture-decisions.md): why Cloudflare, why TypeScript, why one DNS cutover, and the non-profit context those rest on
-- [`docs/cutover.md`](docs/cutover.md): the ordered runbook for moving `card.losverd.es` and retiring GCP
+- [`docs/cutover.md`](docs/cutover.md): the record of how `card.losverd.es` moved over, with the follow-ups still open from it
 - [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): **the specification the rest of this repository follows** -- what an order is, where each card field comes from, and how "current member" is decided. Written for the Merch Team and the Membership Committee; where it and the code disagree, that is a defect to fix rather than a document to quietly update. `just provenance-gdoc` prepares a copy for Google Docs, for the people who would rather comment there -- the repository's copy stays the source of truth
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync

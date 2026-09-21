@@ -54,7 +54,7 @@ if (!token || !accountId) {
 if (env === "production" && !confirmedProduction) {
   // A drill on production posts a real alert to the channel people watch,
   // and leaves a real dead-lettered message in the logs. That is sometimes
-  // exactly what you want -- proving production's alerting before cutover --
+  // exactly what you want -- proving production's alerting --
   // but never by accident.
   fail(
     "refusing to drill production without --yes-production.\n" +

@@ -33,13 +33,13 @@ export interface MemberRecord {
   last_name: string;
   status: "active" | "expired" | "revoked";
   expiration_date: string | null;
-  /** Effective value: a `member_since_overrides` row wins (migration 0005). */
+  /** Effective value: a `member_since_overrides` row wins. */
   member_since: string | null;
   /**
    * What the member (or an admin) asked to be shown instead of the name
-   * derived from their orders; null when nobody has asked for anything
-   * (migration 0014). The derived `first_name`/`last_name` stay as they are
-   * underneath, so clearing this puts the card back to them.
+   * derived from their orders; null when nobody has asked for anything.
+   * The derived `first_name`/`last_name` stay as they are underneath, so
+   * clearing this puts the card back to them.
    */
   display_name: string | null;
   auth_token: string;
@@ -81,7 +81,7 @@ const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
 /**
  * The name to put on a card, as the two fields every renderer expects.
  *
- * A display name is one free-text field (migration 0014), so it goes in
+ * A display name is one free-text field, so it goes in
  * `firstName` whole and leaves `lastName` empty -- a name someone chose is
  * not ours to split, and several of them would not survive being split.
  * Callers join the two with a space and trim.

@@ -1,6 +1,6 @@
 /**
  * SQL behind the admin membership reports (src/admin/reports.tsx), all over
- * `membership_orders` (migration 0008). Kept apart from the pages so the HTML
+ * `membership_orders`. Kept apart from the pages so the HTML
  * table and the CSV download of a report always run the same query.
  *
  * Timestamps in the table are ISO8601 UTC text, so "was a member at instant

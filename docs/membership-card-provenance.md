@@ -222,9 +222,12 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
 
 ### What this does not catch
 
-* **Archived orders.** The resync looks for orders that are there, not for
-  ones that have gone, so an order archived in BigCommerce keeps its
-  last-known copy here. Deletion is noticed; archival is not.
+* **Archived orders.** Deleting an order in BigCommerce archives it: the
+  order is still there, marked as deleted, and this system keeps syncing it
+  as if it were not. An archived order therefore keeps counting towards its
+  member's membership, and nothing flags it. Whether it should -- or
+  whether archiving should work like a refund -- is worth confirming with
+  the Merch Team, who are the ones who would archive an order.
 * **Memberships sold under an unlisted SKU**, as above.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
@@ -769,6 +772,15 @@ or a change, not an open-ended design exercise.
    a question for them. The same goes for an appeal: the code of conduct
    provides for one, and lifting a revocation or an expulsion here is the
    same single action whatever prompted it.
+
+9. **Should an archived order still count?** Currently yes: deleting an order
+   in BigCommerce archives it rather than removing it, and an archived order
+   keeps counting towards its member's membership, with nothing flagged for
+   anybody to look at. The alternatives are to treat archiving like a refund
+   (it stops counting) or to keep counting but list archived orders for the
+   Merch Team to decide about, as orders that disappear are listed today. It
+   turns on what the Merch Team means when they archive an order -- tidying
+   the order list, or undoing a sale.
 
 ## What is kept about what people did
 

@@ -1,5 +1,5 @@
 /**
- * What has been done to memberships, most recent first (migration 0020).
+ * What has been done to memberships, most recent first.
  *
  * The other admin screens answer "what is true about this person now". This
  * one answers "what happened, and who decided it", which is a different

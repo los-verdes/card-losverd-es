@@ -461,7 +461,7 @@ describe("BigCommerce", () => {
     const result = find(await check(PRE_CUTOVER), "Order webhook");
 
     expect(result.status).toBe("warn");
-    expect(result.detail).toContain("--cutover");
+    expect(result.detail).toContain("just bigcommerce-ensure-webhook <env>");
   });
 
   it("checks the token on the pre-cutover subscription rather than skipping it", async () => {
@@ -522,7 +522,7 @@ describe("BigCommerce", () => {
     ];
     const result = find(await check(), "Webhook token");
     expect(result.status).toBe("fail");
-    expect(result.detail).toContain("--cutover");
+    expect(result.detail).toContain("just bigcommerce-ensure-webhook <env>");
   });
 
   it("leaves a foreign webhook token a warning on a scheduled run, which cannot tell", async () => {

@@ -43,23 +43,20 @@ to Workers:
      splits that single key into `SESSION_SIGNING_KEY` and
      `PASS_SIGNATURE_KEY` for the same reason; this design adds a third,
      purpose-specific secret rather than resurrecting the old
-     one-key-for-everything pattern. It must be regenerated and the
-     webhook subscription recreated with the new token at cutover (Phase
-     8) — it cannot be carried over from GCP's `SECRET_KEY` since that
-     value is being retired entirely.
+     one-key-for-everything pattern. It was generated fresh, not carried over
+     from the previous site's `SECRET_KEY`, and each store's webhook was
+     registered with the token derived from it.
    - **Registration:** `just bigcommerce-ensure-webhook <env>`
      (`scripts/bigcommerce-webhook.mjs`, a port of the legacy
      `ensure-order-webhook` command) creates or updates the store's
      `store/order/*` webhook with the header. It computes the token with
      the Worker's own `src/bigcommerce/webhookToken.ts` (Node imports the
      TypeScript directly), so registration and verification can't drift.
-   - Deferred: real verification against a live secret. There's no
-     BigCommerce sandbox store or webhook subscription available in this
-     environment, so `sync.spec.ts`/`routes.spec.ts` exercise the HMAC
-     logic against a locally-generated key/token pair, not a token BigCommerce
-     itself issued. The `signWebhookToken`/`verifyWebhookSignature` helpers
-     are pure functions, so this is a config/secrets exercise at cutover,
-     not a code change.
+   - Verified against real deliveries: the sandbox store's webhook drives
+     staging, and production's has pointed at `card.losverd.es` since the
+     cutover. The specs (`sync.spec.ts`/`routes.spec.ts`) exercise the same
+     pure `signWebhookToken`/`verifyWebhookSignature` helpers against a
+     locally generated key.
 4. If `data.type === "order"`, check `data.id` is a positive integer, which
    is all a BigCommerce order id ever is. Reject (400) otherwise. The id is
    interpolated into the API path the sync later fetches, and a URL
@@ -149,9 +146,14 @@ raises it for a person instead, on the "Missing from BigCommerce" report.
 A later sync that finds the order again clears the flag, so a transient 404
 heals itself.
 
-This catches deletion, not archival. An archived order simply stops
-appearing in the order list, and the resync (§4) walks forward from a cursor
-rather than looking for absences, so nothing notices.
+This catches an order that really disappears, which in practice BigCommerce
+does not do: deleting an order there archives it. An archived order is still
+returned, by the order list and by its own id, marked `is_deleted: true`, and
+archiving it fires a webhook like any other change (checked on a sandbox
+order, 2026-09-21). The sync does not read `is_deleted`, so an archived
+order is re-applied unchanged and keeps counting, with nothing flagged.
+Whether an archived order should count is an open question in the
+provenance document.
 
 ## 3. Integration with the `etl-sync` queue
 
@@ -175,15 +177,14 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 When the webhook path (and only the webhook path) sees an order **become**
 `Completed`, the member is emailed their card once
 (`src/email/newOrder.ts`). Emailing in bulk would be a disaster -- a
-backfill, resync, legacy import or cutover would mail hundreds of existing
-members -- so three guards each stop that on their own:
+backfill, resync or data reload would mail hundreds of existing members -- so three guards each stop that on their own:
 
 1. only `syncBigCommerceOrder` calls it; the scheduled and `loadAll`
    resyncs go straight to `applyMembershipOrder`, and the legacy import
    writes D1 without running either;
 2. `CARD_EMAIL_NEW_ORDERS_SINCE`, a plain var that is **empty by default**,
    switches sending on and limits it to orders created on or after that date;
-3. `card_emails` (migration 0010) records the order *before* the send, so a
+3. `card_emails` records the order *before* the send, so a
    webhook retry or duplicate delivery finds the row and stops.
 
 Removing any one of them fails a test. A send that fails is logged and not
@@ -242,29 +243,19 @@ one is implemented fully:
   `map_customer_to_user_by_store_id`). Still a stub. In the legacy app this
   job is also what re-pointed a member at their current storefront email;
   here that role belongs to `membership_orders.member_email`, and how it
-  gets updated after cutover is an open design point (see
+  gets updated is an open design point (see
   [`reporting.md`](reporting.md), "Not built yet").
 * **`sync_minibc_subscriptions_etl` — stubbed.** High-level: call
   MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
   per `member_card/minibc.py`) for recurring-subscription state that
   doesn't flow through BigCommerce order webhooks at all, and reconcile
   `expiration_date` for members on a MiniBC recurring
-  plan. Deferred until after cutover (decided 2026-09-17): MiniBC is the
-  vendor that handles renewals, so it holds membership status that nothing
-  else records, but porting it is lower priority than the cutover itself.
+  plan. Not started: MiniBC is the vendor that handles renewals, so it
+  holds membership status that nothing else records, and it is the largest
+  piece of ingestion not yet built.
 
 ## 5. What's deferred
 
-* **Real webhook signature verification against a live secret.** The HMAC
-  logic is implemented and tested against locally-generated keys; there's
-  no BigCommerce store/webhook subscription in this environment to
-  validate the exact header format/casing BigCommerce sends in
-  production. Verify against a real sandbox store during Phase 1 risk
-  spikes or staging validation (Phase 8.2), before cutover.
-* **Production cron triggers.** Staging runs all three scheduled jobs
-  (`[env.staging.triggers]`); production has no `[triggers] crons` block,
-  because its BigCommerce credentials are still placeholders and the jobs
-  would run against them.
 * **`sync_customers_etl` and `sync_minibc_subscriptions_etl` full
   implementations** — stubbed with a clear high-level description each
   (§4); `sync_subscriptions_etl` is the one fully implemented, working

@@ -1,6 +1,5 @@
 /**
- * Barring somebody from the group, and lifting that again (#31,
- * migration 0017).
+ * Barring somebody from the group, and lifting that again (#31).
  *
  * A ban is the heavier of the two things an admin can do to a person here,
  * and the difference from a withdrawn card is worth keeping straight:

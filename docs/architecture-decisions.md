@@ -92,11 +92,10 @@ which both stacks are live, both must be maintained, and every question
 about behaviour has two possible answers. For a volunteer-run project, that
 state costs more than a brief, scheduled disruption does.
 
-It also keeps rollback genuinely simple. Until the new stack takes real
-production writes, reverting is a DNS change, and the legacy stack has been
-kept syncing in the meantime so nothing is lost by going back. See
-[`cutover.md`](cutover.md) for how that is carried out and what the rollback
-actually restores.
+It also kept rollback simple: until the new stack took real production
+writes, reverting was a DNS change, and the legacy stack was kept syncing so
+nothing would have been lost by going back. The move happened on 2026-09-21
+without needing it; [`cutover.md`](cutover.md) is the record of how.
 
 ## Two environments, not one
 

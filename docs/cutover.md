@@ -1,5 +1,12 @@
 # Cutover runbook
 
+**Done: `card.losverd.es` moved to this stack on 2026-09-21.** This file is
+kept as the record of how it was done, and for the two pieces still ahead:
+sweeping Squarespace out of the code (section 4) and decommissioning GCP
+(section 5), each with gates recorded below. Sections 1 to 3 describe steps
+already carried out, in the imperative they were written in; their rollback
+notes no longer apply, since the previous site is offline.
+
 Moving `card.losverd.es` from the legacy GCP stack to this one, and retiring
 GCP afterwards.
 
@@ -226,16 +233,11 @@ elsewhere.
 
 ## 4. Settle
 
-Wait at least one full reporting cycle, roughly two weeks.
-
-Then retire the migration framing
-([#186](https://github.com/los-verdes/card-losverd-es/issues/186)). This
-repository is written throughout as a migration in progress -- this runbook
-most of all -- and every one of those references stops being true on the day
-of the flip. Left alone they do not read as history; they read as a project
-that was abandoned midway. The issue separates what to sweep from the
-references to the old system that stay correct indefinitely, which are not
-the same thing and are easy to confuse.
+The migration framing across the repository was retired straight after the
+flip ([#186](https://github.com/los-verdes/card-losverd-es/issues/186)):
+documents and comments now describe this stack as the live one, and refer to
+the previous site only where what it left behind is still in use -- its QR
+codes, its cards, and the order history it held.
 
 Sweeping Squarespace out of the code
 ([#215](https://github.com/los-verdes/card-losverd-es/issues/215)) belongs to

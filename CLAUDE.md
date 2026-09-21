@@ -91,7 +91,7 @@ id, `1001` for a BigCommerce order key.
 
 A membership card is emailed only because a member asked for it, or because
 a new order completed. It is never sent as a side effect of a backfill, a
-resync, the legacy import, or cutover -- those touch every member at once,
+resync, or a data import or reload -- those touch every member at once,
 and getting it wrong means mailing hundreds of people who did not ask.
 
 Three guards in `src/email/newOrder.ts` enforce that, each sufficient alone,

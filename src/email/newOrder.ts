@@ -4,7 +4,7 @@
  * site at all.
  *
  * The danger this file is built around: emailing cards must never happen in
- * bulk. A backfill, a scheduled resync, the legacy Postgres import or cutover
+ * bulk. A backfill, a scheduled resync, or a data import or reload
  * would otherwise mail hundreds of existing members at once. Three guards:
  *
  * 1. **Webhook path only.** This is called from `syncBigCommerceOrder`, the
@@ -17,7 +17,7 @@
  *    eligible. Sufficient on its own *provided it is set to the day sending
  *    is switched on and never backdated*; an unparseable value turns sending
  *    off rather than letting everything through.
- * 3. **A sent log.** `card_emails` (migration 0010) is claimed before the
+ * 3. **A sent log.** `card_emails` is claimed before the
  *    send, so a webhook retry, a duplicate delivery, or two deliveries at
  *    once can't send a second copy. Sufficient on its own to keep it to one
  *    email per order.

@@ -1,5 +1,5 @@
 /**
- * Which `membership_orders` rows (migration 0008) count as a membership.
+ * Which `membership_orders` rows count as a membership.
  * Shared by the member sync (src/bigcommerce/sync.ts), which derives each
  * member's card from these rows, and the admin reports
  * (src/admin/reportQueries.ts), so a card and a report never disagree about

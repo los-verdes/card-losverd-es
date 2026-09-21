@@ -1,8 +1,8 @@
 # Membership reporting
 
 The legacy app's membership reports lived in Google Data Studio, which read
-the legacy Postgres database directly through a read-only SQL user. Cutover
-retires that database, and Data Studio cannot connect to D1, so reporting is
+the legacy Postgres database directly through a read-only SQL user. The
+cutover retired that database, and Data Studio cannot connect to D1, so reporting is
 rebuilt here as **admin-only pages inside the Worker**
 ([#53](https://github.com/los-verdes/card-losverd-es/issues/53)). Cloudflare
 has no Data Studio equivalent, and an export pipeline to keep Data Studio
@@ -11,8 +11,8 @@ alive would be one more thing to maintain.
 ## The data: `membership_orders`
 
 `members` holds only each member's *current* state. Reports need history
-("who was a member on a given date"), so `membership_orders` (migration
-`0008`) keeps one row per membership order, ever. It is a port of the legacy
+("who was a member on a given date"), so `membership_orders` keeps one row
+per membership order, ever. It is a port of the legacy
 `annual_membership` table.
 
 * **`created_on` / `expires_on`**: ISO8601 UTC text. `expires_on` is
@@ -134,8 +134,8 @@ until it has run (`SLACK_BOT_TOKEN` set) every member shows as not in Slack.
 
 | Legacy page | Plan |
 | :--- | :--- |
-| Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. For the analytics charts, use Cloudflare Web Analytics rather than rebuilding them. |
-| MiniBC Subscriptions | After cutover. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |
+| Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. The analytics charts are covered by Cloudflare Web Analytics on the member pages (see the README, "What we record about visits"), so they are not rebuilt here. |
+| MiniBC Subscriptions | Not started. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |
 
 ## Slack members sync
 

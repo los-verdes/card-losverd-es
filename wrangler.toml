@@ -22,21 +22,19 @@ type = "Data"
 globs = ["**/*.woff", "**/*.png"]
 fallthrough = true
 
-# The production hostname, as a Workers Custom Domain: on deploy Cloudflare
-# creates the proxied DNS record and the certificate itself. It cannot be
-# created while any other record exists for the name, so the previous site's
-# `card` CNAME (to ghs.googlehosted.com) is deleted in the dashboard first --
-# the deploy token has no DNS permission -- and this merges straight after.
-# That is step 1 of "The flip" in docs/cutover.md. Production only -- and
-# routes are the one thing named environments *do* inherit, so
-# [env.staging] sets `routes = []`; without it staging, deployed first, would
-# claim this hostname. `just check-wrangler-envs` fails if it ever does.
+# The production hostname, as a Workers Custom Domain: Cloudflare manages its
+# proxied DNS record and certificate. A Custom Domain cannot be created while
+# any other record exists for the name, which is why the previous site's
+# `card` CNAME was deleted by hand before this was first deployed
+# (docs/cutover.md) -- the deploy token has no DNS permission.
+#
+# Production only. Routes are the one thing named environments *do* inherit,
+# so [env.staging] sets `routes = []`; without it staging, deployed first,
+# would claim this hostname. `just check-wrangler-envs` fails if it ever does.
 #
 # Once a route exists, Wrangler stops serving the Worker on its workers.dev
-# hostname unless `workers_dev` says otherwise, so from the flip production
-# answers on card.losverd.es alone. Anything still pointed at
-# card-losverd-es-production.los-verdes.workers.dev -- a BigCommerce webhook
-# origin used for testing -- has to move, which is step 3 of the flip anyway.
+# hostname unless `workers_dev` says otherwise, so production answers on
+# card.losverd.es alone; its workers.dev hostname is retired.
 [[routes]]
 pattern = "card.losverd.es"
 custom_domain = true
@@ -193,9 +191,9 @@ crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
 name = "card-losverd-es-staging"
 # Routes are the one thing named environments inherit, so without this
 # staging -- deployed before production -- would claim production's custom
-# domain (step 1 of "The flip", docs/cutover.md) the moment one is added at
-# the top level. Staging is served on its workers.dev hostname.
-# `just check-wrangler-envs` fails if the two ever share a route.
+# domain (card.losverd.es, declared at the top level). Staging is served on
+# its workers.dev hostname. `just check-wrangler-envs` fails if the two ever
+# share a route.
 routes = []
 
 [[env.staging.d1_databases]]

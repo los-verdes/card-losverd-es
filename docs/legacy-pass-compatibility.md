@@ -1,7 +1,7 @@
 # Legacy Wallet Pass Compatibility — Audit & Decisions
 
 The migration plan's Phase 2.2 originally committed to carrying
-already-installed Apple Wallet passes across cutover ("existing members keep
+already-installed Apple Wallet passes across the cutover ("existing members keep
 receiving push updates ... with no reinstall required"). This doc records
 what the legacy `digital-membership` app actually embeds in those passes,
 where the new `card-losverd-es` implementation differs, and the decisions
@@ -38,7 +38,7 @@ is unique, with a single `membership_card_id`).
 
 * **`webServiceURL`.** Already `card.losverd.es/passkit`, and `src/index.ts`
   mounts PassKit at `/passkit`, so legacy passes' (never-working) update
-  requests reach the Worker after cutover; they just won't match a member
+  requests reach this Worker; they just don't match a member
   (§3.1).
 * **Pass type / team identifiers** — `wrangler.toml` now sets them to the
   legacy values (previously `REPLACE_WITH_...` placeholders). Note the
@@ -55,7 +55,7 @@ is unique, with a single `membership_card_id`).
 The new routes resolve `:serialNumber` via `members.member_id`, and
 `registrations.serial_number` has a foreign key to `members(member_id)`.
 Legacy serials are per-card UUID integers, so installed legacy passes
-won't match anything post-cutover.
+don't match anything here.
 
 That turns out not to matter much, because **the legacy pass update flow
 never worked**, so no installed pass has ever received an update. Members
@@ -93,8 +93,11 @@ Legacy `verify_pass` (`member_card/app.py`, `@login_required`) verifies the
 signature, then **looks the card up by UUID** to show whose card it is and
 whether it's expired (`member_until < now` → "CARD EXPIRED (but valid)!").
 
-`src/passkit/generator.ts` and `src/google/jwt.ts` currently encode the
-bare serial as the barcode, and no `/verify-pass` route exists yet.
+New passes (`src/passkit/generator.ts`, `src/google/jwt.ts`) and card images
+encode the same signed `/verify-pass` URL, and `/verify-pass` resolves both
+new serials and legacy card UUIDs (`legacy_membership_cards`), so a QR code
+from either site verifies. Production's `PASS_SIGNATURE_KEY` holds the
+legacy `SECRET_KEY * 5` for exactly that reason (D2).
 
 ### 3.4 Google Wallet object ids
 

@@ -11,7 +11,7 @@
  *   (src/email/newOrder.ts), once per order.
  *
  * Nothing else may send it. Emailing cards must never be a side effect of a
- * backfill, a resync, the legacy import, or cutover -- that would mail
+ * backfill, a resync, or a data import or reload -- that would mail
  * hundreds of existing members at once.
  */
 

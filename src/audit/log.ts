@@ -1,5 +1,5 @@
 /**
- * Writing and reading the audit log (migration 0020).
+ * Writing and reading the audit log.
  *
  * Every function that changes somebody's standing, name or "member since"
  * calls `recordAuditEvent` as part of doing so. The tables those functions

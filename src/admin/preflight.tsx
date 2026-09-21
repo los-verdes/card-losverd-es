@@ -1,5 +1,5 @@
 /**
- * The pre-cutover readiness page: everything the Worker can check about its
+ * The readiness page: everything the Worker can check about its
  * own deployment, plus the steps that still need a person and a phone.
  *
  * Deliberately a page rather than a script. The checks worth running are the
@@ -69,7 +69,7 @@ preflight.get("/", async (c) => {
   const warnings = groups.flatMap((group) => group.results).filter((result) => result.status === "warn").length;
 
   return c.html(
-    <AdminPage title="Pre-cutover readiness">
+    <AdminPage title="Readiness">
       <p style="margin-top: 0">
         Checks this Worker can run against its own deployment, for the environment serving this
         page. Read-only: nothing here creates a class, uploads an asset, or applies a migration.
