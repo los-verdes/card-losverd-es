@@ -1,5 +1,5 @@
 set shell := ["bash", "-c"]
-account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
+account_id := "42988f13a6daf00814bced22aff46f4e"
 
 # Default task: list available commands
 default:

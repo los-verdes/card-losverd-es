@@ -9,7 +9,7 @@ terraform {
     skip_requesting_account_id  = true
     skip_s3_checksum            = true
     use_path_style              = true
-    endpoints                   = { s3 = "https://ff1b7ea0ebb95f46b7b15289ed8ce21d.r2.cloudflarestorage.com" }
+    endpoints                   = { s3 = "https://42988f13a6daf00814bced22aff46f4e.r2.cloudflarestorage.com" }
 
     # values supplied via env vars:
     # access_key                  = var.r2_access_key
