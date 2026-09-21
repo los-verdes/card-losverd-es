@@ -32,9 +32,15 @@ Zone-level permissions are not needed until the Phase 8 DNS cutover.
 
 `just cloudflare-token-check` checks a token against that list before it is swapped in. It is read-only -- it lists each resource type rather than creating anything -- so it is safe to run against a candidate token at any time, and it names the group to add for anything missing. It proves each group is *granted*; it cannot prove the group is scoped to Edit rather than Read, because only a write does that. Deploy to staging to prove the rest.
 
+It also reports how long each credential has left, and exits non-zero once one has expired -- an expiry is a deploy that breaks on a date nobody is watching, and every permission group can still be listed correctly while it does. The API token's expiry comes back from Cloudflare's own verify endpoint. The state credential's cannot: it is an access key pair rather than a bearer token, so there is nothing to ask, and the date has to be recorded alongside it and passed in as `TF_STATE_TOKEN_EXPIRES_ON`. An unrecorded expiry is reported as unrecorded rather than treated as "does not expire" -- from here those look identical, and only one of them is safe.
+
 ## Remote state
 
-State lives in Cloudflare R2, accessed through Terraform's `s3` backend (R2 is S3-API-compatible) -- see `_config.tf`. Credentials are a separate `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair (R2 API tokens, not real AWS credentials -- named that way only because the `s3` backend expects those env var names), scoped to just the state bucket (`los-verdes-terraform-state`, provisioned ad hoc outside this Terraform config, since Terraform can't very well manage the bucket holding its own state). Supplied via 1Password locally and via GitHub Actions secrets in CI, same pattern as the Cloudflare token above.
+State lives in Cloudflare R2, accessed through Terraform's `s3` backend (R2 is S3-API-compatible) -- see `_config.tf`. Credentials are a separate `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair (R2 API tokens, not real AWS credentials -- named that way only because the `s3` backend expects those env var names). The bucket, `los-verdes-terraform-state`, is provisioned ad hoc outside this Terraform config, since Terraform can't very well manage the bucket holding its own state. Supplied via 1Password locally and via GitHub Actions secrets in CI, same pattern as the Cloudflare token above.
+
+In the Los Verdes account this is a dedicated R2 token named **`terraform-state-management`**, scoped to that bucket alone and set to expire annually. Two consequences worth knowing. It is the one credential here no Cloudflare API token grants, so a token that passes `cloudflare-token-check` can still leave `terraform init` unable to read state. And because it expires, the date belongs wherever the key does -- see `TF_STATE_TOKEN_EXPIRES_ON` above, which is how the check reports it.
+
+The endpoint URL in `_config.tf` contains the account id. Moving accounts means changing it, and getting it wrong does not fail loudly: it authenticates against the wrong account.
 
 ## DNS
 
