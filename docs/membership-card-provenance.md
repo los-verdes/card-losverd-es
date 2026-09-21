@@ -231,8 +231,8 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
 * **Memberships sold under an unlisted SKU**, as above.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
-  not built yet and is not planned before the migration finishes, so a MiniBC
-  renewal reaches this system only if it also produces a BigCommerce order.
+  not built, so a MiniBC renewal reaches this system only if it also produces
+  a BigCommerce order.
 
 None of these can invent a membership that was never bought; each of them can
 leave this system holding a stale answer. If a member's record looks wrong and
