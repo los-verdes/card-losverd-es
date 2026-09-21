@@ -11,6 +11,16 @@ import { STYLESHEET_PATH } from "../styles";
 /** Where members are told to write when something's wrong (the legacy app's contact). */
 export const SUPPORT_EMAIL = "merchteam@losverdesatx.org";
 
+/**
+ * The Membership Committee, for the things that are theirs rather than the
+ * Merch Team's: anything that settles a person's standing in the group.
+ *
+ * Published on the group's own Code of Conduct page, so it is safe to show
+ * to somebody who is not signed in -- which matters, because the page most
+ * likely to need it is the one refusing a sign-in.
+ */
+export const MEMBERSHIP_COMMITTEE_EMAIL = "mc@losverdesatx.org";
+
 export const Page: FC<PropsWithChildren<{ title: string }>> = ({
   title,
   children,

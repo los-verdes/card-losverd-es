@@ -17,6 +17,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { restoreCard, revokedCards, type RevokedCard } from "../member/revocation";
+import { bannedPeople, liftBan, type BannedPerson } from "../member/ban";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 
@@ -51,10 +52,30 @@ const Row: FC<{ card: RevokedCard }> = ({ card }) => (
   </tr>
 );
 
+const BanRow: FC<{ person: BannedPerson }> = ({ person }) => (
+  <tr>
+    <td style={cellStyle}>
+      <a href={`/admin/members?q=${encodeURIComponent(person.email)}`}>{person.email}</a>
+    </td>
+    <td style={cellStyle}>{new Date(person.banned_at).toISOString().slice(0, 10)}</td>
+    <td style={cellStyle}>{person.banned_by_email ?? "unknown"}</td>
+    <td style={cellStyle}>{person.has_membership ? "yes" : "no"}</td>
+    <td style={cellStyle}>{person.note ?? ""}</td>
+    <td style={cellStyle}>
+      <form method="post" action={REVOCATIONS_PATH}>
+        <input type="hidden" name="email" value={person.email} />
+        <input type="hidden" name="action" value="unban" />
+        <button type="submit">Lift</button>
+      </form>
+    </td>
+  </tr>
+);
+
 revocations.get("/", async (c) => {
-  const cards = await revokedCards(c.env);
+  const [cards, banned] = await Promise.all([revokedCards(c.env), bannedPeople(c.env)]);
   return c.html(
-    <AdminPage title="Withdrawn memberships">
+    <AdminPage title="Withdrawn and barred">
+      <h2>Withdrawn memberships</h2>
       <p>
         Memberships taken away before they expired. Each card reads as expired,
         its passes have been told, and its holder cannot reach the member area.
@@ -68,6 +89,11 @@ revocations.get("/", async (c) => {
       </p>
       {c.req.query("saved") === "restored" && (
         <p style="color: var(--success)">Membership restored.</p>
+      )}
+      {c.req.query("saved") === "unbanned" && (
+        <p style="color: var(--success)">
+          Ban lifted. Any membership it was suppressing is back.
+        </p>
       )}
       {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
       {cards.length === 0 ? (
@@ -90,6 +116,34 @@ revocations.get("/", async (c) => {
           </table>
         </div>
       )}
+      <h2>Barred from the group</h2>
+      <p>
+        Heavier and rarer than withdrawing a card: these people cannot sign in
+        at all, and any membership they hold is suppressed while the ban
+        stands. Bans carry no expiry date on purpose -- one that ran out on its
+        own would put somebody back in without anybody deciding they should be.
+        Lifting one restores whatever membership it was suppressing.
+      </p>
+      {banned.length === 0 ? (
+        <p>Nobody is barred.</p>
+      ) : (
+        <div style="overflow-x: auto">
+          <table style="border-collapse: collapse; font-size: 0.9rem">
+            <thead>
+              <tr>
+                {["Person", "Barred", "By", "Holds a membership", "Why", ""].map((h) => (
+                  <th style={cellStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {banned.map((person) => (
+                <BanRow person={person} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </AdminPage>,
   );
 });
@@ -99,6 +153,14 @@ revocations.post("/", csrf(), async (c) => {
   const memberId = typeof form.member_id === "string" ? form.member_id.trim() : "";
   const back = (params: Record<string, string>) =>
     c.redirect(`${REVOCATIONS_PATH}?${new URLSearchParams(params)}`, 303);
+
+  if (form.action === "unban") {
+    const email = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
+    if (!email) return back({ error: "No ban to lift." });
+    return (await liftBan(c.env, email))
+      ? back({ saved: "unbanned" })
+      : back({ error: "That person was not barred." });
+  }
 
   if (!memberId) return back({ error: "No card to restore." });
   return (await restoreCard(c.env, memberId))

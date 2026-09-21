@@ -148,6 +148,18 @@ action, or an answer to a question the issue poses.
 - `gh pr edit` can fail with a Projects-classic GraphQL error;
   `gh api -X PATCH repos/.../pulls/N -F body=@file` works, and the same
   shape edits an issue body.
+- **`just test` is not what CI runs.** CI runs `just test-coverage`, which
+  enforces thresholds (95% statements/lines/functions, 90% branches) that a
+  bare `vitest run` does not check. A green local suite can fail CI on
+  coverage alone -- a new page with no spec of its own is the usual cause,
+  since the threshold is global and one untested file drags it under. Run
+  `just test-coverage` before pushing.
+- **Delete from tables that reference `members` before `members` itself.**
+  D1 enforces the foreign keys, so a spec whose `afterEach` deletes members
+  while a `revoked_cards` or `banned_people` row survives fails the delete,
+  leaves the rows behind, and the *next* test collides with them. The symptom
+  is a `UNIQUE constraint` error in a test that looks unrelated to the one
+  that actually broke.
 - `node:fs` does not work in the Workers test pool. To read source in a
   test, use `import.meta.glob("...", { query: "?raw", eager: true })`, which
   Vite inlines at transform time.

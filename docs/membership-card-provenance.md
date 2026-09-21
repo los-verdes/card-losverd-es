@@ -8,12 +8,13 @@ someone counts as a current member today. When a member writes in to say their
 card is wrong, this is the document that says which of these rules produced
 what they are looking at.
 
-The Membership Committee is consulted on all of it. These rules describe how
-membership works, which is their remit whoever administers it day to day, and
-a change to any of them is worth their input. A smaller number of decisions
-are theirs outright -- anything that settles a person's standing in the group,
-such as whether a membership can be withdrawn before it expires. Those are
-marked where they appear.
+The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
+These rules describe how membership works, which is their remit whoever
+administers it day to day, and a change to any of them is worth their input. A
+smaller number of decisions are theirs outright -- anything that settles a
+person's standing in the group, such as whether a membership is withdrawn
+before it expires or somebody is barred. Those are marked where they appear,
+and that address is who to hand one to.
 
 This is a description of what the code does right now. It documents the
 current implementation explicitly, for reference, _and also_ to invite
@@ -416,8 +417,16 @@ page — checks the expiry date directly rather than trusting a stored
 active/expired label, because that label is only recalculated when an order
 sync happens to touch the record.
 
-**A membership can also be withdrawn**, which is the one way of stopping
-being a current member that has nothing to do with orders. It is recorded
+**A membership can also be withdrawn or the person barred**, which are the
+two ways of stopping being a current member that have nothing to do with
+orders. A ban is the heavier of the two and rarer: as well as taking the
+membership away it stops the person signing in at all, including on a session
+they already hold, and it carries no expiry date -- lifting it is a decision
+somebody makes rather than something that happens on its own
+(`banned_people`). A withdrawal is about a card; a ban is about a person, and
+so follows their address onto any membership they buy under it later.
+
+Withdrawal, in more detail: It is recorded
 against the card (`revoked_cards`) rather than on the membership record,
 because the order sync rebuilds that record and would undo it. While it is in
 force the card reads as withdrawn, carries no expiry, and its holder is
@@ -711,6 +720,23 @@ or a change, not an open-ended design exercise.
    software makes no judgement about when this is appropriate and nothing in
    it is limited to conduct cases; the note is the only record of why, and it
    is free text.
+
+   **Barring somebody from the group** is the heavier version of the same
+   thing, and is theirs outright. It takes the membership away exactly as a
+   withdrawal does, and also stops the person signing in -- immediately,
+   including on a session they already hold. It is recorded with no end date.
+   In practice these are understood to run a couple of years, and that
+   deliberately is not written into the software: a ban that expired on its
+   own would let somebody back in without anybody deciding they should be,
+   which is not a decision to automate. Lifting one is a single action and
+   restores whatever membership it was suppressing.
+
+   The limit worth knowing, because it is real rather than an oversight: a
+   ban follows an **email address**. It covers a membership bought under that
+   address later, and it does not follow somebody to a different one. Closing
+   that would mean identifying people by something more than an address,
+   which this system deliberately does not do
+   ([question 7](#9-decisions-worth-confirming)).
 
 ## Appendix: orders from before BigCommerce
 

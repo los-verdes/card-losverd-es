@@ -62,17 +62,23 @@ export interface MemberRecord {
  * everywhere that asks a date rather than a status -- there is no longer a
  * "good through" that means anything. The underlying `members` row is left
  * alone, so lifting a revocation is a single delete.
+ *
+ * A ban does the same to the membership, resolved here rather than by
+ * writing a second row, so that lifting the ban restores the membership by
+ * itself. Somebody can be both banned and separately revoked; lifting one
+ * then correctly leaves the other standing.
  */
 const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name, m.membership_tier,
-         CASE WHEN r.member_id IS NOT NULL THEN 'revoked' ELSE m.status END AS status,
-         CASE WHEN r.member_id IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
+         CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN 'revoked' ELSE m.status END AS status,
+         CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
          d.display_name,
          m.auth_token, m.last_updated_at
   FROM members m
        LEFT JOIN member_since_overrides o ON o.email = m.email
        LEFT JOIN member_display_names d ON d.email = m.email
-       LEFT JOIN revoked_cards r ON r.member_id = m.member_id`;
+       LEFT JOIN revoked_cards r ON r.member_id = m.member_id
+       LEFT JOIN banned_people b ON b.email = m.email`;
 
 /**
  * The name to put on a card, as the two fields every renderer expects.
