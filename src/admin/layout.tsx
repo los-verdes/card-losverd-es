@@ -17,29 +17,31 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
     </head>
     <body class="admin">
       <nav class="admin-nav">
-        <a href="/admin/reports">Reports</a>
-        {" · "}
-        <a href="/admin/reports/active">Active memberships</a>
-        {" · "}
-        <a href="/admin/reports/expired">Expired memberships</a>
-        {" · "}
-        <a href="/admin/reports/orders">Orders by month</a>
-        {" · "}
-        <a href="/admin/reports/slack">Slack cross-reference</a>
-        {" · "}
-        <a href="/admin/reports/consolidations">Consolidations</a>
-        {" · "}
-        <a href="/admin/reports/missing">Missing orders</a>
-        {" · "}
-        <a href="/admin/members">Find a member</a>
-        {" · "}
-        <a href="/admin/revocations">Withdrawn</a>
-        {" · "}
-        <a href="/admin/member-since">Member since</a>
-        {" · "}
-        <a href="/admin/preflight">Readiness</a>
-        {" · "}
-        <a href="/">My card</a>
+        <span class="nav-group">
+          <span class="nav-label">Reports</span>
+          <a href="/admin/reports">All</a>
+          <a href="/admin/reports/active">Active</a>
+          <a href="/admin/reports/expired">Expired</a>
+          <a href="/admin/reports/orders">By month</a>
+          <a href="/admin/reports/slack">Slack</a>
+          <a href="/admin/reports/consolidations">Consolidations</a>
+        </span>
+        <span class="nav-group">
+          <span class="nav-label">Needs a look</span>
+          <a href="/admin/reports/missing">Missing orders</a>
+          <a href="/admin/reports/extra-memberships">Extra memberships</a>
+        </span>
+        <span class="nav-group">
+          <span class="nav-label">Members</span>
+          <a href="/admin/members">Find</a>
+          <a href="/admin/member-since">Member since</a>
+          <a href="/admin/revocations">Withdrawn</a>
+        </span>
+        <span class="nav-group">
+          <span class="nav-label">This environment</span>
+          <a href="/admin/preflight">Readiness</a>
+          <a href="/">My card</a>
+        </span>
       </nav>
       <h1>{title}</h1>
       {children}
