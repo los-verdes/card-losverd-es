@@ -39,14 +39,13 @@ bucket_name = "card-losverd-es-assets-production"
 
 [vars]
 # BigCommerce store/app identifiers - not secret, safe to commit (see
-# docs/bigcommerce-ingestion.md). The store hash is the production store
-# (legacy Settings' default); BIGCOMMERCE_CLIENT_ID is still a placeholder.
+# docs/bigcommerce-ingestion.md). The store hash is the production store.
 # BIGCOMMERCE_ACCESS_TOKEN and BIGCOMMERCE_WEBHOOK_SIGNING_KEY are secrets,
 # set via `wrangler secret put` -- deliberately with NO placeholder here:
 # `wrangler secret put` refuses a name already bound as a plain var, and a
 # public placeholder signing key would let anyone forge webhook signatures.
 BIGCOMMERCE_STORE_HASH = "3nco2w7eup"
-BIGCOMMERCE_CLIENT_ID = "REPLACE_WITH_BIGCOMMERCE_CLIENT_ID"
+BIGCOMMERCE_CLIENT_ID = "fsnukglh18ksbdvd1g5xh7f6hfpe2p8"
 
 # Apple PassKit identifiers (Phase 4) - not secret, safe to commit (both are
 # embedded in every issued pass). These are the legacy app's real values
