@@ -57,7 +57,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/members", label: "Find" },
       { href: "/admin/member-since", label: "Member since" },
       { href: "/admin/revocations", label: "Revoked & expelled" },
-      { href: "/admin/audit", label: "History" },
+      { href: "/admin/audit", label: "Audit log" },
     ],
   },
   {

@@ -54,7 +54,7 @@ const AdminsPage: FC<{
   <AdminPage title="Admins">
     <p>
       Everyone here can see and change members&#39; records. A change takes effect on that person&#39;s next page
-      load, and every one is in the <a href="/admin/audit">history</a>.
+      load, and every one is in the <a href="/admin/audit">audit log</a>.
     </p>
     {notice && <p style="color: var(--success)">{notice}</p>}
     {error && <p style="color: var(--danger)">{error}</p>}

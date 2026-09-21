@@ -67,7 +67,7 @@ audit.get("/", async (c) => {
     : ["When (UTC)", "What", "Detail", "Who did it"];
 
   return c.html(
-    <AdminPage title={email ? `What has happened to ${email}` : "What has happened"}>
+    <AdminPage title={email ? `Audit log: ${email}` : "Audit log"}>
       <p>
         Decisions people have made about memberships: revocations and
         expulsions and the lifting of them, card names, "member since"
