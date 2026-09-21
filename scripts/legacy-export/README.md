@@ -132,15 +132,33 @@ That leaves anything the BigCommerce sync recorded, and any `manual`
 override, alone. Doing it after cutover would not be safe, which is the
 reason for doing the rehearsing before.
 
-## 4. Spot-check
+## 4. Check it landed
 
 ```bash
-npx wrangler d1 execute card-losverd-es-db-production --remote --command \
-  "SELECT (SELECT COUNT(*) FROM member_since_overrides WHERE source = 'legacy_postgres') AS member_since_rows, (SELECT COUNT(*) FROM legacy_membership_cards) AS cards, (SELECT MIN(member_since) FROM member_since_overrides) AS earliest, (SELECT COUNT(*) FROM membership_orders WHERE source = 'squarespace') AS squarespace_orders, (SELECT COUNT(*) FROM membership_orders WHERE source = 'bigcommerce') AS bigcommerce_orders, (SELECT MIN(created_on) FROM membership_orders) AS first_order"
+just legacy-import-verify production .legacy-export/export.json
 ```
 
+Reads the counts back out of D1 and compares them against the export they
+came from, one line per check, exiting non-zero if any disagree -- so it can
+gate what happens next rather than being read and nodded at. It asks for
+counts only and never reads a member's data, which is what makes it safe to
+paste the output into an issue.
+
+Four of the five checks are exact. Nothing but this import writes a
+`legacy_postgres`-sourced override or display name, a legacy card, or a
+Squarespace-era order -- that store closed in February 2023 and no other code
+path can produce one. A count that is short means rows did not land; one that
+is over means something wrote rows this import did not, which is worth
+knowing too.
+
+BigCommerce-era orders are checked as a lower bound instead, because the live
+sync writes those as well. A rehearsal that follows a resync legitimately
+holds more than the export carried, and the output says so rather than
+calling it a failure.
+
 Plan Phase 8.1 step 5 also asks for a spot-check of a few known early
-members' `member_since` values.
+members' `member_since` values, which is a person reading a handful of dates
+rather than something to automate.
 
 ## Setting a member's "member since" date by hand
 

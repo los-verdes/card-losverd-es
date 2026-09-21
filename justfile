@@ -222,3 +222,10 @@ legacy-import-sql export_json out_sql:
     npx esbuild scripts/legacy-export/build-import-sql.ts --bundle --platform=node --format=esm --packages=external --outfile=.legacy-import-bundle.mjs
     node .legacy-import-bundle.mjs {{export_json}} {{out_sql}}
     rm -f .legacy-import-bundle.mjs
+
+# Check an import landed: compares D1's counts against the export it came from.
+# Exits non-zero when they disagree, so it can gate the next step rather than
+# being read and nodded at. Counts only -- it never reads a member's data.
+legacy-import-verify env export_json:
+    npx esbuild scripts/legacy-export/verify-import.ts --bundle --platform=node --format=esm --packages=external --outfile=.legacy-verify-bundle.mjs
+    node .legacy-verify-bundle.mjs {{env}} {{export_json}}; status=$?; rm -f .legacy-verify-bundle.mjs; exit $status
