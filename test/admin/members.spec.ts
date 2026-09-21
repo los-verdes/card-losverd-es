@@ -181,6 +181,17 @@ describe("an admin setting the name on someone's card", () => {
     expect((await getDisplayName(env, EMAIL))?.source).toBe("admin");
   });
 
+  it("records which admin did it, not just that an admin did", async () => {
+    // A note nobody can attribute answers half the question. Revocations and
+    // bans have said who since they were built; names had not (migration 0019).
+    await post({ email: EMAIL, display_name: "Chuy" });
+
+    expect((await getDisplayName(env, EMAIL))?.set_by_email).toBe("admin@example.com");
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+    expect(body).toContain("admin@example.com");
+  });
+
   it("keeps the reason given, for whoever asks later", async () => {
     await post({ email: EMAIL, display_name: "Chuy", note: "gift from a friend" });
 

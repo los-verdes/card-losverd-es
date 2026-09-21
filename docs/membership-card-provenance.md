@@ -279,8 +279,10 @@ the recipient orders something of their own.
 
 A name can therefore arrive three ways — the member, an admin, or the one-time
 import carrying across one chosen on the previous site — and the admin page
-says which, alongside the name the orders give. That is the answer to "why
-does my card say this".
+says which, alongside the name the orders give. Where a person did it, it
+also says **who**, by the address they signed in with. That is the answer to
+"why does my card say this", and to "who decided that" if the first answer is
+not enough.
 
 Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
 on a card), nothing checks what goes in that field. A membership card is a fun vanity
@@ -530,6 +532,10 @@ current rule does not rank them by reliability, only by origin:
   slightly earlier than the order history would justify.
 * A manual date is as good as the judgement behind it, and is the right tool
   when a member's history genuinely predates the records.
+
+A correction records who made it, shown alongside the date and the note. The
+date the group has been told somebody joined is the sort of thing a person is
+asked about later, and a note nobody can attribute answers half the question.
 
 Because the rule is "prefer the override", an override wins even when it is
 *later* than the earliest counted order, which is not what "member since"
