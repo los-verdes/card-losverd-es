@@ -8,12 +8,14 @@
  *
  * Two things worth knowing about what goes out:
  *
- * 1. **No unsubscribe link.** The previous site sent through SendGrid under an
- *    unsubscribe group, which added a link and a preference page. There is no
- *    equivalent here, so a message carries neither. For a card somebody asked
- *    for that is defensible -- there is nothing to unsubscribe from -- but it
- *    is a decision rather than an oversight, and `List-Unsubscribe` would need
- *    somewhere to point before it could be added.
+ * 1. **No unsubscribe link.** Every card email is transactional -- someone
+ *    asked for it, bought a membership, or had an order attributed to them --
+ *    so there is no ongoing mailing to leave. What would otherwise call for
+ *    one, somebody repeatedly requesting cards to a member's address, is
+ *    bounded by Turnstile and the per-recipient rate limit on /email-card,
+ *    and anyone who reports a message as spam lands on the account's
+ *    suppression list, which the binding enforces. See README, "Sending
+ *    email".
  * 2. **Addresses go in structured, never as `Name <address>`.** The binding
  *    accepts `{ email, name }` for `from` and `to`, and that is what it gets.
  *    Folding the name into one string was tried first and failed on the first
