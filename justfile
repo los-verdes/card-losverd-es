@@ -106,7 +106,7 @@ db-rebuild env:
     echo "Rebuilt $db. Put back what it held:"
     echo "  - production: the legacy import (just legacy-import-sql, apply it, then just legacy-import-verify {{ env }} <export.json>)"
     echo "  - orders: just etl-run {{ env }} full-resync{{ if env == "production" { " --yes-production" } else { "" } }}   (never emails anyone)"
-    echo "  - admins: sign in once, then just admin-grant {{ env }} <address>"
+    echo "  - admins: just admin-grant {{ env }} <address> [<address> ...]   (no need to sign in first)"
     echo "  - Wallet passes already on phones: registrations are gone, so they get no updates until re-added"
 
 # Apply D1 migrations to an environment's remote database (production or
@@ -150,10 +150,12 @@ cloudflare-token-check:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
 
 # Admin is a flag on the person's `users` row, checked on every admin request,
-# so a grant or a revocation takes effect on their next page load. They have to
-# have signed in once first, or there is no row to change -- which is refused
-# with that reason rather than quietly matching nothing. Each grant and
-# revocation is recorded in the audit log (/admin/audit).
+# so a grant or a revocation takes effect on their next page load. A grant
+# works before someone has ever signed in -- it creates their account, and
+# their first sign-in with that address picks it up -- and takes several
+# addresses at once. Each grant and revocation is recorded in the audit log
+# (/admin/audit). /admin/admins does the same from the browser; these work
+# straight against D1, so they are the way in when nobody can reach that page.
 #
 # The account id is pinned so these never depend on which account wrangler
 # happens to be logged into.
@@ -162,13 +164,13 @@ cloudflare-token-check:
 admin-list env:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} list
 
-# Give someone admin access (they must have signed in once)
-admin-grant env email:
-    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} grant {{ email }}
+# Give one or more people admin access, signed in yet or not
+admin-grant env +emails:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} grant {{ emails }}
 
-# Take someone's admin access away
-admin-revoke env email:
-    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} revoke {{ email }}
+# Take admin access away from one or more people
+admin-revoke env +emails:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} revoke {{ emails }}
 
 # Worker secrets: 1Password is the source of truth, since Cloudflare never
 # returns a secret's value. One item per environment in the "Los Verdes" vault,

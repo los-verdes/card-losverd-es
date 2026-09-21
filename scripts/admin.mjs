@@ -1,22 +1,18 @@
-// Granting, revoking and listing admin access for an environment.
+// Granting, revoking and listing admin access for an environment -- the
+// command-line side of /admin/admins, and the way back in when nobody can
+// reach that page (it works straight against D1).
 //
-// Admin is a flag on the `users` row, checked on every admin request. This
-// replaces a hand-typed `UPDATE` that failed in two ways without saying so:
-//
-//   - A person who has never signed in has no `users` row yet, so the update
-//     matched nothing and looked exactly like it had worked.
-//   - Addresses are stored lower-cased, so the same update with a capital in
-//     it also matched nothing, and also looked like it had worked.
-//
-// The first is now refused with the reason; the second is handled by
-// lower-casing the address before it is used. Every grant and revocation is
-// written to the audit log, alongside the membership decisions already there
-// -- who can see and change members' records is the kind of thing somebody
-// asks about later.
+// Admin is a flag on the `users` row, checked on every admin request. A grant
+// creates the row if the person has never signed in; their first sign-in
+// links to it by address and keeps the flag, so a group can be set up at once
+// instead of waiting for each person to sign in. It has to be the address
+// they will sign in with (their relay address, for Apple Hide My Email).
+// Addresses are lower-cased first, because that is how they are stored.
+// Every change is written to the audit log.
 //
 //   node scripts/admin.mjs <env> list
-//   node scripts/admin.mjs <env> grant  <email>
-//   node scripts/admin.mjs <env> revoke <email>
+//   node scripts/admin.mjs <env> grant  <email> [<email> ...]
+//   node scripts/admin.mjs <env> revoke <email> [<email> ...]
 //
 // See `just admin-list`, `just admin-grant` and `just admin-revoke`.
 
@@ -27,7 +23,7 @@ function fail(message) {
   process.exit(1);
 }
 
-const [env, command, rawEmail] = process.argv.slice(2);
+const [env, command, ...rawEmails] = process.argv.slice(2);
 if (!ENVIRONMENTS.includes(env)) fail(`first argument must be one of: ${ENVIRONMENTS.join(", ")}`);
 
 /** One statement against this environment, failing with wrangler's reason. */
@@ -55,40 +51,45 @@ if (command === "list") {
 if (command !== "grant" && command !== "revoke") {
   fail("second argument must be list, grant or revoke");
 }
-if (!rawEmail) fail(`${command} needs the address the person signs in with`);
-const email = sqlSafeEmail(rawEmail);
-if (!email) fail(`${JSON.stringify(rawEmail)} does not look like an email address`);
+if (rawEmails.length === 0) fail(`${command} needs at least one address -- the one each person signs in with`);
 
-const { rows } = d1(`SELECT id, is_admin FROM users WHERE email = '${email}'`);
-if (rows.length === 0) {
-  fail(
-    `nobody has signed in to ${env} as ${email} yet, so there is no account to change. ` +
-      "Ask them to sign in once, then run this again.",
-  );
-}
+// Checked all together before anything changes, so one typo in a list of ten
+// does not leave the other nine half-done.
+const emails = rawEmails.map((raw) => [raw, sqlSafeEmail(raw)]);
+const bad = emails.filter(([, email]) => !email).map(([raw]) => JSON.stringify(raw));
+if (bad.length > 0) fail(`not an email address: ${bad.join(", ")}. Nothing was changed.`);
 
 const granting = command === "grant";
-if ((rows[0].is_admin === 1) === granting) {
-  console.log(`${email} ${granting ? "is already an admin" : "is not an admin"} in ${env}. Nothing to do.`);
-  process.exit(0);
+for (const [, email] of emails) {
+  const { rows } = d1(`SELECT is_admin FROM users WHERE email = '${email}'`);
+  const isAdmin = rows[0]?.is_admin === 1;
+  if (isAdmin === granting) {
+    console.log(`  ${email}: ${granting ? "already an admin" : "not an admin"}; nothing to do.`);
+    continue;
+  }
+
+  if (granting) {
+    d1(
+      `INSERT INTO users (email, is_admin) VALUES ('${email}', 1)
+       ON CONFLICT(email) DO UPDATE SET is_admin = 1, updated_at = unixepoch('subsec') * 1000`,
+    );
+  } else {
+    d1(`UPDATE users SET is_admin = 0, updated_at = unixepoch('subsec') * 1000 WHERE email = '${email}'`);
+  }
+
+  // Recorded after the change rather than before it, so the log never claims
+  // a change that did not happen. The actor is left empty: this ran from a
+  // terminal, and a name here would be a guess.
+  const beforeSignIn = granting && rows.length === 0;
+  d1(
+    `INSERT INTO audit_log (action, subject_email, actor_email, detail)
+     VALUES ('${granting ? "admin.granted" : "admin.revoked"}', '${email}', NULL,
+             'From the command line, with just admin-${command}${beforeSignIn ? ", before they had signed in" : ""}')`,
+  );
+  console.log(
+    granting
+      ? `  ${email}: now an admin${beforeSignIn ? " -- applies when they first sign in with this address" : ""}.`
+      : `  ${email}: no longer an admin.`,
+  );
 }
-
-const { changes } = d1(
-  `UPDATE users SET is_admin = ${granting ? 1 : 0} WHERE email = '${email}'`,
-);
-if (changes !== 1) fail(`expected to change one row and changed ${changes}; check ${env} by hand`);
-
-// Recorded after the change rather than before it, so the log never claims a
-// grant that did not happen. The actor is left empty: this ran from a
-// terminal, and a name here would be a guess.
-d1(
-  `INSERT INTO audit_log (action, subject_email, actor_email, detail)
-   VALUES ('${granting ? "admin.granted" : "admin.revoked"}', '${email}', NULL,
-           'From the command line, with just admin-${command}')`,
-);
-
-console.log(
-  granting
-    ? `${email} is now an admin in ${env}. It takes effect on their next request; no sign-out needed.`
-    : `${email} is no longer an admin in ${env}. It takes effect on their next request.`,
-);
+console.log(`Done in ${env}. Changes take effect on each person's next request; no sign-out needed.`);

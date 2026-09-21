@@ -6,6 +6,7 @@ import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
 import adminRevocations from "./admin/revocations";
 import adminAudit from "./admin/audit";
+import adminAdmins from "./admin/admins";
 import adminOrders from "./admin/orders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
@@ -197,6 +198,7 @@ app.route("/admin/members", adminMembers);
 
 app.route("/admin/revocations", adminRevocations);
 app.route("/admin/audit", adminAudit);
+app.route("/admin/admins", adminAdmins);
 // Admin readiness page: what this environment's deployment is missing.
 app.route("/admin/preflight", adminPreflight);
 app.route("/", portal);
