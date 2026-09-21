@@ -19,7 +19,7 @@ Phase 2.2, `docs/legacy-pass-compatibility.md`):
   membership order Postgres holds, Squarespace and BigCommerce alike. This
   is the order history behind admin reporting ("who was a member on a given
   date"), and the Squarespace-era rows survive nowhere else. BigCommerce
-  orders use the same key as the live sync (`{id}_bc`), so the two never
+  orders use the same key as the live sync (the store's own order id), so the two never
   duplicate each other; for an order the sync already has, the import only
   fills in `member_email` (the member's current address, which only Postgres
   knows), and never for an order an admin has attributed since.
@@ -47,8 +47,9 @@ psql "$LEGACY_DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 \
 (`-A -t` = no alignment/headers, `-q` suppresses command tags).
 
 Before the real run, `column-checks.sql` answers the questions the export's
-correctness rests on -- whether `order_id` carries the `_bc` suffix the
-export keys on, which statuses exist, how many rows the filters will emit.
+correctness rests on -- whether the `_bc` suffix the old app stored agrees
+with each order's channel, which statuses exist, how many rows the filters
+will emit.
 It runs in the BigQuery console through the project's federated connection
 and reads the Postgres columns directly, because the BigQuery *view* of
 `annual_membership` strips that suffix and has misled us once. Every result

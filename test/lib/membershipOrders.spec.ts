@@ -48,17 +48,17 @@ afterEach(async () => {
 
 describe("COUNTS_AS_MEMBERSHIP", () => {
   it("is 1 for a paid BigCommerce order and 0 for an unpaid one", async () => {
-    await insert("1001_bc", "bigcommerce", "Completed");
-    await insert("1002_bc", "bigcommerce", "Awaiting Payment");
-    expect(await countsValue("1001_bc")).toBe(1);
-    expect(await countsValue("1002_bc")).toBe(0);
+    await insert("1001", "bigcommerce", "Completed");
+    await insert("1002", "bigcommerce", "Awaiting Payment");
+    expect(await countsValue("1001")).toBe(1);
+    expect(await countsValue("1002")).toBe(0);
   });
 
   it("is 0, not NULL, for a BigCommerce order with no status", async () => {
     // The case the COALESCE exists for. `lower(NULL) IN (...)` is NULL, and
     // this is the shape every statusless legacy import lands in (#89).
-    await insert("1003_bc", "bigcommerce", null);
-    expect(await countsValue("1003_bc")).toBe(0);
+    await insert("1003", "bigcommerce", null);
+    expect(await countsValue("1003")).toBe(0);
   });
 
   it("still counts a statusless legacy order, where NULL is handled explicitly", async () => {
@@ -67,38 +67,38 @@ describe("COUNTS_AS_MEMBERSHIP", () => {
   });
 
   it("selects only counting orders in a WHERE clause", async () => {
-    await insert("1001_bc", "bigcommerce", "Completed");
-    await insert("1003_bc", "bigcommerce", null);
-    expect(await orderIdsWhere(COUNTS_AS_MEMBERSHIP)).toEqual(["1001_bc"]);
+    await insert("1001", "bigcommerce", "Completed");
+    await insert("1003", "bigcommerce", null);
+    expect(await orderIdsWhere(COUNTS_AS_MEMBERSHIP)).toEqual(["1001"]);
   });
 
   it("finds every non-counting order when negated, statusless ones included", async () => {
     // Being two-valued is what makes this work. While the rule could return
     // NULL, `NOT (...)` stayed NULL and silently skipped exactly the orders
     // most likely to need finding.
-    await insert("1001_bc", "bigcommerce", "Completed");
-    await insert("1002_bc", "bigcommerce", "Awaiting Payment");
-    await insert("1003_bc", "bigcommerce", null);
+    await insert("1001", "bigcommerce", "Completed");
+    await insert("1002", "bigcommerce", "Awaiting Payment");
+    await insert("1003", "bigcommerce", null);
     expect(await orderIdsWhere(`NOT (${COUNTS_AS_MEMBERSHIP})`)).toEqual([
-      "1002_bc",
-      "1003_bc",
+      "1002",
+      "1003",
     ]);
   });
 
   it("answers the same question asked as `= 0`", async () => {
     // The other shape a caller reaches for, and the one that would have been
     // wrong for precisely the statusless orders and right everywhere else.
-    await insert("1002_bc", "bigcommerce", "Awaiting Payment");
-    await insert("1003_bc", "bigcommerce", null);
+    await insert("1002", "bigcommerce", "Awaiting Payment");
+    await insert("1003", "bigcommerce", null);
     expect(await orderIdsWhere(`(${COUNTS_AS_MEMBERSHIP}) = 0`)).toEqual([
-      "1002_bc",
-      "1003_bc",
+      "1002",
+      "1003",
     ]);
   });
 
   it("sums to the number of counting orders, with no NULLs to skip", async () => {
-    await insert("1001_bc", "bigcommerce", "Completed");
-    await insert("1003_bc", "bigcommerce", null);
+    await insert("1001", "bigcommerce", "Completed");
+    await insert("1003", "bigcommerce", null);
     const row = await env.DB.prepare(
       `SELECT SUM(${COUNTS_AS_MEMBERSHIP}) AS counted, COUNT(*) AS total FROM membership_orders`,
     ).first<{ counted: number; total: number }>();

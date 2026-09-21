@@ -26,8 +26,8 @@ alive would be one more thing to maintain.
 * **`first_seen_via`**: `sync` or `legacy_postgres`.
 
 Two writers fill it, and converge on the same rows because both use the
-legacy key format (`{id}_bc` for BigCommerce, the raw order id for
-Squarespace):
+same key -- the store's own order id, for BigCommerce and Squarespace
+alike:
 
 1. **The BigCommerce sync** (`src/bigcommerce/orders.ts`) records every
    membership order it processes, from webhooks and scheduled resyncs alike.

@@ -23,9 +23,9 @@
 --    Want exactly two groups: (true, true) and (false, false). Any row in
 --    the other two means `right(order_id, 3) = '_bc'` and `channel_name`
 --    disagree about an order's era, and the export would misclassify it.
---    All rows in (false, *) means the column holds no suffix and PR #204's
---    key change is right; all BigCommerce rows in (true, true) means it is
---    stored and appending another would produce `1234_bc_bc`.
+--    Either way the export keys on the bare store id: it takes the part
+--    before the first underscore, which is right whether or not a given
+--    row carries the suffix.
 SELECT * FROM EXTERNAL_QUERY(
   'projects/lv-digital-membership/locations/us-central1/connections/lv-digital-membership',
   """

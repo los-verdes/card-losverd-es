@@ -64,7 +64,7 @@ export type Lookup =
  *
  * Deliberately permissive about order numbers: anything that is neither an
  * email nor a card number is tried as one, because order ids come in several
- * shapes (`1001_bc` from the store, a 24-character hex id from the
+ * shapes (`1001` from the store, a 24-character hex id from the
  * Squarespace era) and guessing wrong costs a "not found" rather than
  * anything worse.
  */

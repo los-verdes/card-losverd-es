@@ -164,8 +164,9 @@ they never received a card.
 **The storefront is authoritative.** Nothing in this software creates an
 order, and no screen in it can add one by hand. Every BigCommerce order here
 was read from the store, is keyed by the store's own order id
-(`membership_orders.order_id`, that id with `_bc` appended), and is refreshed
-from the store whenever it is read again.
+(`membership_orders.order_id`) -- the same number the Merch Team sees in the
+store's admin and a member sees on their receipt -- and is refreshed from the
+store whenever it is read again.
 
 The exception is the orders from before February 2023, which were loaded once
 from the old system's database and have no storefront left to be re-read from.
@@ -616,8 +617,8 @@ new address, which admin made it, an optional note, and when
 cards, since one loses that order's contribution and the other gains it; and
 pushes a pass update to any device holding a card that changed.
 
-For example, if an order recorded as `1001_bc` and placed by
-`buyer@example.com` is attributed to `recipient@example.com`, that year's
+For example, if order `1001`, placed by `buyer@example.com`, is attributed
+to `recipient@example.com`, that year's
 expiry moves off the buyer's card and onto the recipient's, and the recipient
 gets a membership record — and a new card — if they did not already have one.
 If the buyer has other counted orders, their own card simply falls back to the

@@ -22,8 +22,8 @@
 --     so what the column holds and what a copy of it shows can differ; a
 --     test on the suffix was wrong against one of them and would have scored
 --     every order under the wrong rule. `order_id` is normalised for the same
---     reason: stripped to the bare store id and re-suffixed, so the key is
---     the live sync's whether or not the suffix was stored.
+--     reason: stripped to the bare store id, which is the key the live sync
+--     writes, whether or not the suffix was stored.
 --     Rows that can't be represented (no order id, date, or email), and
 --     Squarespace's test orders, are counted in `membership_orders_total`
 --     but not exported, so the importer can report how many were left
@@ -104,16 +104,14 @@ SELECT json_build_object(
         SELECT json_agg(
             json_build_object(
                 -- The key the BigCommerce sync writes for the same order
-                -- (`bigCommerceOrderKey()`: `{store id}_bc`), so an imported
-                -- order and a synced one are one row rather than two. Built
-                -- from the bare store id rather than by appending to whatever
-                -- the column holds: if the suffix is stored, appending gives
-                -- `1234_bc_bc` and the sync never matches the row again; if
-                -- it is not, the bare id never matches either. Stripping and
-                -- re-suffixing is right in both cases.
+                -- (`bigCommerceOrderKey()`: the store's own order id), so an
+                -- imported order and a synced one are one row rather than
+                -- two. The old app stored `{id}_bc`; stripping to the part
+                -- before the first underscore gives the bare id whether or
+                -- not a given row carries the suffix.
                 'order_id', CASE
                     WHEN am.channel_name LIKE 'bigcommerce%'
-                        THEN split_part(am.order_id, '_', 1) || '_bc'
+                        THEN split_part(am.order_id, '_', 1)
                     ELSE am.order_id
                 END,
                 -- Which era an order belongs to, and so which counting rule

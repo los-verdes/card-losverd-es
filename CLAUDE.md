@@ -85,7 +85,7 @@ local files that will never be committed.
 
 Use obviously synthetic values that keep the real format: `example.com`
 addresses, invented names, a 24-character hex string for a Squarespace order
-id, `1001_bc` for a BigCommerce order key.
+id, `1001` for a BigCommerce order key.
 
 ## Never email members as a side effect
 

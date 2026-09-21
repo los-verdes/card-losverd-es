@@ -48,9 +48,9 @@ export async function getMemberOrderHistory(
 }
 
 /**
- * The number a member would recognise from their receipt. Order ids carry a
- * source suffix (`104_bc`); the legacy app showed the part before it, so a
- * member comparing the two sees the same number.
+ * The number a member would recognise from their receipt. A BigCommerce order
+ * id already is that number. The part before any underscore is taken so that a
+ * row still carrying the previous site's `_bc` suffix reads the same way.
  */
 export function displayOrderNumber(orderId: string): string {
   return orderId.split("_")[0];

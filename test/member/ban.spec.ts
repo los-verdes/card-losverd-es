@@ -32,7 +32,7 @@ beforeEach(async () => {
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name,
        last_name, sku, status, created_on, expires_on, first_seen_via)
-     VALUES ('9001_bc', 'bigcommerce', ?, ?, 'Jane', 'Doe', 'LOSV-MEM-0001', 'Completed',
+     VALUES ('9001', 'bigcommerce', ?, ?, 'Jane', 'Doe', 'LOSV-MEM-0001', 'Completed',
        '2026-01-15T00:00:00Z', '2099-01-15T00:00:00Z', 'sync')`,
   )
     .bind(EMAIL, EMAIL)

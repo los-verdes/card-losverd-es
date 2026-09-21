@@ -609,8 +609,8 @@ describe("the legacy import", () => {
   });
 
   it("passes when every imported order carries a status that counts", async () => {
-    await insertImportedOrder("101_bc", "Completed", "one@example.com");
-    await insertImportedOrder("102_bc", "Shipped", "two@example.com");
+    await insertImportedOrder("101", "Completed", "one@example.com");
+    await insertImportedOrder("102", "Shipped", "two@example.com");
     const result = find(await check(), CHECK);
     expect(result.status).toBe("ok");
     expect(result.detail).toContain("All 2");
@@ -620,8 +620,8 @@ describe("the legacy import", () => {
     // The common shape by a wide margin, and the reason a raw order count is
     // the wrong number to publish: an abandoned cart next to a real purchase
     // costs its owner nothing.
-    await insertImportedOrder("101_bc", "Completed", "one@example.com");
-    await insertImportedOrder("102_bc", "Incomplete", "one@example.com");
+    await insertImportedOrder("101", "Completed", "one@example.com");
+    await insertImportedOrder("102", "Incomplete", "one@example.com");
 
     const result = find(await check(), CHECK);
 
@@ -633,7 +633,7 @@ describe("the legacy import", () => {
   it("clears somebody left with nothing whom the previous site never carded either", async () => {
     // Then the allow-list agrees with the old system rather than diverging
     // from it, which is the whole question #89 was asking.
-    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+    await insertImportedOrder("102", "Incomplete", "two@example.com");
 
     const result = find(await check(), CHECK);
 
@@ -644,7 +644,7 @@ describe("the legacy import", () => {
   it("warns about somebody the previous site carded who now holds nothing", async () => {
     // The one case that is a real regression: the old system treated them as
     // a member, and this rule does not.
-    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+    await insertImportedOrder("102", "Incomplete", "two@example.com");
     await insertLegacyCard("two@example.com");
 
     const result = find(await check(), CHECK);
@@ -655,8 +655,8 @@ describe("the legacy import", () => {
   });
 
   it("counts only the carded people, not everyone the allow-list excluded", async () => {
-    await insertImportedOrder("101_bc", "Incomplete", "one@example.com");
-    await insertImportedOrder("102_bc", "Incomplete", "two@example.com");
+    await insertImportedOrder("101", "Incomplete", "one@example.com");
+    await insertImportedOrder("102", "Incomplete", "two@example.com");
     await insertLegacyCard("two@example.com");
 
     const result = find(await check(), CHECK);
@@ -666,7 +666,7 @@ describe("the legacy import", () => {
   });
 
   it("ignores orders that arrived through the store sync", async () => {
-    await insertOrder({ id: "201_bc", email: "sync@example.com", created: "2025-01-01", status: null });
+    await insertOrder({ id: "201", email: "sync@example.com", created: "2025-01-01", status: null });
     expect(find(await check(), CHECK).status).toBe("skip");
   });
 });

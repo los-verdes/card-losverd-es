@@ -64,8 +64,8 @@ describe("access control", () => {
 
 describe("GET /admin/reports/active", () => {
   beforeEach(async () => {
-    await insertOrder({ id: "1_bc", email: "current@example.com", first: "Cur", last: "Rent", created: "2026-01-10T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-02-01T00:00:00Z", channel: "bigcommerce_iphone" });
+    await insertOrder({ id: "1", email: "current@example.com", first: "Cur", last: "Rent", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "2", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-02-01T00:00:00Z", channel: "bigcommerce_iphone" });
     vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
   });
 
@@ -103,7 +103,7 @@ describe("GET /admin/reports/active", () => {
   });
 
   it("escapes member-provided text in the table", async () => {
-    await insertOrder({ id: "3_bc", email: "xss@example.com", first: "<img src=x>", created: "2026-03-01T00:00:00Z" });
+    await insertOrder({ id: "3", email: "xss@example.com", first: "<img src=x>", created: "2026-03-01T00:00:00Z" });
 
     const body = await (await get("/admin/reports/active")).text();
 
@@ -183,8 +183,8 @@ describe("GET /admin/reports/active", () => {
 
 describe("GET /admin/reports/expired", () => {
   beforeEach(async () => {
-    await insertOrder({ id: "1_bc", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "current@example.com", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "1", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
+    await insertOrder({ id: "2", email: "current@example.com", created: "2026-01-10T00:00:00Z" });
     vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
   });
 
@@ -210,9 +210,9 @@ describe("GET /admin/reports/expired", () => {
 
 describe("GET /admin/reports/orders", () => {
   beforeEach(async () => {
-    await insertOrder({ id: "1_bc", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "b@example.com", created: "2026-01-20T00:00:00Z" });
-    await insertOrder({ id: "3_bc", email: "c@example.com", created: "2025-01-05T00:00:00Z" });
+    await insertOrder({ id: "1", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "2", email: "b@example.com", created: "2026-01-20T00:00:00Z" });
+    await insertOrder({ id: "3", email: "c@example.com", created: "2025-01-05T00:00:00Z" });
     vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
   });
 
@@ -251,8 +251,8 @@ describe("GET /admin/reports/orders", () => {
 
 describe("GET /admin/reports/slack", () => {
   beforeEach(async () => {
-    await insertOrder({ id: "1_bc", email: "joined@example.com", first: "Jo", last: "Ined", created: "2026-01-10T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
+    await insertOrder({ id: "1", email: "joined@example.com", first: "Jo", last: "Ined", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "2", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
     // A sparse Squarespace-era member with no billing name, not in Slack.
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via)
@@ -336,12 +336,12 @@ describe("GET /admin/reports/slack", () => {
 
 describe("GET /admin/reports/consolidations", () => {
   beforeEach(async () => {
-    await insertOrder({ id: "10_bc", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "11_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "12_bc", email: "p.lee@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
+    await insertOrder({ id: "10", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "11", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "12", email: "p.lee@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
     await env.DB.prepare(
       `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note, created_at)
-       VALUES ('10_bc', 'buyer@example.com', 'recipient@example.com', ?, 'gift', 1700000000000)`,
+       VALUES ('10', 'buyer@example.com', 'recipient@example.com', ?, 'gift', 1700000000000)`,
     )
       .bind(ADMIN_ID)
       .run();
@@ -351,7 +351,7 @@ describe("GET /admin/reports/consolidations", () => {
     const body = await (await get("/admin/reports/consolidations")).text();
 
     expect(body).toContain("Orders attributed to another address (1)");
-    expect(body).toContain('<a href="/admin/orders/10_bc">10_bc</a>');
+    expect(body).toContain('<a href="/admin/orders/10">10</a>');
     expect(body).toContain("recipient@example.com");
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
     expect(body).toContain("admin@example.com");
@@ -372,7 +372,7 @@ describe("GET /admin/reports/consolidations", () => {
     expect(attributed.headers.get("Content-Disposition")).toContain('filename="consolidations-attributed-orders-');
     const csv = await attributed.text();
     expect(csv).toContain("order_id,first_name,last_name,order_email,member_email,created_on,attributed_at,attributed_by,note");
-    expect(csv).toContain("10_bc,Buy,Er,buyer@example.com,recipient@example.com");
+    expect(csv).toContain("10,Buy,Er,buyer@example.com,recipient@example.com");
 
     const names = await get("/admin/reports/consolidations?table=duplicate-names&format=csv");
     expect(await names.text()).toContain("pat lee,p.lee@example.com,1,");
@@ -384,7 +384,7 @@ describe("GET /admin/reports/consolidations", () => {
 
   it("shows only the first page of a long table, with the full count in the CSV link", async () => {
     for (let i = 0; i < PAGE_SIZE + 1; i++) {
-      await insertOrder({ id: `dup-${i}_bc`, email: `dup${i}@example.com`, memberEmail: `moved${i}@example.com`, created: "2026-01-15T00:00:00Z" });
+      await insertOrder({ id: `dup-${i}`, email: `dup${i}@example.com`, memberEmail: `moved${i}@example.com`, created: "2026-01-15T00:00:00Z" });
     }
 
     const body = await (await get("/admin/reports/consolidations")).text();
@@ -422,12 +422,12 @@ describe("missing from BigCommerce", () => {
   it("lists a missing order and states that it still counts", async () => {
     // The page has one job beyond listing: not reading as though something
     // has already been taken away from the member.
-    await insertOrder({ id: "20_bc", email: "gone@example.com", first: "Gone", last: "Order", created: "2026-02-01T00:00:00Z" });
-    await flag("20_bc", Date.UTC(2026, 8, 17));
+    await insertOrder({ id: "20", email: "gone@example.com", first: "Gone", last: "Order", created: "2026-02-01T00:00:00Z" });
+    await flag("20", Date.UTC(2026, 8, 17));
 
     const body = await (await get("/admin/reports/missing")).text();
 
-    expect(body).toContain("20_bc");
+    expect(body).toContain("20");
     expect(body).toContain("gone@example.com");
     expect(body).toContain("still count");
     expect(body).toContain("2026-09-17");
@@ -435,13 +435,13 @@ describe("missing from BigCommerce", () => {
   });
 
   it("downloads as CSV", async () => {
-    await insertOrder({ id: "21_bc", email: "gone2@example.com", created: "2026-02-01T00:00:00Z" });
-    await flag("21_bc", Date.UTC(2026, 8, 17));
+    await insertOrder({ id: "21", email: "gone2@example.com", created: "2026-02-01T00:00:00Z" });
+    await flag("21", Date.UTC(2026, 8, 17));
 
     const res = await get("/admin/reports/missing?format=csv");
 
     expect(res.headers.get("Content-Disposition")).toContain('filename="missing-orders-');
-    expect(await res.text()).toContain("21_bc,gone2@example.com");
+    expect(await res.text()).toContain("21,gone2@example.com");
   });
 
   it("is listed on the reports index", async () => {
