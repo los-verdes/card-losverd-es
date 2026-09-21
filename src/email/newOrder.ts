@@ -88,7 +88,7 @@ export async function maybeEmailNewOrderCard(
     return false;
   }
   // Eligibility before the claim: an environment with the cutoff set but no
-  // SendGrid key would otherwise burn each order's one chance.
+  // email binding would otherwise burn each order's one chance.
   const member = await findCardRecipient(env, memberEmail);
   if (!member) {
     return false;

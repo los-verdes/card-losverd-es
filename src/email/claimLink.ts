@@ -13,7 +13,7 @@
  */
 
 import type { Env } from "../index";
-import { sendEmail } from "./sendgrid";
+import { sendEmail } from "./send";
 
 export const CLAIM_EMAIL_SUBJECT = "Confirm your Los Verdes membership";
 

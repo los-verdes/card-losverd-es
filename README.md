@@ -131,7 +131,7 @@ Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KE
 | `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM` | Pushing Apple pass updates |
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
 | `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
-| `SENDGRID_API_KEY`, `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var) |
+| `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var). Sending itself needs no secret -- it is the `send_email` binding, see "Sending email" below |
 | `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
 | `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
 
@@ -212,6 +212,29 @@ To see what an environment currently has, and how long is left on it:
 ```bash
 just apple-pass-cert-check staging
 ```
+
+### Sending email
+
+Card emails go out through Cloudflare Email Service's `send_email` binding,
+declared in `wrangler.toml` as `EMAIL` for both environments (#244). There is
+no API key: the binding is the credential, so there is nothing to rotate, leak
+or audit.
+
+The sending domain has to be onboarded in the Cloudflare account the Worker
+runs in, and until it is, every send is rejected -- `/admin/preflight` and the
+Worker logs both say so. After onboarding, or after anything that touches the
+sender, send yourself a card from `/email-card` and **confirm the `.pkpass`
+still installs from it**. The attachment is the part most likely to be
+mangled in transit, and no test here can check it.
+
+Who may receive mail is decided separately, and in code: see
+`EMAIL_RECIPIENT_ALLOWLIST`. The binding does not replace that check.
+
+Two things about what goes out. There is no unsubscribe link or preference
+page -- the previous site sent under a SendGrid unsubscribe group, and there
+is no equivalent here, which is defensible for a card somebody asked for but
+is a decision rather than an oversight. And the sender's display name travels
+inside the address, as `Name <address>`, because the binding takes one string.
 
 ### Provisioning the APNs auth key
 

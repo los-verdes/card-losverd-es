@@ -1,22 +1,25 @@
 /**
- * Minimal SendGrid v3 Mail Send client (`POST /v3/mail/send`), used for
- * email card delivery (src/member/email-card.tsx). Mirrors the legacy app's
- * member_card/sendgrid.py: one recipient per message, optionally sent under
- * an ASM unsubscribe group -- but with inline HTML/text content and the card
- * artifacts as attachments rather than a hosted dynamic template.
+ * The one way out of this codebase for an email.
+ *
+ * Everything that decides *whether* a message may be sent lives here rather
+ * than beside the transport, so that the allow-list cannot be stepped around
+ * by calling the transport directly. `sendEmail()` takes the whole `env` for
+ * the same reason: a caller cannot reach the binding without it.
+ *
+ * Mail goes out through Cloudflare Email Service's `send_email` binding
+ * (#244; ./cloudflare.ts).
  */
 
-import { bytesToBase64 } from "../lib/base64";
-
-export const SENDGRID_SEND_URL = "https://api.sendgrid.com/v3/mail/send";
+import { type SendEmailBinding, sendViaBinding } from "./cloudflare";
 
 /**
  * What sending needs from the environment. Narrower than `Env` so this stays
- * a SendGrid client rather than something that knows about the whole Worker,
- * and so a test can hand it two fields.
+ * a send path rather than something that knows about the whole Worker, and so
+ * a test can hand it two fields.
  */
 export interface EmailEnv {
-  SENDGRID_API_KEY?: string;
+  /** Cloudflare Email Service. Absent only where a test removes it. */
+  EMAIL?: SendEmailBinding;
   /** `*` for anyone, empty for nobody, else addresses and domains (#155). */
   EMAIL_RECIPIENT_ALLOWLIST?: string;
 }
@@ -40,31 +43,6 @@ export interface EmailMessage {
   text: string;
   html: string;
   attachments?: EmailAttachment[];
-  /** SendGrid ASM (unsubscribe) group ID; omitted when undefined. */
-  unsubscribeGroupId?: number;
-}
-
-export function buildMailSendBody(message: EmailMessage) {
-  return {
-    from: message.from,
-    personalizations: [{ to: [message.to] }],
-    subject: message.subject,
-    // SendGrid requires text/plain to precede text/html.
-    content: [
-      { type: "text/plain", value: message.text },
-      { type: "text/html", value: message.html },
-    ],
-    attachments: message.attachments?.map((attachment) => ({
-      content: bytesToBase64(attachment.content),
-      filename: attachment.filename,
-      type: attachment.type,
-      disposition: "attachment",
-    })),
-    asm:
-      message.unsubscribeGroupId === undefined
-        ? undefined
-        : { group_id: message.unsubscribeGroupId },
-  };
 }
 
 /** The one value of `EMAIL_RECIPIENT_ALLOWLIST` that permits any address. */
@@ -84,9 +62,9 @@ export function parseRecipientAllowlist(raw: string | undefined): string[] {
  *
  * The value means the same thing wherever it is read, which is the point:
  * empty permits nobody, `*` permits anyone, and anything else is the list.
- * Production carries `*` explicitly, so granting it is an edit someone made
- * on purpose rather than a default arriving by omission -- and an
- * environment that loses the var goes quiet rather than open.
+ * Production carries whichever it means explicitly, so granting it is an edit
+ * someone made on purpose rather than a default arriving by omission -- and
+ * an environment that loses the var goes quiet rather than open.
  *
  * An entry containing `@` is a whole address; one without is a domain, which
  * is what makes `card-test+expired@losverd.es` work without listing every
@@ -109,18 +87,13 @@ export function allowsRecipient(
 
 /**
  * Sends one message, unless this environment isn't allowed to email that
- * recipient. Throws (without retrying) if the API key is unset or SendGrid
- * doesn't accept the message.
- *
- * Takes the whole `env` rather than just the API key so that the allow-list
- * cannot be bypassed by a future caller: there is no way to reach SendGrid
- * from this codebase without passing through the check below.
+ * recipient. Throws (without retrying) if the binding is missing, or if it
+ * rejects the message.
  */
 export async function sendEmail(
   env: EmailEnv,
   message: EmailMessage,
 ): Promise<void> {
-  const apiKey = env.SENDGRID_API_KEY;
   if (!allowsRecipient(env.EMAIL_RECIPIENT_ALLOWLIST, message.to.email)) {
     // Always logged, never silent. The case this is written for is someone
     // testing delivery from staging long after this was added, finding that
@@ -138,20 +111,10 @@ export async function sendEmail(
     });
     return;
   }
-  if (!apiKey) {
-    throw new Error("SENDGRID_API_KEY is not configured");
-  }
-  const res = await fetch(SENDGRID_SEND_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(buildMailSendBody(message)),
-  });
-  if (!res.ok) {
+  if (!env.EMAIL) {
     throw new Error(
-      `SendGrid mail send failed: HTTP ${res.status} ${await res.text()}`,
+      "No email transport: this environment has no Cloudflare Email Service binding (`send_email` named EMAIL in wrangler.toml)",
     );
   }
+  return sendViaBinding(env.EMAIL, message);
 }

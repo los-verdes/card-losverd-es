@@ -18,6 +18,7 @@ import {
 } from "../../src/google/api";
 import worker from "../../src/index";
 import { insertOrder } from "./fixtures";
+import { fakeEmailBinding } from "../fixtures/emailBinding";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -166,7 +167,7 @@ async function configureHealthyEnvironment() {
   // deliberately leaves empty until cutover. A "fully configured"
   // environment is one that can email somebody.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
-  env.SENDGRID_API_KEY = "SG.test";
+  env.EMAIL = fakeEmailBinding();
   env.TURNSTILE_SITE_KEY = "0x000";
   env.TURNSTILE_SECRET_KEY = "0x111";
   env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
@@ -839,7 +840,7 @@ describe("the readiness page", () => {
     env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = undefined;
     env.GOOGLE_WALLET_PRIVATE_KEY_PEM = undefined;
     env.BIGCOMMERCE_CLIENT_ID = "";
-    env.SENDGRID_API_KEY = undefined;
+    env.EMAIL = undefined;
     env.AUTH_GOOGLE_ID = undefined;
     env.APPLE_SIGNIN_KEY_ID = undefined;
 

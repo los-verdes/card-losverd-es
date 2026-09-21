@@ -39,7 +39,7 @@ import { getMemberByEmail, isMembershipCurrent } from "./artifacts";
 import { Page, SUPPORT_EMAIL } from "./layout";
 
 // Deliberately loose: a plausible `local@domain.tld` shape. Whether the
-// address is real is SendGrid's (and the membership roll's) problem.
+// address is real is the mail service's (and the membership roll's) problem.
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 export function isWellFormedEmail(email: string): boolean {
@@ -48,7 +48,7 @@ export function isWellFormedEmail(email: string): boolean {
 
 function isConfigured(env: Env): boolean {
   return Boolean(
-    env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY && env.SENDGRID_API_KEY,
+    env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY && env.EMAIL,
   );
 }
 

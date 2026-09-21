@@ -7,7 +7,8 @@ import {
   issueSessionToken,
   verifySessionToken,
 } from "../../src/auth/session";
-import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
+import type { BindingMessage } from "../../src/email/cloudflare";
+import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import worker from "../../src/index";
 import {
   CLAIM_TOKEN_TTL_SECONDS,
@@ -26,7 +27,8 @@ beforeEach(async () => {
   // Stated, not inherited: production leaves this empty until cutover, and
   // a test about delivery must not turn on what that happens to say today.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
-  env.SENDGRID_API_KEY = "SG.test-key";
+  mail = fakeEmailBinding();
+  env.EMAIL = mail;
   env.EMAIL_FROM_ADDRESS = "cards@losverdesatx.org";
   env.EMAIL_FROM_NAME = "Los Verdes";
   await insertUser(USER_ID, "w49snrrxhh@privaterelay.appleid.com");
@@ -56,20 +58,17 @@ async function insertMember(memberId: string, email: string, expirationDate: str
     .run();
 }
 
-function mockSendGrid(status = 202) {
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (url === SENDGRID_SEND_URL) {
-      return new Response(status === 202 ? null : "nope", { status });
-    }
-    throw new Error(`Unexpected fetch: ${url}`);
-  });
-}
+/**
+ * What the `send_email` binding was handed, per test. Named `mail` rather
+ * than `email` because that is already the address parameter throughout.
+ */
+let mail: FakeEmailBinding;
 
-function sentMessages(spy: ReturnType<typeof mockSendGrid>) {
-  return spy.mock.calls
-    .filter(([input]) => String(input) === SENDGRID_SEND_URL)
-    .map(([, init]) => JSON.parse(init!.body as string));
+/** Any outbound fetch fails the test: claiming makes none. */
+function forbidFetch() {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    throw new Error(`Unexpected fetch: ${input instanceof Request ? input.url : String(input)}`);
+  });
 }
 
 async function sessionCookie(userId: number) {
@@ -107,8 +106,8 @@ async function submit(email: string, userId: number | null = USER_ID) {
   );
 }
 
-function confirmUrlFrom(messages: ReturnType<typeof sentMessages>): string {
-  const text = messages[0].content[0].value as string;
+function confirmUrlFrom(messages: BindingMessage[]): string {
+  const text = messages[0].text;
   const match = text.match(/https:\/\/\S+/);
   if (!match) throw new Error("no link in the claim email");
   return match[0];
@@ -242,14 +241,14 @@ describe("requesting a claim link", () => {
   });
 
   it("emails a confirmation link to a current member's address", async () => {
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     const res = await submit("jane@example.com");
 
     expect(res.status).toBe(200);
-    const messages = sentMessages(fetchSpy);
+    const messages = mail.sent;
     expect(messages).toHaveLength(1);
-    expect(messages[0].personalizations[0].to[0].email).toBe("jane@example.com");
+    expect(recipientOf(messages[0])).toBe("jane@example.com");
     expect(confirmUrlFrom(messages)).toContain("/claim-membership/confirm?token=");
   });
 
@@ -257,11 +256,11 @@ describe("requesting a claim link", () => {
     // Someone who types an address they don't own learns only that mail was
     // sent. Naming the member, the tier or the expiry here would undo the
     // anti-enumeration the form in front of it is built for.
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     await submit("jane@example.com");
 
-    const body = JSON.stringify(sentMessages(fetchSpy)[0]);
+    const body = JSON.stringify(mail.sent[0]);
     expect(body).not.toContain("Jane");
     expect(body).not.toContain("BC-1");
     expect(body).not.toContain("2099");
@@ -270,18 +269,18 @@ describe("requesting a claim link", () => {
   it("never attaches a card, whatever else it carries", async () => {
     // The standing rule: a membership card is never emailed as a side effect
     // of something else. Proving an address is not asking for a card.
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     await submit("jane@example.com");
 
-    expect(sentMessages(fetchSpy)[0].attachments).toBeUndefined();
+    expect(mail.sent[0].attachments).toBeUndefined();
   });
 
   it.each([
     ["an address belonging to nobody", "stranger@example.com"],
     ["a lapsed membership", "lapsed@example.com"],
   ])("answers %s exactly as it answers a member", async (_label, email) => {
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
     const member = await submit("jane@example.com");
     vi.clearAllMocks();
 
@@ -289,20 +288,20 @@ describe("requesting a claim link", () => {
 
     expect(other.status).toBe(member.status);
     expect(other.body).toBe(member.body);
-    expect(sentMessages(fetchSpy)).toHaveLength(0);
+    expect(mail.sent).toHaveLength(0);
   });
 
   it("rejects an address that isn't one", async () => {
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     const res = await submit("not-an-email");
 
     expect(res.status).toBe(400);
-    expect(sentMessages(fetchSpy)).toHaveLength(0);
+    expect(mail.sent).toHaveLength(0);
   });
 
   it("rejects a form with no address in it at all", async () => {
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     const res = await request(
       "/claim-membership",
@@ -314,11 +313,11 @@ describe("requesting a claim link", () => {
     );
 
     expect(res.status).toBe(400);
-    expect(sentMessages(fetchSpy)).toHaveLength(0);
+    expect(mail.sent).toHaveLength(0);
   });
 
   it("stops a signed-in visitor sweeping addresses", async () => {
-    mockSendGrid();
+    forbidFetch();
 
     const statuses: number[] = [];
     for (let i = 0; i < 7; i++) {
@@ -329,7 +328,7 @@ describe("requesting a claim link", () => {
   });
 
   it("stops one address being mailed repeatedly, without saying so", async () => {
-    const fetchSpy = mockSendGrid();
+    forbidFetch();
 
     const responses = [];
     for (const userId of [USER_ID, OTHER_USER_ID, USER_ID, OTHER_USER_ID]) {
@@ -338,28 +337,34 @@ describe("requesting a claim link", () => {
 
     // Three sends allowed, the fourth silently dropped -- and every response
     // identical, since the limit is about the inbox, not the visitor.
-    expect(sentMessages(fetchSpy)).toHaveLength(3);
+    expect(mail.sent).toHaveLength(3);
     expect(new Set(responses.map((r) => r.body)).size).toBe(1);
     expect(new Set(responses.map((r) => r.status))).toEqual(new Set([200]));
   });
 
-  it("survives SendGrid failing, without telling the visitor anything different", async () => {
-    const fetchSpy = mockSendGrid(500);
+  it("survives the binding rejecting the message, without telling the visitor anything different", async () => {
+    const failing = fakeEmailBinding({ failWith: "domain not onboarded" });
+    env.EMAIL = failing;
+    forbidFetch();
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await submit("jane@example.com");
 
     expect(res.status).toBe(200);
-    expect(sentMessages(fetchSpy)).toHaveLength(1);
+    expect(failing.sent).toHaveLength(1);
     expect(await linkedUserFor("BC-1")).toBeNull();
   });
 });
 
 describe("following a claim link", () => {
   async function claimLinkFor(email: string, userId = USER_ID) {
-    const fetchSpy = mockSendGrid();
+    // A binding of its own, so a test that claims twice reads each link
+    // rather than the first one again.
+    const binding = fakeEmailBinding();
+    env.EMAIL = binding;
+    forbidFetch();
     await submit(email, userId);
-    const url = confirmUrlFrom(sentMessages(fetchSpy));
+    const url = confirmUrlFrom(binding.sent);
     vi.restoreAllMocks();
     return url.slice(ORIGIN.length);
   }

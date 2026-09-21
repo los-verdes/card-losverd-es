@@ -10,6 +10,7 @@ import {
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import { emailMemberCard } from "../../src/email/card";
 import { insertOrder, insertSlackUser } from "./fixtures";
+import { fakeEmailBinding, type FakeEmailBinding } from "../fixtures/emailBinding";
 
 const ADMIN_ID = 1;
 const FALLBACK = { firstName: "Test", lastName: "Member" };
@@ -152,6 +153,9 @@ describe("attributeOrder", () => {
   });
 });
 
+/** What the `send_email` binding was handed, per test. */
+let mail: FakeEmailBinding;
+
 describe("emailMemberCard", () => {
   // The route only calls this for a member it just gave a card, so these are
   // the belt-and-braces checks: nothing is emailed without a current card.
@@ -159,19 +163,18 @@ describe("emailMemberCard", () => {
     // Stated, not inherited: production leaves this empty until cutover, and
     // a test about delivery must not turn on what that happens to say today.
     env.EMAIL_RECIPIENT_ALLOWLIST = "*";
-    env.SENDGRID_API_KEY = "SG.test-key";
+    mail = fakeEmailBinding();
+    env.EMAIL = mail;
   });
 
   afterEach(() => {
-    env.SENDGRID_API_KEY = undefined;
+    env.EMAIL = undefined;
   });
 
   it("sends nothing for an address with no member row", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
     await emailMemberCard(env, "nobody@example.com", { kind: "attribution" });
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mail.send).not.toHaveBeenCalled();
   });
 
   it("logs, rather than throwing, when the member lookup itself fails", async () => {
@@ -186,10 +189,9 @@ describe("emailMemberCard", () => {
   it("sends nothing for a member whose card isn't current", async () => {
     await insertOrder({ id: "1", email: "lapsed@example.com", created: "2020-01-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     await emailMemberCard(env, "lapsed@example.com", { kind: "attribution" });
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mail.send).not.toHaveBeenCalled();
   });
 });

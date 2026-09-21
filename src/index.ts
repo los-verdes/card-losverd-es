@@ -1,4 +1,5 @@
 import { authHandler, initAuthConfig } from "@hono/auth-js";
+import type { SendEmailBinding } from "./email/cloudflare";
 import { Hono } from 'hono';
 import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
@@ -97,15 +98,20 @@ export interface Env {
   GOOGLE_WALLET_CLASS_SUFFIX: string;
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL?: string;
   GOOGLE_WALLET_PRIVATE_KEY_PEM?: string;
-  // Email card delivery (src/member/email-card.tsx). SENDGRID_API_KEY and
-  // TURNSTILE_SECRET_KEY are secrets, set via `wrangler secret put` with no
-  // wrangler.toml placeholders (same convention as SESSION_SIGNING_KEY).
-  // TURNSTILE_SITE_KEY isn't secret (it's rendered into the form), so it's a
-  // wrangler.toml `[vars]` entry -- one widget per environment, since a widget
-  // only answers for its own hostnames. Production's is still empty, awaiting
-  // a widget for card.losverd.es. Until all three are set, /email-card fails
+  // Email card delivery (src/member/email-card.tsx). TURNSTILE_SECRET_KEY is
+  // a secret, set via `wrangler secret put` with no wrangler.toml placeholder
+  // (same convention as SESSION_SIGNING_KEY). TURNSTILE_SITE_KEY isn't secret
+  // (it's rendered into the form), so it's a wrangler.toml `[vars]` entry --
+  // one widget per environment, since a widget only answers for its own
+  // hostnames. Until the binding and both keys are present, /email-card fails
   // closed with a "temporarily unavailable" page.
-  SENDGRID_API_KEY?: string;
+  /**
+   * Cloudflare Email Service (#244), declared in wrangler.toml as a
+   * `send_email` binding. There is no API key: the binding is the credential,
+   * so there is nothing to rotate or leak. Optional in the type because a
+   * test can remove it to check the page fails closed.
+   */
+  EMAIL?: SendEmailBinding;
   /**
    * Date (YYYY-MM-DD) from which a completed new order emails the member
    * their card; empty means never (src/email/newOrder.ts).
@@ -113,8 +119,7 @@ export interface Env {
   CARD_EMAIL_NEW_ORDERS_SINCE?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
-  // Not secret -- the legacy app's sender and SendGrid ASM unsubscribe group,
-  // in wrangler.toml `[vars]`. An empty group ID sends without one.
+  // Not secret -- the sender, in wrangler.toml `[vars]`.
   /**
    * Who this environment may email (#155). `*` permits anyone, an empty
    * string permits nobody, and anything else is a comma- or space-separated
@@ -124,7 +129,6 @@ export interface Env {
   EMAIL_RECIPIENT_ALLOWLIST: string;
   EMAIL_FROM_ADDRESS: string;
   EMAIL_FROM_NAME: string;
-  SENDGRID_UNSUBSCRIBE_GROUP_ID: string;
   // Secret -- Slack bot token (`xoxb-...`, scopes `users:read` and
   // `users:read.email`) for the Slack members ETL (src/slack/membersEtl.ts).
   // Optional -- the ETL is skipped (with a warning) until it's set via
