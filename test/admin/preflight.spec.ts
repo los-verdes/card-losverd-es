@@ -163,9 +163,9 @@ async function configureHealthyEnvironment() {
   env.APNS_PRIVATE_KEY_PEM = "-----BEGIN PRIVATE KEY-----";
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
   env.GOOGLE_WALLET_PRIVATE_KEY_PEM = googleWalletKeyPem;
-  // Stated rather than inherited from wrangler.toml, which production
-  // deliberately leaves empty until cutover. A "fully configured"
-  // environment is one that can email somebody.
+  // Stated rather than inherited from wrangler.toml, which sets it per
+  // environment. A "fully configured" environment is one that can email
+  // somebody.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.EMAIL = fakeEmailBinding();
   env.TURNSTILE_SITE_KEY = "0x000";

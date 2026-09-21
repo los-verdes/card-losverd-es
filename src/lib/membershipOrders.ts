@@ -72,12 +72,12 @@ const list = (values: string[]) => values.map((value) => `'${value}'`).join(", "
  *
  * Separate from `COUNTS_AS_MEMBERSHIP` because the two answer different
  * questions. That rule scores an order -- was it paid, was it refunded --
- * and a withdrawal says nothing about the order. Somebody whose membership
- * is withdrawn still bought what they bought, and the money is still the
+ * and a revocation says nothing about the order. Somebody whose membership
+ * is revoked still bought what they bought, and the money is still the
  * group's, so the sale stays on the books.
  *
  * Which is exactly why this has to be applied by hand where it belongs. Only
- * reports about *who is a member now* want it: a withdrawn member must not be
+ * reports about *who is a member now* want it: somebody whose membership is revoked must not be
  * listed as current, or the reports and the access checks would tell
  * different stories about the same person and whoever answered their next
  * question would be reading the wrong one. Reports about what was sold --

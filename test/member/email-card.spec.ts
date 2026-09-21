@@ -30,7 +30,7 @@ beforeEach(async () => {
   env.PASS_SIGNATURE_KEY = "test-pass-signature-key".repeat(5);
   env.TURNSTILE_SITE_KEY = "0x4AAAAAAA-test-site-key";
   env.TURNSTILE_SECRET_KEY = "0x4AAAAAAA-test-secret";
-  // Stated, not inherited: production leaves this empty until cutover, and
+  // Stated, not inherited: wrangler.toml sets this per environment, and
   // a test about delivery must not turn on what that happens to say today.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   email = fakeEmailBinding();

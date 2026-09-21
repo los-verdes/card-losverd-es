@@ -28,7 +28,7 @@ export interface LoginPageProps {
   /** Set when the member has just been sent back here by a sign-in that didn't complete. */
   failed?: boolean;
   /**
-   * Set when the account is barred from the group. Distinguished from
+   * Set when the account is expelled from the group. Distinguished from
    * `failed` because the generic message invites trying again, which is
    * precisely the wrong advice here and leaves somebody retrying a thing
    * that will never work.

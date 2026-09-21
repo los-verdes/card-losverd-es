@@ -100,7 +100,7 @@ addresses, to be consolidated by attributing their orders to one of them.
 ### Missing from BigCommerce
 
 Orders the store has stopped returning, with when each was first missed
-(los-verdes/card-losverd-es#105). **Nothing on this page has been withdrawn
+(los-verdes/card-losverd-es#105). **Nothing on this page has been revoked
 from anyone**: a flagged order counts towards its member's membership exactly
 as it did before, and their card is untouched. The flag exists because
 deciding to end somebody's membership is a judgement, and a 404 from an API
@@ -116,7 +116,7 @@ Two things it does not cover. It catches **deletion**, not **archival**: an
 archived order simply stops appearing in the order list, and the resync walks
 forward from a cursor rather than looking for absences, so nothing notices.
 And there is deliberately no button here to stop a flagged order counting --
-that is a deliberate withdrawal of a membership, which is
+that is a deliberate revocation of a membership, which is
 [#31](https://github.com/los-verdes/card-losverd-es/issues/31).
 
 ### Slack cross-reference
@@ -147,12 +147,17 @@ listed by Slack with `deleted = 1`, so there is no pruning step.
 
 Unlike the legacy job, it does not create a login `users` row per Slack
 member; join on email instead. It skips itself, with a warning, until
-`SLACK_BOT_TOKEN` is set. Staging runs it every six hours against its own
-Slack app; production will once it has cron triggers.
+`SLACK_BOT_TOKEN` is set. Both environments run it every six hours, each
+against its own Slack app, so the real membership roll stays out of staging.
 
 ## Who is an admin
 
-For now, only the maintainer's own account. The eventual list is the Los Verdes
+An admin is a user with `users.is_admin` set. Access is granted and removed on
+`/admin/admins`, or with `just admin-grant <env> <address...>`; an address does
+not need to have signed in first, and the page will not let an admin remove
+themselves. Both leave a line in the audit log.
+
+The list is kept short by hand today. The intended list is the Los Verdes
 board (the "Starting XI"), the Merch Team, who administer the storefront and
 answer `merchteam@losverdesatx.org`, and the Membership Committee. Those names are published on the
 group's website, so the list may be derivable from there rather than

@@ -92,8 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      # TODO: https://card.losverd.es once DNS is cut over (Phase 8).
-      url: https://card-losverd-es-production.los-verdes.workers.dev
+      url: https://card.losverd.es
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@v4

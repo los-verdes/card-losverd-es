@@ -1,5 +1,5 @@
 /**
- * Withdrawing a membership before it expires, and lifting that again (#31).
+ * Revoking a membership before it expires, and lifting that again (#31).
  *
  * The reading half of this costs almost nothing: `revoked` was already a
  * legal `members.status`, already excluded by the access checks, already
@@ -26,12 +26,12 @@ export interface RevokedCard {
 }
 
 /**
- * Withdraws the membership on one card.
+ * Revokes the membership on one card.
  *
  * `members.last_updated_at` is bumped by hand, for the same reason the
  * display-name path does it: the fact lives outside `members`, and that
  * column is what Apple's polling endpoint compares against. Without it the
- * membership would read as withdrawn everywhere except on the passes already
+ * membership would read as revoked everywhere except on the passes already
  * installed, which are the ones somebody would be holding up at a gate.
  */
 export async function revokeCard(
@@ -98,7 +98,7 @@ async function touchAndNotify(env: Env, memberId: string): Promise<void> {
   if (member) await notifyWalletsUpdated(env, member.member_id);
 }
 
-/** Whether this card is currently withdrawn. */
+/** Whether this card is currently revoked. */
 export async function isRevoked(env: Env, memberId: string): Promise<boolean> {
   const row = await env.DB.prepare(
     "SELECT 1 AS present FROM revoked_cards WHERE member_id = ?",
@@ -109,10 +109,10 @@ export async function isRevoked(env: Env, memberId: string): Promise<boolean> {
 }
 
 /**
- * Every withdrawal, most recent first, with who made it.
+ * Every revocation, most recent first, with who made it.
  *
  * Joined to `members` for the address rather than storing a copy: a
- * withdrawal follows the card, and the address on the membership can be
+ * revocation follows the card, and the address on the membership can be
  * re-pointed afterwards without making this list wrong.
  */
 export async function revokedCards(env: Env): Promise<RevokedCard[]> {

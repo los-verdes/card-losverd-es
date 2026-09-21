@@ -1,16 +1,16 @@
 /**
- * Barring somebody from the group, and lifting that again (#31).
+ * Expelling somebody from the group, and lifting that again (#31).
  *
  * A ban is the heavier of the two things an admin can do to a person here,
- * and the difference from a withdrawn card is worth keeping straight:
+ * and the difference from a revoked card is worth keeping straight:
  *
- * - **A withdrawn card** stops the card working. They can still sign in and
+ * - **A revoked card** stops the card working. They can still sign in and
  *   still exist here.
  * - **A ban** also stops them signing in at all, takes effect on sessions
  *   they already hold, and revokes whatever membership they have.
  *
  * The membership half is not written down anywhere. `MEMBER_SELECT` resolves
- * a ban into the same `revoked` status a withdrawn card produces, so lifting
+ * a ban into the same `revoked` status a revoked card produces, so lifting
  * a ban restores the membership by itself, and somebody who is both banned
  * and separately revoked stays revoked when the ban is lifted.
  *
@@ -37,7 +37,7 @@ export interface BannedPerson {
   has_membership: number;
 }
 
-/** Whether this address is barred. Read on every authenticated request. */
+/** Whether this address is expelled. Read on every authenticated request. */
 export async function isBanned(env: Env, email: string): Promise<boolean> {
   const row = await env.DB.prepare(
     "SELECT 1 AS present FROM banned_people WHERE email = ?",
@@ -48,7 +48,7 @@ export async function isBanned(env: Env, email: string): Promise<boolean> {
 }
 
 /**
- * Whether the person this session belongs to is barred.
+ * Whether the person this session belongs to is expelled.
  *
  * By user id rather than address, because that is what a session carries.
  * One indexed lookup, on every authenticated request: a ban that only took
@@ -124,9 +124,9 @@ export async function liftBan(
  * `members.last_updated_at` is bumped by hand, as everywhere else a fact
  * lives outside that table: it is what Apple's polling endpoint compares
  * against, and without it the one place a ban would not reach is the passes
- * already installed on the phone of the person being barred.
+ * already installed on the phone of the person being expelled.
  *
- * Harmless when there is no membership. Somebody can be barred before they
+ * Harmless when there is no membership. Somebody can be expelled before they
  * have ever bought anything, and the ban applies if they later do.
  */
 async function touchAndNotify(env: Env, email: string): Promise<void> {
@@ -139,7 +139,7 @@ async function touchAndNotify(env: Env, email: string): Promise<void> {
   if (member) await notifyWalletsUpdated(env, member.member_id);
 }
 
-/** Everybody currently barred, most recent first, with who decided it. */
+/** Everybody currently expelled, most recent first, with who decided it. */
 export async function bannedPeople(env: Env): Promise<BannedPerson[]> {
   const { results } = await env.DB.prepare(
     `SELECT b.email, b.note, u.email AS banned_by_email, b.banned_at,

@@ -83,7 +83,7 @@ export async function activeMemberships(
   page?: Page,
 ): Promise<ActiveMembershipsResult> {
   const extra = filterClauses(filters, 2);
-  // Withdrawn memberships are left out: this is the "who is a member right
+  // Revoked memberships are left out: this is the "who is a member right
   // now" report, and it must not disagree with what the access checks say
   // about the same person. What they bought stays in the sales reports.
   const where = `created_on <= ?1 AND expires_on > ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}${extra.sql}`;
