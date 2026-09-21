@@ -70,17 +70,25 @@ populated before anyone is pointed at it.
    schedules `[env.staging.triggers]` already runs. Doing this now
    means D1 is populated and syncing before any member sees the new stack.
 6. **Squash the migrations, if that is still wanted**
-   ([#201](https://github.com/los-verdes/card-losverd-es/issues/201)). This is
-   the last moment it is safe, and the moment was chosen deliberately: a
-   squash rewrites what "already applied" means, so it only works while every
-   database can be thrown away and rebuilt from scratch. The step below is
-   what ends that -- afterwards production holds the only copy of the
-   Squarespace-era history, and no later squash can be undone by recreating
-   the database.
+   ([#201](https://github.com/los-verdes/card-losverd-es/issues/201)). A
+   squash rewrites what "already applied" means, so it is only safe while
+   every database can be thrown away and rebuilt from scratch.
 
-   Nothing breaks by skipping it. It is a tidying of fifteen migrations,
-   several of which exist only to correct earlier ones, and the cost of not
-   doing it is that they stay.
+   What keeps that true is not this step's position in the list but whether
+   the Squarespace-era history still exists somewhere else. Two things can
+   hold it: Postgres, until it is decommissioned in section 5, and the export
+   JSON, for as long as that file is kept. While either survives, production
+   can be emptied and loaded again, so the squash is still available -- a
+   first import does not close the window on its own.
+
+   What does close it is the last of those going away. After that production
+   holds the only copy, and no squash can be undone by recreating the
+   database. Keep the export file until this is either done or decided
+   against.
+
+   Nothing breaks by skipping it. It is a tidying of the migration history,
+   several of whose files exist only to correct earlier ones, and the cost of
+   not doing it is that they stay.
 
 7. **Run the legacy Postgres export and import**
    ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
@@ -98,14 +106,22 @@ populated before anyone is pointed at it.
    three in `src/email/newOrder.ts`, on the one operation where a mistake
    reaches people.
 
-   Expect nine members to lose a membership they hold today. They are the
-   orders the old store left as `Partially Refunded`, which counted there and
-   do not count here
-   ([#210](https://github.com/los-verdes/card-losverd-es/issues/210)). That is
-   the intended outcome rather than a surprise: the status is as likely to be
-   stale, or left over from a renewal problem long since resolved, as it is to
-   describe anything current. If members write in afterwards, that is the
-   moment to work out what produces the status -- not before, on nine rows.
+   No member loses a card they hold today. This was measured against the
+   full export once it was loaded, rather than assumed
+   ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)): of the
+   544 addresses holding an imported order that does not count here, 535 also
+   hold one that does, and the nine holding none were never issued a card by
+   the previous site either. The paid-only allow-list reproduces the old
+   system's outcomes.
+
+   The `Partially Refunded` orders are the one real behaviour difference
+   ([#210](https://github.com/los-verdes/card-losverd-es/issues/210)): nine
+   orders, nine people, and eight of them did hold a card from the old site,
+   so that store counted what this one does not. All nine have expired,
+   though, so the difference is historical and nobody is losing anything.
+   Should a live one ever appear, the intended outcome is still that it does
+   not count -- the status is as likely to be stale, or left from a renewal
+   problem long since resolved, as it is to describe anything current.
 
    Check the load with `just legacy-import-verify production <export.json>`
    before going on. It compares D1's counts against the export they came from
