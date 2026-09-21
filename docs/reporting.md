@@ -147,8 +147,8 @@ listed by Slack with `deleted = 1`, so there is no pruning step.
 
 Unlike the legacy job, it does not create a login `users` row per Slack
 member; join on email instead. It skips itself, with a warning, until
-`SLACK_BOT_TOKEN` is set, and only runs on a schedule once cron triggers are
-enabled.
+`SLACK_BOT_TOKEN` is set. Staging runs it every six hours against its own
+Slack app; production will once it has cron triggers.
 
 ## Who is an admin
 
