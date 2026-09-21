@@ -16,10 +16,18 @@ if (!inputPath || !outputPath) {
 
 const data = parseLegacyExport(JSON.parse(readFileSync(inputPath, "utf8")));
 writeFileSync(outputPath, buildImportSql(data));
+// The same four counts the generated SQL carries in its own header, in the
+// same order. Chosen names were missing here, which made them the one thing
+// an operator could not see without opening the file -- and they are the
+// count most worth looking at, because the export only emits a name that
+// differs from the order it came with, so a legitimate answer is zero and a
+// broken one looks identical.
 console.log(
   `Wrote ${outputPath}: ${data.member_since.length} member_since rows, ` +
+    `${data.display_names.length} chosen names, ` +
     `${data.membership_cards.length} membership cards, ` +
-    `${data.membership_orders.length} membership orders (export taken ${data.exported_at}).`,
+    `${data.membership_orders.length} of ${data.membership_orders_total} membership orders ` +
+    `(export taken ${data.exported_at}).`,
 );
 const skipped = data.membership_orders_total - data.membership_orders.length;
 if (skipped > 0) {
