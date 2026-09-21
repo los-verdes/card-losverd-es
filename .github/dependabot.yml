@@ -26,6 +26,14 @@ updates:
       # reviewing it is reading a changelog rather than a diff.
       routine:
         patterns: ["*"]
+        # satori is pinned at 0.32.0 until #8 is resolved: newer releases load
+        # HarfBuzz's WASM from disk at import, which a Worker cannot do, and
+        # every card image test fails. Grouped here, one satori release held
+        # back every other routine bump with it. Left out of the group rather
+        # than ignored, so each new satori release still arrives as a PR of
+        # its own -- that PR is the re-check #8 asks for, and it only blocks
+        # itself.
+        exclude-patterns: ["satori"]
         update-types: ["minor", "patch"]
     ignore:
       # Majors of these change how the code is written, not just what it
