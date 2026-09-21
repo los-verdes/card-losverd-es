@@ -75,6 +75,10 @@ async function probe(destination) {
   }
 }
 
+function onWorkersDev(origin) {
+  return new URL(origin).hostname.endsWith(".workers.dev");
+}
+
 /** One of `current`, `not-ours`, `stale`, or `other`, with a sentence. */
 function verdictFor(hook, currentOrigins, publicOrigin) {
   let url;
@@ -88,8 +92,11 @@ function verdictFor(hook, currentOrigins, publicOrigin) {
     // site's own hook, which uses the same path: before cutover that hostname
     // is still the previous site. Treated as current either way, which is the
     // safe reading -- it can never be deleted from here.
+    // Only a hostname of the group's own can belong to the previous site. An
+    // environment whose public hostname is its workers.dev one (staging) has
+    // never been anything but this Worker.
     const where =
-      url.origin === publicOrigin
+      url.origin === publicOrigin && !onWorkersDev(publicOrigin)
         ? `delivers to ${publicOrigin}, this environment's public hostname -- which before cutover is still the previous site`
         : "delivers to this environment";
     return hook.is_active
@@ -99,7 +106,12 @@ function verdictFor(hook, currentOrigins, publicOrigin) {
   if (url.origin === publicOrigin) {
     // Before cutover the public origin is the previous site's, and so is any
     // hook on it that is not ours. Leave it alone.
-    return { kind: "not-ours", why: "on this environment's public hostname but not this Worker's path -- the previous site's, until cutover" };
+    return {
+      kind: "not-ours",
+      why: onWorkersDev(publicOrigin)
+        ? "on this environment's hostname but not this Worker's path"
+        : "on this environment's public hostname but not this Worker's path -- the previous site's, until cutover",
+    };
   }
   if (url.hostname.endsWith(".workers.dev")) {
     return { kind: "stale", why: "a workers.dev deployment that is not this environment's -- left over from an old account or an old name" };
