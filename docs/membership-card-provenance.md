@@ -310,17 +310,10 @@ member, so a card carries a name, a "member since", a "good through" and a
 card number, and nothing that sorts its holder into a category. The previous
 site's cards were the same three things plus the card number on the back.
 
-This is worth stating because the software briefly said otherwise. A
-`membership_tier` column originated in this project's first schema, grew a
-SKU-to-tier mapping around it, and ended up printing the word "standard" on
-every member's pass, card image and portal page -- a field that told nobody
-anything. It was removed in migration 0018. Nothing was lost with it:
-`membership_orders.sku` still records what each person actually bought, so if
-the store ever does sell a second membership product, a type can be worked out
-from the orders. What remains is `MEMBERSHIP_SKUS`, the list deciding which
-line items count as a membership at all
-([section 3](#3-what-an-order-is-and-where-it-comes-from)) -- the job that
-mapping was really doing.
+If the store ever does sell a second membership product, a type can be worked
+out from the orders: `membership_orders.sku` records what each person bought.
+Which SKUs count as a membership at all is a separate list, `MEMBERSHIP_SKUS`
+([section 3](#3-what-an-order-is-and-where-it-comes-from)).
 
 Card themes are a separate matter and deliberately not built on this. A type
 derived from an order is recomputed on every sync, so a theme stored that way
