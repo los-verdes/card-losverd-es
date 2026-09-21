@@ -103,6 +103,27 @@ check-wrangler-envs:
 cloudflare-token-check:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
 
+# Admin is a flag on the person's `users` row, checked on every admin request,
+# so a grant or a revocation takes effect on their next page load. They have to
+# have signed in once first, or there is no row to change -- which is refused
+# with that reason rather than quietly matching nothing. Each grant and
+# revocation is recorded in the audit log (/admin/audit).
+#
+# The account id is pinned so these never depend on which account wrangler
+# happens to be logged into.
+#
+# List who has admin access in an environment
+admin-list env:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} list
+
+# Give someone admin access (they must have signed in once)
+admin-grant env email:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} grant {{ email }}
+
+# Take someone's admin access away
+admin-revoke env email:
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/admin.mjs {{ env }} revoke {{ email }}
+
 # Worker secrets: 1Password is the source of truth, since Cloudflare never
 # returns a secret's value. One item per environment in the "Los Verdes" vault,
 # `lv-card-losverd-es-worker-<env>`, with one field per secret labeled with its

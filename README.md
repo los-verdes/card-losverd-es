@@ -272,14 +272,15 @@ It reads the access token and signing key from the environment's 1Password item 
 
 ## Making someone an admin
 
-Admin is a flag in D1, checked on every admin request. The person logs in once so their `users` row exists, then:
+Admin is a flag in D1, checked on every admin request. The person signs in once so their `users` row exists, then:
 
 ```bash
-npx wrangler d1 execute DB --remote --env="" --command \
-  "UPDATE users SET is_admin = 1 WHERE email = 'someone@example.com'"
+just admin-grant production someone@example.com
+just admin-revoke production someone@example.com
+just admin-list production
 ```
 
-`--env=""` is production; use `--env staging` for staging. Set it back to `0` to revoke; it takes effect immediately.
+Either takes effect on their next request. The hand-written `UPDATE` this replaces failed silently in two ways, both handled now: an address typed with a capital letter never matched, because addresses are stored lower-cased, and is now lower-cased first; and someone who has never signed in has no row to change, which is now refused with that reason instead of appearing to succeed. Grants and revocations are recorded in the audit log.
 
 Worth doing early on a new environment rather than last: the readiness page below is admin-gated, and it is most useful while an environment is still being set up.
 
