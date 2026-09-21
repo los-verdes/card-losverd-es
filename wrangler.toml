@@ -176,6 +176,12 @@ max_retries = 0
 # =============================================================================
 [env.staging]
 name = "card-losverd-es-staging"
+# Routes are the one thing named environments inherit, so without this
+# staging -- deployed before production -- would claim production's custom
+# domain (step 1 of "The flip", docs/cutover.md) the moment one is added at
+# the top level. Staging is served on its workers.dev hostname.
+# `just check-wrangler-envs` fails if the two ever share a route.
+routes = []
 
 [[env.staging.d1_databases]]
 binding = "DB"

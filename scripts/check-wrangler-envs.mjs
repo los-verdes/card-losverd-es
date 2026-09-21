@@ -7,7 +7,11 @@
 //    level silently disappears from the environment. (A Worker once shipped
 //    with no bindings at all this way -- see the migration plan's Handoff note.)
 // 2. Leaks: an environment accidentally pointing at a production resource
-//    (D1 database, R2 bucket, queue) or reusing production's Worker name.
+//    (D1 database, R2 bucket, queue, Google Wallet class, route or custom
+//    domain) or reusing production's Worker name. Routes are the one thing
+//    named environments *do* inherit, so a production custom domain added
+//    at the top level is claimed by staging -- deployed first -- unless
+//    staging sets `routes = []`.
 //
 // Usage: node scripts/check-wrangler-envs.mjs   (or `just check-wrangler-envs`)
 
@@ -38,6 +42,7 @@ function summarize(config) {
     // Google Wallet passes an environment issues are filed under this class,
     // so sharing one would let staging edit production members' passes.
     walletClass: [`${config.vars.GOOGLE_WALLET_ISSUER_ID}.${config.vars.GOOGLE_WALLET_CLASS_SUFFIX}`],
+    routes: (config.routes ?? []).map((route) => (typeof route === "string" ? route : route.pattern)),
   };
 }
 
@@ -72,7 +77,7 @@ for (const envName of envNames) {
   }
 
   if (env.name === production.name) problems.push(`${where}: reuses production's Worker name "${env.name}"`);
-  for (const key of ["d1", "buckets", "queues", "walletClass"]) {
+  for (const key of ["d1", "buckets", "queues", "walletClass", "routes"]) {
     const shared = env[key].filter((x) => production[key].includes(x));
     if (shared.length) problems.push(`${where}: shares production ${key}: ${shared.join(", ")}`);
   }
