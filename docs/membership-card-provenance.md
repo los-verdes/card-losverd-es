@@ -116,31 +116,21 @@ grain: re-pointing a gift moves the whole order to the recipient
 ([section 8](#8-gift-purchases-and-re-attributed-orders)), because an order is
 the smallest thing that can be pointed at anybody.
 
-There are two ways an order could carry a second membership, and neither is
-handled:
-
-* **Two membership line items on one order.** The first one found sets the
-  tier; the second is ignored.
-* **One membership line item with a quantity above one.** BigCommerce does
-  report the quantity; this software simply never looks at it, so an order for
-  two memberships looks exactly like an order for one.
-
-Both end the same way, and this is the part worth holding on to: one
-membership is recorded, attributed to whoever paid, and the second leaves no
-trace anywhere. No error, no warning, no row on any report. Somebody has paid
-for a membership that no card exists for, and the first anyone hears of it is
-when they ask why they never got one.
+There are two ways an order can carry a second membership: two membership
+line items, or one line item with a quantity above one. Either way exactly one
+membership is recorded, attributed to whoever paid, and the second produces no
+card. Somebody has paid for a membership that does not exist, which is the
+case the report below exists for.
 
 **So two memberships mean two orders.** A member buying one for someone else
 as well as renewing their own should place separate orders, and the gift order
 is then re-attributed to the recipient.
 
-That is a constraint of how orders are stored rather than a law of nature, and
-there is a proposal to lift it
-([#198](https://github.com/los-verdes/card-losverd-es/issues/198)): give every
-membership line item its own row, so an order carrying two produces two
-memberships and the spare can be re-attributed like any gift. It would turn
-the case below from something unrecoverable into an ordinary correction.
+That is a constraint of how orders are stored rather than a law of nature.
+Giving every membership line item its own row would lift it, and was
+considered and set aside as not worth the added complexity
+([#198](https://github.com/los-verdes/card-losverd-es/issues/198)); the
+reasoning is there if the question comes back.
 
 **This is checked.** Each time an order is read from the store, the
 memberships on it are counted across every line item, quantities included, and
@@ -236,8 +226,6 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   ones that have gone, so an order archived in BigCommerce keeps its
   last-known copy here. Deletion is noticed; archival is not.
 * **Memberships sold under an unlisted SKU**, as above.
-* **A second membership bought on the same order**, as above — invisible, and
-  not detectable from anything this system stores.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
   not built yet and is not planned before the migration finishes, so a MiniBC
@@ -250,10 +238,11 @@ store is the first thing to try, and it cannot make matters worse.
 
 ## 4. Each field on the card
 
-The stored membership record (`members`) is what all card formats read from.
-Apple Wallet passes, the "Save to Google Wallet" card, the emailed card image,
-and the QR verification page all draw on the same record, so they cannot
-disagree with each other.
+Every card format — the Apple Wallet pass, the "Save to Google Wallet" card,
+the emailed card image, and the QR verification page — reads the stored
+membership record (`members`) through one shared lookup (`MEMBER_SELECT` in
+`src/member/artifacts.ts`), which layers the corrections described below on
+top of it. So the formats cannot disagree with each other.
 
 ### Holder's name
 
@@ -277,27 +266,25 @@ purchase indefinitely. And because an attributed gift order still carries the
 *purchaser's* billing name, a gifted card can end up showing the giver's name
 (see [section 8](#8-gift-purchases-and-re-attributed-orders)).
 
-**A member can set the name on their own card.** Signed in, there is a page
-for it, and what they put there is shown instead of the name their orders
-give (`member_display_names`). Clearing it puts the card back to the derived
-name, which stays intact underneath the whole time, so nothing is lost by
-trying something. It is one free-text field rather than a first and last
-name, which suits a mononym or a name that does not split in two.
+**A member can set the name on their own card**, signed in, and what they put
+there is shown instead of the name their orders give
+(`member_display_names`). It is one free-text field rather than a first and
+last name, which suits a mononym or a name that does not split in two.
+Clearing it puts the card back to the derived name, which stays intact
+underneath, so nothing is lost by trying something.
 
-**An admin can set one too**, from the member page in the admin area, for
-somebody who asks rather than does it themselves. It matters most for a
-gifted membership: attribution moves the membership to the person it was
-bought for, but the card keeps the buyer's billing name until the recipient
-orders something of their own, and they cannot fix that themselves if they
-never do.
+**An admin can set one too**, from the member page in the admin area. It
+matters most for a gifted membership: attribution moves the membership to the
+person it was bought for, but the card keeps the buyer's billing name until
+the recipient orders something of their own.
 
-So a name can arrive three ways — the member, an admin, or the one-time
-import carrying across one they set on the previous site — and the admin page
-says which, alongside the name their orders give. That is why the name on a
-card may not match the orders behind it, and why "why does my card say this"
-has an answer rather than a shrug.
+A name can therefore arrive three ways — the member, an admin, or the one-time
+import carrying across one chosen on the previous site — and the admin page
+says which, alongside the name the orders give. That is the answer to "why
+does my card say this".
 
-Nothing checks what goes in that field. A membership card is a fun vanity
+Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
+on a card), nothing checks what goes in that field. A membership card is a fun vanity
 item rather than an identity document and gets very little scrutiny in
 practice, so a card showing a nickname, or a name that is nobody's real one,
 is working as intended. If the group would rather that were not so, this is
@@ -391,11 +378,7 @@ a last resort.
 | Card number | on the back | as QR alt text | under the QR code |
 | Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
 
-All three carry the same fields. The card image
-(`src/cardimage/template.ts`) omitted "member since" for a while, deliberately,
-so that the date would not raise questions while unrelated membership renewal
-problems were being worked through; it was restored once the provenance of
-those dates was established (2026-09-18).
+All three carry the same fields.
 
 ## 5. How the software decides who is a current member
 
@@ -433,13 +416,15 @@ force the card reads as withdrawn, carries no expiry, and its holder is
 refused everywhere a current membership is required -- see
 [question 8](#9-decisions-worth-confirming).
 
-That stored label (`members.status`) is not decorative, though: it is what
-decides whether an Apple pass carries an "Expired" note on its back, and what
-Google Wallet is told about the card's state. Since it only moves when a sync
-touches the record, a membership that lapsed without any order activity can
-keep an `active` label until the next sync. The expiry date printed on the
-card is still correct, and every access check still refuses — but the pass's
-own status marking can lag behind reality for a while.
+The stored label (`members.status`) is no longer read directly by anything
+that matters: the "Expired" note on the back of an Apple pass and the state
+Google Wallet is told are both derived from the expiry date at the moment a
+pass is built (`effectiveStatus()` in `src/member/artifacts.ts`). The
+remaining limit is that a pass already on a phone is not rebuilt merely
+because a date passed. It is corrected the next time it is rebuilt — a
+renewal, an attribution, a re-download — so an installed pass can go on
+saying "active" for a while after the membership lapsed, even though every
+access check already refuses it.
 
 ### Which orders count
 
@@ -448,9 +433,12 @@ are `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`,
 `Shipped` and `Completed` (`PAID_BIGCOMMERCE_STATUSES`). Everything else is
 excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
 `Pending`, `Awaiting Payment`) and money returned or the sale undone
-(`Refunded`, `Cancelled`, `Declined`, `Disputed`, and any other status the
-store may report). The list is an allow-list, so an unfamiliar BigCommerce
-status does not confer membership.
+(`Refunded`, `Partially Refunded`, `Cancelled`, `Declined`, `Disputed`, and
+any other status the store may report). The list is an allow-list, so an
+unfamiliar BigCommerce status does not confer membership. `Partially
+Refunded` sits in the second group on purpose: the status cannot say which
+part of the order was refunded, and the rule does not confer membership on a
+refund it cannot read.
 
 That last property is worth watching rather than trusting, because its cost
 falls on a member rather than on us. Checking the list against every status
@@ -484,8 +472,7 @@ includes the imported historical orders, so once that one-time import had
 loaded, this value alone is often already correct.
 
 **The override, which wins.** A separate table
-(`member_since_overrides`, added in
-`src/db/migrations/0005_legacy_export.sql`) holds authoritative dates that did
+(`member_since_overrides`) holds authoritative dates that did
 not come from current orders. When a card is rendered, the override is used if
 one exists, and the order-derived value is used only if none does — a plain
 "prefer the override" choice, visible as the `COALESCE` in the shared
@@ -528,7 +515,7 @@ usually implies. See the questions in [section 9](#9-decisions-worth-confirming)
 
 Changing an override immediately marks that member's card as stale, so the
 next time their pass is fetched it is regenerated with the new date. That is
-enforced by the database itself (the triggers in migration 0005), so it works
+enforced by the database itself (triggers on that table), so it works
 even when a date is corrected with hand-written SQL. Already-installed Wallet
 passes pick the change up on their next routine update rather than being
 pushed immediately.
@@ -597,7 +584,7 @@ Re-pointing an order is an administrative action (`attributeOrder()` in
 `src/admin/attribution.ts`). It does four things: updates the order's
 `member_email`; appends a permanent audit record of the change — old address,
 new address, which admin made it, an optional note, and when
-(`membership_order_attributions`, migration 0009); rebuilds **both** people's
+(`membership_order_attributions`); rebuilds **both** people's
 cards, since one loses that order's contribution and the other gains it; and
 pushes a pass update to any device holding a card that changed.
 
@@ -661,7 +648,8 @@ or a change, not an open-ended design exercise.
    earlier.
 
 6. **Is a free-text name on a card the right latitude?** A member can set
-   whatever they like as the name on their own card, and nothing checks it.
+   whatever they like as the name on their own card, and beyond a length
+   limit nothing checks it.
    That follows from treating a card as a fun vanity item rather than an
    identity document -- one that gets very little scrutiny in practice, and
    where a nickname or a name that is nobody's real one costs nothing.
@@ -674,14 +662,11 @@ or a change, not an open-ended design exercise.
    before a name appears -- and the field is small enough that any of them is
    a modest change.
 
-   The membership behind the card is a separate matter and is treated as
-   one: who counts as current, whether one can be withdrawn, and who gets
-   emailed are all guarded much more carefully than what the card says.
-
-   Whoever writes last wins between a member and an admin, and the record
-   keeps which of them it was. Nobody has needed to overrule anybody yet, so
-   that is a simple rule rather than a considered one; if it ever matters,
-   it is a small thing to change.
+   The membership behind the card is a separate matter, guarded much more
+   carefully: who counts as current, whether one can be withdrawn, who gets
+   emailed. Between a member and an admin, whoever writes last wins and the
+   record keeps which; nobody has needed to overrule anybody yet, so that is
+   a simple rule rather than a considered one.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
@@ -768,14 +753,9 @@ The statuses that void one of these orders are `canceled`, `cancelled`,
 `refunded` and `declined` (`VOID_LEGACY_STATUSES`). Anything else counts,
 including a blank status.
 
-In the event no imported order has a blank one. Every row in the old system's
-database carries a status, across both eras and all seven order channels,
-measured against it directly in September 2026. That was not assumed when
-this rule was written, and it was worth checking: had the answer gone the
-other way, the stricter BigCommerce rule would have quietly dropped imported
-members at cutover. The tolerance for a blank status stays because it costs
-nothing and the measurement speaks for the rows that exist today rather than
-for every row that ever will.
+In practice none has one: every row in the old system's database carries a
+status, checked against that database directly before the import. The
+tolerance stays because it costs nothing.
 
 That is the opposite shape to the BigCommerce rule, which counts an order only
 on a positively paid status, and the difference is deliberate. Squarespace's
