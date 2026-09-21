@@ -104,6 +104,7 @@ const WEBHOOK_DESTINATION = "https://card.losverd.es/bigcommerce/order-webhook";
 interface RemoteState {
   classStatus: number;
   storeStatus: number;
+  ordersStatus: number;
   hooksStatus: number;
   hooks: unknown[];
 }
@@ -125,6 +126,8 @@ function mockRemotes() {
     if (url === GOOGLE_OAUTH_TOKEN_URL) return Response.json({ access_token: "token" });
     if (url.startsWith(`${GOOGLE_WALLET_API}/genericClass`))
       return new Response("{}", { status: remote.classStatus });
+    if (url.endsWith("/v2/orders/count"))
+      return new Response(JSON.stringify({ count: 1234 }), { status: remote.ordersStatus });
     if (url.endsWith("/v2/store"))
       return new Response(JSON.stringify({ name: "Los Verdes", domain: "shop.example" }), {
         status: remote.storeStatus,
@@ -169,6 +172,7 @@ async function configureHealthyEnvironment() {
   remote = {
     classStatus: 200,
     storeStatus: 200,
+    ordersStatus: 200,
     hooksStatus: 200,
     hooks: [
       {
@@ -346,11 +350,34 @@ describe("BigCommerce", () => {
   it("names the store the token opens, so a misaimed environment shows up", async () => {
     const result = find(await check(), "Access token");
     expect(result.status).toBe("ok");
-    expect(result.detail).toContain("shop.example");
+    expect(result.detail).toContain("Los Verdes");
+    expect(result.detail).toContain("1234");
+  });
+
+  it("passes a token scoped to orders but not to the store's own details", async () => {
+    // The shape a correctly-scoped production token actually has. Reading
+    // orders is all this Worker ever does; `/v2/store` needs BigCommerce's
+    // separate "Information & Settings" scope, and probing it for the verdict
+    // reported a working token as broken while the webhook tooling, on the
+    // same token, was succeeding.
+    remote.storeStatus = 403;
+
+    const result = find(await check(), "Access token");
+
+    expect(result.status).toBe("ok");
+    expect(result.detail).not.toContain("Los Verdes");
+    expect(result.detail).toContain("1234");
+  });
+
+  it("fails when the token cannot read orders, which is all it is for", async () => {
+    remote.ordersStatus = 403;
+    const result = find(await check(), "Access token");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("Orders read scope");
   });
 
   it("fails on a rejected token", async () => {
-    remote.storeStatus = 401;
+    remote.ordersStatus = 401;
     expect(find(await check(), "Access token").status).toBe("fail");
   });
 

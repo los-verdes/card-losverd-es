@@ -5,6 +5,12 @@ account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
 default:
     @just --list
 
+# `--dir` and `--out` below are real options (`[arg(..., long)]`, just 1.46+).
+# Every other parameter is positional, which is what `just --list` shows but
+# not what its `dir=".apple-pass-cert"` rendering looks like: written that way
+# on the command line it is a value, not an assignment, and a directory of
+# that name appears in the repository root.
+
 # Install dependencies
 install:
     npm install
@@ -88,6 +94,12 @@ worker_secrets_item := "lv-card-losverd-es-worker-"
 
 # Rotating a secret = edit it in 1Password, then push just that one, e.g.
 # `just secrets-push staging AUTH_SECRET`. Uploads in a single deploy.
+#
+# Leading and trailing whitespace is trimmed on the way through, and the
+# names it was trimmed from are printed. The exception is a value used as key
+# material, where trimming would change the key rather than tidy it: those are
+# refused instead, and named. See SIGNING_KEY_SECRETS in
+# scripts/worker-secrets.mjs.
 # Push Worker secrets from 1Password (all with values, or only NAMES)
 secrets-push env *names:
     payload="$(op item get "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" --reveal --format json | node scripts/worker-secrets.mjs {{ env }} {{ names }})" && printf '%s' "$payload" | npx wrangler secret bulk {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
@@ -149,10 +161,12 @@ google-wallet-check env *flags:
 # and the chain, stores all three PEMs in 1Password, reads them back to
 # confirm, pushes them, and deletes the local copies.
 # Generate a private key and CSR for a new Apple pass certificate
+[arg("dir", long)]
 apple-pass-cert-csr dir=".apple-pass-cert":
     node scripts/apple-pass-cert.mjs csr --dir {{ dir }}
 
 # Install the .cer Apple returned: verify it, store it, push it
+[arg("dir", long)]
 apple-pass-cert-install env cer dir=".apple-pass-cert":
     node scripts/apple-pass-cert.mjs install {{ cer }} --dir {{ dir }} --env {{ env }}
     op item edit "{{ worker_secrets_item }}{{ env }}" --vault "{{ op_vault }}" "APPLE_PASS_CERT_PEM[password]=$(cat {{ dir }}/pass-cert.pem)" "APPLE_PASS_KEY_PEM[password]=$(cat {{ dir }}/pass-key.pem)" "APPLE_WWDR_CERT_PEM[password]=$(cat {{ dir }}/wwdr.pem)" > /dev/null
@@ -227,6 +241,7 @@ legacy-import-sql export_json out_sql:
 # Membership Committee to read and comment on. Upload the result to Drive, then
 # right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
 # the source of truth; re-run this and re-import whenever it changes.
+[arg("out", long)]
 provenance-gdoc out=".provenance-gdoc.md":
     node scripts/provenance-gdoc.mjs {{out}}
 
