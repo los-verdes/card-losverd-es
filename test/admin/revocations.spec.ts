@@ -60,7 +60,7 @@ function form(fields: Record<string, string>) {
   return { method: "POST" as const, body };
 }
 
-describe("the withdrawn and barred page", () => {
+describe("the revoked and expelled page", () => {
   it("says plainly when there is nothing on either list", async () => {
     // The ordinary state, and the one worth being unambiguous about: an
     // empty page should read as "nobody" rather than as a page that failed
@@ -69,11 +69,11 @@ describe("the withdrawn and barred page", () => {
 
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("No membership has been withdrawn");
-    expect(body).toContain("Nobody is barred");
+    expect(body).toContain("No membership has been revoked");
+    expect(body).toContain("Nobody has been expelled");
   });
 
-  it("lists a withdrawn card with its reason and who decided it", async () => {
+  it("lists a revoked card with its reason and who decided it", async () => {
     await revokeCard(env, CARD, "a recorded reason", ADMIN_ID);
 
     const body = await (await request()).text();
@@ -84,14 +84,14 @@ describe("the withdrawn and barred page", () => {
     expect(body).toContain("admin@example.com");
   });
 
-  it("lists a barred person, and whether they hold a membership", async () => {
+  it("lists an expelled person, and whether they hold a membership", async () => {
     await banPerson(env, EMAIL, "another reason", ADMIN_ID);
 
     const body = await (await request()).text();
 
     expect(body).toContain(EMAIL);
     expect(body).toContain("another reason");
-    expect(body).toContain("Barred from the group");
+    expect(body).toContain("Expelled from the group");
   });
 
   it("copes with a ban on somebody who has never bought anything", async () => {
@@ -103,7 +103,7 @@ describe("the withdrawn and barred page", () => {
     expect(await res.text()).toContain("stranger@example.com");
   });
 
-  it("restores a withdrawn membership", async () => {
+  it("restores a revoked membership", async () => {
     await revokeCard(env, CARD, null, ADMIN_ID);
 
     const res = await request(form({ member_id: CARD }));
@@ -123,13 +123,13 @@ describe("the withdrawn and barred page", () => {
     expect(await isBanned(env, EMAIL)).toBe(false);
   });
 
-  it("says so rather than pretending, when the card was not withdrawn", async () => {
+  it("says so rather than pretending, when the card has not been revoked", async () => {
     const res = await request(form({ member_id: CARD }));
 
     expect(res.headers.get("Location")).toContain("error=");
   });
 
-  it("says so rather than pretending, when the person was not barred", async () => {
+  it("says so rather than pretending, when the person has not been expelled", async () => {
     const res = await request(form({ action: "unban", email: EMAIL }));
 
     expect(res.headers.get("Location")).toContain("error=");
@@ -152,11 +152,11 @@ describe("the withdrawn and barred page", () => {
       "Membership restored",
     );
     expect(await (await request({ path: "/admin/revocations?saved=unbanned" })).text()).toContain(
-      "Ban lifted",
+      "Expulsion lifted",
     );
     expect(
-      await (await request({ path: "/admin/revocations?error=That+card+was+not+withdrawn." })).text(),
-    ).toContain("That card was not withdrawn.");
+      await (await request({ path: "/admin/revocations?error=That+card+has+not+been+revoked." })).text(),
+    ).toContain("That card has not been revoked.");
   });
 
   it("is admin-only, and never cached", async () => {

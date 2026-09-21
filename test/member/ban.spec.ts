@@ -61,7 +61,7 @@ async function getAs(path: string, userId: number | null = USER_ID) {
 }
 
 describe("barring somebody from the group", () => {
-  it("takes their membership away, like a withdrawn card does", async () => {
+  it("takes their membership away, like a revoked card does", async () => {
     await banPerson(env, EMAIL, "conduct", null);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
@@ -84,7 +84,7 @@ describe("barring somebody from the group", () => {
 
   it("tells them it is a decision rather than a fault", async () => {
     // The generic "that sign-in didn't complete, try again" invites exactly
-    // the wrong thing from somebody who has been barred.
+    // the wrong thing from somebody who has been expelled.
     const body = await (await getAs("/login?error=account-blocked", null)).text();
 
     expect(body).toContain("cannot sign in");
@@ -136,7 +136,7 @@ describe("barring somebody from the group", () => {
     expect((await activeMemberships(env.DB, "2026-06-01")).totalMembers).toBe(0);
   });
 
-  it("refuses to email a card to somebody barred", async () => {
+  it("refuses to email a card to somebody expelled", async () => {
     // Falls out of resolving the ban in one place rather than being handled
     // here, which is the point of resolving it there.
     await banPerson(env, EMAIL, null, null);
