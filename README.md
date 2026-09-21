@@ -91,7 +91,7 @@ Behind the routes:
 
 ## Data (D1)
 
-Schema lives in `src/db/migrations/` (applied automatically on deploy); `src/db/schema.sql` mirrors it for reading.
+Schema lives in `src/db/migrations/` (applied automatically on deploy). It was squashed into a single file before the legacy import; `just db-schema-compare <env>` checks an environment's database still matches what those migrations produce, which stops being automatic the moment one is squashed.
 
 | Table | Holds |
 | :--- | :--- |

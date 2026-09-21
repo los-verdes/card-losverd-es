@@ -90,6 +90,23 @@ populated before anyone is pointed at it.
    several of whose files exist only to correct earlier ones, and the cost of
    not doing it is that they stay.
 
+   **A squash is not finished until the databases are rebuilt.** A database
+   that ran the old files keeps the schema those files built, which is not
+   quite the schema the new one builds -- a column added by `ALTER TABLE`
+   sits at the end of the table, where a declared one sits where it is
+   written. Every query this project makes names its columns, so nothing
+   breaks; what is lost is being able to recreate the database from the
+   migrations, which is the thing the migrations are for.
+
+   So after squashing, for each environment: drop every table, apply the
+   migrations, and reload. `just db-schema-compare <env>` says whether it
+   worked, by building a throwaway database from the migrations and comparing
+   the two object by object. It exits non-zero while they differ, so it can
+   gate the step rather than be read and nodded at.
+
+   For production that reload is the legacy import below, which is why the
+   export file has to still be around.
+
 7. **Run the legacy Postgres export and import**
    ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
    Rehearse the load rather than trying to get it right once: until cutover
