@@ -205,7 +205,10 @@ EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
 # Staging's own Turnstile widget, bound to the workers.dev hostname above.
 TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
-CARD_EMAIL_NEW_ORDERS_SINCE = ""
+# On, so the new-order email runs here ahead of production. The allowlist
+# above keeps it to test mailboxes; the date is the day it was switched on,
+# as the production comment requires.
+CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
 ENVIRONMENT = "staging"
@@ -227,17 +230,14 @@ queue = "etl-sync-dlq-staging"
 max_batch_size = 10
 max_retries = 0
 
-# Cron triggers, staging only (decided 2026-09-19): the scheduled BigCommerce
-# resync (src/scheduled.ts maps the schedule to `sync_subscriptions_etl`) runs
-# here first, against the sandbox store, so the cron -> queue -> resync path
-# is exercised before production. Deliberately only that one job:
-#   - "0 */6 * * *" (Slack members) runs here since staging got its own Slack
-#     credentials (2026-09-19, #133) -- it previously held production's bot
-#     token, which would have read the real membership roll into a database
-#     meant for test data;
-#   - "30 * * * *" (customers) and "30 */12 * * *" (MiniBC) are stubs.
-# A resync never emails anyone (see src/email/newOrder.ts). Production gets
-# its own [triggers] block once its secrets are set, with the same schedules.
+# Cron triggers, staging only for now: every scheduled job that does
+# something runs here first, so the cron -> queue -> job path soaks before
+# production gets the same block. Two mapped schedules are left out because
+# they would only log that they are not implemented: "30 * * * *" (customers)
+# and "30 */12 * * *" (MiniBC, which docs/membership-card-provenance.md
+# places after cutover). A resync never emails anyone (src/email/newOrder.ts).
+# The Slack sync reads staging's own Slack credentials (#133), never
+# production's, so the real membership roll stays out of staging.
 [env.staging.triggers]
 # "0 */6 * * *" the Slack members sync; "15 */6 * * *" the BigCommerce resync;
 # "0 9 * * 1" the weekly readiness check, which posts to Slack only when a
