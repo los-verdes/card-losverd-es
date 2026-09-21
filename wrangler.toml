@@ -1,4 +1,4 @@
-name = "card-losverd-es"
+name = "card-losverd-es-production"
 main = "src/index.ts"
 compatibility_date = "2026-09-15"
 compatibility_flags = ["nodejs_compat"]
