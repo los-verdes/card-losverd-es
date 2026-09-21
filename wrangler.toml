@@ -110,19 +110,12 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # rather than inheriting one from a default -- an environment that loses this
 # var sends to nobody.
 #
-# Empty until cutover, on purpose. Production now holds every member's real
-# address, and the steps left before the flip -- reloading the legacy import,
-# a full resync, a squash and reload -- each touch every member at once. The
-# three guards in src/email/newOrder.ts already stop a bulk send, and any one
-# of them is sufficient; this is the fourth, and the only one that does not
-# depend on the send path being reached by the route we expect.
-#
-# **Restore it to `*` at the flip.** Until then /email-card answers a member
-# with silence, which is fine while the legacy app is still serving them and
-# a broken service the moment it is not. `/admin/preflight` fails on an empty
-# list once this Worker is serving PUBLIC_BASE_URL, so the mistake is caught
-# rather than remembered.
-EMAIL_RECIPIENT_ALLOWLIST = ""
+# `*`: production may email any member. It was empty through the cutover's
+# bulk steps -- reloading the legacy import, the full resync -- as a fourth
+# guard beside the three in src/email/newOrder.ts, and opened once the full
+# resync had finished. Emptying it again stops every email this environment
+# sends, and /admin/preflight then fails, since members are being served.
+EMAIL_RECIPIENT_ALLOWLIST = "*"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 # A Turnstile site key is public -- it's rendered into the /email-card form --
