@@ -27,19 +27,43 @@ export interface LoginPageProps {
   providers: string[];
   /** Set when the member has just been sent back here by a sign-in that didn't complete. */
   failed?: boolean;
+  /**
+   * Set when the account is barred from the group. Distinguished from
+   * `failed` because the generic message invites trying again, which is
+   * precisely the wrong advice here and leaves somebody retrying a thing
+   * that will never work.
+   */
+  blocked?: boolean;
 }
 
-export const LoginPage: FC<LoginPageProps> = ({ signInHref, providers, failed }) => (
+export const LoginPage: FC<LoginPageProps> = ({
+  signInHref,
+  providers,
+  failed,
+  blocked,
+}) => (
   <Page title="Your Membership Card">
     <h1>Los Verdes Membership Card</h1>
 
-    {failed && (
+    {blocked ? (
+      // Said plainly, and without an apology or an explanation that is not
+      // ours to give. Somebody in this position needs to know it is a
+      // decision rather than a fault, and who to take it up with.
+      <p style="color: var(--danger)">
+        This account cannot sign in. That is a decision of the Los Verdes
+        Membership Committee rather than a problem with the site, and{" "}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> can put you in
+        touch with them.
+      </p>
+    ) : (
+      failed && (
       // Arriving back here having just signed in successfully elsewhere is
       // baffling without this: it reads as though nothing happened.
       <p style="color: var(--danger)">
         That sign-in didn't complete. Trying again often works. If it doesn't,
         you can still have your card emailed to you below.
       </p>
+      )
     )}
 
     {providers.length > 0 ? (

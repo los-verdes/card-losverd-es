@@ -33,6 +33,7 @@ import {
   restoreCard,
   revokeCard,
 } from "../member/revocation";
+import { MAX_BAN_NOTE_LENGTH, banPerson, isBanned, liftBan } from "../member/ban";
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
@@ -94,7 +95,8 @@ const Summary: FC<{
   footprint: EmailFootprint;
   orders: MemberOrder[];
   nameSetBy: string | null;
-}> = ({ member, footprint, orders, nameSetBy }) => (
+  banned: boolean;
+}> = ({ member, footprint, orders, nameSetBy, banned }) => (
   <>
     <h2>{cardNameText(member)}</h2>
     {member.display_name && (
@@ -220,6 +222,47 @@ const Summary: FC<{
         </form>
       </>
     )}
+    <h3>Barred from the group</h3>
+    {banned ? (
+      <>
+        <p class="danger">
+          <strong>This person is barred from Los Verdes.</strong> They cannot sign
+          in, any session they already had has stopped working, and their
+          membership is suppressed for as long as the ban stands. Lifting it
+          restores the membership by itself.
+        </p>
+        <form method="post" action={MEMBERS_PATH}>
+          <input type="hidden" name="email" value={member.email} />
+          <input type="hidden" name="action" value="unban" />
+          <button type="submit">Lift this ban</button>
+        </form>
+      </>
+    ) : (
+      <>
+        <p>
+          Heavier than withdrawing a card, and rarer. A ban stops them signing in
+          at all as well as taking the membership away, and it is indefinite --
+          there is no date on it, and lifting it is a decision somebody has to
+          make. It follows the address, so it covers a membership bought under
+          it later, and does not follow them to a different one.
+        </p>
+        <form method="post" action={MEMBERS_PATH}>
+          <input type="hidden" name="email" value={member.email} />
+          <input type="hidden" name="action" value="ban" />
+          <label for="ban_note">
+            Why (kept, because whoever is asked about this later will not be you)
+          </label>
+          <input
+            id="ban_note"
+            name="ban_note"
+            type="text"
+            maxlength={MAX_BAN_NOTE_LENGTH}
+            autocomplete="off"
+          />
+          <button type="submit">Bar this person from the group</button>
+        </form>
+      </>
+    )}
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
@@ -271,13 +314,14 @@ members.get("/", async (c) => {
     if (!member) notFound = "No membership carries that card number.";
   }
 
-  const [footprint, orders, override] = member
+  const [footprint, orders, override, banned] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
         getDisplayName(c.env, member.email),
+        isBanned(c.env, member.email),
       ])
-    : [null, [], null];
+    : [null, [], null, false];
 
   return c.html(
     <AdminPage title="Find a member">
@@ -292,6 +336,17 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "revoked" && (
         <p style="color: var(--success)">
           Membership withdrawn. Their passes have been told.
+        </p>
+      )}
+      {c.req.query("saved") === "banned" && (
+        <p style="color: var(--success)">
+          Barred from the group. They can no longer sign in, and their membership
+          is suppressed.
+        </p>
+      )}
+      {c.req.query("saved") === "unbanned" && (
+        <p style="color: var(--success)">
+          Ban lifted. Any membership it was suppressing is back.
         </p>
       )}
       {c.req.query("saved") === "restored" && (
@@ -312,6 +367,7 @@ members.get("/", async (c) => {
           footprint={footprint}
           orders={orders}
           nameSetBy={override?.source ?? null}
+          banned={banned}
         />
       )}
     </AdminPage>,
@@ -330,6 +386,21 @@ members.post("/", csrf(), async (c) => {
     c.redirect(`${MEMBERS_PATH}?${new URLSearchParams({ q: email, ...params })}`, 303);
 
   if (!email) return back({ error: "No member to set a name for." });
+
+  if (form.action === "ban" || form.action === "unban") {
+    if (form.action === "unban") {
+      return (await liftBan(c.env, email))
+        ? back({ saved: "unbanned" })
+        : back({ error: "That person was not barred." });
+    }
+    const note =
+      typeof form.ban_note === "string" && form.ban_note.trim() !== ""
+        ? form.ban_note.trim()
+        : null;
+    return (await banPerson(c.env, email, note, c.get("session").userId))
+      ? back({ saved: "banned" })
+      : back({ error: "That person was already barred." });
+  }
 
   if (form.action === "revoke" || form.action === "restore") {
     const member = await getMemberByEmail(c.env, email);

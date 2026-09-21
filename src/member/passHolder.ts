@@ -51,12 +51,14 @@ export async function lookupPassHolder(
   const member = await env.DB.prepare(
     // Joined rather than selected from `members` alone: the verification page
     // must show the same name as the card it is verifying (migration 0014),
-    // and must not call a withdrawn membership merely expired (0016).
+    // and must not call a withdrawn membership merely expired (0016) -- which
+    // a ban produces as surely as a withdrawn card does (0017).
     `SELECT m.first_name, m.last_name, m.status, m.expiration_date, d.display_name,
-            r.member_id AS revoked_card
+            COALESCE(r.member_id, b.email) AS revoked_card
        FROM members m
             LEFT JOIN member_display_names d ON d.email = m.email
             LEFT JOIN revoked_cards r ON r.member_id = m.member_id
+            LEFT JOIN banned_people b ON b.email = m.email
       WHERE m.email = ?`,
   )
     .bind(email)

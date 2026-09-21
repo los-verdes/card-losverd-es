@@ -77,6 +77,15 @@ CREATE TABLE IF NOT EXISTS revoked_cards (
     revoked_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
+-- People barred from the group (see migrations/0017). Indefinite by design;
+-- lifted by hand. Stops them signing in, and revokes any membership they hold.
+CREATE TABLE IF NOT EXISTS banned_people (
+    email TEXT PRIMARY KEY,                   -- lower-cased, matching members.email
+    note TEXT,
+    banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    banned_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
 -- Login Identities (see migrations/0004_member_auth.sql)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
