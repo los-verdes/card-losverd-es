@@ -56,7 +56,9 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await env.DB.exec("DELETE FROM audit_log");
-  await env.DB.exec("DELETE FROM members");
+// Before `members`, which it references.
+  await env.DB.exec("DELETE FROM revoked_cards");
+    await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM rate_limit_counters");
   const listed = await env.ASSETS.list();
   await env.ASSETS.delete(listed.objects.map((o) => o.key));
@@ -64,8 +66,8 @@ afterEach(async () => {
 
 async function insertMember(memberId: string, email: string, expirationDate: string) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'active', ?, '2021-07-15', 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', ?, ?, '2021-07-15', 'token', 1)`,
   )
     .bind(memberId, email, expirationDate)
     .run();
@@ -233,7 +235,7 @@ describe("POST /email-card", () => {
     });
 
     it("treats a revoked member as a non-member", async () => {
-      await env.DB.exec("UPDATE members SET status = 'revoked' WHERE member_id = 'BC-1'");
+      await env.DB.exec("INSERT INTO revoked_cards (member_id) VALUES ('BC-1')");
       mockUpstreams();
 
       expect((await submitEmail("jane@example.com")).body).toContain("Check your email");

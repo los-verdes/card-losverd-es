@@ -16,9 +16,9 @@ const ADMIN_ID = 1;
 const FALLBACK = { firstName: "Test", lastName: "Member" };
 
 async function member(email: string) {
-  return env.DB.prepare("SELECT member_id, first_name, last_name, status, expiration_date FROM members WHERE email = ?")
+  return env.DB.prepare("SELECT member_id, first_name, last_name, expiration_date FROM members WHERE email = ?")
     .bind(email)
-    .first<{ member_id: string; first_name: string; last_name: string; status: string; expiration_date: string | null }>();
+    .first<{ member_id: string; first_name: string; last_name: string; expiration_date: string | null }>();
 }
 
 async function order(id: string) {
@@ -34,6 +34,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
+  // Before `members`, which it references.
+  await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM slack_users");
   await env.DB.exec("DELETE FROM users");
@@ -73,7 +75,7 @@ describe("emailFootprint", () => {
     const footprint = await emailFootprint(env.DB, "someone@example.com");
 
     expect(footprint).toMatchObject({
-      member: { status: "active", expiration_date: "2099-01-15" },
+      member: { revoked: 0, expiration_date: "2099-01-15" },
       memberOrders: { total: 2, counted: 1 },
       placedOrders: 3,
       login: { is_admin: 0 },
@@ -83,6 +85,14 @@ describe("emailFootprint", () => {
 });
 
 describe("attributeOrder", () => {
+  it("says when the address's card is revoked, so the page cannot call it current", async () => {
+    await insertOrder({ id: "1", email: "someone@example.com", created: "2098-01-15T00:00:00Z" });
+    const refreshed = await refreshMemberFromOrders(env, "someone@example.com", FALLBACK);
+    await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES (?)").bind(refreshed!.memberId).run();
+
+    expect((await emailFootprint(env.DB, "someone@example.com")).member).toMatchObject({ revoked: 1 });
+  });
+
   it("moves a gifted order to its recipient, leaving the buyer their own membership", async () => {
     await insertOrder({ id: "1", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
     await insertOrder({ id: "2", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-06-15T00:00:00Z" });
@@ -99,7 +109,6 @@ describe("attributeOrder", () => {
     expect(await member("gift.recipient@example.com")).toMatchObject({
       member_id: result.current?.memberId,
       expiration_date: "2099-06-15",
-      status: "active",
     });
     expect((await order("2")).member_email).toBe("gift.recipient@example.com");
     expect(await listAttributions(env.DB, "2")).toEqual([

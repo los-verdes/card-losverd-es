@@ -26,7 +26,6 @@ interface MemberRow {
   first_name: string;
   last_name: string;
   email: string;
-  status: string;
   expiration_date: string | null;
   member_since: string | null;
   auth_token: string;
@@ -163,8 +162,6 @@ async function setOrderStatus(orderId: string, status: string) {
 }
 
 describe("deriveMembershipState", () => {
-  const NOW = new Date("2026-09-16T12:00:00.000Z");
-
   function counted(
     createdOn: string,
     overrides: Partial<CountedMembershipOrder> = {},
@@ -180,9 +177,8 @@ describe("deriveMembershipState", () => {
     };
   }
 
-  it("is expired, with no dates or name, when no order counts", () => {
-    expect(deriveMembershipState([], NOW)).toEqual({
-      status: "expired",
+  it("has no dates or name when no order counts", () => {
+    expect(deriveMembershipState([])).toEqual({
       expirationDate: null,
       memberSince: null,
       firstName: null,
@@ -191,8 +187,7 @@ describe("deriveMembershipState", () => {
   });
 
   it("takes a single order's dates and billing name", () => {
-    expect(deriveMembershipState([counted("2026-01-15")], NOW)).toEqual({
-      status: "active",
+    expect(deriveMembershipState([counted("2026-01-15")])).toEqual({
       expirationDate: "2027-01-15",
       memberSince: "2026-01-15",
       firstName: "Jane",
@@ -202,12 +197,10 @@ describe("deriveMembershipState", () => {
 
   it("uses the earliest order for member_since and the latest expiry, whatever order the rows come in", () => {
     const state = deriveMembershipState(
-      [counted("2025-01-15"), counted("2016-03-01"), counted("2026-01-15"), counted("2020-06-01")],
-      NOW,
+      [counted("2025-01-15"), counted("2016-03-01"), counted("2026-01-15"), counted("2020-06-01")]
     );
     expect(state.memberSince).toBe("2016-03-01");
     expect(state.expirationDate).toBe("2027-01-15");
-    expect(state.status).toBe("active");
   });
 
   it("takes the name from the latest order", () => {
@@ -215,23 +208,20 @@ describe("deriveMembershipState", () => {
       [
         counted("2026-01-15", { last_name: "Doe-Smith" }),
         counted("2025-01-15", { first_name: "Janet" }),
-      ],
-      NOW,
+      ]
     );
     expect(state.firstName).toBe("Jane");
     expect(state.lastName).toBe("Doe-Smith");
   });
 
-  it("is expired once even the latest order's year has passed", () => {
-    const state = deriveMembershipState([counted("2024-01-15"), counted("2025-01-15")], NOW);
-    expect(state.status).toBe("expired");
+  it("keeps the latest order's expiry even once it has passed, leaving \"expired\" to whoever asks", () => {
+    const state = deriveMembershipState([counted("2024-01-15"), counted("2025-01-15")]);
     expect(state.expirationDate).toBe("2026-01-15");
   });
 
   it("leaves the name null when the latest order doesn't say (e.g. a Squarespace-era row)", () => {
     const state = deriveMembershipState(
-      [counted("2016-03-01", { sku: null, first_name: null, last_name: "" }), counted("2015-03-01", { sku: "SQ-UNKNOWN" })],
-      NOW,
+      [counted("2016-03-01", { sku: null, first_name: null, last_name: "" }), counted("2015-03-01", { sku: "SQ-UNKNOWN" })]
     );
     expect(state.firstName).toBeNull();
     expect(state.lastName).toBeNull();
@@ -251,20 +241,18 @@ describe("refreshMemberFromOrders", () => {
     email: string,
     fields: Partial<{
       firstName: string;
-      status: string;
       expirationDate: string | null;
       memberSince: string | null;
     }> = {},
   ) {
     await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-       VALUES (?, ?, 'Doe', ?, ?, ?, ?, 'pre-existing-token', ?)`,
+      `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+       VALUES (?, ?, 'Doe', ?, ?, ?, 'pre-existing-token', ?)`,
     )
       .bind(
         memberId,
         fields.firstName ?? "Jane",
         email,
-        fields.status ?? "active",
         fields.expirationDate === undefined ? "2099-01-15" : fields.expirationDate,
         fields.memberSince === undefined ? "2098-01-15" : fields.memberSince,
         Date.now(),
@@ -284,7 +272,6 @@ describe("refreshMemberFromOrders", () => {
       member_id: result?.memberId,
       first_name: "Jane",
       last_name: "Doe-Smith",
-      status: "active",
       expiration_date: "2099-01-15",
       member_since: "2090-01-15",
     });
@@ -399,7 +386,6 @@ describe("refreshMemberFromOrders", () => {
       member_id: before?.member_id,
       auth_token: before?.auth_token,
       first_name: "Jane",
-      status: "expired",
       expiration_date: null,
       member_since: null,
     });
@@ -442,15 +428,6 @@ describe("refreshMemberFromOrders", () => {
       first_name: "Fallback",
       last_name: "Name",
     });
-  });
-
-  it("re-derives a revoked member's status like any other (revocation isn't sticky)", async () => {
-    await insertMember("LV-10023", "jane.doe@example.com", { status: "revoked" });
-    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
-
-    await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
-
-    expect((await getMemberByEmail("jane.doe@example.com"))?.status).toBe("active");
   });
 
   it("gives each new member their own id, even when their orders share a BigCommerce customer id", async () => {
@@ -639,7 +616,7 @@ describe("syncBigCommerceOrder", () => {
     expect(await countMembers()).toBe(0);
   });
 
-  it("computes status=expired for an order whose one-year membership period has already lapsed", async () => {
+  it("records the expiry of an order whose one-year membership period has already lapsed", async () => {
     const order = makeOrder({ id: 3003, date_created: "2020-01-01T00:00:00.000Z" });
     const products = makeProducts();
     mockBigCommerceOrderFetch(order, products);
@@ -647,7 +624,6 @@ describe("syncBigCommerceOrder", () => {
     await syncBigCommerceOrder(env, "store123", order.id);
 
     const member = await getMemberByEmail("jane.doe@example.com");
-    expect(member?.status).toBe("expired");
     // 2020 is a leap year, so +365 days from Jan 1 lands on Dec 31, not Jan 1.
     expect(member?.expiration_date).toBe("2020-12-31");
   });
@@ -1030,7 +1006,6 @@ describe("pass-change detection and update pushes", () => {
     ["last name", "last_name = 'Doe-Smith'"],
     ["expiration", "expiration_date = '2000-01-01'"],
     ["member_since", "member_since = '2000-01-01'"],
-    ["status", "status = 'expired'"],
   ])("reports a change when the stored %s differs from the history, and bumps last_updated_at", async (_label, staleField) => {
     await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
     await refresh();

@@ -33,8 +33,8 @@ afterEach(async () => {
 
 async function insertMember(memberId = "BC-1", email = "jane@example.com") {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-01-15', '2024-01-15', 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, 'Jane', 'Doe', ?, '2099-01-15', '2024-01-15', 'token', 1)`,
   )
     .bind(memberId, email)
     .run();
@@ -62,35 +62,34 @@ describe("member lookups", () => {
 });
 
 describe("isMembershipCurrent", () => {
-  it.each<[string, Pick<MemberRecord, "status" | "expiration_date">, boolean]>([
-    ["unexpired", { status: "active", expiration_date: "2026-09-16" }, true],
-    ["stale 'expired' status but renewed date", { status: "expired", expiration_date: "2027-01-01" }, true],
-    ["lapsed despite 'active' status", { status: "active", expiration_date: "2026-09-15" }, false],
-    ["revoked", { status: "revoked", expiration_date: "2099-01-01" }, false],
-    ["no expiration on record", { status: "active", expiration_date: null }, false],
+  it.each<[string, Pick<MemberRecord, "revoked" | "expiration_date">, boolean]>([
+    ["good through today", { revoked: 0, expiration_date: "2026-09-16" }, true],
+    ["good through a later date", { revoked: 0, expiration_date: "2027-01-01" }, true],
+    ["lapsed yesterday", { revoked: 0, expiration_date: "2026-09-15" }, false],
+    ["revoked", { revoked: 1, expiration_date: "2099-01-01" }, false],
+    ["no expiration on record", { revoked: 0, expiration_date: null }, false],
   ])("%s -> %s", (_label, member, expected) => {
     expect(isMembershipCurrent(member, "2026-09-16")).toBe(expected);
   });
 
   it("defaults to today", () => {
-    expect(isMembershipCurrent({ status: "active", expiration_date: "2099-01-01" })).toBe(true);
+    expect(isMembershipCurrent({ revoked: 0, expiration_date: "2099-01-01" })).toBe(true);
   });
 });
 
 describe("effectiveStatus", () => {
-  it.each<[string, Pick<MemberRecord, "status" | "expiration_date">, string]>([
-    ["current", { status: "active", expiration_date: "2026-09-16" }, "active"],
-    // The case this exists for: nothing has synced since the date passed.
-    ["lapsed while still stored as active", { status: "active", expiration_date: "2026-09-15" }, "expired"],
-    ["renewed but still stored as expired", { status: "expired", expiration_date: "2027-01-01" }, "active"],
-    ["revoked, whatever the date says", { status: "revoked", expiration_date: "2099-01-01" }, "revoked"],
-    ["no expiration on record", { status: "active", expiration_date: null }, "expired"],
+  it.each<[string, Pick<MemberRecord, "revoked" | "expiration_date">, string]>([
+    ["current", { revoked: 0, expiration_date: "2026-09-16" }, "active"],
+    // The case this exists for: a date passed, and no sync was there to notice.
+    ["lapsed yesterday", { revoked: 0, expiration_date: "2026-09-15" }, "expired"],
+    ["revoked, whatever the date says", { revoked: 1, expiration_date: "2099-01-01" }, "revoked"],
+    ["no expiration on record", { revoked: 0, expiration_date: null }, "expired"],
   ])("%s -> %s", (_label, member, expected) => {
     expect(effectiveStatus(member, "2026-09-16")).toBe(expected);
   });
 
   it("defaults to today", () => {
-    expect(effectiveStatus({ status: "active", expiration_date: "2099-01-01" })).toBe("active");
+    expect(effectiveStatus({ revoked: 0, expiration_date: "2099-01-01" })).toBe("active");
   });
 });
 

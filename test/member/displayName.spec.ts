@@ -22,9 +22,9 @@ beforeEach(async () => {
     .bind(USER_ID, EMAIL)
     .run();
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status,
+    `INSERT INTO members (member_id, first_name, last_name, email,
        expiration_date, member_since, user_id, auth_token, last_updated_at)
-     VALUES ('LV-1', 'Jane', 'Doe', ?, 'active', '2099-03-04', '2021-07-15', ?, 'token', 1)`,
+     VALUES ('LV-1', 'Jane', 'Doe', ?, '2099-03-04', '2021-07-15', ?, 'token', 1)`,
   )
     .bind(EMAIL, USER_ID)
     .run();

@@ -161,9 +161,12 @@ export const requireAdmin = every(
  *
  * Membership rows are matched by `members.user_id` *or* email, since
  * `members` rows are created by BigCommerce order sync, usually before any
- * login has linked them. Checks `expiration_date` directly rather than
- * trusting `status = 'active'`, which is only recomputed when a sync
- * touches the row.
+ * login has linked them. A membership counts when it is good through today
+ * and not revoked -- the rule `MEMBER_SELECT` resolves
+ * (src/member/artifacts.ts), restated here because this asks "is there one"
+ * across two ways of matching rather than loading a member. Somebody
+ * expelled never gets this far: `requireAuth` has already refused them. A
+ * new reason a membership stops counting belongs in both places.
  */
 export const requireActiveMembership = every(
   requireAuth,
@@ -172,8 +175,8 @@ export const requireActiveMembership = every(
     const membership = await c.env.DB.prepare(
       `SELECT 1 FROM members m JOIN users u ON u.id = ?
        WHERE (m.user_id = u.id OR m.email = u.email)
-         AND m.status != 'revoked'
          AND m.expiration_date >= ?
+         AND NOT EXISTS (SELECT 1 FROM revoked_cards r WHERE r.member_id = m.member_id)
        LIMIT 1`,
     )
       .bind(c.get("session").userId, today)

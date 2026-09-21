@@ -31,7 +31,14 @@ export interface MemberRecord {
   email: string;
   first_name: string;
   last_name: string;
-  status: "active" | "expired" | "revoked";
+  /**
+   * 1 when the membership is revoked or its holder expelled. All the
+   * database can say about standing: whether an unrevoked membership is
+   * active or expired depends on today's date, which is `effectiveStatus()`'s
+   * to answer.
+   */
+  revoked: 0 | 1;
+  /** Null when revoked: there is no "good through" that means anything. */
   expiration_date: string | null;
   /** Effective value: a `member_since_overrides` row wins. */
   member_since: string | null;
@@ -50,11 +57,10 @@ export interface MemberRecord {
  * One member, with everything that overrides what the order sync derived.
  *
  * A revocation is resolved here rather than by the callers, which is what
- * makes the rest of this cheap: `revoked` was already a legal `status` and
- * was already honoured by the access checks, the Apple pass's status field,
- * the Google object's state and the admin screens. It simply had no way to
- * arrive. Resolving it in one `SELECT` means every one of those keeps
- * working without being told.
+ * makes the rest of this cheap: the access checks, the Apple pass's status
+ * field, the Google object's state and the admin screens all read `revoked`
+ * off this one `SELECT`, so none of them has to be told where a revocation
+ * is kept.
  *
  * The expiry is dropped with it, so a revoked membership reads as expired
  * everywhere that asks a date rather than a status -- there is no longer a
@@ -67,7 +73,7 @@ export interface MemberRecord {
  * then correctly leaves the other standing.
  */
 const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
-         CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN 'revoked' ELSE m.status END AS status,
+         (r.member_id IS NOT NULL OR b.email IS NOT NULL) AS revoked,
          CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
          d.display_name,
@@ -120,33 +126,27 @@ export async function getMemberByEmail(
 }
 
 /**
- * Whether a membership is current. Checks `expiration_date` directly rather
- * than trusting `status = 'active'`, which is only recomputed when a sync
- * touches the row.
+ * Whether a membership is current: not revoked, and good through today or
+ * later. Asked of the date every time rather than stored, since a stored
+ * answer goes stale the day after it is written.
  */
 export function isMembershipCurrent(
-  member: Pick<MemberRecord, "status" | "expiration_date">,
+  member: Pick<MemberRecord, "revoked" | "expiration_date">,
   today: string = new Date().toISOString().slice(0, 10),
 ): boolean {
   return (
-    member.status !== "revoked" &&
+    !member.revoked &&
     member.expiration_date !== null &&
     member.expiration_date >= today
   );
 }
 
 /**
- * The status a pass should carry, which is not always the one stored.
+ * The status a pass should carry, worked out at the moment it is built.
  *
- * `members.status` only moves when a sync touches the row, so a membership
- * that lapsed with no order activity keeps saying `active` indefinitely. The
- * access checks never trusted it (see `isMembershipCurrent`), but the passes
- * did: the Apple pass's status field and the Google object's `state` both
- * came straight from the column, so a rebuilt pass could show "active" for a
- * membership that had expired months earlier.
- *
- * Revocation is a stored decision and is left alone; the rest is derived from
- * the expiry date, which is what every other reader already does.
+ * Nothing stores this. Revocation is a stored decision and arrives as
+ * `revoked`; the rest is derived from the expiry date against `today`, which
+ * is a parameter so a test can pin it.
  *
  * Note the limit of this: a pass already on a device or cached in R2 is not
  * rebuilt just because a date passed. It fixes what a pass says when it *is*
@@ -154,10 +154,10 @@ export function isMembershipCurrent(
  * reaching out to correct one already issued.
  */
 export function effectiveStatus(
-  member: Pick<MemberRecord, "status" | "expiration_date">,
+  member: Pick<MemberRecord, "revoked" | "expiration_date">,
   today: string = new Date().toISOString().slice(0, 10),
-): MemberRecord["status"] {
-  if (member.status === "revoked") {
+): "active" | "expired" | "revoked" {
+  if (member.revoked) {
     return "revoked";
   }
   return isMembershipCurrent(member, today) ? "active" : "expired";

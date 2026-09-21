@@ -16,7 +16,6 @@ const BASE = "https://example.com/passkit";
 interface SeedMemberOptions {
   memberId?: string;
   authToken?: string;
-  status?: "active" | "expired" | "revoked";
   expirationDate?: string;
   lastUpdatedAt?: number;
 }
@@ -25,15 +24,14 @@ async function seedMember(options: SeedMemberOptions = {}) {
   const memberId = options.memberId ?? "LV-10023";
   const authToken = options.authToken ?? "test-auth-token";
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       memberId,
       "Jane",
       "Doe",
       `${memberId.toLowerCase()}@example.com`,
-      options.status ?? "active",
       options.expirationDate ?? "2027-01-15",
       "2021-07-15",
       authToken,
@@ -278,13 +276,11 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
   });
 
   it("marks a lapsed membership expired even when nothing has synced since", async () => {
-    // members.status only moves when a sync touches the row, so a membership
-    // that lapsed quietly still reads "active" there. The pass Apple fetches
-    // should not repeat that.
+    // Nothing stores "expired": a membership lapses because a date passes,
+    // with no sync to notice. The pass Apple fetches works it out when built.
     await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({
       memberId: "LV-30007",
-      status: "active",
       expirationDate: "2020-01-15",
     });
 

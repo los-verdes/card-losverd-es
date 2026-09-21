@@ -405,9 +405,10 @@ disagree about the same order.
 card's expiry date is today or later and the record has not been revoked
 (`isMembershipCurrent()` in `src/member/artifacts.ts`). Every gate that
 matters — access to the member portal, emailing a card, the QR verification
-page — checks the expiry date directly rather than trusting a stored
-active/expired label, because that label is only recalculated when an order
-sync happens to touch the record.
+page — asks that question of the expiry date at the moment it needs the
+answer. No active/expired label is stored anywhere: a membership lapses
+because a date passes, with no order sync there to notice, so a stored label
+would be wrong from the day after it was written.
 
 **A membership can also be revoked, or the person expelled from the group**,
 which are the two ways of ceasing to be a current member that have nothing to
@@ -438,15 +439,10 @@ record and would undo it. While it is in force the card reads as revoked,
 carries no expiry, and its holder is refused everywhere a current membership
 is required.
 
-There is also a stored label, `members.status`, and **nothing reads it.**
-Whether a card is good is answered from the expiry date and from those two
-tables, never from that column; the "Expired" note on the back of an Apple
-pass and the state Google Wallet is told are both worked out at the moment a
-pass is built (`effectiveStatus()` in `src/member/artifacts.ts`). The order
-sync still writes the column, so it is on its way out rather than gone
-([#224](https://github.com/los-verdes/card-losverd-es/issues/224)); a stored
-value that looks authoritative and is not is how somebody later comes to
-trust it.
+The same goes for what a pass says about itself. The "Expired" note on the
+back of an Apple pass and the state Google Wallet is told are both worked out
+at the moment a pass is built (`effectiveStatus()` in
+`src/member/artifacts.ts`), from the expiry date and from those two tables.
 
 One real limit sits underneath all of this: a pass already on a phone is not
 rebuilt merely because a date passed. It is corrected the next time it is

@@ -79,7 +79,8 @@ export async function listAttributions(
  * the address they typed before attributing an order to it.
  */
 export interface EmailFootprint {
-  member: { member_id: string; status: string; expiration_date: string | null } | null;
+  /** `revoked` and `expiration_date` as `MEMBER_SELECT` resolves them, so this page cannot call a revoked card current. */
+  member: { member_id: string; revoked: 0 | 1; expiration_date: string | null } | null;
   /** Orders attributed to the address, and how many of those count as memberships. */
   memberOrders: { total: number; counted: number };
   /** Orders placed with the address, whoever they're attributed to now. */
@@ -93,7 +94,15 @@ export async function emailFootprint(
   email: string,
 ): Promise<EmailFootprint> {
   const [member, memberOrders, placedOrders, login, slack] = await db.batch<Record<string, unknown>>([
-    db.prepare("SELECT member_id, status, expiration_date FROM members WHERE email = ?1").bind(email),
+    db
+      .prepare(
+        `SELECT m.member_id, (r.member_id IS NOT NULL OR b.email IS NOT NULL) AS revoked, m.expiration_date
+         FROM members m
+              LEFT JOIN revoked_cards r ON r.member_id = m.member_id
+              LEFT JOIN banned_people b ON b.email = m.email
+         WHERE m.email = ?1`,
+      )
+      .bind(email),
     db
       .prepare(
         `SELECT COUNT(*) AS total, COALESCE(SUM(${COUNTS_AS_MEMBERSHIP}), 0) AS counted

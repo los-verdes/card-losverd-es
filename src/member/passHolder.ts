@@ -53,7 +53,7 @@ export async function lookupPassHolder(
     // must show the same name as the card it is verifying,
     // and must not call a revoked membership merely expired -- which
     // a ban produces as surely as a revoked card does.
-    `SELECT m.first_name, m.last_name, m.status, m.expiration_date, d.display_name,
+    `SELECT m.first_name, m.last_name, m.expiration_date, d.display_name,
             COALESCE(r.member_id, b.email) AS revoked_card
        FROM members m
             LEFT JOIN member_display_names d ON d.email = m.email
@@ -67,7 +67,6 @@ export async function lookupPassHolder(
         MemberRecord,
         | "first_name"
         | "last_name"
-        | "status"
         | "expiration_date"
         | "display_name"
       > & { revoked_card: string | null }
@@ -91,7 +90,7 @@ export async function lookupPassHolder(
     name: cardNameText(member) || null,
     // Nothing to be good through once it is revoked.
     expirationDate: revoked ? null : member.expiration_date,
-    active: !revoked && isMembershipCurrent(member, today),
+    active: isMembershipCurrent({ revoked: revoked ? 1 : 0, expiration_date: member.expiration_date }, today),
     revoked,
   };
 }

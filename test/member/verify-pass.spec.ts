@@ -44,19 +44,17 @@ async function insertMember(fields: {
   email: string;
   firstName?: string;
   lastName?: string;
-  status?: string;
   expirationDate: string;
 }) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'token', 1)`,
+    `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, 'token', 1)`,
   )
     .bind(
       fields.memberId,
       fields.firstName ?? "Jane",
       fields.lastName ?? "Doe",
       fields.email,
-      fields.status ?? "active",
       fields.expirationDate,
     )
     .run();
@@ -124,11 +122,6 @@ describe("GET /verify-pass/:serial", () => {
     expect(html).toContain("Expired Jun 1, 2021");
   });
 
-  it("treats a revoked member as not current", async () => {
-    await insertMember({ memberId: "BC-1", email: "jane@example.com", status: "revoked", expirationDate: "2099-01-01" });
-    expect(await (await signedVerify("BC-1")).text()).toContain("MEMBERSHIP EXPIRED");
-  });
-
   it("says a revoked card is revoked, in the code of conduct's word", async () => {
     await insertMember({ memberId: "BC-1", email: "jane@example.com", expirationDate: "2099-01-01" });
     await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES (?)").bind("BC-1").run();
@@ -184,8 +177,8 @@ describe("GET /verify-pass/:serial", () => {
 
   it("omits a blank member name, and treats a missing expiration as not current", async () => {
     await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, auth_token, last_updated_at)
-       VALUES ('BC-9', '', ' ', 'blank@example.com', 'active', NULL, 'token', 1)`,
+      `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, auth_token, last_updated_at)
+       VALUES ('BC-9', '', ' ', 'blank@example.com', NULL, 'token', 1)`,
     ).run();
 
     const html = await (await signedVerify("BC-9")).text();

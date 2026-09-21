@@ -47,9 +47,9 @@ function post(body: Record<string, string>) {
 
 async function insertMember(email: string, memberSince: string | null) {
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, status,
+    `INSERT INTO members (member_id, first_name, last_name, email,
        expiration_date, member_since, auth_token, last_updated_at)
-     VALUES ('LV-1', 'Pat', 'Lee', ?, 'active', '2099-01-15', ?, 'token', 1)`,
+     VALUES ('LV-1', 'Pat', 'Lee', ?, '2099-01-15', ?, 'token', 1)`,
   )
     .bind(email, memberSince)
     .run();
