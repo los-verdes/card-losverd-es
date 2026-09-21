@@ -69,7 +69,20 @@ populated before anyone is pointed at it.
 5. **Add a production `[triggers]` block** to `wrangler.toml`, with the same
    schedules `[env.staging.triggers]` already runs. Doing this now
    means D1 is populated and syncing before any member sees the new stack.
-6. **Run the legacy Postgres export and import**
+6. **Squash the migrations, if that is still wanted**
+   ([#201](https://github.com/los-verdes/card-losverd-es/issues/201)). This is
+   the last moment it is safe, and the moment was chosen deliberately: a
+   squash rewrites what "already applied" means, so it only works while every
+   database can be thrown away and rebuilt from scratch. The step below is
+   what ends that -- afterwards production holds the only copy of the
+   Squarespace-era history, and no later squash can be undone by recreating
+   the database.
+
+   Nothing breaks by skipping it. It is a tidying of fifteen migrations,
+   several of which exist only to correct earlier ones, and the cost of not
+   doing it is that they stay.
+
+7. **Run the legacy Postgres export and import**
    ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
    Rehearse the load rather than trying to get it right once: until cutover
    the production database serves nobody, so it can be loaded, checked,
@@ -101,7 +114,7 @@ populated before anyone is pointed at it.
    ([#89](https://github.com/los-verdes/card-losverd-es/issues/89)), so
    nothing here should be a surprise.
 
-7. **Run a full BigCommerce resync**, then reconcile member counts against
+8. **Run a full BigCommerce resync**, then reconcile member counts against
    BigCommerce's own admin.
 
    > **Order matters.** This must come *after* the legacy import. The import
@@ -109,7 +122,7 @@ populated before anyone is pointed at it.
    > run first leaves members who have changed address holding cards under
    > their old one.
 
-8. **Grant an admin**: log in once so the `users` row exists, then set
+9. **Grant an admin**: log in once so the `users` row exists, then set
    `is_admin` (see the README). Worth doing as soon as login works rather
    than last, since `/admin/preflight` is admin-gated and is most useful
    while the rest of this list is still outstanding.
