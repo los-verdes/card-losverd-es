@@ -122,10 +122,11 @@ EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 # Empty until a widget exists for card.losverd.es, which leaves /email-card
 # failing closed rather than rendering a widget that can never be solved.
 TURNSTILE_SITE_KEY = "0x4AAAAAAE-1rj-sdiipmGPH"
-# Empty until we're ready for new orders to email their member a card, so a
-# backfill or resync can't mail existing members (src/email/newOrder.ts). Set
-# it to the day sending is switched on, never a past date.
-CARD_EMAIL_NEW_ORDERS_SINCE = ""
+# The day new orders began emailing their member a card. Only an order
+# created on or after it is eligible, which is one of three guards that keep
+# a backfill or resync from mailing existing members (src/email/newOrder.ts).
+# Empty switches sending off. Never move it to an earlier date.
+CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
 
 # Queue names src/queues/index.ts routes batches by (they differ per
 # environment -- queue names are account-wide).
