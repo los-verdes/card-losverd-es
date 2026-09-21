@@ -425,3 +425,27 @@ export async function missingOrders(db: D1Database): Promise<MissingOrderRow[]> 
     .all<MissingOrderRow>();
   return results;
 }
+
+/** How many rows each of the "needs a look" reports would list. */
+export interface AttentionCounts {
+  missing: number;
+  extraMemberships: number;
+}
+
+/**
+ * The size of the two reports above, in one pass, for the admin nav.
+ *
+ * Read on every admin page, so it counts rather than fetching rows; the
+ * conditions are the reports' own `WHERE` clauses, and a test holds the two
+ * in agreement.
+ */
+export async function attentionCounts(db: D1Database): Promise<AttentionCounts> {
+  const row = await db
+    .prepare(
+      `SELECT COALESCE(SUM(missing_since IS NOT NULL), 0) AS missing,
+              COALESCE(SUM(membership_units > 1), 0) AS extraMemberships
+         FROM membership_orders`,
+    )
+    .first<AttentionCounts>();
+  return row ?? { missing: 0, extraMemberships: 0 };
+}
