@@ -7,7 +7,6 @@
  * generators in src/passkit, src/cardimage, and src/google.
  */
 
-import { renderMembershipCardPng } from "../cardimage/render";
 import {
   updateGenericObjectIfPresent,
   upsertGenericObject,
@@ -257,6 +256,14 @@ export async function renderCardImage(
   env: Env,
   member: MemberRecord,
 ): Promise<Uint8Array> {
+  // Imported here rather than at the top of the file. This module is imported
+  // by nearly everything that touches a member, and the renderer brings satori
+  // and resvg with it -- several megabytes of JavaScript that most requests
+  // never use. Loaded lazily, their code is evaluated the first time a card is
+  // actually drawn. The WebAssembly they use is still compiled at startup:
+  // that is a top-level module import in the bundle, and a lazy import of the
+  // JavaScript does not move it.
+  const { renderMembershipCardPng } = await import("../cardimage/render");
   return renderMembershipCardPng(
     {
       ...cardName(member),
