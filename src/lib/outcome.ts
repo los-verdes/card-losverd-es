@@ -27,6 +27,7 @@ export const OUTCOMES = [
   "display_name.saved",
   "email_card.requested",
   "email_card.delivery",
+  "card.suppressed",
   "claim.requested",
   "claim.confirmed",
   "pass.verified",

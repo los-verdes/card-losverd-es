@@ -179,9 +179,9 @@ export async function sendClaimLink(
     });
     const base = env.PUBLIC_BASE_URL.replace(/\/+$/, "");
     const url = `${base}${CLAIM_PATH}/confirm?token=${encodeURIComponent(token)}`;
-    await sendClaimLinkEmail(env, member.email, url);
-    console.log("Claim link sent", { memberId: member.member_id, userId });
-    recordOutcome("claim.requested", { result: "link_sent" });
+    const outcome = await sendClaimLinkEmail(env, member.email, url);
+    if (outcome === "sent") console.log("Claim link sent", { memberId: member.member_id, userId });
+    recordOutcome("claim.requested", { result: outcome === "sent" ? "link_sent" : outcome });
   } catch (err) {
     console.error("Claim link delivery failed", { error: String(err) });
     recordOutcome("claim.requested", { result: "failed" });

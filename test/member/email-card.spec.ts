@@ -55,6 +55,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM rate_limit_counters");
   const listed = await env.ASSETS.list();
@@ -175,6 +176,40 @@ describe("POST /email-card", () => {
       expect(callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL)).toHaveLength(3);
       expect(email.sent).toHaveLength(1);
       expect(recipientOf(email.sent[0])).toBe("jane@example.com");
+    });
+
+    it("puts a card somebody asked for in that person's audit log", async () => {
+      // It used not to: this path skipped the one function that wrote it, so
+      // "has anything been sent to this person" missed every requested card.
+      mockUpstreams();
+
+      await submitEmail("jane@example.com");
+
+      const { results } = await env.DB.prepare("SELECT action, subject_email, detail FROM audit_log").all();
+      expect(results).toEqual([
+        { action: "card.emailed", subject_email: "jane@example.com", detail: "They asked for it from /email-card" },
+      ]);
+    });
+
+    it("records a card Cloudflare would not deliver to a suppressed address, and not as emailed", async () => {
+      env.EMAIL = fakeEmailBinding({ suppressed: true });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const spy = spyOnOutcomes();
+      mockUpstreams();
+
+      const res = await submitEmail("jane@example.com");
+
+      // The page never changes, whatever happened.
+      expect(res.body).toContain("Check your email");
+      const { results } = await env.DB.prepare("SELECT action, subject_email, detail FROM audit_log").all();
+      expect(results).toEqual([
+        {
+          action: "card.suppressed",
+          subject_email: "jane@example.com",
+          detail: expect.stringContaining("the address is on the email suppression list"),
+        },
+      ]);
+      expect(outcomesFrom(spy)).toContainEqual({ outcome: "email_card.delivery", result: "suppressed" });
     });
 
     it("records who was sent a card only in the logs, never in the response", async () => {
