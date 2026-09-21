@@ -86,6 +86,21 @@ CREATE TABLE IF NOT EXISTS banned_people (
     banned_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
+-- Append-only record of decisions people make about memberships (see
+-- migrations/0020). Written alongside the tables above, never instead of
+-- them: they answer "what is true now", this answers "what happened".
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,                     -- e.g. membership.revoked, card.emailed
+    subject_email TEXT,                       -- lower-cased; the person it was about
+    actor_email TEXT,                         -- lower-cased; null when nobody was signed in
+    detail TEXT NOT NULL,                     -- one line, composed at the time
+    created_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_subject ON audit_log(subject_email, id DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_recent ON audit_log(id DESC);
+
 -- Login Identities (see migrations/0004_member_auth.sql)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

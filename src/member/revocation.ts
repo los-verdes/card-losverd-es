@@ -12,6 +12,7 @@
 
 import type { Env } from "../index";
 import { getMemberById } from "./artifacts";
+import { actorEmail, recordAuditEvent } from "../audit/log";
 import { notifyWalletsUpdated } from "./walletUpdates";
 
 /** Long enough to explain a decision, short enough to stay a note. */
@@ -47,21 +48,43 @@ export async function revokeCard(
   )
     .bind(memberId, note, revokedBy)
     .run();
-  // Already withdrawn: leave the original note, author and date alone rather
+  // Already revoked: leave the original note, author and date alone rather
   // than quietly restamping somebody else's decision.
   if ((result.meta.changes ?? 0) === 0) return false;
+  await recordAuditEvent(env, {
+    action: "membership.revoked",
+    subjectEmail: (await getMemberById(env, memberId))?.email ?? null,
+    actorEmail: await actorEmail(env, revokedBy),
+    detail: `Card ${memberId}${note ? ` -- ${note}` : " -- no reason recorded"}`,
+  });
   await touchAndNotify(env, memberId);
   return true;
 }
 
-/** Lifts a withdrawal, putting the membership back to what the orders say. */
-export async function restoreCard(env: Env, memberId: string): Promise<boolean> {
+/**
+ * Lifts a revocation, putting the membership back to what the orders say.
+ *
+ * `restoredBy` is recorded in the audit log rather than anywhere here: the
+ * row is deleted, so this is the only account of the reversal that survives
+ * it -- which is exactly the moment somebody asks who decided.
+ */
+export async function restoreCard(
+  env: Env,
+  memberId: string,
+  restoredBy: number | null = null,
+): Promise<boolean> {
   const result = await env.DB.prepare(
     "DELETE FROM revoked_cards WHERE member_id = ?",
   )
     .bind(memberId)
     .run();
   if ((result.meta.changes ?? 0) === 0) return false;
+  await recordAuditEvent(env, {
+    action: "membership.restored",
+    subjectEmail: (await getMemberById(env, memberId))?.email ?? null,
+    actorEmail: await actorEmail(env, restoredBy),
+    detail: `Card ${memberId}`,
+  });
   await touchAndNotify(env, memberId);
   return true;
 }

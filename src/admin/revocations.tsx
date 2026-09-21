@@ -158,13 +158,13 @@ revocations.post("/", csrf(), async (c) => {
   if (form.action === "unban") {
     const email = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
     if (!email) return back({ error: "No ban to lift." });
-    return (await liftBan(c.env, email))
+    return (await liftBan(c.env, email, c.get("session").userId))
       ? back({ saved: "unbanned" })
       : back({ error: "That person has not been expelled." });
   }
 
   if (!memberId) return back({ error: "No card to restore." });
-  return (await restoreCard(c.env, memberId))
+  return (await restoreCard(c.env, memberId, c.get("session").userId))
     ? back({ saved: "restored" })
     : back({ error: "That card has not been revoked." });
 });

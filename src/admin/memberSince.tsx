@@ -30,6 +30,7 @@ import { formatShortDate, parseIsoDate } from "../lib/dateFormat";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { actorEmail, recordAuditEvent } from "../audit/log";
 
 export const MEMBER_SINCE_PATH = "/admin/member-since";
 const MAX_NOTE_LENGTH = 500;
@@ -258,6 +259,15 @@ memberSince.post("/", csrf(), async (c) => {
   const back = (params: Record<string, string>) =>
     c.redirect(`${MEMBER_SINCE_PATH}?${new URLSearchParams({ email, ...params })}`, 303);
 
+  const actor = await actorEmail(c.env, c.get("session").userId);
+  // Read before either branch writes: both destroy the previous value, and
+  // the log line is the only place it survives.
+  const existing = await c.env.DB.prepare(
+    "SELECT member_since FROM member_since_overrides WHERE email = ?",
+  )
+    .bind(email)
+    .first<{ member_since: string }>();
+
   if (form.action === "clear") {
     // Never removes an imported date: that is the only surviving record of a
     // Squarespace-era membership, and the old site is gone (plan Phase 2.2).
@@ -266,9 +276,18 @@ memberSince.post("/", csrf(), async (c) => {
     )
       .bind(email)
       .run();
-    return (result.meta.changes ?? 0) > 0
-      ? back({ saved: "cleared" })
-      : back({ error: "There was no correction to remove." });
+    if ((result.meta.changes ?? 0) === 0) {
+      return back({ error: "There was no correction to remove." });
+    }
+    await recordAuditEvent(c.env, {
+      action: "member_since.cleared",
+      subjectEmail: email,
+      actorEmail: actor,
+      detail: existing
+        ? `Was ${existing.member_since}; back to what the orders say`
+        : "Correction removed",
+    });
+    return back({ saved: "cleared" });
   }
 
   const input = parseMemberSince(form.email, form.member_since, form.note, today);
@@ -289,6 +308,15 @@ memberSince.post("/", csrf(), async (c) => {
   )
     .bind(input.email, input.date, input.note, c.get("session").userId)
     .run();
+  await recordAuditEvent(c.env, {
+    action: "member_since.set",
+    subjectEmail: input.email,
+    actorEmail: actor,
+    detail:
+      input.date +
+      (existing ? ` (was ${existing.member_since})` : "") +
+      (input.note ? ` -- ${input.note}` : ""),
+  });
   // No pass push needed: the table's triggers bump the member's
   // `last_updated_at`, so their card and pass are rebuilt on next fetch.
   return back({ saved: "set" });

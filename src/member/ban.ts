@@ -22,6 +22,7 @@
  */
 
 import type { Env } from "../index";
+import { actorEmail, recordAuditEvent } from "../audit/log";
 import { getMemberByEmail } from "./artifacts";
 import { notifyWalletsUpdated } from "./walletUpdates";
 
@@ -80,20 +81,42 @@ export async function banPerson(
   )
     .bind(key, note, bannedBy)
     .run();
-  // Already barred: leave the original note, author and date alone rather
+  // Already expelled: leave the original note, author and date alone rather
   // than restamping somebody else's decision.
   if ((result.meta.changes ?? 0) === 0) return false;
+  await recordAuditEvent(env, {
+    action: "person.expelled",
+    subjectEmail: key,
+    actorEmail: await actorEmail(env, bannedBy),
+    detail: note ? note : "No reason recorded",
+  });
   await touchAndNotify(env, key);
   return true;
 }
 
-/** Lifts a ban. Any membership it was suppressing comes back by itself. */
-export async function liftBan(env: Env, email: string): Promise<boolean> {
+/**
+ * Lifts an expulsion. Any membership it was suppressing comes back by itself.
+ *
+ * `liftedBy` goes to the audit log rather than into a column: the row is
+ * deleted, so that entry is the only surviving account of the reversal --
+ * and an appeal is precisely when somebody asks who decided it.
+ */
+export async function liftBan(
+  env: Env,
+  email: string,
+  liftedBy: number | null = null,
+): Promise<boolean> {
   const key = email.trim().toLowerCase();
   const result = await env.DB.prepare("DELETE FROM banned_people WHERE email = ?")
     .bind(key)
     .run();
   if ((result.meta.changes ?? 0) === 0) return false;
+  await recordAuditEvent(env, {
+    action: "person.readmitted",
+    subjectEmail: key,
+    actorEmail: await actorEmail(env, liftedBy),
+    detail: "Expulsion lifted; any membership it was suppressing is back.",
+  });
   await touchAndNotify(env, key);
   return true;
 }
