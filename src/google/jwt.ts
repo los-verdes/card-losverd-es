@@ -86,7 +86,6 @@ export interface MemberWalletInput {
   memberId: string; // == the GenericObject id suffix and the QR code's alternate text
   firstName: string;
   lastName: string;
-  membershipTier: string;
   status: "active" | "expired" | "revoked";
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
   /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
@@ -114,7 +113,7 @@ type GenericObjectState = "ACTIVE" | "EXPIRED" | "INACTIVE";
  * The subset of Google Wallet's `GenericObject` resource this project
  * populates -- see Phase 5.1/5.2. Field structure mirrors
  * `../passkit/generator.ts`'s `PassJson` (name as the prominent header,
- * tier/member-since/expiry as secondary text, status folded into a single
+ * member-since/expiry as secondary text, status folded into a single
  * field) adapted to Google Wallet's own object shape rather than Apple's.
  */
 export interface GenericObject {
@@ -201,13 +200,7 @@ export function buildGenericObject(
   member: MemberWalletInput,
   config: GoogleWalletConfig,
 ): GenericObject {
-  const textModulesData: TextModuleData[] = [
-    {
-      id: "membership_tier",
-      header: "Tier",
-      body: member.membershipTier,
-    },
-  ];
+  const textModulesData: TextModuleData[] = [];
   if (member.memberSince) {
     textModulesData.push({
       id: "member_since",

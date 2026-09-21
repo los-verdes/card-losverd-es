@@ -193,7 +193,6 @@ export const MemberCard: FC<{
     <p style="font-size: 1.5rem; margin-bottom: 0">
       {`${member.first_name} ${member.last_name}`.trim()}
     </p>
-    <p style="margin-top: 0.25rem">{member.membership_tier}</p>
     {member.member_since && (
       <p>Member since {formatMonthYear(member.member_since)}</p>
     )}

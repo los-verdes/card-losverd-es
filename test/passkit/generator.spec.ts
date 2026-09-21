@@ -30,7 +30,6 @@ function makeMember(overrides: Partial<MemberPassInput> = {}): MemberPassInput {
     memberId: "LV-10023",
     firstName: "Jane",
     lastName: "Doe",
-    membershipTier: "standard",
     status: "active",
     memberSince: "2021-07-15",
     expirationDate: "2024-02-17",
@@ -93,16 +92,12 @@ describe("buildPassJson", () => {
     ]);
   });
 
-  it("surfaces membership tier in an auxiliary field", () => {
-    const pass = parse(makeMember({ membershipTier: "los-pringles" }));
-    expect(pass.generic.auxiliaryFields).toEqual([
-      {
-        key: "membership_tier",
-        label: "Tier",
-        value: "los-pringles",
-        textAlignment: "PKTextAlignmentLeft",
-      },
-    ]);
+  it("has no auxiliary fields, the tier having been the only one", () => {
+    // Omitted rather than empty (migration 0018). Wallet lays the front of
+    // the card out from the keys present, and an installed pass picks this up
+    // the next time it is rebuilt.
+    const pass = parse(makeMember({}));
+    expect(pass.generic.auxiliaryFields).toBeUndefined();
   });
 
   it("formats member_since as short-month + year", () => {

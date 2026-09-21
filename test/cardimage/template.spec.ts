@@ -11,7 +11,6 @@ function makeMember(overrides: Partial<MembershipCardMember> = {}): MembershipCa
   return {
     firstName: "Jane",
     lastName: "Doe",
-    membershipTier: "standard",
     memberId: "LV-10023",
     verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     expirationDate: "2027-01-15",
@@ -29,16 +28,15 @@ function flattenText(el: SatoriElement | string): string[] {
 }
 
 describe("buildCardTree", () => {
-  it("includes the member's name, tier, and member id somewhere in the tree", () => {
+  it("includes the member's name and member id somewhere in the tree", () => {
     const tree = buildCardTree(
-      makeMember({ firstName: "Pat", lastName: "Lee", membershipTier: "los-pringles", memberId: "LV-99999" }),
+      makeMember({ firstName: "Pat", lastName: "Lee", memberId: "LV-99999" }),
       { memberSince: "Member since Jul 2021", expiration: "Good through Jan 15, 2027" },
       IMAGES,
     );
     const text = flattenText(tree);
 
     expect(text).toContain("Pat Lee");
-    expect(text).toContain("los-pringles");
     expect(text).toContain("LV-99999");
     expect(text).toContain("Good through Jan 15, 2027");
     expect(text).toContain("Member since Jul 2021");

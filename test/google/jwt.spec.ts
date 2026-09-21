@@ -25,7 +25,6 @@ function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInp
     memberId: "LV-10023",
     firstName: "Jane",
     lastName: "Doe",
-    membershipTier: "standard",
     status: "active",
     memberSince: "2021-07-15",
     expirationDate: "2024-02-17",
@@ -122,13 +121,12 @@ describe("buildGenericObject", () => {
     });
   });
 
-  it("always includes a membership tier text module", () => {
-    const object = buildGenericObject(makeMember({ membershipTier: "los-pringles" }), CONFIG);
-    expect(object.textModulesData).toContainEqual({
-      id: "membership_tier",
-      header: "Tier",
-      body: "los-pringles",
-    });
+  it("carries no tier module, which said the same word to every member", () => {
+    // Guards migration 0018 from coming back by accident: a Wallet object is
+    // rebuilt from this on renewal, so a field reintroduced here reappears on
+    // passes people already hold.
+    const object = buildGenericObject(makeMember({}), CONFIG);
+    expect(object.textModulesData.map((m) => m.id)).not.toContain("membership_tier");
   });
 
   it("formats member_since as short-month + year when known", () => {

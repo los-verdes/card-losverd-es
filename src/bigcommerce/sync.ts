@@ -7,16 +7,14 @@ import { bigCommerceOrderKey, recordMembershipOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
-// SKU -> membership tier. The Python app currently treats membership as
-// effectively single-tier (`BIGCOMMERCE_MEMBERSHIP_SKUS`, default
-// `LOSV-MEM-0001`, from `member_card/settings.py`); the D1 schema comment
-// on `members.membership_tier` already anticipates more tiers
-// (standard/los-pringles/cut-crew), so this is an explicit map rather than
-// a single hardcoded SKU. Extend this as new membership SKUs are added to
-// the BigCommerce catalog.
-export const MEMBERSHIP_SKU_TIER_MAP: Record<string, string> = {
-  "LOSV-MEM-0001": "standard",
-};
+// Which SKUs are a membership. Everything else the store sells is ignored.
+//
+// An allow-list rather than a single hardcoded SKU, so a renamed or
+// additional membership product is one line here. This is the same job the
+// previous site's `BIGCOMMERCE_MEMBERSHIP_SKUS` did; Los Verdes sells one
+// membership and draws no distinction between kinds of member, so there is
+// nothing for a SKU to map *to* (migration 0018).
+export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set(["LOSV-MEM-0001"]);
 
 export interface BigCommerceAddress {
   first_name: string;
@@ -208,11 +206,6 @@ export class BigCommerceClient {
   }
 }
 
-interface MembershipLineItem {
-  tier: string;
-  product: BigCommerceOrderProduct;
-}
-
 /**
  * How many memberships an order actually contains, across every line item.
  *
@@ -230,7 +223,7 @@ export function countMembershipUnits(
 ): number {
   let units = 0;
   for (const product of products) {
-    if (!MEMBERSHIP_SKU_TIER_MAP[product.sku]) continue;
+    if (!MEMBERSHIP_SKUS.has(product.sku)) continue;
     units += membershipLineItemQuantity(product);
   }
   return units;
@@ -274,12 +267,8 @@ function membershipLineItemQuantity(
 /** The order's first membership line item, if it has one. */
 function resolveMembership(
   products: BigCommerceOrderProduct[],
-): MembershipLineItem | null {
-  for (const product of products) {
-    const tier = MEMBERSHIP_SKU_TIER_MAP[product.sku];
-    if (tier) return { tier, product };
-  }
-  return null;
+): BigCommerceOrderProduct | null {
+  return products.find((product) => MEMBERSHIP_SKUS.has(product.sku)) ?? null;
 }
 
 function computeStatus(
@@ -306,8 +295,6 @@ export interface MembershipState {
   /** `YYYY-MM-DD`; null when no order counts (e.g. every order was refunded). */
   expirationDate: string | null;
   memberSince: string | null;
-  /** From the latest counted order; null when it doesn't say (e.g. a Squarespace-era row). */
-  membershipTier: string | null;
   firstName: string | null;
   lastName: string | null;
 }
@@ -327,7 +314,7 @@ export interface MembershipState {
  * - `expiration_date` is the latest counted order's expiry, and `status` is
  *   derived from it -- mirroring the Python app's "any membership still
  *   active" semantics.
- * - Name and tier come from the latest counted order.
+ * - The name comes from the latest counted order.
  *
  * ISO timestamps sort chronologically, so plain string comparison is correct.
  */
@@ -340,7 +327,6 @@ export function deriveMembershipState(
       status: "expired",
       expirationDate: null,
       memberSince: null,
-      membershipTier: null,
       firstName: null,
       lastName: null,
     };
@@ -358,7 +344,6 @@ export function deriveMembershipState(
     status: computeStatus(expirationDate, now),
     expirationDate,
     memberSince: earliest.created_on.slice(0, 10),
-    membershipTier: (latest.sku && MEMBERSHIP_SKU_TIER_MAP[latest.sku]) || null,
     firstName: latest.first_name || null,
     lastName: latest.last_name || null,
   };
@@ -368,7 +353,6 @@ export function deriveMembershipState(
 export interface MemberFallback {
   firstName: string;
   lastName: string;
-  membershipTier: string;
 }
 
 export interface MemberUpsertResult {
@@ -416,7 +400,7 @@ export async function refreshMemberFromOrders(
   const state = deriveMembershipState(orders);
 
   const existing = await env.DB.prepare(
-    `SELECT member_id, first_name, last_name, membership_tier, status, expiration_date, member_since
+    `SELECT member_id, first_name, last_name, status, expiration_date, member_since
      FROM members WHERE email = ?`,
   )
     .bind(email)
@@ -424,7 +408,6 @@ export async function refreshMemberFromOrders(
       member_id: string;
       first_name: string;
       last_name: string;
-      membership_tier: string;
       status: string;
       expiration_date: string | null;
       member_since: string | null;
@@ -433,11 +416,9 @@ export async function refreshMemberFromOrders(
   if (existing) {
     const firstName = state.firstName ?? existing.first_name;
     const lastName = state.lastName ?? existing.last_name;
-    const membershipTier = state.membershipTier ?? existing.membership_tier;
     const unchanged =
       existing.first_name === firstName &&
       existing.last_name === lastName &&
-      existing.membership_tier === membershipTier &&
       existing.status === state.status &&
       existing.expiration_date === state.expirationDate &&
       existing.member_since === state.memberSince;
@@ -446,13 +427,12 @@ export async function refreshMemberFromOrders(
     }
     await env.DB.prepare(
       `UPDATE members
-       SET first_name = ?, last_name = ?, membership_tier = ?, status = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
+       SET first_name = ?, last_name = ?, status = ?, expiration_date = ?, member_since = ?, last_updated_at = ?
        WHERE member_id = ?`,
     )
       .bind(
         firstName,
         lastName,
-        membershipTier,
         state.status,
         state.expirationDate,
         state.memberSince,
@@ -477,12 +457,11 @@ export async function refreshMemberFromOrders(
   // that got there first keeps its member_id and auth token, and takes this
   // state, which was derived from the same email's history.
   const inserted = await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        first_name = excluded.first_name,
        last_name = excluded.last_name,
-       membership_tier = excluded.membership_tier,
        status = excluded.status,
        expiration_date = excluded.expiration_date,
        member_since = excluded.member_since,
@@ -494,7 +473,6 @@ export async function refreshMemberFromOrders(
       state.firstName ?? fallback.firstName,
       state.lastName ?? fallback.lastName,
       email,
-      state.membershipTier ?? fallback.membershipTier,
       state.status,
       state.expirationDate,
       state.memberSince,
@@ -556,7 +534,7 @@ async function alertOnNewExtraMemberships(
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
-  membership: MembershipLineItem,
+  membership: BigCommerceOrderProduct,
   membershipUnits: number,
 ): Promise<string> {
   if (membershipUnits > 1) {
@@ -565,13 +543,12 @@ async function applyMembershipOrder(
   const memberEmail = await recordMembershipOrder(
     env,
     order,
-    membership.product,
+    membership,
     membershipUnits,
   );
   const result = await refreshMemberFromOrders(env, memberEmail, {
     firstName: order.billing_address.first_name,
     lastName: order.billing_address.last_name,
-    membershipTier: membership.tier,
   });
   if (result?.passChanged) {
     await notifyWalletsUpdated(env, result.memberId);
@@ -866,7 +843,7 @@ export async function syncCustomersEtl(env: Env): Promise<void> {
 /**
  * Stub - see docs/bigcommerce-ingestion.md section 4 for the intended
  * design (call MiniBC's recurring-subscription API and reconcile
- * `membership_tier`/`expiration_date` for members on a MiniBC plan).
+ * `expiration_date` for members on a MiniBC plan).
  * Deferred: no MiniBC sandbox API key is available in this environment to
  * validate request/response shapes against.
  */

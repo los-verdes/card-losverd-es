@@ -7,7 +7,6 @@ export interface MemberPassInput {
   memberId: string; // == the pass's serialNumber
   firstName: string;
   lastName: string;
-  membershipTier: string;
   status: "active" | "expired" | "revoked";
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
   /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
@@ -57,7 +56,12 @@ interface PassJson {
   generic: {
     primaryFields: PassField[];
     secondaryFields: PassField[];
-    auxiliaryFields: PassField[];
+    /**
+     * Omitted entirely rather than sent empty: the only auxiliary field this
+     * pass ever had was the membership tier, dropped in migration 0018.
+     * Wallet lays the front of the card out from the keys that are present.
+     */
+    auxiliaryFields?: PassField[];
     backFields: PassField[];
   };
   barcode: {
@@ -234,14 +238,6 @@ export function buildPassJson(
         },
       ],
       secondaryFields,
-      auxiliaryFields: [
-        {
-          key: "membership_tier",
-          label: "Tier",
-          value: member.membershipTier,
-          textAlignment: "PKTextAlignmentLeft",
-        },
-      ],
       backFields,
     },
     barcode: {

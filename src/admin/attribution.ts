@@ -10,7 +10,6 @@
  */
 
 import {
-  MEMBERSHIP_SKU_TIER_MAP,
   refreshMemberFromOrders,
   type MemberUpsertResult,
 } from "../bigcommerce/sync";
@@ -151,7 +150,6 @@ export async function attributeOrder(
   const fallback = {
     firstName: order.first_name ?? "",
     lastName: order.last_name ?? "",
-    membershipTier: (order.sku && MEMBERSHIP_SKU_TIER_MAP[order.sku]) || "standard",
   };
   const previous = await refreshMemberFromOrders(env, previousMemberEmail, fallback);
   const current = await refreshMemberFromOrders(env, memberEmail, fallback);

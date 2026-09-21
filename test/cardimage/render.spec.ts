@@ -12,7 +12,6 @@ function makeMember(overrides: Partial<MembershipCardMember> = {}): MembershipCa
   return {
     firstName: "Jane",
     lastName: "Doe",
-    membershipTier: "standard",
     memberId: "LV-10023",
     verifyUrl: "https://card.losverd.es/verify-pass/LV-10023?signature=test-signature%3D",
     expirationDate: "2027-01-15",

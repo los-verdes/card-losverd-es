@@ -26,7 +26,6 @@ interface MemberRow {
   first_name: string;
   last_name: string;
   email: string;
-  membership_tier: string;
   status: string;
   expiration_date: string | null;
   member_since: string | null;
@@ -174,23 +173,21 @@ describe("deriveMembershipState", () => {
     };
   }
 
-  it("is expired, with no dates, tier, or name, when no order counts", () => {
+  it("is expired, with no dates or name, when no order counts", () => {
     expect(deriveMembershipState([], NOW)).toEqual({
       status: "expired",
       expirationDate: null,
       memberSince: null,
-      membershipTier: null,
       firstName: null,
       lastName: null,
     });
   });
 
-  it("takes a single order's dates, tier, and billing name", () => {
+  it("takes a single order's dates and billing name", () => {
     expect(deriveMembershipState([counted("2026-01-15")], NOW)).toEqual({
       status: "active",
       expirationDate: "2027-01-15",
       memberSince: "2026-01-15",
-      membershipTier: "standard",
       firstName: "Jane",
       lastName: "Doe",
     });
@@ -206,7 +203,7 @@ describe("deriveMembershipState", () => {
     expect(state.status).toBe("active");
   });
 
-  it("takes name and tier from the latest order", () => {
+  it("takes the name from the latest order", () => {
     const state = deriveMembershipState(
       [
         counted("2026-01-15", { last_name: "Doe-Smith" }),
@@ -224,12 +221,11 @@ describe("deriveMembershipState", () => {
     expect(state.expirationDate).toBe("2026-01-15");
   });
 
-  it("leaves tier and name null when the latest order doesn't say (e.g. a Squarespace-era row)", () => {
+  it("leaves the name null when the latest order doesn't say (e.g. a Squarespace-era row)", () => {
     const state = deriveMembershipState(
       [counted("2016-03-01", { sku: null, first_name: null, last_name: "" }), counted("2015-03-01", { sku: "SQ-UNKNOWN" })],
       NOW,
     );
-    expect(state.membershipTier).toBeNull();
     expect(state.firstName).toBeNull();
     expect(state.lastName).toBeNull();
   });
@@ -239,7 +235,6 @@ describe("refreshMemberFromOrders", () => {
   const fallback = {
     firstName: "Fallback",
     lastName: "Name",
-    membershipTier: "fallback-tier",
   };
 
   afterEach(clearMembershipTables);
@@ -249,21 +244,19 @@ describe("refreshMemberFromOrders", () => {
     email: string,
     fields: Partial<{
       firstName: string;
-      membershipTier: string;
       status: string;
       expirationDate: string | null;
       memberSince: string | null;
     }> = {},
   ) {
     await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status, expiration_date, member_since, auth_token, last_updated_at)
-       VALUES (?, ?, 'Doe', ?, ?, ?, ?, ?, 'pre-existing-token', ?)`,
+      `INSERT INTO members (member_id, first_name, last_name, email, status, expiration_date, member_since, auth_token, last_updated_at)
+       VALUES (?, ?, 'Doe', ?, ?, ?, ?, 'pre-existing-token', ?)`,
     )
       .bind(
         memberId,
         fields.firstName ?? "Jane",
         email,
-        fields.membershipTier ?? "standard",
         fields.status ?? "active",
         fields.expirationDate === undefined ? "2099-01-15" : fields.expirationDate,
         fields.memberSince === undefined ? "2098-01-15" : fields.memberSince,
@@ -284,7 +277,6 @@ describe("refreshMemberFromOrders", () => {
       member_id: result?.memberId,
       first_name: "Jane",
       last_name: "Doe-Smith",
-      membership_tier: "standard",
       status: "active",
       expiration_date: "2099-01-15",
       member_since: "2090-01-15",
@@ -400,7 +392,6 @@ describe("refreshMemberFromOrders", () => {
       member_id: before?.member_id,
       auth_token: before?.auth_token,
       first_name: "Jane",
-      membership_tier: "standard",
       status: "expired",
       expiration_date: null,
       member_since: null,
@@ -425,18 +416,17 @@ describe("refreshMemberFromOrders", () => {
     expect(member?.first_name).toBe("Jane");
   });
 
-  it("keeps the stored name and tier when the latest order doesn't say", async () => {
-    await insertMember("LV-10023", "jane.doe@example.com", { firstName: "Janet", membershipTier: "cut-crew" });
+  it("keeps the stored name when the latest order doesn't say", async () => {
+    await insertMember("LV-10023", "jane.doe@example.com", { firstName: "Janet" });
     await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", sku: null, firstName: null, lastName: null });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
     const member = await getMemberByEmail("jane.doe@example.com");
     expect(member?.first_name).toBe("Janet");
-    expect(member?.membership_tier).toBe("cut-crew");
   });
 
-  it("uses the synced order's name and tier for a new member when the history doesn't say", async () => {
+  it("uses the synced order's name for a new member when the history doesn't say", async () => {
     await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", sku: null, firstName: null, lastName: null });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
@@ -444,7 +434,6 @@ describe("refreshMemberFromOrders", () => {
     expect(await getMemberByEmail("jane.doe@example.com")).toMatchObject({
       first_name: "Fallback",
       last_name: "Name",
-      membership_tier: "fallback-tier",
     });
   });
 
@@ -617,7 +606,6 @@ describe("syncBigCommerceOrder", () => {
     const member = await getMemberByEmail("jane.doe@example.com");
     expect(member).not.toBeNull();
     expect(member?.member_id).toEqual(expect.stringMatching(MEMBER_ID_PATTERN));
-    expect(member?.membership_tier).toBe("standard");
     // order.date_created (2026-01-15) + 365 days
     expect(member?.expiration_date).toBe("2027-01-15");
     expect(member?.member_since).toBe("2026-01-15");
@@ -1009,7 +997,6 @@ describe("pass-change detection and update pushes", () => {
   const fallback = {
     firstName: "Jane",
     lastName: "Doe",
-    membershipTier: "standard",
   };
 
   function refresh() {
@@ -1034,7 +1021,6 @@ describe("pass-change detection and update pushes", () => {
   it.each([
     ["first name", "first_name = 'Janet'"],
     ["last name", "last_name = 'Doe-Smith'"],
-    ["tier", "membership_tier = 'cut-crew'"],
     ["expiration", "expiration_date = '2000-01-01'"],
     ["member_since", "member_since = '2000-01-01'"],
     ["status", "status = 'expired'"],

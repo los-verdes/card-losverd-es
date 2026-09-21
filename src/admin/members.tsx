@@ -116,10 +116,6 @@ const Summary: FC<{
           <td style={cellStyle}>{member.email}</td>
         </tr>
         <tr>
-          <th style={cellStyle}>Tier</th>
-          <td style={cellStyle}>{member.membership_tier}</td>
-        </tr>
-        <tr>
           <th style={cellStyle}>Good through</th>
           <td style={cellStyle}>
             {member.expiration_date ? formatShortDate(member.expiration_date) : "no counted orders"}

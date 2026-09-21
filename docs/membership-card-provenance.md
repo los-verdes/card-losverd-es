@@ -67,10 +67,9 @@ flowchart TD
     KEEP["Counted orders,<br/>grouped by member"]
     KEEP --> CARD["One membership,<br/>one card"]
     CARD --> F1["Holder's name<br/>latest counted order"]
-    CARD --> F2["Tier<br/>latest counted order"]
-    CARD --> F3["Member since<br/>earliest counted order,<br/>or an override"]
-    CARD --> F4["Good through<br/>furthest expiry"]
-    CARD --> F5["Card number<br/>assigned once"]
+    CARD --> F2["Member since<br/>earliest counted order,<br/>or an override"]
+    CARD --> F3["Good through<br/>furthest expiry"]
+    CARD --> F4["Card number<br/>assigned once"]
 ```
 
 The rebuild happens in one place (`refreshMemberFromOrders()` in
@@ -95,9 +94,9 @@ as one, and how far our list of them can be trusted to match the storefront's.
 
 An order becomes a membership order when one of the products on it is a
 membership. The SKU is what decides: the software holds an explicit list of
-membership SKUs (`MEMBERSHIP_SKU_TIER_MAP` in `src/bigcommerce/sync.ts`,
-currently the single entry `LOSV-MEM-0001`, tier `standard`), and an order is
-recorded here only when one of its line items matches. Everything else the
+membership SKUs (`MEMBERSHIP_SKUS` in `src/bigcommerce/sync.ts`, currently the
+single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
+its line items matches. Everything else the
 storefront sells passes by untouched: an order for a scarf creates no record,
 and an order containing both a scarf and a membership is recorded as the
 membership it contains.
@@ -304,19 +303,24 @@ is working as intended. If the group would rather that were not so, this is
 a good thing to say so about -- see
 [question 6](#9-decisions-worth-confirming).
 
-### Membership tier
+### There is no membership type, and the card shows none
 
-The product bought on the **most recent counted order**, translated from its
-SKU by a fixed table (`MEMBERSHIP_SKU_TIER_MAP` in `src/bigcommerce/sync.ts`).
-Today that table has exactly one entry — SKU `LOSV-MEM-0001` means the
-`standard` tier — because the store sells a single membership product. An
-order with no recognised membership SKU is not a membership order at all
+Los Verdes sells one membership and draws no distinction between kinds of
+member, so a card carries a name, a "member since", a "good through" and a
+card number, and nothing that sorts its holder into a category. The previous
+site's cards were the same three things plus the card number on the back.
+
+If the store ever does sell a second membership product, a type can be worked
+out from the orders: `membership_orders.sku` records what each person bought.
+Which SKUs count as a membership at all is a separate list, `MEMBERSHIP_SKUS`
 ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
 
-An imported historical order whose SKU is not in that table leaves the tier as
-whatever is already on file, or `standard` for a record being created from
-scratch. The tier is printed on the card exactly as stored, so it currently
-appears in lowercase.
+Card themes are a separate matter and deliberately not built on this. A type
+derived from an order is recomputed on every sync, so a theme stored that way
+would be overwritten each time its holder renewed. A theme is a choice
+somebody makes, so it belongs in its own table keyed on their address, the way
+a chosen display name already works
+([section 4](#4-each-field-on-the-card)).
 
 ### Member since
 
@@ -385,7 +389,6 @@ a last resort.
 | | Apple Wallet pass | Google Wallet card | Emailed card image |
 | :--- | :--- | :--- | :--- |
 | Holder's name | yes | yes | yes |
-| Tier | yes | yes | yes |
 | Member since | yes | yes | yes |
 | Good through | yes | yes | yes |
 | Card number | on the back | as QR alt text | under the QR code |
@@ -543,7 +546,7 @@ card. The mechanics live in `refreshMemberFromOrders()` in
    is read.
 2. Those orders are reduced to one set of card values
    (`deriveMembershipState()`): earliest order for "member since", furthest
-   expiry for "good through", latest order for name and tier.
+   expiry for "good through", latest order for the name.
 3. The existing membership record for that email address is updated in place,
    or a new one is created if there is none.
 
@@ -790,9 +793,6 @@ the old system did: count it unless it was cancelled.
 
 * **Names are often missing.** The export did not always carry one, so an
   imported order frequently leaves the name already on file untouched.
-* **Tiers are often missing.** An imported order whose SKU is not in the
-  current store's mapping leaves the tier as whatever is on file, or
-  `standard` for a record created from scratch.
 * **The same 365-day expiry was applied** to imported orders at import time,
   matching the old system's behaviour.
 * **Test orders are not imported at all.** Squarespace flagged orders placed

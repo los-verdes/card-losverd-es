@@ -28,7 +28,6 @@ const MEMBER = {
   memberId: 'LV-00000000-0000-4000-8000-000000000000',
   firstName: 'Casey',
   lastName: 'Example',
-  membershipTier: 'Los Verdes Member',
   status: 'active' as const,
   expirationDate: '2099-02-17',
   memberSince: '2021-07-01',

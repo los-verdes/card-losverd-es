@@ -23,9 +23,9 @@ beforeEach(async () => {
     .bind("admin@example.com")
     .run();
   await env.DB.prepare(
-    `INSERT INTO members (member_id, first_name, last_name, email, membership_tier, status,
+    `INSERT INTO members (member_id, first_name, last_name, email, status,
        expiration_date, member_since, auth_token, last_updated_at)
-     VALUES (?, 'Jane', 'Doe', ?, 'standard', 'active', '2099-03-04', '2021-07-15', 'token', 1)`,
+     VALUES (?, 'Jane', 'Doe', ?, 'active', '2099-03-04', '2021-07-15', 'token', 1)`,
   )
     .bind(CARD, EMAIL)
     .run();
@@ -91,7 +91,6 @@ describe("revoking a membership", () => {
     await refreshMemberFromOrders(env, EMAIL, {
       firstName: "Jane",
       lastName: "Doe",
-      membershipTier: "standard",
     });
 
     expect((await getMemberByEmail(env, EMAIL))!.status).toBe("revoked");

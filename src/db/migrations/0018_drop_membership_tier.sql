@@ -1,0 +1,28 @@
+-- Drop the membership tier.
+--
+-- Los Verdes sells one membership and draws no distinction between kinds of
+-- member, so this column held the string 'standard' for every row. It was not
+-- carried across from the previous site, which had no such concept: that app
+-- kept a list of membership SKUs (`BIGCOMMERCE_MEMBERSHIP_SKUS`) purely to
+-- decide which line items were memberships, and its Apple pass showed three
+-- things -- the member's name, the good-through date, and the card number on
+-- the back. The tier originated in this project's own first schema and grew a
+-- SKU mapping around it before anyone asked whether it named a real thing.
+--
+-- Until now every pass carried an auxiliary field labelled "Tier" reading
+-- "standard", and the card image and member portal printed the same word
+-- under the holder's name.
+--
+-- Nothing is lost. `membership_orders.sku` still records what each person
+-- actually bought, so if the store ever sells a second membership product a
+-- tier can be derived from the orders rather than stored here. What is left
+-- in its place is `MEMBERSHIP_SKUS`, an allow-list deciding which line items
+-- count as a membership at all -- the job the SKU map was really doing.
+--
+-- Card themes, which are the thing people actually want, are a different
+-- shape and deliberately not built on this. A tier is recomputed from the
+-- latest counted order on every sync; a theme is a choice its holder makes.
+-- Storing one in a column the sync owns would mean every renewal silently
+-- overwrote it, so a theme belongs in its own table keyed on the member's
+-- address, the way `member_display_names` already works.
+ALTER TABLE members DROP COLUMN membership_tier;

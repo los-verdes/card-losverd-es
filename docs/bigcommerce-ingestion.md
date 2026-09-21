@@ -112,7 +112,6 @@ deliver them chronologically.
 | `member_id` | A random `LV-{uuid}` if inserting a brand-new row | It's the serial number / object id baked into every Apple and Google Wallet pass issued for that member, so it must identify exactly one member and never change: a row matched by email keeps its **existing** `member_id`. Not derived from the BigCommerce customer id (#66): guest checkouts all have `customer_id` 0, and an order attributed to someone else carries the buyer's. Rows are always found by email, so the id never needs to be reproducible. |
 | `first_name` / `last_name` | Billing name on the member's latest counted order | Same field the Python `insert_order_as_membership()` uses. Falls back to the stored name (or, for a new row, the synced order's) when that order has none, e.g. a Squarespace-era row. |
 | `email` | `membership_orders.member_email` (lower-cased; the billing email unless re-pointed) | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
-| `membership_tier` | SKU of the member's latest counted order, via `MEMBERSHIP_SKU_TIER_MAP` | The Python app treats membership as effectively single-tier (`BIGCOMMERCE_MEMBERSHIP_SKUS`, default `LOSV-MEM-0001`); the D1 schema comment already anticipates more (`standard`, `los-pringles`, `cut-crew`), so this design introduces an explicit SKU→tier map (a plain object literal for now) rather than assuming one SKU. An order with no matching SKU is not a membership order and is skipped (ack'd, no D1 write) — mirrors the Python ETL's `ignored_line_items` filtering. Unknown SKUs in the history (Squarespace-era rows) fall back like the name. |
 | `status` | `'active'` if `expiration_date >= today`, else `'expired'` | Mirrors `AnnualMembership.is_active` (created_on within the last 365 days) across *all* of a member's orders. The sync never sets `'revoked'`, and doesn't preserve it either: the legacy app has no revocation concept, so a sync re-derives status like any other row. |
 | `expiration_date` | Latest counted order's `created_on + 365 days`, `YYYY-MM-DD`; `NULL` if no order counts | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Can move earlier, when a renewal is refunded. |
 | `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders once the legacy export has loaded them. `member_since_overrides` still wins when a pass is rendered. |
@@ -249,7 +248,7 @@ one is implemented fully:
   MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
   per `member_card/minibc.py`) for recurring-subscription state that
   doesn't flow through BigCommerce order webhooks at all, and reconcile
-  `membership_tier`/`expiration_date` for members on a MiniBC recurring
+  `expiration_date` for members on a MiniBC recurring
   plan. Deferred until after cutover (decided 2026-09-17): MiniBC is the
   vendor that handles renewals, so it holds membership status that nothing
   else records, but porting it is lower priority than the cutover itself.

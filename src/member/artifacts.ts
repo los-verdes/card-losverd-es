@@ -32,7 +32,6 @@ export interface MemberRecord {
   email: string;
   first_name: string;
   last_name: string;
-  membership_tier: string;
   status: "active" | "expired" | "revoked";
   expiration_date: string | null;
   /** Effective value: a `member_since_overrides` row wins (migration 0005). */
@@ -68,7 +67,7 @@ export interface MemberRecord {
  * itself. Somebody can be both banned and separately revoked; lifting one
  * then correctly leaves the other standing.
  */
-const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name, m.membership_tier,
+const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
          CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN 'revoked' ELSE m.status END AS status,
          CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
@@ -220,7 +219,6 @@ export async function getApplePassBundle(
     {
       memberId: member.member_id,
       ...cardName(member),
-      membershipTier: member.membership_tier,
       status: effectiveStatus(member),
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
@@ -262,7 +260,6 @@ export async function renderCardImage(
   return renderMembershipCardPng(
     {
       ...cardName(member),
-      membershipTier: member.membership_tier,
       memberId: member.member_id,
       verifyUrl: await verifyUrl(env, member),
       expirationDate: member.expiration_date,
@@ -313,7 +310,6 @@ async function googleWalletObjectFor(
     {
       memberId: member.member_id,
       ...cardName(member),
-      membershipTier: member.membership_tier,
       status: effectiveStatus(member),
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
