@@ -527,14 +527,14 @@ async function legacyImportChecks(env: Env): Promise<CheckGroup> {
 
     const imported = row?.imported ?? 0;
     if (imported === 0) {
-      return skip(label, "No historical `*_bc` orders here yet -- run the legacy import first.");
+      return skip(label, "No historical BigCommerce-era orders here yet -- run the legacy import first.");
     }
     const discarded = row?.discarded ?? 0;
     const stranded = row?.stranded ?? 0;
     const excluded =
       discarded === 0
-        ? `All ${imported} imported \`*_bc\` orders carry a status that counts.`
-        : `${discarded} of ${imported} imported \`*_bc\` orders fail the paid-only allow-list (abandoned carts, mostly), across ${row?.people ?? 0} ${row?.people === 1 ? "address" : "addresses"}.`;
+        ? `All ${imported} imported BigCommerce-era orders carry a status that counts.`
+        : `${discarded} of ${imported} imported BigCommerce-era orders fail the paid-only allow-list (abandoned carts, mostly), across ${row?.people ?? 0} ${row?.people === 1 ? "address" : "addresses"}.`;
 
     if (stranded === 0) {
       return ok(label, `${excluded} Nobody is left holding no counted order at all.`);

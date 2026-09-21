@@ -59,7 +59,7 @@ beforeEach(async () => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'admin@example.com', 1)").bind(ADMIN_ID).run();
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'member@example.com', 0)").bind(MEMBER_ID).run();
-  await insertOrder({ id: "1001_bc", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
+  await insertOrder({ id: "1001", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
 });
 
 afterEach(async () => {
@@ -73,37 +73,37 @@ afterEach(async () => {
 
 describe("access control", () => {
   it("sends an anonymous visitor to log in", async () => {
-    const res = await request("/admin/orders/1001_bc", { as: null });
+    const res = await request("/admin/orders/1001", { as: null });
 
     expect(res.status).toBe(302);
     expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
   });
 
   it("refuses a logged-in non-admin, for viewing and attributing alike", async () => {
-    expect((await request("/admin/orders/1001_bc", { as: MEMBER_ID })).status).toBe(403);
-    expect((await post("/admin/orders/1001_bc/member", { email: "x@example.com" }, { as: MEMBER_ID })).status).toBe(403);
-    expect(await memberEmailOf("1001_bc")).toBe("buyer@example.com");
+    expect((await request("/admin/orders/1001", { as: MEMBER_ID })).status).toBe(403);
+    expect((await post("/admin/orders/1001/member", { email: "x@example.com" }, { as: MEMBER_ID })).status).toBe(403);
+    expect(await memberEmailOf("1001")).toBe("buyer@example.com");
   });
 
   it("rejects a cross-site attribution POST", async () => {
-    const res = await post("/admin/orders/1001_bc/member", { email: "x@example.com" }, { origin: "https://evil.example" });
+    const res = await post("/admin/orders/1001/member", { email: "x@example.com" }, { origin: "https://evil.example" });
 
     expect(res.status).toBe(403);
-    expect(await memberEmailOf("1001_bc")).toBe("buyer@example.com");
+    expect(await memberEmailOf("1001")).toBe("buyer@example.com");
   });
 });
 
 describe("GET /admin/orders/:orderId", () => {
   it("shows the order, an empty history, and the attribution form, uncached", async () => {
-    const res = await request("/admin/orders/1001_bc");
+    const res = await request("/admin/orders/1001");
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const body = await res.text();
-    expect(body).toContain("Membership order 1001_bc");
+    expect(body).toContain("Membership order 1001");
     expect(body).toContain("buyer@example.com");
     expect(body).toContain("No attribution changes yet.");
-    expect(body).toContain('<form method="get" action="/admin/orders/1001_bc">');
+    expect(body).toContain('<form method="get" action="/admin/orders/1001">');
   });
 
   it("says so for an unknown order", async () => {
@@ -116,38 +116,38 @@ describe("GET /admin/orders/:orderId", () => {
   it("is linked from the report tables", async () => {
     const body = await (await request("/admin/reports/active?as_of=2098-06-01")).text();
 
-    expect(body).toContain('<a href="/admin/orders/1001_bc">1001_bc</a>');
+    expect(body).toContain('<a href="/admin/orders/1001">1001</a>');
   });
 
   it("reviews an entered address, showing where it already appears, before anything changes", async () => {
-    await insertOrder({ id: "2002_bc", email: "friend@example.com", created: "2098-03-01T00:00:00Z" });
+    await insertOrder({ id: "2002", email: "friend@example.com", created: "2098-03-01T00:00:00Z" });
 
-    const res = await request("/admin/orders/1001_bc?email=%20Friend@Example.com%20&note=gift");
+    const res = await request("/admin/orders/1001?email=%20Friend@Example.com%20&note=gift");
 
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain('<form method="post" action="/admin/orders/1001_bc/member">');
+    expect(body).toContain('<form method="post" action="/admin/orders/1001/member">');
     expect(body).toContain('<input type="hidden" name="email" value="friend@example.com"/>');
     expect(body).toContain('<input type="hidden" name="note" value="gift"/>');
     expect(body).toContain("1 order(s) attributed to this address (1 counting as memberships); 1 placed with it");
     expect(body).not.toContain("appear anywhere yet");
-    expect(await memberEmailOf("1001_bc")).toBe("buyer@example.com");
+    expect(await memberEmailOf("1001")).toBe("buyer@example.com");
   });
 
   it("says no card email will go out when the order does not count as a membership", async () => {
-    await insertOrder({ id: "4004_bc", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "4004", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
 
-    const body = await (await request("/admin/orders/4004_bc?email=friend@example.com")).text();
+    const body = await (await request("/admin/orders/4004?email=friend@example.com")).text();
 
     expect(body).toContain("nothing will be sent");
   });
 
   it("says when the store no longer has the order, without implying it was revoked", async () => {
-    await env.DB.prepare("UPDATE membership_orders SET missing_since = ? WHERE order_id = '1001_bc'")
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = ? WHERE order_id = '1001'")
       .bind(Date.UTC(2026, 8, 17))
       .run();
 
-    const body = await (await request("/admin/orders/1001_bc")).text();
+    const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toContain("No longer returned by the store");
     expect(body).toContain("2026-09-17");
@@ -155,7 +155,7 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("warns when a reviewed address appears nowhere", async () => {
-    const body = await (await request("/admin/orders/1001_bc?email=typo@exmaple.com")).text();
+    const body = await (await request("/admin/orders/1001?email=typo@exmaple.com")).text();
 
     expect(body).toContain("appear anywhere yet");
     expect(body).toContain('<input type="hidden" name="note" value=""/>');
@@ -166,23 +166,23 @@ describe("GET /admin/orders/:orderId", () => {
       "INSERT INTO slack_users (slack_id, name, real_name, email, deleted, synced_at) VALUES ('U0DEACT', NULL, NULL, 'admin@example.com', 1, 0)",
     ).run();
 
-    const body = await (await request("/admin/orders/1001_bc?email=admin@example.com")).text();
+    const body = await (await request("/admin/orders/1001?email=admin@example.com")).text();
 
     expect(body).toContain("Has logged in (admin)");
     expect(body).toContain("Slack: U0DEACT (deactivated)");
   });
 
   it("describes an ordinary login", async () => {
-    const body = await (await request("/admin/orders/1001_bc?email=member@example.com")).text();
+    const body = await (await request("/admin/orders/1001?email=member@example.com")).text();
 
     expect(body).toContain("<li>Has logged in</li>");
   });
 
   it("flags an order that doesn't count as a membership, and copes with missing fields", async () => {
-    await insertOrder({ id: "3003_bc", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
-    await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, status = NULL WHERE order_id = '3003_bc'");
+    await insertOrder({ id: "3003", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
+    await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, status = NULL WHERE order_id = '3003'");
 
-    const body = await (await request("/admin/orders/3003_bc")).text();
+    const body = await (await request("/admin/orders/3003")).text();
 
     expect(body).toContain("(doesn&#39;t count as a membership)");
   });
@@ -192,7 +192,7 @@ describe("GET /admin/orders/:orderId", () => {
       "INSERT INTO slack_users (slack_id, name, real_name, email, deleted, synced_at) VALUES ('U0LIVE', 'friend', 'Friend', 'friend@example.com', 0, 0)",
     ).run();
 
-    const body = await (await request("/admin/orders/1001_bc?email=friend@example.com")).text();
+    const body = await (await request("/admin/orders/1001?email=friend@example.com")).text();
 
     expect(body).toContain("Slack: friend</li>");
     expect(body).toContain("Has never logged in");
@@ -201,10 +201,10 @@ describe("GET /admin/orders/:orderId", () => {
   it("shows history entries whose admin was since deleted, or that have no note", async () => {
     await env.DB.prepare(
       `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note)
-       VALUES ('1001_bc', 'buyer@example.com', 'friend@example.com', NULL, NULL)`,
+       VALUES ('1001', 'buyer@example.com', 'friend@example.com', NULL, NULL)`,
     ).run();
 
-    const body = await (await request("/admin/orders/1001_bc")).text();
+    const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toContain("friend@example.com");
     expect(body).not.toContain("No attribution changes yet.");
@@ -215,12 +215,12 @@ describe("GET /admin/orders/:orderId", () => {
     ["the current attribution", "email=buyer@example.com", "This order is already attributed to buyer@example.com."],
     ["an over-long note", `email=friend@example.com&note=${"x".repeat(501)}`, "Keep the note under 500 characters."],
   ])("re-shows the form with an error for %s", async (_label, query, message) => {
-    const res = await request(`/admin/orders/1001_bc?${query}`);
+    const res = await request(`/admin/orders/1001?${query}`);
 
     expect(res.status).toBe(400);
     const body = await res.text();
     expect(body).toContain(message);
-    expect(body).toContain('<form method="get" action="/admin/orders/1001_bc">');
+    expect(body).toContain('<form method="get" action="/admin/orders/1001">');
   });
 });
 
@@ -228,11 +228,11 @@ describe("POST /admin/orders/:orderId/member", () => {
   it("attributes the order, records who did it, and shows both members' cards", async () => {
     await refreshMemberFromOrders(env, "buyer@example.com", { firstName: "Buy", lastName: "Er" });
 
-    const res = await post("/admin/orders/1001_bc/member", { email: " Friend@Example.com ", note: " gift " });
+    const res = await post("/admin/orders/1001/member", { email: " Friend@Example.com ", note: " gift " });
 
     expect(res.status).toBe(303);
-    expect(res.headers.get("Location")).toBe("/admin/orders/1001_bc?attributed_from=buyer%40example.com");
-    expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
+    expect(res.headers.get("Location")).toBe("/admin/orders/1001?attributed_from=buyer%40example.com");
+    expect(await memberEmailOf("1001")).toBe("friend@example.com");
     expect(
       await env.DB.prepare("SELECT previous_member_email, member_email, admin_user_id, note FROM membership_order_attributions").first(),
     ).toEqual({ previous_member_email: "buyer@example.com", member_email: "friend@example.com", admin_user_id: ADMIN_ID, note: "gift" });
@@ -245,13 +245,13 @@ describe("POST /admin/orders/:orderId/member", () => {
   });
 
   it("stores an empty note as none", async () => {
-    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", note: "   " });
+    await post("/admin/orders/1001/member", { email: "friend@example.com", note: "   " });
 
     expect(await env.DB.prepare("SELECT note FROM membership_order_attributions").first()).toEqual({ note: null });
   });
 
   it("refuses an invalid attribution without changing anything", async () => {
-    const res = await post("/admin/orders/1001_bc/member", { email: "buyer@example.com" });
+    const res = await post("/admin/orders/1001/member", { email: "buyer@example.com" });
 
     expect(res.status).toBe(400);
     expect(await res.text()).toContain("already attributed");
@@ -259,7 +259,7 @@ describe("POST /admin/orders/:orderId/member", () => {
   });
 
   it("refuses a submission missing its fields", async () => {
-    const res = await post("/admin/orders/1001_bc/member", {});
+    const res = await post("/admin/orders/1001/member", {});
 
     expect(res.status).toBe(400);
     expect(await res.text()).toContain("Enter a valid email address.");
@@ -298,7 +298,7 @@ describe("emailing the new member their card", () => {
   it("sends the card once, only to the new member", async () => {
     const sendgrid = mockSendGrid();
 
-    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
     expect(sentTo(sendgrid)).toEqual(["friend@example.com"]);
   });
@@ -306,7 +306,7 @@ describe("emailing the new member their card", () => {
   it("says so on the page afterwards", async () => {
     mockSendGrid();
 
-    const res = await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    const res = await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
     const body = await (await request(res.headers.get("Location")!)).text();
 
     expect(body).toContain("Their card is on its way by email.");
@@ -315,7 +315,7 @@ describe("emailing the new member their card", () => {
   it("sends nothing when the box is unchecked", async () => {
     const sendgrid = mockSendGrid();
 
-    const res = await post("/admin/orders/1001_bc/member", { email: "friend@example.com" });
+    const res = await post("/admin/orders/1001/member", { email: "friend@example.com" });
     const body = await (await request(res.headers.get("Location")!)).text();
 
     expect(sentTo(sendgrid)).toEqual([]);
@@ -323,10 +323,10 @@ describe("emailing the new member their card", () => {
   });
 
   it("sends nothing when the order gives the new member no card", async () => {
-    await env.DB.exec("UPDATE membership_orders SET status = 'Refunded' WHERE order_id = '1001_bc'");
+    await env.DB.exec("UPDATE membership_orders SET status = 'Refunded' WHERE order_id = '1001'");
     const sendgrid = mockSendGrid();
 
-    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
     expect(sentTo(sendgrid)).toEqual([]);
   });
@@ -336,20 +336,20 @@ describe("emailing the new member their card", () => {
     const sendgrid = mockSendGrid();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
     expect(sentTo(sendgrid)).toEqual([]);
     expect(warn).toHaveBeenCalledWith("Card email: SENDGRID_API_KEY not configured, not sending");
-    expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
+    expect(await memberEmailOf("1001")).toBe("friend@example.com");
   });
 
   it("logs, and still attributes, when SendGrid rejects the message", async () => {
     mockSendGrid(500);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await post("/admin/orders/1001_bc/member", { email: "friend@example.com", email_card: "on" });
+    await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
     expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("SendGrid") });
-    expect(await memberEmailOf("1001_bc")).toBe("friend@example.com");
+    expect(await memberEmailOf("1001")).toBe("friend@example.com");
   });
 });

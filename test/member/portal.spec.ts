@@ -350,9 +350,9 @@ describe("GET /", () => {
 describe("GET / membership history", () => {
   it("lists the member's orders, newest first, with what a receipt would show", async () => {
     await seedCurrentMember();
-    await insertOrder({ orderId: "104_bc", createdOn: "2023-04-04", expiresOn: "2024-04-03" });
+    await insertOrder({ orderId: "104", createdOn: "2023-04-04", expiresOn: "2024-04-03" });
     await insertOrder({
-      orderId: "106_bc",
+      orderId: "106",
       createdOn: "2026-09-18",
       expiresOn: "2027-09-18",
       productName: "Los Verdes Membership 2026",
@@ -364,14 +364,14 @@ describe("GET / membership history", () => {
     expect(body).toContain("Order #106");
     expect(body).toContain("Los Verdes Membership 2026");
     expect(body).toContain("Order #104");
-    // Newest first, and the source suffix is not shown to the member.
+    // Newest first, and no internal id convention reaches the member.
     expect(body.indexOf("Order #106")).toBeLessThan(body.indexOf("Order #104"));
-    expect(body).not.toContain("104_bc");
+    expect(body).not.toContain("_bc");
   });
 
   it("says when an order doesn't count, which is what explains a lapsed card", async () => {
     await seedCurrentMember();
-    await insertOrder({ orderId: "105_bc", status: "Refunded" });
+    await insertOrder({ orderId: "105", status: "Refunded" });
 
     const body = await (await get("/")).text();
 
@@ -381,7 +381,7 @@ describe("GET / membership history", () => {
 
   it("marks nothing when every order counts", async () => {
     await seedCurrentMember();
-    await insertOrder({ orderId: "104_bc" });
+    await insertOrder({ orderId: "104" });
 
     const body = await (await get("/")).text();
 
@@ -394,10 +394,10 @@ describe("GET / membership history", () => {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, product_name, status,
                                       created_on, expires_on, first_seen_via)
-       VALUES ('200_bc', 'bigcommerce', 'buyer@example.com', 'jane@example.com', 'Gift Membership', 'Completed',
+       VALUES ('200', 'bigcommerce', 'buyer@example.com', 'jane@example.com', 'Gift Membership', 'Completed',
                '2026-01-05', '2027-01-05', 'sync')`,
     ).run();
-    await insertOrder({ orderId: "201_bc", memberEmail: "buyer@example.com" });
+    await insertOrder({ orderId: "201", memberEmail: "buyer@example.com" });
 
     const body = await (await get("/")).text();
 
@@ -522,7 +522,7 @@ describe("GET /no-active-membership", () => {
     // have said itself.
     await insertUser("lapsed@example.com");
     await insertOrder({
-      orderId: "1001_bc",
+      orderId: "1001",
       memberEmail: "lapsed@example.com",
       productName: "Los Verdes Membership",
       status: "Refunded",
@@ -542,7 +542,7 @@ describe("GET /no-active-membership", () => {
 
   it("counts the orders it found rather than saying 'some'", async () => {
     await insertUser("lapsed@example.com");
-    for (const orderId of ["1001_bc", "1002_bc"]) {
+    for (const orderId of ["1001", "1002"]) {
       await insertOrder({ orderId, memberEmail: "lapsed@example.com", status: "Completed" });
     }
 
@@ -554,7 +554,7 @@ describe("GET /no-active-membership", () => {
 
   it("offers a renewal rather than a first purchase once there are orders", async () => {
     await insertUser("lapsed@example.com");
-    await insertOrder({ orderId: "1001_bc", memberEmail: "lapsed@example.com" });
+    await insertOrder({ orderId: "1001", memberEmail: "lapsed@example.com" });
 
     const html = await (await get("/no-active-membership")).text();
 

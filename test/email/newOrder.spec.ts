@@ -93,7 +93,7 @@ describe("a new order reaching Completed", () => {
     await syncBigCommerceOrder(env, "store123", order.id);
 
     expect(sentTo(sendgrid)).toEqual(["new.member@example.com"]);
-    expect(await cardEmailRows()).toEqual([{ order_id: "5001_bc", member_email: "new.member@example.com" }]);
+    expect(await cardEmailRows()).toEqual([{ order_id: "5001", member_email: "new.member@example.com" }]);
   });
 
   it("says why the member is getting it", async () => {
@@ -264,9 +264,9 @@ describe("the guards against mailing existing members", () => {
     await env.DB.prepare(
       "INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-      .bind("5001_bc", "bigcommerce", "new.member@example.com", "new.member@example.com", "Completed", "2026-09-15T00:00:00Z", "2027-09-15T00:00:00Z", "sync")
+      .bind("5001", "bigcommerce", "new.member@example.com", "new.member@example.com", "Completed", "2026-09-15T00:00:00Z", "2027-09-15T00:00:00Z", "sync")
       .run();
-    await env.DB.prepare("INSERT INTO card_emails (order_id, member_email) VALUES (?, ?)").bind("5001_bc", "new.member@example.com").run();
+    await env.DB.prepare("INSERT INTO card_emails (order_id, member_email) VALUES (?, ?)").bind("5001", "new.member@example.com").run();
 
     const sent = await maybeEmailNewOrderCard(env, order, "new.member@example.com");
 

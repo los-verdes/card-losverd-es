@@ -79,7 +79,7 @@ describe("working out what an admin typed", () => {
     ["  Jane@Example.com  ", "email"],
     ["LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6", "card"],
     ["lv-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6", "card"],
-    ["1001_bc", "order"],
+    ["1001", "order"],
     ["5f00000000000000000000a1", "order"],
     ["", "empty"],
     ["   ", "empty"],
@@ -124,10 +124,10 @@ describe("finding a member", () => {
   });
 
   it("sends an order number to the order page rather than guessing at a person", async () => {
-    const res = await get("/admin/members?q=1001_bc");
+    const res = await get("/admin/members?q=1001");
 
     expect(res.status).toBe(303);
-    expect(res.headers.get("Location")).toBe("/admin/orders/1001_bc");
+    expect(res.headers.get("Location")).toBe("/admin/orders/1001");
   });
 
   it("says so plainly when a card number matches nothing", async () => {

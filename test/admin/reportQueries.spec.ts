@@ -15,21 +15,21 @@ const AS_OF = "2026-06-01T12:00:00Z";
 
 beforeEach(async () => {
   // Current, and renewed early: two orders in force at AS_OF, one member.
-  await insertOrder({ id: "1_bc", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2025-07-01T00:00:00Z" });
-  await insertOrder({ id: "2_bc", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2026-05-20T00:00:00Z", channel: "bigcommerce_iphone" });
+  await insertOrder({ id: "1", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2025-07-01T00:00:00Z" });
+  await insertOrder({ id: "2", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2026-05-20T00:00:00Z", channel: "bigcommerce_iphone" });
   // Current, Squarespace-era style row with no status or channel.
   await insertOrder({ id: "5f00000000000000000000b2", source: "squarespace", email: "steady@example.com", created: "2025-09-09T00:00:00Z", status: null, channel: null });
   // Lapsed: last order expired 2025-03-01, an older one before it.
-  await insertOrder({ id: "3_bc", email: "lapsed@example.com", first: "Lap", last: "Sed", created: "2023-03-01T00:00:00Z" });
-  await insertOrder({ id: "4_bc", email: "lapsed@example.com", first: "Lap", last: "Sed", created: "2024-03-01T00:00:00Z" });
+  await insertOrder({ id: "3", email: "lapsed@example.com", first: "Lap", last: "Sed", created: "2023-03-01T00:00:00Z" });
+  await insertOrder({ id: "4", email: "lapsed@example.com", first: "Lap", last: "Sed", created: "2024-03-01T00:00:00Z" });
   // Old order under an old address, renewed under the new one: NOT lapsed.
-  await insertOrder({ id: "5_bc", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-01-01T00:00:00Z" });
-  await insertOrder({ id: "6_bc", email: "moved@example.com", created: "2026-01-01T00:00:00Z" });
+  await insertOrder({ id: "5", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-01-01T00:00:00Z" });
+  await insertOrder({ id: "6", email: "moved@example.com", created: "2026-01-01T00:00:00Z" });
   // Never memberships: refunded, and cancelled in the Squarespace spelling.
-  await insertOrder({ id: "7_bc", email: "refunded@example.com", created: "2026-02-01T00:00:00Z", status: "Refunded" });
+  await insertOrder({ id: "7", email: "refunded@example.com", created: "2026-02-01T00:00:00Z", status: "Refunded" });
   await insertOrder({ id: "sq-void", source: "squarespace", email: "void@example.com", created: "2026-02-02T00:00:00Z", status: "CANCELED" });
   // Not yet placed at AS_OF.
-  await insertOrder({ id: "8_bc", email: "future@example.com", created: "2026-08-01T00:00:00Z" });
+  await insertOrder({ id: "8", email: "future@example.com", created: "2026-08-01T00:00:00Z" });
 });
 
 afterEach(async () => {
@@ -42,7 +42,7 @@ describe("activeMemberships", () => {
   it("lists orders in force at the instant, newest first, skipping voided ones", async () => {
     const result = await activeMemberships(env.DB, AS_OF);
 
-    expect(result.rows.map((r) => r.order_id)).toEqual(["2_bc", "6_bc", "5f00000000000000000000b2", "1_bc"]);
+    expect(result.rows.map((r) => r.order_id)).toEqual(["2", "6", "5f00000000000000000000b2", "1"]);
     expect(result.totalOrders).toBe(4);
     expect(result.totalMembers).toBe(3); // the early renewer counts once
   });
@@ -50,7 +50,7 @@ describe("activeMemberships", () => {
   it("answers for a past date: who was a member then", async () => {
     const result = await activeMemberships(env.DB, "2024-06-01T00:00:00Z");
 
-    expect(result.rows.map((r) => r.order_id)).toEqual(["4_bc", "5_bc"]);
+    expect(result.rows.map((r) => r.order_id)).toEqual(["4", "5"]);
   });
 
   it("treats the expiry instant itself as no longer in force", async () => {
@@ -58,13 +58,13 @@ describe("activeMemberships", () => {
     const justBefore = await activeMemberships(env.DB, "2025-02-28T23:59:59Z", { search: "lapsed" });
 
     expect(atExpiry.rows).toEqual([]);
-    expect(justBefore.rows.map((r) => r.order_id)).toEqual(["4_bc"]);
+    expect(justBefore.rows.map((r) => r.order_id)).toEqual(["4"]);
   });
 
   it("filters by search across both emails and the billing name, case-insensitively", async () => {
     expect((await activeMemberships(env.DB, AS_OF, { search: "RENEWER@" })).totalOrders).toBe(2);
     expect((await activeMemberships(env.DB, AS_OF, { search: "rene wer" })).totalOrders).toBe(2);
-    expect((await activeMemberships(env.DB, "2024-06-01T00:00:00Z", { search: "moved@" })).rows.map((r) => r.order_id)).toEqual(["5_bc"]);
+    expect((await activeMemberships(env.DB, "2024-06-01T00:00:00Z", { search: "moved@" })).rows.map((r) => r.order_id)).toEqual(["5"]);
     expect((await activeMemberships(env.DB, AS_OF, { search: "   " })).totalOrders).toBe(4);
   });
 
@@ -74,14 +74,14 @@ describe("activeMemberships", () => {
   });
 
   it("filters by channel, alone and combined with search", async () => {
-    expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone" })).rows.map((r) => r.order_id)).toEqual(["2_bc"]);
+    expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone" })).rows.map((r) => r.order_id)).toEqual(["2"]);
     expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone", search: "steady" })).totalOrders).toBe(0);
   });
 
   it("pages the rows but not the totals", async () => {
     const result = await activeMemberships(env.DB, AS_OF, {}, { limit: 2, offset: 2 });
 
-    expect(result.rows.map((r) => r.order_id)).toEqual(["5f00000000000000000000b2", "1_bc"]);
+    expect(result.rows.map((r) => r.order_id)).toEqual(["5f00000000000000000000b2", "1"]);
     expect(result.totalOrders).toBe(4);
   });
 });
@@ -90,7 +90,7 @@ describe("expiredMemberships", () => {
   it("lists each lapsed member once, by their most recent order", async () => {
     const result = await expiredMemberships(env.DB, AS_OF);
 
-    expect(result.rows.map((r) => r.order_id)).toEqual(["4_bc"]);
+    expect(result.rows.map((r) => r.order_id)).toEqual(["4"]);
     expect(result.rows[0]).toMatchObject({ member_email: "lapsed@example.com", expires_on: "2025-03-01T00:00:00Z" });
     expect(result.total).toBe(1);
   });
@@ -208,35 +208,35 @@ describe("consolidations", () => {
   });
 
   it("lists orders attributed elsewhere, newest change first, and says which came from the legacy import", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "moved.away@example.com", memberEmail: "moved.here@example.com", created: "2026-02-15T00:00:00Z" });
-    await insertOrder({ id: "3_bc", email: "plain@example.com", created: "2026-03-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "moved.away@example.com", memberEmail: "moved.here@example.com", created: "2026-02-15T00:00:00Z" });
+    await insertOrder({ id: "3", email: "plain@example.com", created: "2026-03-15T00:00:00Z" });
     await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, 'boss@example.com', 1)").run();
     await env.DB.prepare(
       `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note, created_at)
-       VALUES ('1_bc', 'buyer@example.com', 'recipient@example.com', 9, 'gift', 1700000000000)`,
+       VALUES ('1', 'buyer@example.com', 'recipient@example.com', 9, 'gift', 1700000000000)`,
     ).run();
 
     const { attributed } = await consolidations(env.DB);
 
     expect(attributed).toEqual([
       expect.objectContaining({
-        order_id: "1_bc",
+        order_id: "1",
         order_email: "buyer@example.com",
         member_email: "recipient@example.com",
         attributed_at: 1700000000000,
         attributed_by: "boss@example.com",
         note: "gift",
       }),
-      expect.objectContaining({ order_id: "2_bc", attributed_at: null, attributed_by: null, note: null }),
+      expect.objectContaining({ order_id: "2", attributed_at: null, attributed_by: null, note: null }),
     ]);
   });
 
   it("reports only the latest change for an order", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", memberEmail: "second@example.com", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "buyer@example.com", memberEmail: "second@example.com", created: "2026-01-15T00:00:00Z" });
     for (const [to, at] of [["first@example.com", 1], ["second@example.com", 2]] as const) {
       await env.DB.prepare(
-        `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, note, created_at) VALUES ('1_bc', 'buyer@example.com', ?, ?, ?)`,
+        `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, note, created_at) VALUES ('1', 'buyer@example.com', ?, ?, ?)`,
       )
         .bind(to, `change ${at}`, at)
         .run();
@@ -249,13 +249,13 @@ describe("consolidations", () => {
   });
 
   it("groups billing names that appear under more than one address, ignoring void and unnamed orders", async () => {
-    await insertOrder({ id: "1_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "pat@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
-    await insertOrder({ id: "3_bc", email: "p.lee@example.com", first: "pat", last: " Lee ", created: "2024-01-15T00:00:00Z" });
-    await insertOrder({ id: "4_bc", email: "solo@example.com", first: "Solo", last: "Member", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "5_bc", email: "void@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z", status: "Refunded" });
-    await insertOrder({ id: "6_bc", email: "nameless@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "7_bc", email: "nameless2@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "pat@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
+    await insertOrder({ id: "3", email: "p.lee@example.com", first: "pat", last: " Lee ", created: "2024-01-15T00:00:00Z" });
+    await insertOrder({ id: "4", email: "solo@example.com", first: "Solo", last: "Member", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "5", email: "void@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "6", email: "nameless@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "7", email: "nameless2@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
 
     const { duplicateNames } = await consolidations(env.DB);
 

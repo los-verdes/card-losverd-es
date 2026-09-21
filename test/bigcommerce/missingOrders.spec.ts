@@ -9,7 +9,7 @@ import { missingOrders } from "../../src/admin/reportQueries";
 
 const STORE = "storehash";
 const ORDER_ID = 4242;
-const ORDER_KEY = "4242_bc";
+const ORDER_KEY = "4242";
 const SLACK_WEBHOOK = "https://hooks.slack.example/T/B/X";
 
 /**
@@ -164,12 +164,12 @@ describe("the missing-orders report", () => {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
          status, created_on, expires_on, first_seen_via, missing_since)
-       VALUES ('4243_bc', 'bigcommerce', 'other@example.com', 'other@example.com', 'Test', 'Member',
+       VALUES ('4243', 'bigcommerce', 'other@example.com', 'other@example.com', 'Test', 'Member',
          'Completed', '2025-06-01', '2026-06-01', 'sync', 1000)`,
     ).run();
 
     expect((await missingOrders(env.DB)).map((row) => row.order_id)).toEqual([
-      "4243_bc",
+      "4243",
       ORDER_KEY,
     ]);
   });

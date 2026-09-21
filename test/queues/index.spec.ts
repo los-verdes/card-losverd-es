@@ -95,7 +95,7 @@ describe("handleDeadLetterBatch", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const posts = mockSlack();
     const batch = makeBatch("etl-sync-dlq", [
-      makeMessage({ type: "sync_bigcommerce_order", orderId: "1001_bc" }, 6),
+      makeMessage({ type: "sync_bigcommerce_order", orderId: "1001" }, 6),
       makeMessage({ type: "sync_subscriptions_etl" }, 6),
     ]);
 
@@ -113,12 +113,12 @@ describe("handleDeadLetterBatch", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const posts = mockSlack();
     const batch = makeBatch("etl-sync-dlq", [
-      makeMessage({ type: "sync_bigcommerce_order", orderId: "1001_bc", email: "someone@example.com" }, 6),
+      makeMessage({ type: "sync_bigcommerce_order", orderId: "1001", email: "someone@example.com" }, 6),
     ]);
 
     await handleDeadLetterBatch(batch, { ...env, SLACK_ALERT_WEBHOOK_URL: WEBHOOK });
 
-    expect(posts[0].text).not.toContain("1001_bc");
+    expect(posts[0].text).not.toContain("1001");
     expect(posts[0].text).not.toContain("someone@example.com");
     // The type is enough to know what broke; the log has the rest.
     expect(posts[0].text).toContain("sync_bigcommerce_order");

@@ -28,7 +28,7 @@ const SQUARESPACE_ORDER = {
 };
 
 const BIGCOMMERCE_ORDER = {
-  order_id: "1001_bc",
+  order_id: "1001",
   source: "bigcommerce",
   order_number: "1001_00000000-0000-4000-8000-000000000001",
   channel_name: "bigcommerce_www",
@@ -296,7 +296,7 @@ describe("buildImportStatements (executed against D1)", () => {
       first_seen_via: "legacy_postgres",
     });
     expect(results[1]).toMatchObject({
-      order_id: "1001_bc",
+      order_id: "1001",
       source: "bigcommerce",
       customer_id: 42,
       modified_on: null,
@@ -331,7 +331,7 @@ describe("buildImportStatements (executed against D1)", () => {
   it("for an order the BigCommerce sync already recorded, only fills in member_email", async () => {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
-       VALUES ('1001_bc', 'bigcommerce', 'early@example.com', 'early@example.com', 'Refunded', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
+       VALUES ('1001', 'bigcommerce', 'early@example.com', 'early@example.com', 'Refunded', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
     ).run();
 
     await runImport(
@@ -348,11 +348,11 @@ describe("buildImportStatements (executed against D1)", () => {
   it("never overwrites the member_email of an order an admin has attributed", async () => {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
-       VALUES ('1001_bc', 'bigcommerce', 'early@example.com', 'gift.recipient@example.com', 'Completed', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
+       VALUES ('1001', 'bigcommerce', 'early@example.com', 'gift.recipient@example.com', 'Completed', '2023-03-10T08:30:00Z', '2024-03-09T08:30:00Z', 'sync')`,
     ).run();
     await env.DB.prepare(
       `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email)
-       VALUES ('1001_bc', 'early@example.com', 'gift.recipient@example.com')`,
+       VALUES ('1001', 'early@example.com', 'gift.recipient@example.com')`,
     ).run();
 
     await runImport(

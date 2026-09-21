@@ -23,11 +23,21 @@ export function membershipExpiry(createdOn: Date): Date {
 }
 
 /**
- * The legacy key format. Kept so the one-time legacy Postgres import and this
- * sync write the same row for the same order.
+ * An order's key: BigCommerce's own order id, as the store reports it.
+ *
+ * The previous site appended `_bc`, against a worry that a BigCommerce id and
+ * a Squarespace one might collide while both stores were in use. They cannot:
+ * a Squarespace id is 24 hexadecimal characters and a BigCommerce one a short
+ * integer, and `membership_orders.source` records which store an order came
+ * from regardless. So the key is the id the Merch Team sees in the store's
+ * admin, and the legacy export strips the suffix to match.
+ *
+ * Kept as a function, rather than inlined, because the export and this sync
+ * have to agree on it -- an imported order and a synced one must be the same
+ * row, not two.
  */
 export function bigCommerceOrderKey(orderId: number | string): string {
-  return `${orderId}_bc`;
+  return String(orderId);
 }
 
 /**

@@ -40,11 +40,11 @@ afterEach(async () => {
 
 describe("getAttributableOrder", () => {
   it("returns the order with whether it counts as a membership", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "buyer@example.com", created: "2098-02-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "1", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "buyer@example.com", created: "2098-02-15T00:00:00Z", status: "Refunded" });
 
-    expect(await getAttributableOrder(env.DB, "1_bc")).toMatchObject({ order_id: "1_bc", member_email: "buyer@example.com", counts: 1 });
-    expect((await getAttributableOrder(env.DB, "2_bc"))?.counts).toBe(0);
+    expect(await getAttributableOrder(env.DB, "1")).toMatchObject({ order_id: "1", member_email: "buyer@example.com", counts: 1 });
+    expect((await getAttributableOrder(env.DB, "2"))?.counts).toBe(0);
     expect(await getAttributableOrder(env.DB, "nope")).toBeNull();
   });
 });
@@ -61,9 +61,9 @@ describe("emailFootprint", () => {
   });
 
   it("finds the address's card, orders, login, and Slack account", async () => {
-    await insertOrder({ id: "1_bc", email: "someone@example.com", created: "2098-01-15T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "someone@example.com", created: "2097-01-15T00:00:00Z", status: "Cancelled" });
-    await insertOrder({ id: "3_bc", email: "someone@example.com", memberEmail: "elsewhere@example.com", created: "2096-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "someone@example.com", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "someone@example.com", created: "2097-01-15T00:00:00Z", status: "Cancelled" });
+    await insertOrder({ id: "3", email: "someone@example.com", memberEmail: "elsewhere@example.com", created: "2096-01-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "someone@example.com", FALLBACK);
     await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (2, 'someone@example.com', 0)").run();
     await insertSlackUser({ id: "U2", email: "someone@example.com", realName: "Old Account", deleted: true });
@@ -83,13 +83,13 @@ describe("emailFootprint", () => {
 
 describe("attributeOrder", () => {
   it("moves a gifted order to its recipient, leaving the buyer their own membership", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
-    await insertOrder({ id: "2_bc", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-06-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-06-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "buyer@example.com", FALLBACK);
     const buyerBefore = await member("buyer@example.com");
     expect(buyerBefore?.expiration_date).toBe("2099-06-15");
 
-    const result = await attributeOrder(env, await order("2_bc"), "gift.recipient@example.com", ADMIN_ID, "gift from the buyer");
+    const result = await attributeOrder(env, await order("2"), "gift.recipient@example.com", ADMIN_ID, "gift from the buyer");
 
     expect(result.previousMemberEmail).toBe("buyer@example.com");
     expect(result.previous).toEqual({ memberId: buyerBefore?.member_id, passChanged: true });
@@ -100,8 +100,8 @@ describe("attributeOrder", () => {
       expiration_date: "2099-06-15",
       status: "active",
     });
-    expect((await order("2_bc")).member_email).toBe("gift.recipient@example.com");
-    expect(await listAttributions(env.DB, "2_bc")).toEqual([
+    expect((await order("2")).member_email).toBe("gift.recipient@example.com");
+    expect(await listAttributions(env.DB, "2")).toEqual([
       {
         previous_member_email: "buyer@example.com",
         member_email: "gift.recipient@example.com",
@@ -113,11 +113,11 @@ describe("attributeOrder", () => {
   });
 
   it("lists attribution history newest first", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
-    await attributeOrder(env, await order("1_bc"), "first@example.com", ADMIN_ID, null);
-    await attributeOrder(env, await order("1_bc"), "second@example.com", ADMIN_ID, null);
+    await insertOrder({ id: "1", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
+    await attributeOrder(env, await order("1"), "first@example.com", ADMIN_ID, null);
+    await attributeOrder(env, await order("1"), "second@example.com", ADMIN_ID, null);
 
-    expect((await listAttributions(env.DB, "1_bc")).map((a) => a.member_email)).toEqual(["second@example.com", "first@example.com"]);
+    expect((await listAttributions(env.DB, "1")).map((a) => a.member_email)).toEqual(["second@example.com", "first@example.com"]);
   });
 
   it("gives a new member the order's name when their history has none, and skips a previous member with no card", async () => {
@@ -131,20 +131,20 @@ describe("attributeOrder", () => {
   });
 
   it("gives the recipient a card when the order's SKU is a membership", async () => {
-    await insertOrder({ id: "1_bc", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "buyer@example.com", created: "2098-01-15T00:00:00Z" });
     await env.DB.exec("UPDATE membership_orders SET sku = 'LOSV-MEM-0001', first_name = NULL");
 
-    await attributeOrder(env, await order("1_bc"), "recipient@example.com", ADMIN_ID, null);
+    await attributeOrder(env, await order("1"), "recipient@example.com", ADMIN_ID, null);
 
     expect((await member("recipient@example.com"))?.member_id).toMatch(/^LV-/);
   });
 
   it("creates no card for the recipient of an order that doesn't count, and pushes nothing for an unchanged card", async () => {
-    await insertOrder({ id: "1_bc", email: "recipient@example.com", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "recipient@example.com", created: "2098-01-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "recipient@example.com", FALLBACK);
-    await insertOrder({ id: "2_bc", email: "buyer@example.com", created: "2097-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "2", email: "buyer@example.com", created: "2097-01-15T00:00:00Z", status: "Refunded" });
 
-    const result = await attributeOrder(env, await order("2_bc"), "recipient@example.com", ADMIN_ID, null);
+    const result = await attributeOrder(env, await order("2"), "recipient@example.com", ADMIN_ID, null);
 
     expect(result.previous).toBeNull();
     expect(result.current?.passChanged).toBe(false);
@@ -184,7 +184,7 @@ describe("emailMemberCard", () => {
   });
 
   it("sends nothing for a member whose card isn't current", async () => {
-    await insertOrder({ id: "1_bc", email: "lapsed@example.com", created: "2020-01-15T00:00:00Z" });
+    await insertOrder({ id: "1", email: "lapsed@example.com", created: "2020-01-15T00:00:00Z" });
     await refreshMemberFromOrders(env, "lapsed@example.com", FALLBACK);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 

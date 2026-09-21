@@ -28,7 +28,7 @@ function exportWith(orders: Array<"squarespace" | "bigcommerce">): LegacyExport 
     ],
     membership_orders_total: orders.length + 3,
     membership_orders: orders.map((source, i) => ({
-      order_id: source === "bigcommerce" ? `${1000 + i}_bc` : `5f0000000000000000000${i}a1`,
+      order_id: source === "bigcommerce" ? `${1000 + i}` : `5f0000000000000000000${i}a1`,
       source,
       order_number: null,
       channel_name: null,

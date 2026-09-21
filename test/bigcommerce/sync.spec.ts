@@ -266,8 +266,8 @@ describe("refreshMemberFromOrders", () => {
   }
 
   it("inserts a new member derived from their counted orders", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
-    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-01-15", lastName: "Doe-Smith" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2090-01-15" });
+    await insertHistoryOrder({ orderId: "2", createdOn: "2098-01-15", lastName: "Doe-Smith" });
 
     const result = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
     expect(result).toEqual({ memberId: expect.stringMatching(MEMBER_ID_PATTERN), passChanged: true });
@@ -285,7 +285,7 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("is idempotent: one row, the same auth_token, and no change reported the second time", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
     const first = await getMemberByEmail("jane.doe@example.com");
@@ -298,7 +298,7 @@ describe("refreshMemberFromOrders", () => {
 
   it("preserves an existing member_id and auth_token when matched by email", async () => {
     await insertMember("LV-10023", "jane.doe@example.com", { expirationDate: "2026-06-01" });
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
@@ -310,7 +310,7 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("lower-cases and trims the email it is given", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     await refreshMemberFromOrders(env, " Jane.Doe@EXAMPLE.com ", fallback);
 
@@ -318,10 +318,10 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("leaves out refunded, cancelled, and declined orders", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2090-01-15" });
-    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2080-01-15", status: "Declined" });
-    await insertHistoryOrder({ orderId: "3_bc", createdOn: "2095-01-15", status: "Refunded" });
-    await insertHistoryOrder({ orderId: "4_bc", createdOn: "2096-01-15", status: "Cancelled" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2090-01-15" });
+    await insertHistoryOrder({ orderId: "2", createdOn: "2080-01-15", status: "Declined" });
+    await insertHistoryOrder({ orderId: "3", createdOn: "2095-01-15", status: "Refunded" });
+    await insertHistoryOrder({ orderId: "4", createdOn: "2096-01-15", status: "Cancelled" });
     await insertHistoryOrder({ orderId: "sq-5", createdOn: "2097-01-15", status: "CANCELED", source: "squarespace" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
@@ -343,7 +343,7 @@ describe("refreshMemberFromOrders", () => {
     ["Partially Refunded", null],
     ["Disputed", null],
   ])("a BigCommerce %s order gives an expiration of %s", async (status, expiration) => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15", status });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15", status });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
@@ -366,23 +366,23 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("rolls a synced renewal back once it is refunded", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
-    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2097-01-15" });
+    await insertHistoryOrder({ orderId: "2", createdOn: "2098-01-15" });
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
     expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2099-01-15");
 
-    await setOrderStatus("2_bc", "Refunded");
+    await setOrderStatus("2", "Refunded");
 
     expect((await refreshMemberFromOrders(env, "jane.doe@example.com", fallback))?.passChanged).toBe(true);
     expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date).toBe("2098-01-15");
   });
 
   it("keeps a member whose every order stopped counting, with no current membership", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
     const before = await getMemberByEmail("jane.doe@example.com");
 
-    await setOrderStatus("1_bc", "Refunded");
+    await setOrderStatus("1", "Refunded");
 
     expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toEqual({
       memberId: before?.member_id,
@@ -399,7 +399,7 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("creates nothing for an email with no counted orders", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15", status: "Refunded" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15", status: "Refunded" });
 
     expect(await refreshMemberFromOrders(env, "jane.doe@example.com", fallback)).toBeNull();
     expect(await countMembers()).toBe(0);
@@ -407,7 +407,7 @@ describe("refreshMemberFromOrders", () => {
 
   it("counts a Squarespace-era order toward member_since", async () => {
     await insertHistoryOrder({ orderId: "sq-1", createdOn: "2016-03-01", source: "squarespace", sku: null, firstName: null, lastName: null });
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
@@ -439,7 +439,7 @@ describe("refreshMemberFromOrders", () => {
 
   it("re-derives a revoked member's status like any other (revocation isn't sticky)", async () => {
     await insertMember("LV-10023", "jane.doe@example.com", { status: "revoked" });
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
@@ -449,8 +449,8 @@ describe("refreshMemberFromOrders", () => {
   it("gives each new member their own id, even when their orders share a BigCommerce customer id", async () => {
     // Guest checkouts all have customer_id 0, and a gifted order carries the
     // buyer's; neither may make two people share a pass serial (#66).
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
-    await insertHistoryOrder({ orderId: "2_bc", createdOn: "2098-02-15", email: "gift.recipient@example.com" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "2", createdOn: "2098-02-15", email: "gift.recipient@example.com" });
 
     const buyer = await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
     const recipient = await refreshMemberFromOrders(env, "gift.recipient@example.com", fallback);
@@ -463,7 +463,7 @@ describe("refreshMemberFromOrders", () => {
   });
 
   it("converges on one row when two refreshes of the same new member overlap", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     const results = await Promise.all([
       refreshMemberFromOrders(env, "jane.doe@example.com", fallback),
@@ -656,7 +656,7 @@ describe("syncBigCommerceOrder", () => {
 
   it("updates the member recorded on the order, even when that isn't the billing email", async () => {
     // An order already attributed to someone else (e.g. by the legacy import).
-    await insertHistoryOrder({ orderId: "1001_bc", createdOn: "2098-01-15", email: "gift.recipient@example.com" });
+    await insertHistoryOrder({ orderId: "1001", createdOn: "2098-01-15", email: "gift.recipient@example.com" });
     const order = makeOrder({ date_created: "2098-01-15T00:00:00.000Z" });
     mockBigCommerceOrderFetch(order, makeProducts());
 
@@ -1004,13 +1004,13 @@ describe("pass-change detection and update pushes", () => {
   }
 
   it("reports a new member as changed", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
 
     expect(await refresh()).toEqual({ memberId: expect.stringMatching(MEMBER_ID_PATTERN), passChanged: true });
   });
 
   it("doesn't rewrite (or bump last_updated_at on) a member whose pass-visible fields are unchanged", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
     await refresh();
     await env.DB.exec("UPDATE members SET last_updated_at = 123");
 
@@ -1025,7 +1025,7 @@ describe("pass-change detection and update pushes", () => {
     ["member_since", "member_since = '2000-01-01'"],
     ["status", "status = 'expired'"],
   ])("reports a change when the stored %s differs from the history, and bumps last_updated_at", async (_label, staleField) => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2098-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2098-01-15" });
     await refresh();
     await env.DB.exec(`UPDATE members SET ${staleField}, last_updated_at = 123`);
 
@@ -1062,7 +1062,7 @@ describe("pass-change detection and update pushes", () => {
   }
 
   it("syncBigCommerceOrder pushes a pass update to registered devices when the pass changed", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2097-01-15" });
     await refresh();
     await registerDevice(await memberIdFor("jane.doe@example.com"));
     const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
@@ -1074,7 +1074,7 @@ describe("pass-change detection and update pushes", () => {
   });
 
   it("syncBigCommerceOrder pushes when a refund shortens the membership", async () => {
-    await insertHistoryOrder({ orderId: "1_bc", createdOn: "2097-01-15" });
+    await insertHistoryOrder({ orderId: "1", createdOn: "2097-01-15" });
     const renewal = makeOrder({ date_created: "2098-06-01T00:00:00.000Z" });
     mockOrderAndApns(renewal);
     await syncBigCommerceOrder(env, "store123", renewal.id);
@@ -1114,7 +1114,7 @@ describe("more than one membership on an order", () => {
     const row = await env.DB.prepare(
       "SELECT membership_units FROM membership_orders WHERE order_id = ?",
     )
-      .bind(`${orderId}_bc`)
+      .bind(`${orderId}`)
       .first<{ membership_units: number | null }>();
     return row?.membership_units ?? null;
   }

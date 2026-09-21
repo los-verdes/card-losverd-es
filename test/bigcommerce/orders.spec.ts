@@ -52,7 +52,7 @@ describe("helpers", () => {
   });
 
   it("keys orders the way the legacy app did", () => {
-    expect(bigCommerceOrderKey(1001)).toBe("1001_bc");
+    expect(bigCommerceOrderKey(1001)).toBe("1001");
   });
 });
 
@@ -102,7 +102,7 @@ describe("recordMembershipOrder", () => {
 
     expect(await orderRows()).toEqual([
       expect.objectContaining({
-        order_id: "2001_bc",
+        order_id: "2001",
         source: "bigcommerce",
         order_number: "2001_00000000-0000-4000-8000-000000000002",
         channel_name: "bigcommerce_checkout_api",
@@ -149,7 +149,7 @@ describe("recordMembershipOrder", () => {
   it("converges with a legacy-imported row, keeping its member_email and provenance", async () => {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
-       VALUES ('2001_bc', 'bigcommerce', 'sam.rivera@example.com', 'sam.new@example.com', 'Awaiting Fulfillment', '2026-09-01T10:00:00Z', '2027-09-01T10:00:00Z', 'legacy_postgres')`,
+       VALUES ('2001', 'bigcommerce', 'sam.rivera@example.com', 'sam.new@example.com', 'Awaiting Fulfillment', '2026-09-01T10:00:00Z', '2027-09-01T10:00:00Z', 'legacy_postgres')`,
     ).run();
 
     // Returns the member the order belongs to, not its billing email.
@@ -200,7 +200,7 @@ describe("BigCommerce sync", () => {
     await syncBigCommerceOrder(env, "store123", ORDER.id);
 
     expect(await orderRows()).toEqual([
-      expect.objectContaining({ order_id: "2001_bc", sku: "LOSV-MEM-0001" }),
+      expect.objectContaining({ order_id: "2001", sku: "LOSV-MEM-0001" }),
     ]);
     const member = await env.DB.prepare("SELECT email FROM members").first();
     expect(member).toEqual({ email: "sam.rivera@example.com" });
