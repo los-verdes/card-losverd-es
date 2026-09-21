@@ -15,6 +15,10 @@ crash.*.log
 # Local planning/reference docs -- not part of this repo's history
 .ai/
 
+# Google Docs copy of the provenance doc (just provenance-gdoc) -- generated,
+# and a stale one sitting in a working tree is how two versions get shared.
+.provenance-gdoc.md
+
 # Phase 1.0.1 spike build artifact (see justfile's verify-pkcs7-openssl)
 .verify-pkcs7-bundle.mjs
 
