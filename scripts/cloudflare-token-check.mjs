@@ -116,6 +116,54 @@ if (!verify.body?.success) {
   process.exit(1);
 }
 
+// Both credentials this project holds for Cloudflare can now expire, and an
+// expiry is a deploy that breaks on a date nobody is looking at. Thirty days
+// is the same notice the Apple pass certificate gets, for the same reason:
+// long enough to act calmly, short enough not to become background noise.
+const EXPIRY_WARN_DAYS = 30;
+
+function daysUntil(when) {
+  return Math.floor((when.getTime() - Date.now()) / 86_400_000);
+}
+
+/**
+ * Reports how long a credential has left, and whether that is a problem.
+ * Returns true when it is past due, so the caller can fail on it.
+ */
+function reportExpiry(label, iso) {
+  if (!iso) {
+    console.log(`     ${label}: no expiry set`);
+    return false;
+  }
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) {
+    console.log(`     ${label}: expiry recorded as ${JSON.stringify(iso)}, which is not a date`);
+    return false;
+  }
+  const left = daysUntil(when);
+  const on = when.toISOString().slice(0, 10);
+  if (left < 0) {
+    console.log(`     ${label}: EXPIRED on ${on}`);
+    return true;
+  }
+  console.log(
+    `     ${label}: valid until ${on} (${left} days)${left <= EXPIRY_WARN_DAYS ? " -- renew it" : ""}`,
+  );
+  return false;
+}
+
+console.log("Credentials:");
+const apiTokenExpired = reportExpiry("API token", verify.body?.result?.expires_on);
+// The state credential is an R2 access key pair, not a bearer token, so there
+// is no endpoint to ask and the date has to be recorded alongside it. Absent
+// is reported rather than assumed fine: "no expiry set" and "nobody wrote the
+// date down" look the same from here, and only one of them is safe.
+const stateExpired = reportExpiry(
+  "Terraform state credential",
+  process.env.TF_STATE_TOKEN_EXPIRES_ON,
+);
+console.log("");
+
 const results = [];
 for (const probe of PROBES) {
   const response = await call(probe.path);
@@ -149,6 +197,14 @@ if (missing.length) {
   console.error(
     `\ncloudflare-token-check: ${missing.length} of ${results.length} permission groups missing. Add in the Cloudflare dashboard:\n` +
       missing.map((r) => `  - ${r.group}\n      needed by: ${r.usedBy}`).join("\n"),
+  );
+  process.exit(1);
+}
+
+if (apiTokenExpired || stateExpired) {
+  console.error(
+    "\ncloudflare-token-check: a credential has expired. Every permission group " +
+      "above can still be listed correctly and the deploy will still fail.",
   );
   process.exit(1);
 }
