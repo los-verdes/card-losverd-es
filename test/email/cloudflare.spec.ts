@@ -39,6 +39,13 @@ describe("the message handed to the binding", () => {
     expect(built.subject).toBe("Your membership card");
   });
 
+  it("passes headers through, and leaves them off when there are none", () => {
+    const headers = { "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
+
+    expect(buildBindingMessage({ ...MESSAGE, headers }).headers).toEqual(headers);
+    expect(buildBindingMessage(MESSAGE)).not.toHaveProperty("headers");
+  });
+
   it("leaves attachments out entirely when there are none", () => {
     // Rather than an empty list, which is a claim that there are attachments
     // and they are nothing.

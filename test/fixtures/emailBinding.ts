@@ -27,9 +27,18 @@ export interface FakeEmailBinding extends SendEmailBinding {
 /**
  * `failWith` makes every send throw, as the binding does when it rejects a
  * message -- the equivalent of a mail service answering with an error.
+ * `suppressed` throws the way it does for an address on the account's
+ * suppression list: with the documented `code`.
  */
-export function fakeEmailBinding(options: { failWith?: string } = {}): FakeEmailBinding {
+export function fakeEmailBinding(
+  options: { failWith?: string; suppressed?: boolean } = {},
+): FakeEmailBinding {
   const send = vi.fn<(message: BindingMessage) => Promise<unknown>>(async () => {
+    if (options.suppressed) {
+      throw Object.assign(new Error("Suppressed recipient while dropping is off"), {
+        code: "E_RECIPIENT_SUPPRESSED",
+      });
+    }
     if (options.failWith) throw new Error(options.failWith);
     return undefined;
   });

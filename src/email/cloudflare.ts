@@ -8,12 +8,11 @@
  *
  * Two things worth knowing about what goes out:
  *
- * 1. **No unsubscribe link.** The previous site sent through SendGrid under an
- *    unsubscribe group, which added a link and a preference page. There is no
- *    equivalent here, so a message carries neither. For a card somebody asked
- *    for that is defensible -- there is nothing to unsubscribe from -- but it
- *    is a decision rather than an oversight, and `List-Unsubscribe` would need
- *    somewhere to point before it could be added.
+ * 1. **Unsubscribing is ours to handle.** A message can carry
+ *    `List-Unsubscribe` headers, and Cloudflare keeps a suppression list it
+ *    enforces at send time, but it does not process unsubscribe links. The
+ *    link, the page behind it, and adding the address to that list are in
+ *    ./unsubscribeToken.ts, ./suppressions.ts and src/member/unsubscribe.tsx.
  * 2. **The display name is folded into the address.** The binding takes one
  *    string, so the name goes in as `Name <address>`. That is the RFC 5322
  *    form and should be read correctly, but it is the first thing to check on
@@ -51,6 +50,8 @@ export interface BindingMessage {
   text: string;
   html: string;
   attachments?: BindingAttachment[];
+  /** Only headers Cloudflare allowlists, such as `List-Unsubscribe`. */
+  headers?: Record<string, string>;
 }
 
 /** `Name <address>`, or the bare address when there is no name. */
@@ -71,23 +72,36 @@ export function buildBindingMessage(message: EmailMessage): BindingMessage {
       type: attachment.type,
       disposition: "attachment",
     })),
+    ...(message.headers ? { headers: message.headers } : {}),
   };
 }
 
+/** What became of a message the binding was handed. */
+export type SendOutcome = "sent" | "suppressed";
+
 /**
- * Sends one message. Throws if the binding rejects it, with the service named
- * in the error, so a log line says where the failure came from.
+ * The binding's code for an address on the account's suppression list:
+ * somebody unsubscribed, or Cloudflare recorded a hard bounce or complaint.
+ */
+const RECIPIENT_SUPPRESSED = "E_RECIPIENT_SUPPRESSED";
+
+/**
+ * Sends one message. A suppressed recipient is an outcome rather than a
+ * failure -- nothing is wrong, the person asked not to be emailed. Anything
+ * else the binding rejects throws, with the service named in the error, so a
+ * log line says where the failure came from.
  */
 export async function sendViaBinding(
   binding: SendEmailBinding,
   message: EmailMessage,
-): Promise<void> {
+): Promise<SendOutcome> {
   try {
     await binding.send(buildBindingMessage(message));
+    return "sent";
   } catch (error) {
-    // The binding throws rather than returning a status, so this is where the
-    // reason is legible. Naming the transport matters while there are two:
-    // "mail send failed" alone would leave a reader guessing which.
+    if ((error as { code?: unknown } | null)?.code === RECIPIENT_SUPPRESSED) {
+      return "suppressed";
+    }
     throw new Error(`Cloudflare Email Service send failed: ${String(error)}`);
   }
 }

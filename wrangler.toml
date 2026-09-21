@@ -106,6 +106,9 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_RECIPIENT_ALLOWLIST = ""
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
+# Where unsubscribes are recorded: the account-wide Email Service
+# suppression list (src/email/suppressions.ts). Not secret.
+CLOUDFLARE_ACCOUNT_ID = "42988f13a6daf00814bced22aff46f4e"
 # A Turnstile site key is public -- it's rendered into the /email-card form --
 # so it belongs here rather than in the Worker secrets item. Each widget is
 # bound to its own hostnames, so production and staging need separate ones.
@@ -203,6 +206,9 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
+# Where unsubscribes are recorded: the account-wide Email Service
+# suppression list (src/email/suppressions.ts). Not secret.
+CLOUDFLARE_ACCOUNT_ID = "42988f13a6daf00814bced22aff46f4e"
 # Staging's own Turnstile widget, bound to the workers.dev hostname above.
 TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 CARD_EMAIL_NEW_ORDERS_SINCE = ""

@@ -28,6 +28,7 @@ import {
   ALLOW_ANY_RECIPIENT,
   parseRecipientAllowlist,
 } from "../email/send";
+import { checkSuppressionListAccess, isSuppressionListConfigured } from "../email/suppressions";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
@@ -386,7 +387,7 @@ async function googleWalletChecks(env: Env): Promise<CheckGroup> {
   return { title: "Google Wallet", results: [result] };
 }
 
-function deliveryChecks(env: Env, live: boolean): CheckGroup {
+async function deliveryChecks(env: Env, live: boolean): Promise<CheckGroup> {
   const results: CheckResult[] = [];
 
   // Reported on the page because "no email arrived" is otherwise a puzzle
@@ -433,6 +434,20 @@ function deliveryChecks(env: Env, live: boolean): CheckGroup {
       ),
     );
   }
+
+  // Every card email carries an unsubscribe link, and it only works if this
+  // Worker can write to the account's suppression list.
+  results.push(
+    isSuppressionListConfigured(env)
+      ? await attempt("Unsubscribe links", async () => {
+          await checkSuppressionListAccess(env);
+          return ok("Unsubscribe links", "The token can reach the account's email suppression list.");
+        })
+      : fail(
+          "Unsubscribe links",
+          "EMAIL_SUPPRESSIONS_API_TOKEN is unset, so the link in every card email leads to a \"try again later\" page. It needs an account token with Email Sending: Edit.",
+        ),
+  );
 
   // Deliberately empty until we're ready for new orders to mail a card;
   // a past date here during a backfill is how existing members get mailed.
@@ -822,7 +837,7 @@ export async function runPreflightChecks(
     await applePassChecks(env, now),
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live, requestUrl),
-    deliveryChecks(env, live),
+    await deliveryChecks(env, live),
     await queueChecks(env, now),
   ];
 }

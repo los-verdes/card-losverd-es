@@ -775,7 +775,9 @@ or a change, not an open-ended design exercise.
 Alongside the records of what is true now, there is a permanent record of what
 was done: every revocation and expulsion and the lifting of either, every card
 name set or cleared, every "member since" correction, every re-attributed
-order, and every card email sent. Each line says when, what, who it was about,
+order, every card email sent, and every time somebody stops or restarts
+card emails to their address with the unsubscribe link those emails carry.
+Each line says when, what, who it was about,
 who did it, and one sentence of detail -- including the value that was
 replaced, where there was one. An admin can read it for one person or as a
 recent-activity list (`/admin/audit`).
@@ -795,7 +797,8 @@ all routine, and a log that included them would bury the handful of entries
 that represent a decision somebody made. And it does not record a card email
 as a decision -- nobody chose to send it, a member asked or an order completed
 -- but it does record that one went out, because "has anything been sent to
-this person, and when" has no other answer.
+this person, and when" has no other answer. A card email that was not delivered because the
+address had unsubscribed is not recorded as sent.
 
 ## Appendix: orders from before BigCommerce
 

@@ -30,7 +30,9 @@ import {
   type MemberRecord,
   cardNameText,
 } from "../member/artifacts";
+import type { SendOutcome } from "./cloudflare";
 import { sendEmail } from "./send";
+import { unsubscribeUrl } from "./unsubscribeToken";
 
 export const EMAIL_SUBJECT = "Los Verdes Membership Card Details";
 export const CARD_IMAGE_FILENAME = "los-verdes-membership-card.png";
@@ -57,6 +59,8 @@ interface CardEmailProps {
   reason: CardEmailReason;
   /** The site's public origin (`PUBLIC_BASE_URL`), no trailing slash. */
   baseUrl: string;
+  /** Stops card emails to this address; also sent as `List-Unsubscribe`. */
+  unsubscribeUrl: string;
 }
 
 function opening(reason: CardEmailReason): string {
@@ -110,6 +114,10 @@ const CardEmail: FC<CardEmailProps> = (props) => (
         contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for
         assistance. {footer(props)}
       </p>
+      <p style="font-size: 0.8em; color: #393939">
+        Don&#39;t want these emails?{" "}
+        <a href={props.unsubscribeUrl}>Stop card emails to this address</a>.
+      </p>
     </body>
   </html>
 );
@@ -139,6 +147,8 @@ function cardEmailText(props: CardEmailProps): string {
     `This Los Verdes digital membership card is intended for ${props.name}.`,
     `If you are not ${props.name}, please feel free to delete this email or contact ${SUPPORT_EMAIL} for assistance.`,
     footer(props),
+    "",
+    `Don't want these emails? Stop card emails to this address: ${props.unsubscribeUrl}`,
   ].join("\n");
 }
 
@@ -164,13 +174,14 @@ async function googleWalletLink(
 /**
  * Emails `member` their card. The caller decides whether this member should
  * be emailed at all; this throws on failure, so a caller inside `waitUntil`
- * should catch.
+ * should catch. "suppressed" means the recipient unsubscribed, or this
+ * environment may not email them.
  */
 export async function sendMembershipCardEmail(
   env: Env,
   member: MemberRecord & { expiration_date: string },
   reason: CardEmailReason,
-): Promise<void> {
+): Promise<SendOutcome> {
   // Sequential: rendering and signing are CPU-bound, so running them
   // concurrently wouldn't finish sooner, and a failure in one would leave
   // the others running on after this function returns.
@@ -184,8 +195,9 @@ export async function sendMembershipCardEmail(
     googleWalletUrl,
     reason,
     baseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ""),
+    unsubscribeUrl: await unsubscribeUrl(env, member.email),
   };
-  await sendEmail(env, {
+  return sendEmail(env, {
     from: { email: env.EMAIL_FROM_ADDRESS, name: env.EMAIL_FROM_NAME },
     to: { email: member.email, name: props.name },
     subject: EMAIL_SUBJECT,
@@ -203,6 +215,12 @@ export async function sendMembershipCardEmail(
         content: applePass,
       },
     ],
+    // RFC 8058: with both headers, a mail client can offer its own
+    // unsubscribe button and POST to the link without opening a page.
+    headers: {
+      "List-Unsubscribe": `<${props.unsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   });
 }
 
@@ -240,7 +258,11 @@ export async function emailCardTo(
   reason: CardEmailReason,
 ): Promise<boolean> {
   try {
-    await sendMembershipCardEmail(env, member, reason);
+    if ((await sendMembershipCardEmail(env, member, reason)) === "suppressed") {
+      // Already logged by sendEmail, and not an event in this person's
+      // history: nothing reached them.
+      return false;
+    }
     console.log("Card email sent", { memberId: member.member_id, reason: reason.kind });
     // Best effort, and deliberately after the send: the message has left, so
     // throwing here would leave the caller's only move being to send it

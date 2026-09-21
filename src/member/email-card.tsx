@@ -192,8 +192,10 @@ export async function deliverCardByEmail(
     }
     // Non-null: isMembershipCurrent() requires an expiration date.
     const current = { ...member, expiration_date: member.expiration_date! };
-    await sendMembershipCardEmail(env, current, { kind: "request", submittedOn });
-    console.log("Email card sent", { memberId: member.member_id });
+    // "suppressed" -- they unsubscribed -- is already logged by sendEmail.
+    if ((await sendMembershipCardEmail(env, current, { kind: "request", submittedOn })) === "sent") {
+      console.log("Email card sent", { memberId: member.member_id });
+    }
   } catch (err) {
     console.error("Email card delivery failed", { error: String(err) });
   }

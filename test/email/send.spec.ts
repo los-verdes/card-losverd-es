@@ -36,6 +36,30 @@ describe("sendEmail", () => {
     );
   });
 
+  it("reports a sent message as sent", async () => {
+    await expect(
+      sendEmail({ EMAIL: fakeEmailBinding(), EMAIL_RECIPIENT_ALLOWLIST: "*" }, MESSAGE),
+    ).resolves.toBe("sent");
+  });
+
+  it("treats an unsubscribed recipient as suppressed, not failed, and logs it without the address", async () => {
+    // The binding throws for an address on the suppression list. That is the
+    // list working, so it must not read as a delivery failure anywhere.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const outcome = await sendEmail(
+      { EMAIL: fakeEmailBinding({ suppressed: true }), EMAIL_RECIPIENT_ALLOWLIST: "*" },
+      MESSAGE,
+    );
+
+    expect(outcome).toBe("suppressed");
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Email suppressed: recipient is on the account's suppression list",
+      { subject: "Subject" },
+    );
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("jane@example.com");
+  });
+
   it("says which service rejected a message", async () => {
     const binding = fakeEmailBinding({ failWith: "domain not onboarded" });
 
@@ -135,6 +159,6 @@ describe("suppressing a send", () => {
     // binding to say so.
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(sendEmail({ EMAIL_RECIPIENT_ALLOWLIST: "" }, MESSAGE)).resolves.toBeUndefined();
+    await expect(sendEmail({ EMAIL_RECIPIENT_ALLOWLIST: "" }, MESSAGE)).resolves.toBe("suppressed");
   });
 });

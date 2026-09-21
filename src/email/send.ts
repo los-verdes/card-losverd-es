@@ -10,7 +10,7 @@
  * (#244; ./cloudflare.ts).
  */
 
-import { type SendEmailBinding, sendViaBinding } from "./cloudflare";
+import { type SendEmailBinding, type SendOutcome, sendViaBinding } from "./cloudflare";
 
 /**
  * What sending needs from the environment. Narrower than `Env` so this stays
@@ -43,6 +43,8 @@ export interface EmailMessage {
   text: string;
   html: string;
   attachments?: EmailAttachment[];
+  /** Extra headers; Cloudflare accepts only its allowlisted ones. */
+  headers?: Record<string, string>;
 }
 
 /** The one value of `EMAIL_RECIPIENT_ALLOWLIST` that permits any address. */
@@ -87,13 +89,14 @@ export function allowsRecipient(
 
 /**
  * Sends one message, unless this environment isn't allowed to email that
- * recipient. Throws (without retrying) if the binding is missing, or if it
- * rejects the message.
+ * recipient or the recipient has unsubscribed; either way says "suppressed".
+ * Throws (without retrying) if the binding is missing, or if it rejects the
+ * message for any other reason.
  */
 export async function sendEmail(
   env: EmailEnv,
   message: EmailMessage,
-): Promise<void> {
+): Promise<SendOutcome> {
   if (!allowsRecipient(env.EMAIL_RECIPIENT_ALLOWLIST, message.to.email)) {
     // Always logged, never silent. The case this is written for is someone
     // testing delivery from staging long after this was added, finding that
@@ -109,12 +112,20 @@ export async function sendEmail(
       allowlist: env.EMAIL_RECIPIENT_ALLOWLIST || "(empty -- nobody)",
       subject: message.subject,
     });
-    return;
+    return "suppressed";
   }
   if (!env.EMAIL) {
     throw new Error(
       "No email transport: this environment has no Cloudflare Email Service binding (`send_email` named EMAIL in wrangler.toml)",
     );
   }
-  return sendViaBinding(env.EMAIL, message);
+  const outcome = await sendViaBinding(env.EMAIL, message);
+  if (outcome === "suppressed") {
+    // Also logged, for the same reason as above, and also without the
+    // address. The subject is enough to tell which kind of mail it was.
+    console.warn("Email suppressed: recipient is on the account's suppression list", {
+      subject: message.subject,
+    });
+  }
+  return outcome;
 }

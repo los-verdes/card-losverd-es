@@ -16,8 +16,10 @@ import { handleServerError } from "./lib/serverError";
 import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
 import portal from "./member/portal";
+import unsubscribe from "./member/unsubscribe";
 import verifyPass from "./member/verify-pass";
 import passkit from "./passkit/routes";
+import { UNSUBSCRIBE_PATH } from "./email/unsubscribeToken";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
 import { scheduled } from "./scheduled";
@@ -113,6 +115,15 @@ export interface Env {
    */
   EMAIL?: SendEmailBinding;
   /**
+   * Unsubscribing (src/email/suppressions.ts): adds and removes addresses on
+   * the account's Email Service suppression list. The account id is a plain
+   * var; the token (Email Sending: Edit) is a secret. Without the token the
+   * unsubscribe page says it can't record the request rather than claiming
+   * to have done so.
+   */
+  CLOUDFLARE_ACCOUNT_ID: string;
+  EMAIL_SUPPRESSIONS_API_TOKEN?: string;
+  /**
    * Date (YYYY-MM-DD) from which a completed new order emails the member
    * their card; empty means never (src/email/newOrder.ts).
    */
@@ -168,6 +179,9 @@ app.route("/passkit", passkit);
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
 app.route("/email-card", emailCard);
+// Where a card email's unsubscribe link, and a mail client's one-click
+// unsubscribe, land.
+app.route(UNSUBSCRIBE_PATH, unsubscribe);
 // Claiming a membership bought under another address (#144), which is how
 // an Apple Hide My Email sign-in reaches its card.
 app.route(CLAIM_PATH, claimMembership);

@@ -4,6 +4,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { exportPKCS8, generateKeyPair } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
+import { verifyUnsubscribeToken } from "../../src/email/unsubscribeToken";
 import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
 import { getTestCertChain } from "../fixtures/certChain";
@@ -18,6 +19,8 @@ const GOOGLE_SAVE_PREFIX = "https://pay.google.com/gp/v/save/";
 let email: FakeEmailBinding;
 
 beforeEach(async () => {
+  // Signs the unsubscribe link every card email carries.
+  env.SESSION_SIGNING_KEY = "test-session-signing-key-0123456789";
   const chain = getTestCertChain();
   env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";
   env.PASSKIT_TEAM_IDENTIFIER = "TEAMID1234";
@@ -263,6 +266,39 @@ describe("POST /email-card", () => {
       for (const part of [text, html]) {
         expect(part).not.toContain("card.losverd.es");
       }
+    });
+
+    it("carries a working unsubscribe link, in the body and as the headers mail clients read", async () => {
+      mockUpstreams();
+
+      await submitEmail("Jane@Example.com");
+
+      const { text, html, headers } = email.sent[0];
+      const link = headers!["List-Unsubscribe"].slice(1, -1);
+      expect(headers!["List-Unsubscribe"]).toBe(`<${link}>`);
+      expect(headers!["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+      expect(link.startsWith(`${ORIGIN}/email/unsubscribe?token=`)).toBe(true);
+      expect(text).toContain(`Stop card emails to this address: ${link}`);
+      expect(html).toContain(`<a href="${link}">Stop card emails to this address</a>`);
+      // The token names the recipient, so the page it opens is theirs.
+      const token = new URL(link).searchParams.get("token")!;
+      expect(await verifyUnsubscribeToken(env.SESSION_SIGNING_KEY, token)).toBe("jane@example.com");
+    });
+
+    it("says nothing was sent when the recipient has unsubscribed, and answers the same", async () => {
+      env.EMAIL = fakeEmailBinding({ suppressed: true });
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockUpstreams();
+
+      const res = await submitEmail("jane@example.com");
+
+      expect(res.body).toContain("Check your email");
+      expect(logSpy).not.toHaveBeenCalledWith("Email card sent", expect.anything());
+      expect(warnSpy).toHaveBeenCalledWith(
+        "Email suppressed: recipient is on the account's suppression list",
+        expect.anything(),
+      );
     });
 
     it("escapes member-provided text in the HTML body", async () => {

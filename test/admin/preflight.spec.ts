@@ -121,6 +121,7 @@ interface RemoteState {
   ordersStatus: number;
   hooksStatus: number;
   hooks: unknown[];
+  suppressionsStatus: number;
 }
 
 /**
@@ -146,6 +147,10 @@ function mockRemotes() {
       return new Response(JSON.stringify({ name: "Los Verdes", domain: "shop.example" }), {
         status: remote.storeStatus,
       });
+    if (url.includes("/email/sending/suppressions"))
+      return remote.suppressionsStatus === 200
+        ? Response.json({ success: true, result: [] })
+        : Response.json({ success: false, errors: [{ message: "Authentication error" }] }, { status: remote.suppressionsStatus });
     if (url.endsWith("/v3/hooks"))
       return new Response(JSON.stringify({ data: remote.hooks }), { status: remote.hooksStatus });
     throw new Error(`unexpected fetch: ${url}`);
@@ -168,6 +173,8 @@ async function configureHealthyEnvironment() {
   // environment is one that can email somebody.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
   env.EMAIL = fakeEmailBinding();
+  env.CLOUDFLARE_ACCOUNT_ID = "0123456789abcdef";
+  env.EMAIL_SUPPRESSIONS_API_TOKEN = "suppressions-token";
   env.TURNSTILE_SITE_KEY = "0x000";
   env.TURNSTILE_SECRET_KEY = "0x111";
   env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
@@ -191,6 +198,7 @@ async function configureHealthyEnvironment() {
     storeStatus: 200,
     ordersStatus: 200,
     hooksStatus: 200,
+    suppressionsStatus: 200,
     hooks: [
       {
         scope: "store/order/*",
@@ -749,6 +757,25 @@ describe("configuration", () => {
     env.TURNSTILE_SITE_KEY = "";
     env.TURNSTILE_SECRET_KEY = undefined;
     expect(find(await check(), "Email a card to myself").status).toBe("warn");
+  });
+
+  it("confirms unsubscribe links work by reaching the suppression list", async () => {
+    expect(find(await check(), "Unsubscribe links").status).toBe("ok");
+  });
+
+  it("fails without the suppression list token, saying what it needs", async () => {
+    env.EMAIL_SUPPRESSIONS_API_TOKEN = undefined;
+    const result = find(await check(), "Unsubscribe links");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("Email Sending: Edit");
+  });
+
+  it("fails when the token can't reach the list, with Cloudflare's reason", async () => {
+    // The likely mistake: a token created with the wrong permission.
+    remote.suppressionsStatus = 403;
+    const result = find(await check(), "Unsubscribe links");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("Authentication error");
   });
 
   it("reports a configured send date", async () => {

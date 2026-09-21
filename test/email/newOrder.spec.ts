@@ -58,6 +58,8 @@ async function cardEmailRows() {
 }
 
 beforeEach(async () => {
+  // Signs the unsubscribe link every card email carries.
+  env.SESSION_SIGNING_KEY = "test-session-signing-key-0123456789";
   const chain = getTestCertChain();
   env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
   env.CARD_EMAIL_NEW_ORDERS_SINCE = CUTOFF;
@@ -83,6 +85,7 @@ afterEach(async () => {
   env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
   env.EMAIL = undefined;
   await env.DB.exec("DELETE FROM card_emails");
+  await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM etl_sync_state");
@@ -97,6 +100,21 @@ describe("a new order reaching Completed", () => {
 
     expect(sentTo()).toEqual(["new.member@example.com"]);
     expect(await cardEmailRows()).toEqual([{ order_id: "5001", member_email: "new.member@example.com" }]);
+  });
+
+  it("keeps a send the recipient unsubscribed from out of their history", async () => {
+    // Nothing reached them, so "Card emailed" would be a false line in the
+    // audit log -- and the order's one send is still spent, as it should be.
+    env.EMAIL = fakeEmailBinding({ suppressed: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const order = makeOrder();
+    mockUpstreams([order]);
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    const { results } = await env.DB.prepare("SELECT action FROM audit_log WHERE action = 'card.emailed'").all();
+    expect(results).toEqual([]);
+    expect(await cardEmailRows()).toHaveLength(1);
   });
 
   it("says why the member is getting it", async () => {

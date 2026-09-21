@@ -62,8 +62,10 @@ export async function sendClaimLinkEmail(
     subject: CLAIM_EMAIL_SUBJECT,
     text: claimEmailText(confirmUrl),
     html: claimEmailHtml(confirmUrl),
-    // No unsubscribe group: this is a transactional reply to something the
-    // member just did, not membership mail they could reasonably opt out of
-    // and still expect to work.
+    // No unsubscribe link: this is a reply to something the member just did,
+    // not mail they could reasonably opt out of and still expect to work.
+    // The account's suppression list applies to it all the same, though, so
+    // an address that unsubscribed from card emails gets no claim link
+    // either -- the binding enforces the list for every message.
   });
 }

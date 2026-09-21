@@ -69,6 +69,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/name` | Set the name your card shows -- a nickname, or a correction the orders will never catch up with (`src/member/portal.tsx`) | Logged-in current member |
 | `/login`, `/logout`, `/api/auth/*` | Login with Google or Apple via Auth.js, bridged to a signed `lv_session` cookie. `/login` also offers `/email-card`, for anyone who has neither account (`src/auth/`) | Public |
 | `/email-card` | No-login fallback: emails a member their card. Turnstile-protected and rate limited; never reveals whether an address is a member (`src/member/email-card.tsx`) | Public |
+| `/email/unsubscribe` | Where a card email's unsubscribe link lands: stop, or restart, card emails to that address. Also the target of mail clients' one-click unsubscribe (`src/member/unsubscribe.tsx`) | Signed link |
 | `/verify-pass` | What a card's QR code points at; shows the holder's current membership (`src/member/verify-pass.tsx`) | Any logged-in user |
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
@@ -132,6 +133,7 @@ Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KE
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
 | `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
 | `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var). Sending itself needs no secret -- it is the `send_email` binding, see "Sending email" below |
+| `EMAIL_SUPPRESSIONS_API_TOKEN` | Unsubscribe links: an account API token with **Email Sending: Edit**, used to add and remove addresses on the account's suppression list. One token per environment; the list itself is account-wide |
 | `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
 | `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
 
@@ -230,11 +232,34 @@ mangled in transit, and no test here can check it.
 Who may receive mail is decided separately, and in code: see
 `EMAIL_RECIPIENT_ALLOWLIST`. The binding does not replace that check.
 
-Two things about what goes out. There is no unsubscribe link or preference
-page -- the previous site sent under a SendGrid unsubscribe group, and there
-is no equivalent here, which is defensible for a card somebody asked for but
-is a decision rather than an oversight. And the sender's display name travels
-inside the address, as `Name <address>`, because the binding takes one string.
+The sender's display name travels inside the address, as `Name <address>`,
+because the binding takes one string.
+
+### Unsubscribing
+
+Anyone can ask for a card to be emailed to any member's address, so every card
+email carries a way for the recipient to make that stop: a link in the footer,
+and the `List-Unsubscribe` headers that let a mail client show its own
+unsubscribe button. Both lead to `/email/unsubscribe`, which asks for a button
+press before changing anything, since mail scanners open links on their own.
+
+Who has unsubscribed is kept in the Cloudflare account's Email Service
+suppression list rather than in D1. The binding already refuses to send to an
+address on it, and Cloudflare adds hard bounces and spam complaints to it by
+itself; what this project adds is the link and the page. The page writes to
+the list with `EMAIL_SUPPRESSIONS_API_TOKEN`, and `/admin/preflight` checks
+that token can reach it. The list is account-wide, so staging and production
+share it. A send to an address on it is logged as suppressed rather than
+failed, and is not recorded as a card emailed.
+
+The previous site kept its unsubscribes in a SendGrid unsubscribe group. To
+carry them over, run this once while `SENDGRID_API_KEY` is still in
+production's 1Password item (it prints counts, never addresses):
+
+```bash
+just sendgrid-import-unsubscribes --dry-run
+just sendgrid-import-unsubscribes
+```
 
 ### Provisioning the APNs auth key
 

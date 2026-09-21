@@ -107,6 +107,17 @@ check-wrangler-envs:
 cloudflare-token-check:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
 
+# One-off, before SENDGRID_API_KEY is deleted: copies the previous site's
+# SendGrid unsubscribe group onto the account's Email Service suppression list,
+# so nobody who unsubscribed there is emailed again. The list is account-wide,
+# so this runs once, with production's credentials. Idempotent, and prints
+# counts only. Pass --dry-run to see the counts without changing anything.
+#
+# Carry the previous site's email unsubscribes over to Cloudflare
+[arg("dry_run", long="dry-run", value="--dry-run")]
+sendgrid-import-unsubscribes dry_run="":
+    SENDGRID_API_KEY='op://{{ op_vault }}/{{ worker_secrets_item }}production/SENDGRID_API_KEY'     EMAIL_SUPPRESSIONS_API_TOKEN='op://{{ op_vault }}/{{ worker_secrets_item }}production/EMAIL_SUPPRESSIONS_API_TOKEN'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/sendgrid-import-unsubscribes.mjs {{ dry_run }}
+
 # Admin is a flag on the person's `users` row, checked on every admin request,
 # so a grant or a revocation takes effect on their next page load. They have to
 # have signed in once first, or there is no row to change -- which is refused
