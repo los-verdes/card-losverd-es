@@ -8,7 +8,7 @@
  * what `idx_membership_orders_window` exists for.
  */
 
-import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
+import { COUNTS_AS_MEMBERSHIP, MEMBER_IN_GOOD_STANDING } from "../lib/membershipOrders";
 
 export interface ReportFilters {
   /** Matches anywhere in either email or the billing name; case-insensitive. */
@@ -83,7 +83,10 @@ export async function activeMemberships(
   page?: Page,
 ): Promise<ActiveMembershipsResult> {
   const extra = filterClauses(filters, 2);
-  const where = `created_on <= ?1 AND expires_on > ?1 AND ${COUNTS_AS_MEMBERSHIP}${extra.sql}`;
+  // Withdrawn memberships are left out: this is the "who is a member right
+  // now" report, and it must not disagree with what the access checks say
+  // about the same person. What they bought stays in the sales reports.
+  const where = `created_on <= ?1 AND expires_on > ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}${extra.sql}`;
   const paging = page ? ` LIMIT ${Number(page.limit)} OFFSET ${Number(page.offset)}` : "";
   const [list, totals] = await db.batch<Record<string, unknown>>([
     db
@@ -224,7 +227,7 @@ export async function slackCrossReference(
     WITH memberships AS (
       SELECT lower(member_email) AS email, first_name, last_name, MAX(expires_on) AS expires_on
       FROM membership_orders
-      WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP}
+      WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}
       GROUP BY lower(member_email)
     ),
     slack AS (

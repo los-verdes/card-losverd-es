@@ -67,6 +67,16 @@ CREATE TABLE IF NOT EXISTS member_display_names (
     updated_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
 );
 
+-- Memberships withdrawn before they expire (see migrations/0016).
+-- Keyed on the card number, which never changes. Its own table because
+-- `members.status` is recomputed from orders on every sync.
+CREATE TABLE IF NOT EXISTS revoked_cards (
+    member_id TEXT PRIMARY KEY REFERENCES members(member_id),
+    note TEXT,
+    revoked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    revoked_at INTEGER NOT NULL DEFAULT (unixepoch('subsec') * 1000)
+);
+
 -- Login Identities (see migrations/0004_member_auth.sql)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

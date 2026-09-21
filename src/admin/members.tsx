@@ -28,6 +28,11 @@ import {
   normalizeDisplayName,
   setDisplayName,
 } from "../member/displayName";
+import {
+  MAX_REVOCATION_NOTE_LENGTH,
+  restoreCard,
+  revokeCard,
+} from "../member/revocation";
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
@@ -175,6 +180,46 @@ const Summary: FC<{
         <button type="submit">Use the name from their orders instead</button>
       </form>
     )}
+    <h3>Membership standing</h3>
+    {member.status === "revoked" ? (
+      <>
+        <p class="danger">
+          <strong>This membership has been withdrawn.</strong> Their card reads as
+          expired, their passes have been told, and they cannot reach the member
+          area. The orders behind it are untouched, so restoring puts the
+          membership back to whatever those say.
+        </p>
+        <form method="post" action={MEMBERS_PATH}>
+          <input type="hidden" name="email" value={member.email} />
+          <input type="hidden" name="action" value="restore" />
+          <button type="submit">Restore this membership</button>
+        </form>
+      </>
+    ) : (
+      <>
+        <p>
+          Withdrawing a membership takes the card away before it expires. It is a
+          decision about a person rather than about an order, so it sits with the
+          Membership Committee -- see the provenance document. Everything they
+          bought stays on the record, and this can be lifted again.
+        </p>
+        <form method="post" action={MEMBERS_PATH}>
+          <input type="hidden" name="email" value={member.email} />
+          <input type="hidden" name="action" value="revoke" />
+          <label for="revocation_note">
+            Why (kept, because somebody will be asked to explain this later)
+          </label>
+          <input
+            id="revocation_note"
+            name="revocation_note"
+            type="text"
+            maxlength={MAX_REVOCATION_NOTE_LENGTH}
+            autocomplete="off"
+          />
+          <button type="submit">Withdraw this membership</button>
+        </form>
+      </>
+    )}
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
@@ -244,6 +289,16 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}
+      {c.req.query("saved") === "revoked" && (
+        <p style="color: var(--success)">
+          Membership withdrawn. Their passes have been told.
+        </p>
+      )}
+      {c.req.query("saved") === "restored" && (
+        <p style="color: var(--success)">
+          Membership restored, to whatever their orders say.
+        </p>
+      )}
       {c.req.query("saved") === "cleared" && (
         <p style="color: var(--success)">
           Name removed. Their card is back to the name their orders give.
@@ -275,6 +330,25 @@ members.post("/", csrf(), async (c) => {
     c.redirect(`${MEMBERS_PATH}?${new URLSearchParams({ q: email, ...params })}`, 303);
 
   if (!email) return back({ error: "No member to set a name for." });
+
+  if (form.action === "revoke" || form.action === "restore") {
+    const member = await getMemberByEmail(c.env, email);
+    if (!member) return back({ error: "No membership is held under that address." });
+
+    if (form.action === "restore") {
+      return (await restoreCard(c.env, member.member_id))
+        ? back({ saved: "restored" })
+        : back({ error: "That membership was not withdrawn." });
+    }
+
+    const note =
+      typeof form.revocation_note === "string" && form.revocation_note.trim() !== ""
+        ? form.revocation_note.trim()
+        : null;
+    return (await revokeCard(c.env, member.member_id, note, c.get("session").userId))
+      ? back({ saved: "revoked" })
+      : back({ error: "That membership was already withdrawn." });
+  }
 
   if (form.action === "clear") {
     const existing = await getDisplayName(c.env, email);

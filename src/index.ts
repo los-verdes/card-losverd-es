@@ -2,6 +2,7 @@ import { authHandler, initAuthConfig } from "@hono/auth-js";
 import { Hono } from 'hono';
 import adminMemberSince from "./admin/memberSince";
 import adminMembers from "./admin/members";
+import adminRevocations from "./admin/revocations";
 import adminOrders from "./admin/orders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
@@ -175,6 +176,8 @@ app.route("/admin/orders", adminOrders);
 app.route("/admin/member-since", adminMemberSince);
 
 app.route("/admin/members", adminMembers);
+
+app.route("/admin/revocations", adminRevocations);
 // Admin readiness page: what this environment's deployment is missing.
 app.route("/admin/preflight", adminPreflight);
 app.route("/", portal);
