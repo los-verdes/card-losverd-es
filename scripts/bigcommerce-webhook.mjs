@@ -86,7 +86,7 @@ const origin = (options.origin ?? vars.PUBLIC_BASE_URL).replace(/\/$/, "");
 if (options.env === "production" && origin === LEGACY_SHARED_ORIGIN && !options.cutover) {
   fail(
     `${LEGACY_SHARED_ORIGIN} is still the legacy app's webhook destination; re-registering it swaps in this Worker's token. ` +
-      `Before cutover pass --origin https://card-losverd-es.jeff-hogan1.workers.dev; at cutover pass --cutover.`,
+      `Before cutover pass --origin https://card-losverd-es-production.los-verdes.workers.dev; at cutover pass --cutover.`,
   );
 }
 const destination = `${origin}${WEBHOOK_PATH}`;

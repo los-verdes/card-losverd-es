@@ -89,9 +89,10 @@ export function daysUntil(when: Date, now: Date): number {
  * and nothing would look broken until those cards were scanned.
  *
  * The wrinkle is that a mismatch is *normal* before cutover. Production is
- * deployed and reachable at `card-losverd-es.jeff-hogan1.workers.dev` while
- * `card.losverd.es` still resolves to the legacy stack, and that is the
- * expected state for every pre-cutover run of this page.
+ * deployed and reachable at
+ * `card-losverd-es-production.los-verdes.workers.dev` while `card.losverd.es`
+ * still resolves to the legacy stack, and that is the expected state for
+ * every pre-cutover run of this page.
  *
  * So the verdict turns on which side of the mismatch the `workers.dev` host
  * is on, which is the one thing here that *is* unambiguous. Being served at a
