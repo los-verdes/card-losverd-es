@@ -39,6 +39,13 @@ async function getMemberByEmail(email: string): Promise<MemberRow | null> {
     .first<MemberRow>();
 }
 
+// Stated, not inherited: wrangler.toml sets this per environment, and these
+// are tests of the sync rather than of the email a completed order sends,
+// which test/email/newOrder.spec.ts covers.
+beforeEach(() => {
+  env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
+});
+
 async function countMembers(): Promise<number> {
   const row = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM members",
