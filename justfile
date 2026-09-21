@@ -1,5 +1,5 @@
 set shell := ["bash", "-c"]
-account_id := "ff1b7ea0ebb95f46b7b15289ed8ce21d"
+account_id := "42988f13a6daf00814bced22aff46f4e"
 
 # Default task: list available commands
 default:
@@ -101,7 +101,7 @@ check-wrangler-envs:
 #
 # Check the Cloudflare API token has every permission Terraform and Deploy need
 cloudflare-token-check:
-    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/cloudflare-token-check.mjs
 
 # Worker secrets: 1Password is the source of truth, since Cloudflare never
 # returns a secret's value. One item per environment in the "Los Verdes" vault,
@@ -136,7 +136,7 @@ secrets-status env:
 #
 # Run a scheduled job now: slack, resync or readiness
 etl-run env job *flags:
-    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/etl-run.mjs {{ env }} {{ job }} {{ flags }}
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/etl-run.mjs {{ env }} {{ job }} {{ flags }}
 
 # Sends one `dlq_drill` message, which fails on purpose. Two modes, proving
 # different things:
@@ -152,7 +152,7 @@ etl-run env job *flags:
 #
 # Prove the dead-letter alert actually reaches Slack, in a real environment
 queue-dlq-drill env="staging" *flags:
-    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/credential'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/queue-dlq-drill.mjs {{ env }} {{ flags }}
+    CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/queue-dlq-drill.mjs {{ env }} {{ flags }}
 
 # The two environments should share no secret values, so that a staging leak
 # is not also a production compromise. Reads both 1Password items and reports
@@ -241,7 +241,7 @@ bigcommerce-ensure-webhook env *flags:
 local_tf_cmd := f"""
 AWS_ACCESS_KEY_ID='op://Los Verdes/lv-card-losverd-es-github-workflows/access_key_id' \\
 AWS_SECRET_ACCESS_KEY='op://Los Verdes/lv-card-losverd-es-github-workflows/secret_access_key' \\
-CLOUDFLARE_API_TOKEN='op://Los Verdes/lv-card-losverd-es-github-workflows/credential' \\
+CLOUDFLARE_API_TOKEN='op://Los Verdes/lv-card-losverd-es-github-workflows/applier_token' \\
 TF_VAR_cloudflare_account_id='{{ account_id }}' \\
 op run -- terraform"""
 tf_subdir := "terraform"

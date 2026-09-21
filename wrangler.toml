@@ -25,7 +25,7 @@ fallthrough = true
 [[d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-production"
-database_id = "5fdb69dd-7bac-4770-a33e-1f58eadbf987"
+database_id = "2205f64b-4273-45b7-91e3-a544b686392c"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
 # ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
 # d1 migrations apply` fails with "No migrations present at .../migrations"
@@ -105,7 +105,7 @@ EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
 # bound to its own hostnames, so production and staging need separate ones.
 # Empty until a widget exists for card.losverd.es, which leaves /email-card
 # failing closed rather than rendering a widget that can never be solved.
-TURNSTILE_SITE_KEY = "0x4AAAAAAE-aM-kXUz92yNvf"
+TURNSTILE_SITE_KEY = "0x4AAAAAAE-1rj-sdiipmGPH"
 # Empty until we're ready for new orders to email their member a card, so a
 # backfill or resync can't mail existing members (src/email/newOrder.ts). Set
 # it to the day sending is switched on, never a past date.
@@ -168,7 +168,7 @@ name = "card-losverd-es-staging"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-staging"
-database_id = "de087994-608c-4839-828b-51f5d1077a26"
+database_id = "c40987a2-5d2b-430b-a78e-31e64c666854"
 migrations_dir = "src/db/migrations"
 
 [[env.staging.r2_buckets]]
@@ -196,7 +196,7 @@ EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
 # Staging's own Turnstile widget, bound to the workers.dev hostname above.
-TURNSTILE_SITE_KEY = "0x4AAAAAAE7AWaDCMllSuHOM"
+TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 CARD_EMAIL_NEW_ORDERS_SINCE = ""
 SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
