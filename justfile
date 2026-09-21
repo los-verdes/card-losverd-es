@@ -86,19 +86,21 @@ db-rebuild env:
     #!/usr/bin/env bash
     set -euo pipefail
     export CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'
-    envflag={{ if env == "production" { "--env=\"\"" } else { "--env " + env } }}
+    # An array, so `--env staging` stays two words and production's empty
+    # environment name stays one empty word, whatever the shell does next.
+    envflag=(--env "{{ if env == "production" { "" } else { env } }}")
     db="card-losverd-es-db-{{ env }}"
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
-    npx wrangler d1 execute "$db" --remote $envflag --json \
+    npx wrangler d1 execute "$db" --remote "${envflag[@]}" --json \
       --command "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 4) != '_cf_' ORDER BY name" \
       > "$work/tables.json"
     node scripts/db-drop-sql.mjs "$work/tables.json" "$work/drop.sql"
     echo
     read -r -p "Type '{{ env }}' to drop every table above in $db: " answer
     if [ "$answer" != "{{ env }}" ]; then echo "Not confirmed; nothing was changed."; exit 1; fi
-    npx wrangler d1 execute "$db" --remote $envflag --file "$work/drop.sql"
-    npx wrangler d1 migrations apply DB --remote $envflag
+    npx wrangler d1 execute "$db" --remote "${envflag[@]}" --file "$work/drop.sql"
+    npx wrangler d1 migrations apply DB --remote "${envflag[@]}"
     just db-schema-compare {{ env }}
     echo
     echo "Rebuilt $db. Put back what it held:"
