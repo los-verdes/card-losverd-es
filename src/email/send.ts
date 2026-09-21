@@ -1,21 +1,16 @@
 /**
- * The one way out of this codebase for an email, whatever carries it.
+ * The one way out of this codebase for an email.
  *
  * Everything that decides *whether* a message may be sent lives here rather
- * than in either transport, so that adding a second one could not create a
- * second way past the allow-list. `sendEmail()` takes the whole `env` for the
- * same reason: a caller cannot reach a transport without it.
+ * than beside the transport, so that the allow-list cannot be stepped around
+ * by calling the transport directly. `sendEmail()` takes the whole `env` for
+ * the same reason: a caller cannot reach the binding without it.
  *
- * Which transport is used is decided by whether the environment has the
- * Cloudflare Email Service binding (#244). Presence rather than a setting,
- * because a binding is declared in `wrangler.toml` per environment and
- * already says plainly which environments have it -- the same shape
- * `apnsConfig()` uses for APNs credentials. An environment with no binding
- * goes to SendGrid, which is what keeps the two switchable one at a time.
+ * Mail goes out through Cloudflare Email Service's `send_email` binding
+ * (#244; ./cloudflare.ts).
  */
 
 import { type SendEmailBinding, sendViaBinding } from "./cloudflare";
-import { sendViaSendGrid } from "./sendgrid";
 
 /**
  * What sending needs from the environment. Narrower than `Env` so this stays
@@ -23,9 +18,8 @@ import { sendViaSendGrid } from "./sendgrid";
  * a test can hand it two fields.
  */
 export interface EmailEnv {
-  /** Cloudflare Email Service. Absent in an environment still on SendGrid. */
+  /** Cloudflare Email Service. Absent only where a test removes it. */
   EMAIL?: SendEmailBinding;
-  SENDGRID_API_KEY?: string;
   /** `*` for anyone, empty for nobody, else addresses and domains (#155). */
   EMAIL_RECIPIENT_ALLOWLIST?: string;
 }
@@ -49,11 +43,6 @@ export interface EmailMessage {
   text: string;
   html: string;
   attachments?: EmailAttachment[];
-  /**
-   * SendGrid ASM (unsubscribe) group ID; omitted when undefined, and ignored
-   * by the Cloudflare transport, which has no equivalent (see ./cloudflare.ts).
-   */
-  unsubscribeGroupId?: number;
 }
 
 /** The one value of `EMAIL_RECIPIENT_ALLOWLIST` that permits any address. */
@@ -96,16 +85,10 @@ export function allowsRecipient(
   );
 }
 
-/** Which transport an environment will use, for reporting it on a page. */
-export function transportName(env: EmailEnv): "cloudflare" | "sendgrid" | null {
-  if (env.EMAIL) return "cloudflare";
-  return env.SENDGRID_API_KEY ? "sendgrid" : null;
-}
-
 /**
  * Sends one message, unless this environment isn't allowed to email that
- * recipient. Throws (without retrying) if nothing is configured to send with,
- * or if the transport rejects the message.
+ * recipient. Throws (without retrying) if the binding is missing, or if it
+ * rejects the message.
  */
 export async function sendEmail(
   env: EmailEnv,
@@ -128,13 +111,10 @@ export async function sendEmail(
     });
     return;
   }
-  if (env.EMAIL) {
-    return sendViaBinding(env.EMAIL, message);
-  }
-  if (!env.SENDGRID_API_KEY) {
+  if (!env.EMAIL) {
     throw new Error(
-      "No email transport configured: this environment has neither the Cloudflare Email Service binding nor SENDGRID_API_KEY",
+      "No email transport: this environment has no Cloudflare Email Service binding (`send_email` named EMAIL in wrangler.toml)",
     );
   }
-  return sendViaSendGrid(env.SENDGRID_API_KEY, message);
+  return sendViaBinding(env.EMAIL, message);
 }

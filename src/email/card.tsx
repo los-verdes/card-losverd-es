@@ -203,9 +203,6 @@ export async function sendMembershipCardEmail(
         content: applePass,
       },
     ],
-    unsubscribeGroupId: env.SENDGRID_UNSUBSCRIBE_GROUP_ID
-      ? Number(env.SENDGRID_UNSUBSCRIBE_GROUP_ID)
-      : undefined,
   });
 }
 
@@ -220,8 +217,8 @@ export async function findCardRecipient(
   env: Env,
   email: string,
 ): Promise<(MemberRecord & { expiration_date: string }) | null> {
-  if (!env.SENDGRID_API_KEY) {
-    console.warn("Card email: SENDGRID_API_KEY not configured, not sending");
+  if (!env.EMAIL) {
+    console.warn("Card email: the EMAIL binding is not configured, not sending");
     return null;
   }
   const member = await getMemberByEmail(env, email);

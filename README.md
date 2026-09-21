@@ -130,7 +130,7 @@ Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KE
 | `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM` | Pushing Apple pass updates |
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
 | `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
-| `SENDGRID_API_KEY`, `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var). `SENDGRID_API_KEY` is only needed by an environment that has no Cloudflare Email Service binding -- see below |
+| `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var). Sending itself needs no secret -- it is the `send_email` binding, see "Sending email" below |
 | `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
 | `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
 
@@ -212,41 +212,28 @@ To see what an environment currently has, and how long is left on it:
 just apple-pass-cert-check staging
 ```
 
-### Moving an environment onto Cloudflare Email Service
+### Sending email
 
-Email goes out through one of two transports, and which one an environment
-uses is decided by whether it has the Cloudflare Email Service binding
-(#244). Presence rather than a setting: a binding is declared per environment
-in `wrangler.toml`, which already says plainly which environments have it.
+Card emails go out through Cloudflare Email Service's `send_email` binding,
+declared in `wrangler.toml` as `EMAIL` for both environments (#244). There is
+no API key: the binding is the credential, so there is nothing to rotate, leak
+or audit.
 
-The binding is the reason to prefer it. There is no API key, so there is no
-outbound credential to rotate, leak or audit -- and sending is a Worker call
-rather than an HTTPS request to somebody else's API.
+The sending domain has to be onboarded in the Cloudflare account the Worker
+runs in, and until it is, every send is rejected -- `/admin/preflight` and the
+Worker logs both say so. After onboarding, or after anything that touches the
+sender, send yourself a card from `/email-card` and **confirm the `.pkpass`
+still installs from it**. The attachment is the part most likely to be
+mangled in transit, and no test here can check it.
 
-To move one environment across:
+Who may receive mail is decided separately, and in code: see
+`EMAIL_RECIPIENT_ALLOWLIST`. The binding does not replace that check.
 
-1. Onboard the sending domain in the Cloudflare account the Worker runs in.
-   The domain has to be in that account, which is why this cannot be done for
-   production until the account move is finished.
-2. Add the binding to that environment in `wrangler.toml`:
-
-   ```toml
-   [[send_email]]
-   name = "EMAIL"
-   ```
-
-3. Deploy, then send yourself a card from `/email-card` and **confirm the
-   `.pkpass` still installs from it**. The attachment is the part a different
-   sender is most likely to change, and it is not something a test here can
-   check.
-4. Once every environment is across, `SENDGRID_API_KEY` and
-   `src/email/sendgrid.ts` can go.
-
-Two differences from SendGrid worth knowing before the last environment
-moves. There is no unsubscribe group, so a message sent this way carries
-neither an unsubscribe link nor a preference page. And the display name is
-folded into the address as `Name <address>`, because the binding takes one
-string where SendGrid took two fields.
+Two things about what goes out. There is no unsubscribe link or preference
+page -- the previous site sent under a SendGrid unsubscribe group, and there
+is no equivalent here, which is defensible for a card somebody asked for but
+is a decision rather than an oversight. And the sender's display name travels
+inside the address, as `Name <address>`, because the binding takes one string.
 
 ### Provisioning the APNs auth key
 

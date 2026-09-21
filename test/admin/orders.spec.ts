@@ -2,8 +2,8 @@ import "../setup/d1";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
-import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import { getTestCertChain } from "../fixtures/certChain";
+import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import LOGO from "../fixtures/sample-logo.png";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import worker from "../../src/index";
@@ -28,19 +28,22 @@ async function request(path: string, init: RequestInit & { as?: number | null } 
   return res;
 }
 
-/** Fakes SendGrid; any other outbound fetch fails the test. */
-function mockSendGrid(status = 202) {
+/** What the `send_email` binding was handed, per test. */
+let email: FakeEmailBinding;
+
+/**
+ * Any outbound fetch fails the test. Attributing an order and emailing its
+ * card make none: mail goes through `env.EMAIL`, the fake binding.
+ */
+function forbidFetch() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (url === SENDGRID_SEND_URL) return new Response(null, { status });
-    throw new Error(`unexpected fetch: ${url}`);
+    throw new Error(`unexpected fetch: ${input instanceof Request ? input.url : String(input)}`);
   });
 }
 
-function sentTo(spy: ReturnType<typeof mockSendGrid>) {
-  return spy.mock.calls
-    .filter(([input]) => String(input) === SENDGRID_SEND_URL)
-    .map(([, init]) => JSON.parse(init!.body as string).personalizations[0].to[0].email);
+/** Who the binding was asked to email. */
+function sentTo() {
+  return email.sent.map(recipientOf);
 }
 
 function post(path: string, fields: Record<string, string>, options: { origin?: string | null; as?: number | null } = {}) {
@@ -277,8 +280,8 @@ describe("emailing the new member their card", () => {
     // Stated, not inherited: production leaves this empty until cutover, and
     // a test about delivery must not turn on what that happens to say today.
     env.EMAIL_RECIPIENT_ALLOWLIST = "*";
-    env.SENDGRID_API_KEY = "SG.test-key";
-    env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631";
+    email = fakeEmailBinding();
+    env.EMAIL = email;
     env.PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card";
     env.PASSKIT_TEAM_IDENTIFIER = "TEAMID1234";
     env.APPLE_PASS_CERT_PEM = chain.leafCertPem;
@@ -292,19 +295,19 @@ describe("emailing the new member their card", () => {
   });
 
   afterEach(() => {
-    env.SENDGRID_API_KEY = undefined;
+    env.EMAIL = undefined;
   });
 
   it("sends the card once, only to the new member", async () => {
-    const sendgrid = mockSendGrid();
+    forbidFetch();
 
     await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
-    expect(sentTo(sendgrid)).toEqual(["friend@example.com"]);
+    expect(sentTo()).toEqual(["friend@example.com"]);
   });
 
   it("says so on the page afterwards", async () => {
-    mockSendGrid();
+    forbidFetch();
 
     const res = await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
     const body = await (await request(res.headers.get("Location")!)).text();
@@ -313,43 +316,44 @@ describe("emailing the new member their card", () => {
   });
 
   it("sends nothing when the box is unchecked", async () => {
-    const sendgrid = mockSendGrid();
+    forbidFetch();
 
     const res = await post("/admin/orders/1001/member", { email: "friend@example.com" });
     const body = await (await request(res.headers.get("Location")!)).text();
 
-    expect(sentTo(sendgrid)).toEqual([]);
+    expect(sentTo()).toEqual([]);
     expect(body).not.toContain("on its way by email");
   });
 
   it("sends nothing when the order gives the new member no card", async () => {
     await env.DB.exec("UPDATE membership_orders SET status = 'Refunded' WHERE order_id = '1001'");
-    const sendgrid = mockSendGrid();
+    forbidFetch();
 
     await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
-    expect(sentTo(sendgrid)).toEqual([]);
+    expect(sentTo()).toEqual([]);
   });
 
-  it("warns, and still attributes, when SendGrid isn't configured", async () => {
-    env.SENDGRID_API_KEY = undefined;
-    const sendgrid = mockSendGrid();
+  it("warns, and still attributes, when email isn't configured", async () => {
+    env.EMAIL = undefined;
+    forbidFetch();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
-    expect(sentTo(sendgrid)).toEqual([]);
-    expect(warn).toHaveBeenCalledWith("Card email: SENDGRID_API_KEY not configured, not sending");
+    expect(sentTo()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith("Card email: the EMAIL binding is not configured, not sending");
     expect(await memberEmailOf("1001")).toBe("friend@example.com");
   });
 
-  it("logs, and still attributes, when SendGrid rejects the message", async () => {
-    mockSendGrid(500);
+  it("logs, and still attributes, when the binding rejects the message", async () => {
+    env.EMAIL = fakeEmailBinding({ failWith: "domain not onboarded" });
+    forbidFetch();
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
 
-    expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("SendGrid") });
+    expect(error).toHaveBeenCalledWith("Card email failed", { reason: "attribution", error: expect.stringContaining("Cloudflare Email Service") });
     expect(await memberEmailOf("1001")).toBe("friend@example.com");
   });
 });

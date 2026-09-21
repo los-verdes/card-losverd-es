@@ -3,16 +3,19 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { strFromU8, unzipSync } from "fflate";
 import { exportPKCS8, generateKeyPair } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SENDGRID_SEND_URL } from "../../src/email/sendgrid";
 import { TURNSTILE_SITEVERIFY_URL } from "../../src/email/turnstile";
 import worker from "../../src/index";
 import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card";
 import { getTestCertChain } from "../fixtures/certChain";
+import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
 
 const ORIGIN = "https://card.losverd.es";
 const GOOGLE_SAVE_PREFIX = "https://pay.google.com/gp/v/save/";
+
+/** What the `send_email` binding was handed, per test. */
+let email: FakeEmailBinding;
 
 beforeEach(async () => {
   const chain = getTestCertChain();
@@ -28,8 +31,8 @@ beforeEach(async () => {
   // Stated, not inherited: production leaves this empty until cutover, and
   // a test about delivery must not turn on what that happens to say today.
   env.EMAIL_RECIPIENT_ALLOWLIST = "*";
-  env.SENDGRID_API_KEY = "SG.test-key";
-  env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "29631";
+  email = fakeEmailBinding();
+  env.EMAIL = email;
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = undefined;
   env.GOOGLE_WALLET_PRIVATE_KEY_PEM = undefined;
   // `templates/card/crest.png` too, so these keep passing once the card image
@@ -67,18 +70,17 @@ async function insertMember(memberId: string, email: string, expirationDate: str
 
 interface MockOptions {
   turnstileSuccess?: boolean;
-  sendGridStatus?: number;
 }
 
-/** Fakes Turnstile Siteverify and SendGrid; any other outbound fetch fails the test. */
-function mockUpstreams({ turnstileSuccess = true, sendGridStatus = 202 }: MockOptions = {}) {
+/**
+ * Fakes Turnstile Siteverify and Google Wallet. Mail is not an HTTP call any
+ * more -- it goes through `env.EMAIL`, the fake binding set above.
+ */
+function mockUpstreams({ turnstileSuccess = true }: MockOptions = {}) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url === TURNSTILE_SITEVERIFY_URL) {
       return Response.json({ success: turnstileSuccess, "error-codes": [] });
-    }
-    if (url === SENDGRID_SEND_URL) {
-      return new Response(sendGridStatus === 202 ? null : "SendGrid is down", { status: sendGridStatus });
     }
     return fakeGoogleWallet(url);
   });
@@ -86,10 +88,6 @@ function mockUpstreams({ turnstileSuccess = true, sendGridStatus = 202 }: MockOp
 
 function callsTo(fetchSpy: ReturnType<typeof mockUpstreams>, url: string) {
   return fetchSpy.mock.calls.filter(([input]) => String(input) === url);
-}
-
-function sentMessages(fetchSpy: ReturnType<typeof mockUpstreams>) {
-  return callsTo(fetchSpy, SENDGRID_SEND_URL).map(([, init]) => JSON.parse(init!.body as string));
 }
 
 async function request(init: RequestInit & { path?: string } = {}) {
@@ -125,7 +123,7 @@ describe("GET /email-card", () => {
     expect(body).toContain('<a href="/">Back to the start</a>');
   });
 
-  it.each(["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "SENDGRID_API_KEY"] as const)(
+  it.each(["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "EMAIL"] as const)(
     "shows a temporarily-unavailable page instead of the form without %s",
     async (key) => {
       env[key] = undefined;
@@ -154,17 +152,16 @@ describe("POST /email-card", () => {
       expect(stranger).toEqual(member);
       // Every submission passed the bot check, but only the current member was emailed.
       expect(callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL)).toHaveLength(3);
-      const sent = sentMessages(fetchSpy);
-      expect(sent).toHaveLength(1);
-      expect(sent[0].personalizations[0].to[0].email).toBe("jane@example.com");
+      expect(email.sent).toHaveLength(1);
+      expect(recipientOf(email.sent[0])).toBe("jane@example.com");
     });
 
     it("treats a revoked member as a non-member", async () => {
       await env.DB.exec("UPDATE members SET status = 'revoked' WHERE member_id = 'BC-1'");
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       expect((await submitEmail("jane@example.com")).body).toContain("Check your email");
-      expect(sentMessages(fetchSpy)).toHaveLength(0);
+      expect(email.sent).toHaveLength(0);
     });
 
     it("offers a way onward, and sends nobody to a losverd.es address", async () => {
@@ -182,31 +179,31 @@ describe("POST /email-card", () => {
 
   describe("email contents", () => {
     it("points a wrong recipient at the merch team, not a losverd.es address", async () => {
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("jane@example.com");
 
-      const [text, html] = sentMessages(fetchSpy)[0].content as { value: string }[];
-      for (const { value } of [text, html]) {
+      const { text, html } = email.sent[0];
+      for (const value of [text, html]) {
         expect(value).toContain("merchteam@losverdesatx.org");
         expect(value).not.toContain("support@losverd.es");
       }
     });
 
     it("sends the card image and Apple pass as attachments, without a Google link when unconfigured", async () => {
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("  Jane@Example.COM ");
 
-      const [call] = callsTo(fetchSpy, SENDGRID_SEND_URL);
-      expect((call[1]!.headers as Record<string, string>).authorization).toBe("Bearer SG.test-key");
-      const [message] = sentMessages(fetchSpy);
-      expect(message.from).toEqual({ email: "verde-bot@losverd.es", name: "Los Verdes (verde-bot)" });
-      expect(message.personalizations).toEqual([{ to: [{ email: "jane@example.com", name: "Jane Doe" }] }]);
+      expect(email.send).toHaveBeenCalledOnce();
+      const [message] = email.sent;
+      // One string each, name and address together: the binding takes the
+      // RFC 5322 form rather than separate fields.
+      expect(message.from).toBe("Los Verdes (verde-bot) <verde-bot@losverd.es>");
+      expect(message.to).toBe("Jane Doe <jane@example.com>");
       expect(message.subject).toBe("Los Verdes Membership Card Details");
-      expect(message.asm).toEqual({ group_id: 29631 });
 
-      const attachments = message.attachments as { filename: string; type: string; content: string; disposition: string }[];
+      const attachments = message.attachments!;
       expect(attachments.map(({ filename, type, disposition }) => ({ filename, type, disposition }))).toEqual([
         { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "attachment" },
         { filename: "los-verdes-membership-card.pkpass", type: "application/vnd.apple.pkpass", disposition: "attachment" },
@@ -216,10 +213,7 @@ describe("POST /email-card", () => {
       const pass = JSON.parse(strFromU8(unzipSync(decode(attachments[1].content))["pass.json"]));
       expect(pass.serialNumber).toBe("BC-1");
 
-      const [text, html] = message.content as { type: string; value: string }[];
-      expect(text.type).toBe("text/plain");
-      expect(html.type).toBe("text/html");
-      for (const part of [text.value, html.value]) {
+      for (const part of [message.text, message.html]) {
         expect(part).toContain("Jane Doe");
         expect(part).toContain("Good through Mar 4, 2099");
         expect(part).toContain("BC-1");
@@ -231,64 +225,53 @@ describe("POST /email-card", () => {
       const { privateKey } = await generateKeyPair("RS256", { extractable: true });
       env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
       env.GOOGLE_WALLET_PRIVATE_KEY_PEM = await exportPKCS8(privateKey);
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("jane@example.com");
 
-      const [message] = sentMessages(fetchSpy);
-      const [text, html] = message.content as { value: string }[];
-      expect(text.value).toContain(`- Google Wallet: ${GOOGLE_SAVE_PREFIX}`);
-      expect(html.value).toContain(`<a href="${GOOGLE_SAVE_PREFIX}`);
+      const [message] = email.sent;
+      expect(message.text).toContain(`- Google Wallet: ${GOOGLE_SAVE_PREFIX}`);
+      expect(message.html).toContain(`<a href="${GOOGLE_SAVE_PREFIX}`);
     });
 
     it("sends without the Google link (and logs) if building it fails", async () => {
       env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "wallet@example.iam.gserviceaccount.com";
       env.GOOGLE_WALLET_PRIVATE_KEY_PEM = "not a pem";
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("jane@example.com");
 
-      const [message] = sentMessages(fetchSpy);
-      expect(message.content[1].value).not.toContain("Google Wallet");
+      expect(email.sent[0].html).not.toContain("Google Wallet");
       expect(errorSpy).toHaveBeenCalledWith(
         "Email card: Google Wallet link failed; sending without it",
         expect.objectContaining({ memberId: "BC-1" }),
       );
     });
 
-    it("sends without an ASM group when none is configured", async () => {
-      env.SENDGRID_UNSUBSCRIBE_GROUP_ID = "";
-      const fetchSpy = mockUpstreams();
-
-      await submitEmail("jane@example.com");
-
-      expect(sentMessages(fetchSpy)[0]).not.toHaveProperty("asm");
-    });
-
     it("links back to PUBLIC_BASE_URL rather than a hardcoded production origin", async () => {
       env.PUBLIC_BASE_URL = "https://staging.example.test/";
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("jane@example.com");
 
-      const [text, html] = sentMessages(fetchSpy)[0].content as { value: string }[];
-      expect(text.value).toContain("Visit online at: https://staging.example.test\n");
-      expect(text.value).toContain("made at https://staging.example.test/email-card at:");
-      expect(html.value).toContain('<a href="https://staging.example.test">staging.example.test</a>');
-      expect(html.value).toContain("https://staging.example.test/email-card at:");
-      for (const part of [text.value, html.value]) {
+      const { text, html } = email.sent[0];
+      expect(text).toContain("Visit online at: https://staging.example.test\n");
+      expect(text).toContain("made at https://staging.example.test/email-card at:");
+      expect(html).toContain('<a href="https://staging.example.test">staging.example.test</a>');
+      expect(html).toContain("https://staging.example.test/email-card at:");
+      for (const part of [text, html]) {
         expect(part).not.toContain("card.losverd.es");
       }
     });
 
     it("escapes member-provided text in the HTML body", async () => {
       await env.DB.exec("UPDATE members SET first_name = '<script>x</script>' WHERE member_id = 'BC-1'");
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       await submitEmail("jane@example.com");
 
-      const html = sentMessages(fetchSpy)[0].content[1].value as string;
+      const { html } = email.sent[0];
       expect(html).not.toContain("<script>x</script>");
       expect(html).toContain("&lt;script&gt;");
     });
@@ -313,7 +296,7 @@ describe("POST /email-card", () => {
       expect(verifyBody.get("secret")).toBe("0x4AAAAAAA-test-secret");
       expect(verifyBody.get("response")).toBe("forged");
       expect(verifyBody.get("remoteip")).toBe("203.0.113.7");
-      expect(sentMessages(fetchSpy)).toHaveLength(0);
+      expect(email.sent).toHaveLength(0);
     });
 
     it("rejects a submission with no Turnstile token", async () => {
@@ -371,17 +354,19 @@ describe("POST /email-card", () => {
   });
 
   describe("failures", () => {
-    it("logs a SendGrid failure without retrying, and still shows the same page", async () => {
+    it("logs a rejected send without retrying, and still shows the same page", async () => {
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const failing = mockUpstreams({ sendGridStatus: 500 });
+      const failing = fakeEmailBinding({ failWith: "domain not onboarded" });
+      env.EMAIL = failing;
+      mockUpstreams();
 
       const res = await submitEmail("jane@example.com");
 
       expect(res.status).toBe(200);
       expect(res.body).toContain("Check your email");
-      expect(callsTo(failing, SENDGRID_SEND_URL)).toHaveLength(1);
+      expect(failing.send).toHaveBeenCalledOnce();
       expect(errorSpy).toHaveBeenCalledWith("Email card delivery failed", {
-        error: expect.stringContaining("HTTP 500 SendGrid is down"),
+        error: expect.stringContaining("domain not onboarded"),
       });
 
       vi.restoreAllMocks();
@@ -392,16 +377,16 @@ describe("POST /email-card", () => {
     it("logs a card rendering failure without emailing", async () => {
       await env.ASSETS.delete(["templates/apple/icon@2x.png", "templates/card/crest.png"]);
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const fetchSpy = mockUpstreams();
+      mockUpstreams();
 
       expect((await submitEmail("jane@example.com")).status).toBe(200);
 
       expect(errorSpy).toHaveBeenCalledWith("Email card delivery failed", expect.anything());
-      expect(sentMessages(fetchSpy)).toHaveLength(0);
+      expect(email.sent).toHaveLength(0);
     });
 
-    it("fails closed without SENDGRID_API_KEY", async () => {
-      env.SENDGRID_API_KEY = undefined;
+    it("fails closed without the email binding", async () => {
+      env.EMAIL = undefined;
       const fetchSpy = mockUpstreams();
 
       const { status, body } = await submitEmail("jane@example.com");
@@ -429,21 +414,21 @@ describe("rate limiting", () => {
     expect(blocked.body).toContain("Too many requests");
     expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
     expect(callsTo(fetchSpy, TURNSTILE_SITEVERIFY_URL)).toHaveLength(turnstileCallsBefore);
-    expect(sentMessages(fetchSpy)).toHaveLength(0);
+    expect(email.sent).toHaveLength(0);
 
     // A different client is unaffected.
     expect((await submit({ email: "jane@example.com", "cf-turnstile-response": "t" }, { "cf-connecting-ip": "198.51.100.99" })).status).toBe(200);
   });
 
   it("silently stops emailing an address after its daily limit, with an unchanged response", async () => {
-    const fetchSpy = mockUpstreams();
+    mockUpstreams();
     const responses = [];
     for (let i = 0; i < RECIPIENT_RATE_LIMIT.limit + 1; i++) {
       // Distinct IPs, so only the recipient limit is in play.
       responses.push(await submit({ email: "Jane@Example.com", "cf-turnstile-response": "t" }, { "cf-connecting-ip": `192.0.2.${i}` }));
     }
 
-    expect(sentMessages(fetchSpy)).toHaveLength(RECIPIENT_RATE_LIMIT.limit);
+    expect(email.sent).toHaveLength(RECIPIENT_RATE_LIMIT.limit);
     expect(new Set(responses.map((r) => `${r.status}:${r.body}`)).size).toBe(1);
   });
 

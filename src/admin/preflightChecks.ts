@@ -27,7 +27,6 @@ import { GOOGLE_WALLET_API, getGoogleWalletAccessToken } from "../google/api";
 import {
   ALLOW_ANY_RECIPIENT,
   parseRecipientAllowlist,
-  transportName,
 } from "../email/send";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
@@ -415,15 +414,9 @@ function deliveryChecks(env: Env, live: boolean): CheckGroup {
 
   const turnstileSite = env.TURNSTILE_SITE_KEY;
   const turnstileSecret = env.TURNSTILE_SECRET_KEY;
-  // Named, because an environment sending through a binding and one sending
-  // through an API key fail in entirely different ways, and the page is read
-  // by whoever has to tell them apart.
-  const transport = transportName(env);
-  const transportLabel =
-    transport === "cloudflare" ? "Cloudflare Email Service" : "SendGrid";
-  if (turnstileSite && turnstileSecret && transport) {
+  if (turnstileSite && turnstileSecret && env.EMAIL) {
     results.push(
-      ok("Email a card to myself", `${transportLabel} and both Turnstile keys are set; /email-card is open.`),
+      ok("Email a card to myself", "The email binding and both Turnstile keys are set; /email-card is open."),
     );
   } else if (!turnstileSite && !turnstileSecret) {
     results.push(
@@ -436,7 +429,7 @@ function deliveryChecks(env: Env, live: boolean): CheckGroup {
     results.push(
       fail(
         "Email a card to myself",
-        "Turnstile is half-configured (one of the site/secret key pair is missing), or this environment has no email transport -- neither the Cloudflare Email Service binding nor SENDGRID_API_KEY.",
+        "Turnstile is half-configured (one of the site/secret key pair is missing), or this environment has no `send_email` binding named EMAIL.",
       ),
     );
   }
