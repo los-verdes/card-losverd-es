@@ -38,11 +38,30 @@ format:
     npx prettier --write "src/**/*.{ts,sql,json}"
 
 # D1 database tasks
-db-init-local:
-    npx wrangler d1 execute DB --local --env="" --file=./src/db/schema.sql
-
 db-migrate-local:
     npx wrangler d1 migrations apply DB --local --env=""
+
+# Does an environment's database match what the migrations produce?
+#
+# Normally nothing has to ask: a database that applied every migration is by
+# definition what they produce. A squash breaks that -- it rewrites what
+# "already applied" means, so a database carrying the old history keeps the
+# schema the old files built and nothing mentions that it is no longer one
+# anybody can reproduce. This builds a throwaway database from the migrations
+# and compares the two, object by object. Exits non-zero when they differ.
+db-schema-compare env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    # `substr` rather than a LIKE with ESCAPE: the backslashes that needs do
+    # not survive the trip through just and bash intact, and the Cloudflare
+    # tables are the only ones that begin `_cf_`.
+    query="SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND substr(name, 1, 4) != '_cf_' AND name != 'd1_migrations' ORDER BY type, name"
+    npx wrangler d1 migrations apply DB --local --env="" --persist-to "$work/state" > /dev/null
+    npx wrangler d1 execute DB --local --env="" --persist-to "$work/state" --json --command "$query" > "$work/expected.json"
+    npx wrangler d1 execute card-losverd-es-db-{{ env }} --remote {{ if env == "production" { "--env=\"\"" } else { "--env " + env } }} --json --command "$query" > "$work/actual.json"
+    node scripts/schema-compare.mjs "$work/expected.json" "$work/actual.json"
 
 # Apply D1 migrations to an environment's remote database (production or
 # staging); CI runs this on deploy.
