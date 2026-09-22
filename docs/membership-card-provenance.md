@@ -410,34 +410,15 @@ answer. No active/expired label is stored anywhere: a membership lapses
 because a date passes, with no order sync there to notice, so a stored label
 would be wrong from the day after it was written.
 
-**A membership can also be revoked, or the person expelled from the group**,
-which are the two ways of ceasing to be a current member that have nothing to
-do with orders. Both words are taken from the [code of
-conduct](https://www.losverdesatx.org/code-of-conduct): it gives the
-Membership Committee the power to "revoke or temporarily suspend that person's
-membership", and names expulsion from Los Verdes as the heaviest outcome of
-its sanction process. The software records an outcome; the code of conduct
-governs when one is appropriate, and how it is appealed.
-
-Expulsion is the heavier of the two, and the rarer. As well as taking the
-membership away it stops the person signing in at all, including on a session
-they already hold, and it carries no end date -- lifting it is a decision
-somebody makes rather than something that happens on its own
-(`expelled_people`). A revocation is about a card; an
-expulsion is about a person, and so follows their address onto any membership
-they buy under it later.
-
-**A temporary suspension has no form of its own here.** The code of conduct
-allows the Committee to suspend a membership as well as revoke it, and the
-software has only the one action, lifted by hand when the Committee decides it
-should be. That is a gap worth naming rather than a position the software
-takes -- see [question 8](#9-decisions-worth-confirming).
-
-Revocation, in more detail: it is recorded against the card (`revoked_cards`)
-rather than on the membership record, because the order sync rebuilds that
-record and would undo it. While it is in force the card reads as revoked,
-carries no expiry, and its holder is refused everywhere a current membership
-is required.
+**A membership can also be revoked, or its holder expelled from the group.**
+Both are expected to be rare. The words come from the [code of
+conduct](https://www.losverdesatx.org/code-of-conduct), and the decision is
+the Membership Committee's. A revocation stops one
+card (`revoked_cards`, kept apart from the membership record so the order
+sync cannot undo it). An expulsion (`expelled_people`) also stops the person
+signing in, and covers any membership later bought under their address.
+Either one makes the card read as revoked, has no end date, and is lifted by
+hand.
 
 The same goes for what a pass says about itself. The "Expired" note on the
 back of an Apple pass and the state Google Wallet is told are both worked out
@@ -704,71 +685,14 @@ or a change, not an open-ended design exercise.
    person.
 
 8. **Are revocation and expulsion shaped the way the group wants them?**
-   Both exist now. An admin revokes a membership from that member's page and
-   the card stops working: it reads as revoked rather than expired, the "good
-   through" date goes away, the passes already installed are told, and the
-   holder loses the member area. A short note is kept alongside it, because
-   somebody will be asked to explain the decision later. Lifting it is one
-   action and puts the membership back to whatever the orders say, since
-   nothing underneath was altered. Everything currently revoked sits on one
-   page, deliberately short.
-
-   Lifting one does not erase it. The record of a decision and its reversal
-   is kept separately and permanently -- see [the history
-   below](#what-is-kept-about-what-people-did) -- because the question "who
-   decided this, and why" is asked most often about a decision that has since
-   been undone.
-
-   Two choices inside that are worth a look rather than assumed.
-
-   **It follows the card, not the address.** A revocation is keyed on the
-   card number, which never changes, so re-pointing an address does not lift
-   it. But somebody who bought a fresh membership under a different address
-   would get a new card, and this would not follow them to it. Whether that
-   is a loophole or the right answer -- a new purchase being a genuinely new
-   membership -- is a question about what revocation means rather than about
-   the software.
-
-   **It does not change what was sold.** They stop being listed as a current
-   member, but the order stays in the monthly sales figures and in the
-   consolidations. That is deliberate: the money is still the group's, and
-   the books should not move because somebody was asked to leave. If a
-   revocation should erase the sale too, that is a different thing and would
-   need saying.
-
-   What it is *for* remains the **Membership Committee's** to settle, as the
-   code of conduct already says it is. The software makes no judgement about
-   when this is appropriate and nothing in it is limited to conduct cases;
-   the note is the only record of why, and it is free text.
-
-   **Expelling somebody from the group** is the heavier version of the same
-   thing, and is theirs outright. It takes the membership away exactly as a
-   revocation does, and also stops the person signing in -- immediately,
-   including on a session they already hold. It is recorded with no end date.
-   In practice these are understood to run a couple of years, and that
-   deliberately is not written into the software: an expulsion that lapsed on
-   its own would let somebody back in without anybody deciding they should
-   be, which is not a decision to automate. Lifting one is a single action
-   and restores whatever membership it was suppressing.
-
-   The limit worth knowing, because it is real rather than an oversight: an
-   expulsion follows an **email address**. It covers a membership bought
-   under that address later, and it does not follow somebody to a different
-   one. Closing that would mean identifying people by something more than an
-   address, which this system deliberately does not do
-   ([question 7](#9-decisions-worth-confirming)).
-
-   **Two things the code of conduct describes that the software has no form
-   of.** The first is temporary suspension, which it names alongside
-   revocation; here there is one action, and it stays until somebody lifts
-   it. The second is the sanction ladder itself -- a verbal warning, then a
-   formal one, then direct disciplinary action. Only the last rung leaves a
-   mark here, so this is not a record of anybody's standing under that
-   process and should not be read as one. Whether either belongs in the
-   software, or is better kept wherever the Committee keeps its own notes, is
-   a question for them. The same goes for an appeal: the code of conduct
-   provides for one, and lifting a revocation or an expulsion here is the
-   same single action whatever prompted it.
+   Both are described [in section 5](#5-how-the-software-decides-who-is-a-current-member) and are expected to be
+   rare. A few choices are open. A revocation follows the card, so a fresh
+   membership bought under a different address is not covered; an expulsion
+   follows the address, for the same reason ([question 7](#9-decisions-worth-confirming)).
+   Neither changes the sales figures. There is no temporary suspension, no
+   sanction ladder and no appeal record here; the Committee may prefer to
+   keep those in its own notes. When either action is appropriate is the
+   Committee's to decide, under the code of conduct.
 
 9. **Should an archived order still count?** Currently yes: deleting an order
    in BigCommerce archives it rather than removing it, and an archived order

@@ -181,85 +181,45 @@ const Summary: FC<{
       </form>
     )}
     <h3>Membership standing</h3>
+    <p class="muted">
+      Rarely needed, and the Membership Committee's decision. Revoking stops this card; expelling also
+      stops the person signing in. Either can be lifted, and their orders are untouched.
+    </p>
     {member.revoked ? (
-      <>
+      <form method="post" action={MEMBERS_PATH}>
         <p class="danger">
-          <strong>This membership has been revoked.</strong> Their card reads as
-          expired, their passes have been told, and they cannot reach the member
-          area. The orders behind it are untouched, so restoring puts the
-          membership back to whatever those say.
+          <strong>This membership has been revoked.</strong>
         </p>
-        <form method="post" action={MEMBERS_PATH}>
-          <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="restore" />
-          <button type="submit">Restore this membership</button>
-        </form>
-      </>
+        <input type="hidden" name="email" value={member.email} />
+        <input type="hidden" name="action" value="restore" />
+        <button type="submit">Restore this membership</button>
+      </form>
     ) : (
-      <>
-        <p>
-          Revoking a membership takes the card away before it expires. It is a
-          decision about a person rather than about an order, so it sits with the
-          Membership Committee -- see the provenance document. Everything they
-          bought stays on the record, and this can be lifted again.
-        </p>
-        <form method="post" action={MEMBERS_PATH}>
-          <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="revoke" />
-          <label for="revocation_note">
-            Why (kept, because somebody will be asked to explain this later)
-          </label>
-          <input
-            id="revocation_note"
-            name="revocation_note"
-            type="text"
-            maxlength={MAX_REVOCATION_NOTE_LENGTH}
-            autocomplete="off"
-          />
-          <button type="submit">Revoke this membership</button>
-        </form>
-      </>
+      <form method="post" action={MEMBERS_PATH}>
+        <input type="hidden" name="email" value={member.email} />
+        <input type="hidden" name="action" value="revoke" />
+        <label for="revocation_note">Reason for revoking (optional)</label>
+        <input id="revocation_note" name="revocation_note" type="text" maxlength={MAX_REVOCATION_NOTE_LENGTH} autocomplete="off" />
+        <button type="submit">Revoke this membership</button>
+      </form>
     )}
-    <h3>Expelled from the group</h3>
     {expelled ? (
-      <>
+      <form method="post" action={MEMBERS_PATH}>
         <p class="danger">
-          <strong>This person has been expelled from Los Verdes.</strong> They cannot sign
-          in, any session they already had has stopped working, and their
-          membership is suppressed for as long as the expulsion stands. Lifting it
-          restores the membership by itself.
+          <strong>This person has been expelled from Los Verdes.</strong>
         </p>
-        <form method="post" action={MEMBERS_PATH}>
-          <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="readmit" />
-          <button type="submit">Lift this expulsion</button>
-        </form>
-      </>
+        <input type="hidden" name="email" value={member.email} />
+        <input type="hidden" name="action" value="readmit" />
+        <button type="submit">Lift this expulsion</button>
+      </form>
     ) : (
-      <>
-        <p>
-          Heavier than revoking a card, and rarer. An expulsion stops them signing in
-          at all as well as taking the membership away, and it is indefinite --
-          there is no date on it, and lifting it is a decision somebody has to
-          make. It follows the address, so it covers a membership bought under
-          it later, and does not follow them to a different one.
-        </p>
-        <form method="post" action={MEMBERS_PATH}>
-          <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="expel" />
-          <label for="expulsion_note">
-            Why (kept, because whoever is asked about this later will not be you)
-          </label>
-          <input
-            id="expulsion_note"
-            name="expulsion_note"
-            type="text"
-            maxlength={MAX_EXPULSION_NOTE_LENGTH}
-            autocomplete="off"
-          />
-          <button type="submit">Expel this person from the group</button>
-        </form>
-      </>
+      <form method="post" action={MEMBERS_PATH}>
+        <input type="hidden" name="email" value={member.email} />
+        <input type="hidden" name="action" value="expel" />
+        <label for="expulsion_note">Reason for expelling (optional)</label>
+        <input id="expulsion_note" name="expulsion_note" type="text" maxlength={MAX_EXPULSION_NOTE_LENGTH} autocomplete="off" />
+        <button type="submit">Expel this person from the group</button>
+      </form>
     )}
     <p class="muted">
       <a href={`/admin/audit?email=${encodeURIComponent(member.email)}`}>
@@ -440,20 +400,13 @@ members.get("/", async (c) => {
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}
       {c.req.query("saved") === "revoked" && (
-        <p style="color: var(--success)">
-          Membership revoked. Their passes have been told.
-        </p>
+        <p style="color: var(--success)">Membership revoked.</p>
       )}
       {c.req.query("saved") === "expelled" && (
-        <p style="color: var(--success)">
-          Expelled from the group. They can no longer sign in, and their membership
-          is suppressed.
-        </p>
+        <p style="color: var(--success)">Expelled from the group.</p>
       )}
       {c.req.query("saved") === "readmitted" && (
-        <p style="color: var(--success)">
-          Expulsion lifted. Any membership it was suppressing is back.
-        </p>
+        <p style="color: var(--success)">Expulsion lifted.</p>
       )}
       {c.req.query("saved") === "restored" && (
         <p style="color: var(--success)">
