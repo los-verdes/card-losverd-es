@@ -176,8 +176,9 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 
 ### Card emails for new orders
 
-When the webhook path (and only the webhook path) sees an order **become**
-`Completed`, the member is emailed their card once
+When the webhook path (and only the webhook path) sees an order that counts
+as a membership -- any of the paid statuses, the same list the card itself
+goes by -- the member is emailed their card once
 (`src/email/newOrder.ts`). Emailing in bulk would be a disaster -- a
 backfill, resync or data reload would mail hundreds of existing members -- so three guards each stop that on their own:
 
