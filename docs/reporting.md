@@ -69,9 +69,17 @@ each card from the member's counted orders (see
 ## The pages (`/admin/reports`)
 
 All require an admin (see the README for granting that), are served
-`Cache-Control: no-store`, and offer a CSV download of every matching row.
-CSV cells that a spreadsheet would evaluate as formulas are neutralized
-(`src/lib/csv.ts`), since names and emails are typed by the public.
+`Cache-Control: no-store`, and offer a CSV download of every matching row,
+linked above each table. CSV cells that a spreadsheet would evaluate as
+formulas are neutralized (`src/lib/csv.ts`), since names and emails are typed
+by the public.
+
+The CSV is the way to do anything more involved with a report. The pages
+themselves send every matching row, not a page of them, and any table sorts
+by a click on a column heading (`src/admin/tableSort.ts`, a small inline
+script; without JavaScript the table stays in the server's order). The
+orders-by-month page also draws its two years as a bar chart above the
+table, rendered on the server as SVG (`src/admin/monthChart.tsx`).
 
 | Page | Shows | Legacy report page it replaces |
 | :--- | :--- | :--- |

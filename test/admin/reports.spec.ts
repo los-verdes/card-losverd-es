@@ -2,7 +2,6 @@ import "../setup/d1";
 import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PAGE_SIZE } from "../../src/admin/reports";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { insertOrder, insertSlackUser } from "./fixtures";
@@ -10,6 +9,8 @@ import { insertOrder, insertSlackUser } from "./fixtures";
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
 const MEMBER_ID = 2;
+/** More rows than the pages used to show at once (100), so nothing is cut short. */
+const MANY = 101;
 
 async function get(path: string, loggedInAs: number | null = ADMIN_ID) {
   const headers = new Headers();
@@ -135,25 +136,24 @@ describe("GET /admin/reports/active", () => {
     vi.restoreAllMocks();
   });
 
-  it("pages, carrying the filters along in the links", async () => {
-    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+  it("sends every matching row in one sortable table, with the filtered CSV link above it", async () => {
+    for (let i = 0; i < MANY; i++) {
       await insertOrder({ id: `bulk-${i}`, email: `bulk${i}@example.com`, created: "2026-02-01T00:00:00Z" });
     }
 
-    const first = await (await get("/admin/reports/active?q=bulk")).text();
-    const second = await (await get("/admin/reports/active?q=bulk&page=2")).text();
+    // A page number from an old bookmark is ignored rather than refused.
+    const body = await (await get("/admin/reports/active?q=bulk&page=2")).text();
 
-    expect(first).toContain("Page 1 of 2");
-    expect(first).toContain('href="/admin/reports/active?q=bulk&amp;page=2">Next');
-    expect(first).not.toContain("Previous");
-    expect(second).toContain("Page 2 of 2");
-    expect(second).toContain('href="/admin/reports/active?q=bulk&amp;page=1">Previous');
-    expect(second).not.toContain(">Next<");
-    expect(second.match(/bulk\d+@example\.com/g)).toHaveLength(1);
+    expect(body.match(/<td[^>]*>bulk\d+@example\.com<\/td>/g)).toHaveLength(MANY);
+    expect(body).toContain("<table data-sortable");
+    const csvLink = body.indexOf(`href="/admin/reports/active?q=bulk&amp;format=csv">Download all ${MANY} as CSV`);
+    expect(csvLink).toBeGreaterThan(-1);
+    expect(csvLink).toBeLessThan(body.indexOf("<table"));
+    expect(body).not.toContain("Page 1 of");
   });
 
-  it("downloads every matching row as CSV, not just one page", async () => {
-    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+  it("downloads every matching row as CSV", async () => {
+    for (let i = 0; i < MANY; i++) {
       await insertOrder({ id: `bulk-${i}`, email: `bulk${i}@example.com`, created: "2026-02-01T00:00:00Z" });
     }
 
@@ -164,15 +164,12 @@ describe("GET /admin/reports/active", () => {
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const lines = (await res.text()).trimEnd().split("\r\n");
     expect(lines[0]).toBe("order_id,first_name,last_name,order_email,member_email,created_on,expires_on,channel_name,source,status");
-    expect(lines).toHaveLength(PAGE_SIZE + 2);
+    expect(lines).toHaveLength(MANY + 1);
   });
 
   it.each([
     ["as_of=yesterday", "as_of"],
     ["as_of=2026-02-30", "as_of"],
-    ["page=0", "page"],
-    ["page=1.5", "page"],
-    ["page=abc", "page"],
   ])("rejects %s", async (query, field) => {
     const res = await get(`/admin/reports/active?${query}`);
 
@@ -237,6 +234,19 @@ describe("GET /admin/reports/orders", () => {
     expect(await (await get("/admin/reports/orders?year=")).text()).toContain("Membership orders, 2026");
   });
 
+  it("charts both years above the table, each bar titled with its figure", async () => {
+    const body = await (await get("/admin/reports/orders")).text();
+
+    expect(body).toContain('<figure class="month-chart">');
+    expect(body).toContain("<title>Jan 2026: 2 orders</title>");
+    expect(body).toContain("<title>Jan 2025: 1 order</title>");
+    expect(body).toContain("<title>Dec 2026: 0 orders</title>");
+    expect(body.match(/<rect /g)).toHaveLength(24);
+    expect(body.indexOf("<svg")).toBeLessThan(body.indexOf("<table"));
+    // Months sort by number, not by name, when the table is re-sorted.
+    expect(body).toMatch(/data-sort="02"[^>]*>February<\/td>/);
+  });
+
   it("downloads as CSV", async () => {
     const res = await get("/admin/reports/orders?year=2026&format=csv");
 
@@ -295,20 +305,18 @@ describe("GET /admin/reports/slack", () => {
     expect(body).toContain("Current members not in Slack (2)");
   });
 
-  it("shows only the first page of a long table, but downloads all of it", async () => {
-    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+  it("shows every row of a long table, as the CSV does", async () => {
+    for (let i = 0; i < MANY; i++) {
       await insertSlackUser({ id: `UBULK${i}`, email: `bulk${i}@example.com` });
     }
 
     const body = await (await get("/admin/reports/slack")).text();
     const csv = await (await get("/admin/reports/slack?table=users-without-orders&format=csv")).text();
 
-    expect(body).toContain(`Slack users with no membership orders (${PAGE_SIZE + 2})`);
-    expect(body).toContain(`Showing the first ${PAGE_SIZE}.`);
-    expect(body.match(/<td[^>]*>UBULK\d+<\/td>/g)).toHaveLength(PAGE_SIZE);
-    expect(body).not.toContain("guest@example.com"); // sorts after every bulk address
-    expect(csv.trimEnd().split("\r\n")).toHaveLength(PAGE_SIZE + 3);
-    expect(csv).toContain("guest@example.com");
+    expect(body).toContain(`Slack users with no membership orders (${MANY + 1})`);
+    expect(body.match(/<td[^>]*>UBULK\d+<\/td>/g)).toHaveLength(MANY);
+    expect(body).toContain("guest@example.com"); // sorts after every bulk address
+    expect(csv.trimEnd().split("\r\n")).toHaveLength(MANY + 2);
   });
 
   it("downloads one table as CSV, with that table's columns", async () => {
@@ -382,16 +390,16 @@ describe("GET /admin/reports/consolidations", () => {
     expect(await bad.text()).toContain("table must be one of attributed-orders, duplicate-names");
   });
 
-  it("shows only the first page of a long table, with the full count in the CSV link", async () => {
-    for (let i = 0; i < PAGE_SIZE + 1; i++) {
+  it("shows every row of a long table, with the full count in the CSV link above it", async () => {
+    for (let i = 0; i < MANY; i++) {
       await insertOrder({ id: `dup-${i}`, email: `dup${i}@example.com`, memberEmail: `moved${i}@example.com`, created: "2026-01-15T00:00:00Z" });
     }
 
     const body = await (await get("/admin/reports/consolidations")).text();
 
-    expect(body).toContain(`Orders attributed to another address (${PAGE_SIZE + 2})`);
-    expect(body).toContain(`Showing the first ${PAGE_SIZE}.`);
-    expect(body).toContain(`Download all ${PAGE_SIZE + 2} as CSV`);
+    expect(body).toContain(`Orders attributed to another address (${MANY + 1})`);
+    expect(body.match(/<a href="\/admin\/orders\/dup-\d+">/g)).toHaveLength(MANY);
+    expect(body.indexOf(`Download all ${MANY + 1} as CSV`)).toBeLessThan(body.indexOf("<table"));
   });
 
   it("is listed on the reports index", async () => {
