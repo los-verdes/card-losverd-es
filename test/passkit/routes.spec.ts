@@ -249,6 +249,27 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
     expect(res.status).toBe(304);
   });
 
+  it("returns 304 when the device echoes back the Last-Modified it was given", async () => {
+    // HTTP dates carry seconds, so the header the device sends back is the
+    // record's time with the milliseconds dropped. Comparing it against the
+    // full millisecond value made the pass look newer than itself, and Wallet
+    // reported being handed a pass identical to the one it held (staging,
+    // 2026-09-22).
+    const lastUpdatedAt = Date.now();
+    const withMilliseconds = lastUpdatedAt % 1000 === 0 ? lastUpdatedAt + 400 : lastUpdatedAt;
+    const { memberId, authToken } = await seedMember({ memberId: "LV-30004", lastUpdatedAt: withMilliseconds });
+
+    const res = await SELF.fetch(path(memberId), {
+      headers: {
+        authorization: `ApplePass ${authToken}`,
+        // Exactly what the previous response's Last-Modified said.
+        "if-modified-since": new Date(withMilliseconds).toUTCString(),
+      },
+    });
+
+    expect(res.status).toBe(304);
+  });
+
   it("fails loudly rather than serving a broken pass when template assets are missing from R2", async () => {
     // No seedTemplateAssets() call -- matches a not-yet-provisioned R2
     // bucket (Phase 3.2's asset migration script hasn't run).

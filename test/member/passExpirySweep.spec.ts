@@ -174,3 +174,20 @@ describe("queue messages", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("not pushing a pass twice", () => {
+  it("skips a lapsed member whose pass was refreshed in the last day", async () => {
+    // What the one-off found on staging: a membership refunded minutes
+    // earlier had already been refreshed by the order webhook, so pushing
+    // again handed Wallet a pass identical to the one it held.
+    const refreshedAt = NOW.getTime() - 3_600_000;
+    await insertMember("LV-A", "2025-01-01");
+    await env.DB.prepare("UPDATE members SET last_updated_at = ? WHERE member_id = 'LV-A'").bind(refreshedAt).run();
+
+    expect(await refreshLapsedPasses(env, "", NOW)).toBeNull();
+
+    expect(await env.DB.prepare("SELECT last_updated_at FROM members WHERE member_id = 'LV-A'").first()).toEqual({
+      last_updated_at: refreshedAt,
+    });
+  });
+});
