@@ -136,6 +136,72 @@ body.admin {
   margin: 1.5rem auto;
 }
 
+/* A report table's headings, once src/admin/tableSort.ts has made them
+   buttons: still read as headings, with an arrow on the sorted one. */
+table[data-sortable] th button.sort {
+  all: unset;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+table[data-sortable] th button.sort:focus-visible {
+  outline: 2px solid var(--verde-ink);
+  outline-offset: 2px;
+}
+
+table[data-sortable] th[aria-sort="ascending"] button.sort::after {
+  content: " \\25B2";
+  font-size: 0.7em;
+}
+
+table[data-sortable] th[aria-sort="descending"] button.sort::after {
+  content: " \\25BC";
+  font-size: 0.7em;
+}
+
+/* The orders-by-month chart (src/admin/monthChart.tsx). The year before is
+   the muted colour, half strength, so the chosen year is what reads first. */
+.month-chart {
+  margin: 1rem 0;
+  max-width: 48rem;
+}
+
+.month-chart svg {
+  width: 100%;
+  height: auto;
+}
+
+.month-chart .this-year {
+  fill: var(--verde-ink);
+  background: var(--verde-ink);
+}
+
+.month-chart .previous-year {
+  fill: color-mix(in srgb, var(--muted) 50%, transparent);
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.month-chart .gridline line {
+  stroke: var(--rule);
+}
+
+.month-chart text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.month-chart figcaption {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.month-chart .swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.5em;
+}
+
 /* No image, whatever its intrinsic size, may be wider than what holds it.
    The card carries its own sizing inline as well; this is the net for
    anything added later that forgets. */

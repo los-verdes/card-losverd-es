@@ -17,11 +17,6 @@ export interface ReportFilters {
   channel?: string;
 }
 
-export interface Page {
-  limit: number;
-  offset: number;
-}
-
 export interface MembershipOrderRow {
   [key: string]: string | null;
   order_id: string;
@@ -69,7 +64,7 @@ function filterClauses(
 
 export interface ActiveMembershipsResult {
   rows: MembershipOrderRow[];
-  /** Matching orders, ignoring paging. */
+  /** Matching orders. */
   totalOrders: number;
   /** Distinct members among them (someone who renewed early has two orders). */
   totalMembers: number;
@@ -80,18 +75,16 @@ export async function activeMemberships(
   db: D1Database,
   asOf: string,
   filters: ReportFilters = {},
-  page?: Page,
 ): Promise<ActiveMembershipsResult> {
   const extra = filterClauses(filters, 2);
   // Revoked memberships are left out: this is the "who is a member right
   // now" report, and it must not disagree with what the access checks say
   // about the same person. What they bought stays in the sales reports.
   const where = `created_on <= ?1 AND expires_on > ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}${extra.sql}`;
-  const paging = page ? ` LIMIT ${Number(page.limit)} OFFSET ${Number(page.offset)}` : "";
   const [list, totals] = await db.batch<Record<string, unknown>>([
     db
       .prepare(
-        `SELECT ${ORDER_COLUMNS} FROM membership_orders WHERE ${where} ORDER BY created_on DESC, order_id${paging}`,
+        `SELECT ${ORDER_COLUMNS} FROM membership_orders WHERE ${where} ORDER BY created_on DESC, order_id`,
       )
       .bind(asOf, ...extra.params),
     db
@@ -125,7 +118,6 @@ export async function expiredMemberships(
   db: D1Database,
   asOf: string,
   filters: ReportFilters = {},
-  page?: Page,
 ): Promise<ExpiredMembershipsResult> {
   const extra = filterClauses(filters, 2);
   // SQLite's bare-column rule: with a single MAX() aggregate, the other
@@ -136,11 +128,10 @@ export async function expiredMemberships(
     WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP}
     GROUP BY member_email
     HAVING latest_expiry <= ?1`;
-  const paging = page ? ` LIMIT ${Number(page.limit)} OFFSET ${Number(page.offset)}` : "";
   const [list, totals] = await db.batch<Record<string, unknown>>([
     db
       .prepare(
-        `SELECT ${ORDER_COLUMNS} FROM (${latest}) WHERE 1 = 1${extra.sql} ORDER BY expires_on DESC, order_id${paging}`,
+        `SELECT ${ORDER_COLUMNS} FROM (${latest}) WHERE 1 = 1${extra.sql} ORDER BY expires_on DESC, order_id`,
       )
       .bind(asOf, ...extra.params),
     db

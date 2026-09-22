@@ -4,6 +4,7 @@ import type { FC, PropsWithChildren } from "hono/jsx";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { STYLESHEET_PATH } from "../styles";
 import { AdminNav } from "./nav";
+import { TABLE_SORT_SCRIPT } from "./tableSort";
 
 export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap";
 
@@ -22,6 +23,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <h1>{title}</h1>
       {children}
       <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
+      <script dangerouslySetInnerHTML={{ __html: TABLE_SORT_SCRIPT }} />
     </body>
   </html>
 );

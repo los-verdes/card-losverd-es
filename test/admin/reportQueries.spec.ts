@@ -78,10 +78,10 @@ describe("activeMemberships", () => {
     expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone", search: "steady" })).totalOrders).toBe(0);
   });
 
-  it("pages the rows but not the totals", async () => {
-    const result = await activeMemberships(env.DB, AS_OF, {}, { limit: 2, offset: 2 });
+  it("lists newest first, every row counted", async () => {
+    const result = await activeMemberships(env.DB, AS_OF);
 
-    expect(result.rows.map((r) => r.order_id)).toEqual(["5f00000000000000000000b2", "1"]);
+    expect(result.rows.slice(2).map((r) => r.order_id)).toEqual(["5f00000000000000000000b2", "1"]);
     expect(result.totalOrders).toBe(4);
   });
 });
@@ -107,14 +107,14 @@ describe("expiredMemberships", () => {
     expect(result.rows.map((r) => r.member_email).sort()).toEqual(["lapsed@example.com", "moved@example.com"]);
   });
 
-  it("filters and pages", async () => {
+  it("filters, and counts every lapsed member", async () => {
     const asOf = "2025-06-01T00:00:00Z";
 
     expect((await expiredMemberships(env.DB, asOf, { search: "lap sed" })).total).toBe(1);
     expect((await expiredMemberships(env.DB, asOf, { channel: "bigcommerce_iphone" })).total).toBe(0);
-    const paged = await expiredMemberships(env.DB, asOf, {}, { limit: 1, offset: 1 });
-    expect(paged.rows).toHaveLength(1);
-    expect(paged.total).toBe(2);
+    const all = await expiredMemberships(env.DB, asOf);
+    expect(all.rows).toHaveLength(2);
+    expect(all.total).toBe(2);
   });
 });
 

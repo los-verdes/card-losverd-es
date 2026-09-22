@@ -1,19 +1,21 @@
 /**
  * Admin-only membership reports, replacing the legacy Google Data Studio
  * report that read Cloud SQL directly (los-verdes/card-losverd-es#53).
- * Server-rendered tables over `membership_orders`, each downloadable as CSV.
+ * Server-rendered tables over `membership_orders`, each downloadable as CSV
+ * and sortable by any column in the browser.
  *
  * Every response is `no-store`: these pages list members' names and emails.
  */
 
 import { Hono } from "hono";
-import type { FC } from "hono/jsx";
+import type { FC, PropsWithChildren } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
 import { parseIsoDate } from "../lib/dateFormat";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { MonthlyOrdersChart } from "./monthChart";
 import { orderPath } from "./orders";
 import {
   activeMemberships,
@@ -32,8 +34,6 @@ import {
   type ReportFilters,
   type SlackCrossReference,
 } from "./reportQueries";
-
-export const PAGE_SIZE = 100;
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -105,7 +105,6 @@ interface ReportRequest {
   /** The instant the report is evaluated at. */
   asOf: string;
   filters: ReportFilters;
-  page: number;
   csv: boolean;
 }
 
@@ -118,20 +117,15 @@ function parseReportRequest(query: Record<string, string>, now: Date): ReportReq
   if (asOfDate && !parseIsoDate(asOfDate)) {
     throw new BadRequest("as_of must be a date in YYYY-MM-DD form");
   }
-  const page = query.page === undefined ? 1 : Number(query.page);
-  if (!Number.isInteger(page) || page < 1) {
-    throw new BadRequest("page must be a positive whole number");
-  }
   return {
     asOfDate,
     asOf: asOfDate ? `${asOfDate}T23:59:59Z` : toIsoSeconds(now),
     filters: { search: query.q, channel: query.channel || undefined },
-    page,
     csv: query.format === "csv",
   };
 }
 
-/** The current report URL, filters kept, plus `changes` (a page number or format). */
+/** The current report URL, filters kept, plus `changes` (the format). */
 function withParams(
   path: string,
   req: ReportRequest,
@@ -182,60 +176,64 @@ const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> =
   </form>
 );
 
-const OrdersTable: FC<{ rows: MembershipOrderRow[] }> = ({ rows }) => (
-  <div style="overflow-x: auto">
-    <table style="border-collapse: collapse; font-size: 0.9rem">
-      <thead>
-        <tr>
-          {["Order", "Name", "Order email", "Member email", "Started", "Expires", "Channel", "Status"].map(
-            (heading) => (
-              <th style={cellStyle}>{heading}</th>
-            ),
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr>
-            <td style={cellStyle}>
-              <a href={orderPath(row.order_id)}>{row.order_id}</a>
-            </td>
-            <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
-            <td style={cellStyle}>{row.order_email}</td>
-            <td style={cellStyle}>{row.member_email === row.order_email ? "" : row.member_email}</td>
-            <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
-            <td style={cellStyle}>{row.expires_on.slice(0, 10)}</td>
-            <td style={cellStyle}>{row.channel_name ?? row.source}</td>
-            <td style={cellStyle}>{row.status ?? ""}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-const Pager: FC<{ path: string; req: ReportRequest; total: number }> = ({ path, req, total }) => {
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  return (
-    <p>
-      Page {req.page} of {lastPage}
-      {req.page > 1 && (
-        <>
-          {" · "}
-          <a href={withParams(path, req, { page: String(req.page - 1) })}>Previous</a>
-        </>
-      )}
-      {req.page < lastPage && (
-        <>
-          {" · "}
-          <a href={withParams(path, req, { page: String(req.page + 1) })}>Next</a>
-        </>
-      )}
-      {" · "}
-      <a href={withParams(path, req, { format: "csv" })}>Download all {total} as CSV</a>
-    </p>
+/**
+ * Every report table: its CSV download first, where someone looking for it
+ * finds it before scrolling past a few hundred rows, then the table itself,
+ * sortable by any heading (src/admin/tableSort.ts). Every row is sent;
+ * sorting in the browser is only honest over the whole report.
+ *
+ * `children` is the table's `<tbody>` (and `<tfoot>`, if it has totals).
+ */
+const ReportTable: FC<
+  PropsWithChildren<{ headings: readonly string[]; csvHref: string; csvLabel: string; empty?: string; rowCount: number }>
+> = ({ headings, csvHref, csvLabel, empty, rowCount, children }) =>
+  rowCount === 0 && empty ? (
+    <p>{empty}</p>
+  ) : (
+    <>
+      <p>
+        <a href={csvHref}>{csvLabel}</a>
+      </p>
+      <div style="overflow-x: auto">
+        <table data-sortable style="border-collapse: collapse; font-size: 0.9rem">
+          <thead>
+            <tr>
+              {headings.map((heading) => (
+                <th style={cellStyle}>{heading}</th>
+              ))}
+            </tr>
+          </thead>
+          {children}
+        </table>
+      </div>
+    </>
   );
-};
+
+const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: number }> = ({ rows, csvHref, total }) => (
+  <ReportTable
+    headings={["Order", "Name", "Order email", "Member email", "Started", "Expires", "Channel", "Status"]}
+    csvHref={csvHref}
+    csvLabel={`Download all ${total} as CSV`}
+    rowCount={rows.length}
+  >
+    <tbody>
+      {rows.map((row) => (
+        <tr>
+          <td style={cellStyle}>
+            <a href={orderPath(row.order_id)}>{row.order_id}</a>
+          </td>
+          <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+          <td style={cellStyle}>{row.order_email}</td>
+          <td style={cellStyle}>{row.member_email === row.order_email ? "" : row.member_email}</td>
+          <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
+          <td style={cellStyle}>{row.expires_on.slice(0, 10)}</td>
+          <td style={cellStyle}>{row.channel_name ?? row.source}</td>
+          <td style={cellStyle}>{row.status ?? ""}</td>
+        </tr>
+      ))}
+    </tbody>
+  </ReportTable>
+);
 
 function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[]): Response {
   const stamp = req.asOf.slice(0, 10);
@@ -316,10 +314,7 @@ reports.get("/active", async (c) => {
     return csvResponse("active-memberships", req, rows);
   }
   const [result, channels] = await Promise.all([
-    activeMemberships(c.env.DB, req.asOf, req.filters, {
-      limit: PAGE_SIZE,
-      offset: (req.page - 1) * PAGE_SIZE,
-    }),
+    activeMemberships(c.env.DB, req.asOf, req.filters),
     listChannels(c.env.DB),
   ]);
   return c.html(
@@ -330,8 +325,7 @@ reports.get("/active", async (c) => {
         <strong>{result.totalMembers}</strong> members holding <strong>{result.totalOrders}</strong> orders, as of{" "}
         {req.asOf}.
       </p>
-      <OrdersTable rows={result.rows} />
-      <Pager path={path} req={req} total={result.totalOrders} />
+      <OrdersTable rows={result.rows} csvHref={withParams(path, req, { format: "csv" })} total={result.totalOrders} />
     </AdminPage>,
   );
 });
@@ -344,10 +338,7 @@ reports.get("/expired", async (c) => {
     return csvResponse("expired-memberships", req, rows);
   }
   const [result, channels] = await Promise.all([
-    expiredMemberships(c.env.DB, req.asOf, req.filters, {
-      limit: PAGE_SIZE,
-      offset: (req.page - 1) * PAGE_SIZE,
-    }),
+    expiredMemberships(c.env.DB, req.asOf, req.filters),
     listChannels(c.env.DB),
   ]);
   return c.html(
@@ -360,8 +351,7 @@ reports.get("/expired", async (c) => {
       <p>
         <strong>{result.total}</strong> lapsed members, as of {req.asOf}.
       </p>
-      <OrdersTable rows={result.rows} />
-      <Pager path={path} req={req} total={result.total} />
+      <OrdersTable rows={result.rows} csvHref={withParams(path, req, { format: "csv" })} total={result.total} />
     </AdminPage>,
   );
 });
@@ -394,21 +384,20 @@ reports.get("/orders", async (c) => {
             <a href={`/admin/reports/orders?year=${year + 1}`}>{year + 1} →</a>
           </>
         )}
-        {" · "}
-        <a href={`/admin/reports/orders?year=${year}&format=csv`}>Download as CSV</a>
       </p>
-      <table style="border-collapse: collapse">
-        <thead>
-          <tr>
-            <th style={cellStyle}>Month (UTC)</th>
-            <th style={cellStyle}>{year}</th>
-            <th style={cellStyle}>{year - 1}</th>
-          </tr>
-        </thead>
+      <MonthlyOrdersChart months={months} year={year} />
+      <ReportTable
+        headings={["Month (UTC)", String(year), String(year - 1)]}
+        csvHref={`/admin/reports/orders?year=${year}&format=csv`}
+        csvLabel="Download as CSV"
+        rowCount={months.length}
+      >
         <tbody>
           {months.map((m, i) => (
             <tr>
-              <td style={cellStyle}>{MONTH_NAMES[i]}</td>
+              <td style={cellStyle} data-sort={m.month}>
+                {MONTH_NAMES[i]}
+              </td>
               <td style={cellStyle}>{m.orders}</td>
               <td style={cellStyle}>{m.previous_year_orders}</td>
             </tr>
@@ -421,7 +410,7 @@ reports.get("/orders", async (c) => {
             <th style={cellStyle}>{previousTotal}</th>
           </tr>
         </tfoot>
-      </table>
+      </ReportTable>
     </AdminPage>,
   );
 });
@@ -465,31 +454,23 @@ reports.get("/slack", async (c) => {
             <h2>
               {table.title} ({rows.length})
             </h2>
-            <div style="overflow-x: auto">
-              <table style="border-collapse: collapse; font-size: 0.9rem">
-                <thead>
+            <ReportTable
+              headings={table.columns.map((column) => SLACK_COLUMN_HEADINGS[column])}
+              csvHref={`/admin/reports/slack?table=${table.key}&format=csv`}
+              csvLabel={`Download all ${rows.length} as CSV`}
+              rowCount={rows.length}
+            >
+              <tbody>
+                {rows.map((row) => (
                   <tr>
                     {table.columns.map((column) => (
-                      <th style={cellStyle}>{SLACK_COLUMN_HEADINGS[column]}</th>
+                      // Dates shown as days; the CSV keeps the full timestamp.
+                      <td style={cellStyle}>{row[column]?.slice(0, column === "expires_on" ? 10 : undefined)}</td>
                     ))}
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, PAGE_SIZE).map((row) => (
-                    <tr>
-                      {table.columns.map((column) => (
-                        // Dates shown as days; the CSV keeps the full timestamp.
-                        <td style={cellStyle}>{row[column]?.slice(0, column === "expires_on" ? 10 : undefined)}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p>
-              {rows.length > PAGE_SIZE && `Showing the first ${PAGE_SIZE}. `}
-              <a href={`/admin/reports/slack?table=${table.key}&format=csv`}>Download all {rows.length} as CSV</a>
-            </p>
+                ))}
+              </tbody>
+            </ReportTable>
           </section>
         );
       })}
@@ -535,30 +516,22 @@ reports.get("/consolidations", async (c) => {
             <h2>
               {table.title} ({rows.length})
             </h2>
-            <div style="overflow-x: auto">
-              <table style="border-collapse: collapse; font-size: 0.9rem">
-                <thead>
+            <ReportTable
+              headings={table.headings}
+              csvHref={`/admin/reports/consolidations?table=${table.key}&format=csv`}
+              csvLabel={`Download all ${rows.length} as CSV`}
+              rowCount={rows.length}
+            >
+              <tbody>
+                {rows.map((row) => (
                   <tr>
-                    {table.headings.map((heading) => (
-                      <th style={cellStyle}>{heading}</th>
+                    {table.columns.map((column) => (
+                      <td style={cellStyle}>{consolidationCell(row, column)}</td>
                     ))}
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, PAGE_SIZE).map((row) => (
-                    <tr>
-                      {table.columns.map((column) => (
-                        <td style={cellStyle}>{consolidationCell(row, column)}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p>
-              {rows.length > PAGE_SIZE && `Showing the first ${PAGE_SIZE}. `}
-              <a href={`/admin/reports/consolidations?table=${table.key}&format=csv`}>Download all {rows.length} as CSV</a>
-            </p>
+                ))}
+              </tbody>
+            </ReportTable>
           </section>
         );
       })}
@@ -605,40 +578,30 @@ reports.get("/missing", async (c) => {
         BigCommerce, and it can also vanish because the store had a bad day, so the flag clears itself if a later
         sync finds the order again.
       </p>
-      {rows.length === 0 ? (
-        <p>No orders are missing.</p>
-      ) : (
-        <div style="overflow-x: auto">
-          <table style="border-collapse: collapse; font-size: 0.9rem">
-            <thead>
-              <tr>
-                {["Order", "Member", "Name", "Status", "Membership", "First missed"].map((heading) => (
-                  <th style={cellStyle}>{heading}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: MissingOrderRow) => (
-                <tr>
-                  <td style={cellStyle}>
-                    <a href={orderPath(row.order_id)}>{row.order_id}</a>
-                  </td>
-                  <td style={cellStyle}>{row.member_email}</td>
-                  <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
-                  <td style={cellStyle}>{row.status ?? ""}</td>
-                  <td style={cellStyle}>
-                    {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
-                  </td>
-                  <td style={cellStyle}>{new Date(row.missing_since).toISOString().slice(0, 10)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p>
-        <a href="/admin/reports/missing?format=csv">Download CSV</a>
-      </p>
+      <ReportTable
+        headings={["Order", "Member", "Name", "Status", "Membership", "First missed"]}
+        csvHref="/admin/reports/missing?format=csv"
+        csvLabel={`Download all ${rows.length} as CSV`}
+        empty="No orders are missing."
+        rowCount={rows.length}
+      >
+        <tbody>
+          {rows.map((row: MissingOrderRow) => (
+            <tr>
+              <td style={cellStyle}>
+                <a href={orderPath(row.order_id)}>{row.order_id}</a>
+              </td>
+              <td style={cellStyle}>{row.member_email}</td>
+              <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+              <td style={cellStyle}>{row.status ?? ""}</td>
+              <td style={cellStyle}>
+                {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
+              </td>
+              <td style={cellStyle}>{new Date(row.missing_since).toISOString().slice(0, 10)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </ReportTable>
     </AdminPage>,
   );
 });
@@ -685,40 +648,30 @@ reports.get("/extra-memberships", async (c) => {
         rest right is a person&#39;s job: refund the extra, or place the membership under the right address. An order
         corrected in BigCommerce drops off this list on the next sync.
       </p>
-      {rows.length === 0 ? (
-        <p>No order carries more than one membership.</p>
-      ) : (
-        <div style="overflow-x: auto">
-          <table style="border-collapse: collapse; font-size: 0.9rem">
-            <thead>
-              <tr>
-                {["Order", "Member", "Name", "Status", "Membership", "Memberships on order"].map((heading) => (
-                  <th style={cellStyle}>{heading}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: ExtraMembershipOrderRow) => (
-                <tr>
-                  <td style={cellStyle}>
-                    <a href={orderPath(row.order_id)}>{row.order_id}</a>
-                  </td>
-                  <td style={cellStyle}>{row.member_email}</td>
-                  <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
-                  <td style={cellStyle}>{row.status ?? ""}</td>
-                  <td style={cellStyle}>
-                    {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
-                  </td>
-                  <td style={cellStyle}>{row.membership_units}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p>
-        <a href="/admin/reports/extra-memberships?format=csv">Download CSV</a>
-      </p>
+      <ReportTable
+        headings={["Order", "Member", "Name", "Status", "Membership", "Memberships on order"]}
+        csvHref="/admin/reports/extra-memberships?format=csv"
+        csvLabel={`Download all ${rows.length} as CSV`}
+        empty="No order carries more than one membership."
+        rowCount={rows.length}
+      >
+        <tbody>
+          {rows.map((row: ExtraMembershipOrderRow) => (
+            <tr>
+              <td style={cellStyle}>
+                <a href={orderPath(row.order_id)}>{row.order_id}</a>
+              </td>
+              <td style={cellStyle}>{row.member_email}</td>
+              <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
+              <td style={cellStyle}>{row.status ?? ""}</td>
+              <td style={cellStyle}>
+                {row.counts ? `counts, to ${row.expires_on.slice(0, 10)}` : "doesn't count"}
+              </td>
+              <td style={cellStyle}>{row.membership_units}</td>
+            </tr>
+          ))}
+        </tbody>
+      </ReportTable>
     </AdminPage>,
   );
 });
