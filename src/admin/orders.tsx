@@ -17,6 +17,8 @@ import { isMembershipCurrent } from "../member/artifacts";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { emailMemberCard } from "../email/card";
+import { readOrderFromStore } from "../bigcommerce/sync";
+import { recordOutcome } from "../lib/outcome";
 import {
   attributeOrder,
   emailFootprint,
@@ -33,6 +35,35 @@ const MAX_NOTE_LENGTH = 500;
 export function orderPath(orderId: string): string {
   return `/admin/orders/${encodeURIComponent(orderId)}`;
 }
+
+/**
+ * Re-reading one order from BigCommerce (#294): the provenance document's
+ * first thing to try when a member's record looks wrong, without waiting for
+ * the resync. What the admin is told afterwards, by outcome.
+ */
+export const REREAD_MESSAGES = {
+  updated: "Re-read from BigCommerce. It had changed, and the membership is now up to date.",
+  unchanged: "Re-read from BigCommerce. Nothing had changed.",
+  missing: 'BigCommerce no longer returns this order. It still counts, and is listed under "Missing from BigCommerce".',
+  "no-membership": "BigCommerce's copy of this order carries no membership, so nothing was changed.",
+  unreachable: "Could not finish reading it from BigCommerce. Try again shortly; a re-read is always safe to repeat.",
+} as const;
+
+export type RereadResult = keyof typeof REREAD_MESSAGES;
+
+export function rereadMessage(value: string | undefined): string | null {
+  return value !== undefined && value in REREAD_MESSAGES ? REREAD_MESSAGES[value as RereadResult] : null;
+}
+
+/** Only BigCommerce orders have a store to re-read; Squarespace-era ones carry a stored verdict. */
+export const RereadButton: FC<{ orderId: string; from: "member" | "order" }> = ({ orderId, from }) => (
+  <form method="post" action={`${orderPath(orderId)}/reread`} style="display: inline">
+    <input type="hidden" name="from" value={from} />
+    <button type="submit" data-busy-label="Re-reading…">
+      Re-read from BigCommerce
+    </button>
+  </form>
+);
 
 type AttributionInput = { email: string; note: string | null } | { error: string };
 
@@ -92,9 +123,12 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
           ["Expires", order.expires_on.slice(0, 10)],
           ["Status", `${order.status ?? ""}${order.counts ? "" : " (doesn't count as a membership)"}`],
           ...(order.membership_units && order.membership_units > 1
-            ? [
-                `Carried ${order.membership_units} memberships; only this one was recorded. See the "More than one membership" report.`,
-              ]
+            ? ([
+                [
+                  "Memberships",
+                  `Carried ${order.membership_units} memberships; only this one was recorded. See the "More than one membership" report.`,
+                ],
+              ] as const)
             : []),
           ...(order.missing_since
             ? ([
@@ -182,7 +216,13 @@ orders.get("/:orderId", async (c) => {
           <Footprint email={done.previous} footprint={done.previousFootprint} />
         </section>
       )}
+      {rereadMessage(c.req.query("reread")) && <p class="muted">{rereadMessage(c.req.query("reread"))}</p>}
       <OrderDetails order={order} />
+      {order.source === "bigcommerce" && (
+        <p>
+          <RereadButton orderId={order.order_id} from="order" />
+        </p>
+      )}
 
       <h2>Attribute to someone else</h2>
       {review ? (
@@ -246,6 +286,54 @@ orders.post("/:orderId/member", csrf(), async (c) => {
   const params = new URLSearchParams({ attributed_from: previousMemberEmail });
   if (emailing) params.set("emailed", "1");
   return c.redirect(`${orderPath(order.order_id)}?${params}`, 303);
+});
+
+/** The fields a re-read can change, to tell "updated" from "unchanged". */
+async function orderSnapshot(db: D1Database, orderId: string): Promise<string | null> {
+  const row = await db
+    .prepare(
+      "SELECT status, expires_on, membership_units, missing_since, sku, first_name, last_name FROM membership_orders WHERE order_id = ?",
+    )
+    .bind(orderId)
+    .first();
+  return row === null ? null : JSON.stringify(row);
+}
+
+/**
+ * Re-reads one order from BigCommerce and applies it as a sync would. Never
+ * emails: `readOrderFromStore` stops short of the webhook's card email, and
+ * that is the point of calling it rather than `syncBigCommerceOrder`.
+ */
+orders.post("/:orderId/reread", csrf(), async (c) => {
+  const order = await getAttributableOrder(c.env.DB, c.req.param("orderId"));
+  if (!order) {
+    return c.text("Not Found", 404);
+  }
+  if (order.source !== "bigcommerce") {
+    return c.text("Bad Request: only BigCommerce orders can be re-read from the store", 400);
+  }
+  const form = await c.req.parseBody();
+
+  let result: RereadResult;
+  const before = await orderSnapshot(c.env.DB, order.order_id);
+  try {
+    const outcome = await readOrderFromStore(c.env, c.env.BIGCOMMERCE_STORE_HASH, order.order_id);
+    if (outcome.kind === "missing") result = "missing";
+    else if (outcome.kind === "no-membership") result = "no-membership";
+    else result = (await orderSnapshot(c.env.DB, order.order_id)) === before ? "unchanged" : "updated";
+  } catch (error) {
+    console.error("admin order re-read failed", { error: String(error) });
+    result = "unreachable";
+  }
+  recordOutcome("order.reread", { result });
+
+  if (form.from === "member") {
+    const params = new URLSearchParams({ q: order.member_email, reread: result, order: order.order_id });
+    // The members page's path, spelled out: it imports this module, so importing
+    // its constant back would be circular.
+    return c.redirect(`/admin/members?${params}`, 303);
+  }
+  return c.redirect(`${orderPath(order.order_id)}?${new URLSearchParams({ reread: result })}`, 303);
 });
 
 export default orders;

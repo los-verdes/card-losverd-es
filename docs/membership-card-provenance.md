@@ -235,7 +235,9 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
 None of these can invent a membership that was never bought; each of them can
 leave this system holding a stale answer. If a member's record looks wrong and
 the reason is not somewhere in this document, re-reading their orders from the
-store is the first thing to try, and it cannot make matters worse.
+store is the first thing to try, and it cannot make matters worse: the
+**Re-read from BigCommerce** button beside each order on their admin page
+does it for one order, and never emails anyone.
 
 ## 4. Each field on the card
 

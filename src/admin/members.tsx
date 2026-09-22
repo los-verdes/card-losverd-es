@@ -37,7 +37,7 @@ import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } fro
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
-import { orderPath } from "./orders";
+import { RereadButton, orderPath, rereadMessage } from "./orders";
 
 const members = new Hono<AuthEnv & { Bindings: Env }>();
 members.use("*", requireAdmin);
@@ -239,7 +239,7 @@ const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
   <table style="border-collapse: collapse; font-size: 0.9rem">
     <thead>
       <tr>
-        {["Order", "Product", "Status", "Placed", "Counts"].map((h) => (
+        {["Order", "Product", "Status", "Placed", "Counts", ""].map((h) => (
           <th style={cellStyle}>{h}</th>
         ))}
       </tr>
@@ -254,6 +254,9 @@ const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
           <td style={cellStyle}>{order.status ?? ""}</td>
           <td style={cellStyle}>{order.created_on.slice(0, 10)}</td>
           <td style={cellStyle}>{order.counts ? "yes" : "no"}</td>
+          <td style={cellStyle}>
+            {order.source === "bigcommerce" && <RereadButton orderId={order.order_id} from="member" />}
+          </td>
         </tr>
       ))}
     </tbody>
@@ -416,6 +419,11 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "cleared" && (
         <p style="color: var(--success)">
           Name removed. Their card is back to the name their orders give.
+        </p>
+      )}
+      {rereadMessage(c.req.query("reread")) && (
+        <p class="muted">
+          Order {c.req.query("order")}: {rereadMessage(c.req.query("reread"))}
         </p>
       )}
       {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
