@@ -1,20 +1,17 @@
 # Where Membership Card Information Comes From
 
 This document is written for the Merch Team, who administer the storefront and
-answer the questions that arrive at `merchteam@losverdesatx.org`. It explains,
-in plain language, where every piece of information printed on a Los Verdes
-membership card comes from, and exactly how the software decides whether
-someone counts as a current member today. When a member writes in to say their
-card is wrong, this is the document that says which of these rules produced
-what they are looking at.
+answer the questions that arrive at `merchteam@losverdesatx.org`. It explains
+where the information printed on a Los Verdes membership card comes from, and
+how the software decides whether someone counts as a current member today.
+When a member writes in to say their card has incorrect details, this is the
+document that helps surface which rules produced what they are looking at.
 
 The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
-These rules describe how membership works, which is their remit whoever
-administers it day to day, and a change to any of them is worth their input. A
-smaller number of decisions are theirs outright -- anything that settles a
-person's standing in the group, such as whether a membership is revoked
-before it expires or somebody is expelled. Those are marked where they appear,
-and that address is who to hand one to.
+These rules describe how membership works, so a change to any of them is
+worth their input. Beyond that, a subset of processes around membership are
+theirs outright: for instance, anything that settles a person's standing in
+the group, such as disciplinary action.
 
 This is a description of what the code does right now. It documents the
 current implementation explicitly, for reference, _and also_ to invite
@@ -24,8 +21,8 @@ to check a claim against the source.
 
 Because it is how the group's stakeholders see the way membership works, this
 document is the specification the rest of the repository follows. Where it and
-the code disagree, that is a defect rather than a documentation lag, and every
-other document here is written to agree with this one.
+the code disagree, the code should be updated to match this document (or the
+document amended).
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
 gathers the places where the software had to pick a rule and where a different
@@ -35,8 +32,9 @@ welcome.
 
 ## 1. The short version
 
-* Orders are the only raw material. Every card is rebuilt from a person's
-  order history; the card itself stores no independent state.
+* Los Verdes storefront orders are used to determine membership. Every
+  card is rebuilt from a person's order history; the card itself stores no
+  independent state.
 * Only orders containing a membership product are recorded at all. Merch
   never reaches this system, and BigCommerce remains the authoritative record
   of what was bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
@@ -72,13 +70,13 @@ flowchart TD
     CARD --> F4["Card number<br/>assigned once"]
 ```
 
-The rebuild happens in one place (`refreshMemberFromOrders()` in
-`src/bigcommerce/sync.ts`). It runs whenever an order arrives or changes, when
-the scheduled resync revisits an order, and when an order is re-attributed by
-hand. Each run recomputes the whole membership from the whole history rather
-than nudging the previous answer, which is why a refund or a correction takes
-effect on its own, and why the result does not depend on the order in which
-orders happen to arrive.
+One bit of code derives membership from order history
+(`refreshMemberFromOrders()` in `src/bigcommerce/sync.ts`). It runs whenever
+an order arrives or changes, when the scheduled resync revisits an order, and
+when an order is re-attributed by hand. Each run recomputes the whole
+membership from the whole history rather than nudging the previous answer,
+which is why a refund or a correction takes effect on its own, and why the
+result does not depend on the order in which orders happen to arrive.
 
 The diagram keeps its labels short so they render legibly; the exact statuses
 behind "does this order count" are in
@@ -702,7 +700,7 @@ or a change, not an open-ended design exercise.
    turns on what the Merch Team means when they archive an order -- tidying
    the order list, or undoing a sale.
 
-## What is kept about what people did
+## The Audit log: What is kept about what people did
 
 Alongside the records of what is true now, there is a permanent record of what
 was done: every revocation and expulsion and the lifting of either, every card
