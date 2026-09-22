@@ -71,6 +71,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/email-card` | No-login fallback: emails a member their card. Turnstile-protected and rate limited; never reveals whether an address is a member (`src/member/email-card.tsx`) | Public |
 | `/claim-membership` | "I bought my membership under a different address": mails a confirmation link to that address and, once followed, links the membership to the signed-in account. Exists for Apple's Hide My Email, whose relay address matches no order. Rate limited; never reveals whether an address is a member (`src/member/claimMembership.tsx`) | Signed in |
 | `/verify-pass` | What a card's QR code points at; shows the holder's current membership (`src/member/verify-pass.tsx`) | Any logged-in user |
+| `/privacy-policy` | The privacy policy, linked from every member page and from Google's OAuth consent screen (`src/member/privacy.tsx`) | Anyone |
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |

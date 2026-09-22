@@ -19,6 +19,7 @@ import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
 import portal from "./member/portal";
 import verifyPass from "./member/verify-pass";
+import privacy, { PRIVACY_PATH } from "./member/privacy";
 import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
@@ -181,6 +182,7 @@ app.route("/passkit", passkit);
 // Membership card QR-code verification (the legacy `/verify-pass` URL is
 // baked into existing cards' QR codes).
 app.route("/verify-pass", verifyPass);
+app.route(PRIVACY_PATH, privacy);
 app.route("/email-card", emailCard);
 // Claiming a membership bought under another address (#144), which is how
 // an Apple Hide My Email sign-in reaches its card.
