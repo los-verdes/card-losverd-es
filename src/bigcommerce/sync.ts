@@ -290,8 +290,8 @@ export interface MembershipState {
 
 /**
  * A member's card state, derived from every order of theirs that counts as a
- * membership (`COUNTS_AS_MEMBERSHIP`: not refunded, cancelled, declined, or a
- * test order). Deriving from the whole history, rather than merging one order
+ * membership (`COUNTS_AS_MEMBERSHIP`: paid, or given a counting verdict when
+ * it was imported). Deriving from the whole history, rather than merging one order
  * at a time into the stored row, is what lets a refund take effect: a
  * refunded renewal's expiration simply stops counting. It also makes the
  * result independent of the order in which orders sync (webhooks and the

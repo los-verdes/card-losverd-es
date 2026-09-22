@@ -5,8 +5,13 @@
  * (src/admin/reportQueries.ts), so a card and a report never disagree about
  * the same order.
  *
- * Statuses are stored verbatim from each store, and the two stores don't mean
- * the same things by them, so the rule is per source.
+ * One rule, for the orders a store still describes: BigCommerce's paid
+ * statuses. Squarespace-era orders, which no store will describe again,
+ * carry the verdict they were given once and for all (`frozen_counts`,
+ * migration 0004, and `legacyVerdict()` in src/legacy/import-sql.ts, which
+ * explains why theirs was the opposite rule). A stored verdict wins wherever
+ * there is one, so a closed year's figures cannot change because the paid
+ * list was tidied.
  */
 
 /**
@@ -27,32 +32,16 @@ export const PAID_BIGCOMMERCE_STATUSES = [
   "shipped",
 ];
 
-/**
- * Squarespace-era orders are closed history with their own vocabulary
- * (`FULFILLED`, `PENDING`, `CANCELED`), where `PENDING` means paid but not
- * yet shipped -- not BigCommerce's "payment pending". So these keep the
- * legacy app's rule (`AnnualMembership.is_canceled`): everything counts
- * except a cancelled order. Applying BigCommerce's allow-list here would
- * silently drop real historical members.
- *
- * This comment used to say that many legacy rows carry no status at all.
- * Measured against the old system's database in September 2026, none do --
- * across both eras and every order channel (#89). The rule is unchanged,
- * since it mirrors what that system did rather than resting on how many
- * rows had a gap.
- */
-export const VOID_LEGACY_STATUSES = ["canceled", "cancelled", "refunded", "declined"];
-
 const list = (values: string[]) => values.map((value) => `'${value}'`).join(", ");
 
 /**
  * SQL condition on a `membership_orders` row: does this order count?
  *
  * Always 0 or 1, never NULL -- which takes a deliberate `COALESCE` to
- * guarantee. Left to itself the expression is three-valued: for a
- * `bigcommerce` row with a NULL status, `lower(NULL) IN (...)` is NULL rather
- * than false, and legacy imports produce exactly those rows in quantity
- * (los-verdes/card-losverd-es#89).
+ * guarantee. Left to itself the expression is three-valued: for an order
+ * with no stored verdict and a NULL status, `lower(NULL) IN (...)` is NULL
+ * rather than false, and legacy imports produce exactly those rows in
+ * quantity (los-verdes/card-losverd-es#89).
  *
  * NULL would be harmless in the two ways this is used today -- as a `WHERE`
  * clause, where NULL is not true and the order correctly does not count, and
@@ -97,7 +86,4 @@ export const MEMBER_IN_GOOD_STANDING = `NOT EXISTS (
      WHERE bp.email = membership_orders.member_email
   )`;
 
-export const COUNTS_AS_MEMBERSHIP = `COALESCE((CASE source
-    WHEN 'bigcommerce' THEN lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)})
-    ELSE (status IS NULL OR lower(status) NOT IN (${list(VOID_LEGACY_STATUSES)}))
-  END), 0)`;
+export const COUNTS_AS_MEMBERSHIP = `COALESCE(frozen_counts, lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)}), 0)`;

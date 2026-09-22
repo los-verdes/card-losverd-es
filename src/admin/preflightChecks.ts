@@ -494,7 +494,7 @@ async function legacyImportChecks(env: Env): Promise<CheckGroup> {
   const label = "Members left behind by the import";
   const result = await attempt(label, async () => {
     // Evaluated once per row in a CTE: the shared rule reads unqualified
-    // `source` and `status`, so it has to sit against a bare
+    // `frozen_counts` and `status`, so it has to sit against a bare
     // `membership_orders` rather than an alias. Safe to compare against 0
     // because the rule is two-valued (#107).
     const row = await env.DB.prepare(

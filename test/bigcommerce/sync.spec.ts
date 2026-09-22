@@ -1,4 +1,5 @@
 import "../setup/d1";
+import { legacyVerdict } from "../../src/legacy/import-sql";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
@@ -138,8 +139,8 @@ interface HistoryOrder {
 async function insertHistoryOrder(order: HistoryOrder) {
   const createdOn = new Date(`${order.createdOn}T00:00:00Z`);
   await env.DB.prepare(
-    `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name, sku, status, created_on, expires_on, first_seen_via)
-     VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync')`,
+    `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name, sku, status, created_on, expires_on, first_seen_via, frozen_counts)
+     VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync', ?10)`,
   )
     .bind(
       order.orderId,
@@ -151,6 +152,10 @@ async function insertHistoryOrder(order: HistoryOrder) {
       order.status === undefined ? "Completed" : order.status,
       toIsoSeconds(createdOn),
       toIsoSeconds(membershipExpiry(createdOn)),
+      legacyVerdict({
+        source: order.source ?? "bigcommerce",
+        status: order.status === undefined ? "Completed" : order.status,
+      }),
     )
     .run();
 }

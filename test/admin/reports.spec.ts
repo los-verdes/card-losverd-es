@@ -114,9 +114,9 @@ describe("GET /admin/reports/active", () => {
 
   it("renders a sparse Squarespace-era row, falling back to the source for its channel", async () => {
     await env.DB.prepare(
-      `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via)
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via, frozen_counts)
        VALUES ('5f00000000000000000000c3', 'squarespace', 'sparse@example.com', 'sparse@example.com',
-               '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres')`,
+               '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres', 1)`,
     ).run();
 
     const body = await (await get("/admin/reports/active?q=sparse")).text();
@@ -265,9 +265,9 @@ describe("GET /admin/reports/slack", () => {
     await insertOrder({ id: "2", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
     // A sparse Squarespace-era member with no billing name, not in Slack.
     await env.DB.prepare(
-      `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via)
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via, frozen_counts)
        VALUES ('5f00000000000000000000d4', 'squarespace', 'nameless@example.com', 'nameless@example.com',
-               '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres')`,
+               '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres', 1)`,
     ).run();
     await insertSlackUser({ id: "U01JOINED", email: "joined@example.com", realName: "Jo Ined" });
     await insertSlackUser({ id: "U02LAPSED", email: "lapsed@example.com", realName: "<img src=x>" });
