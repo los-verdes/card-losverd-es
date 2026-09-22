@@ -233,9 +233,16 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   a BigCommerce order.
 
 None of these can invent a membership that was never bought; each of them can
-leave this system holding a stale answer. If a member's record looks wrong and
-the reason is not somewhere in this document, re-reading their orders from the
-store is the first thing to try, and it cannot make matters worse.
+leave this system holding a stale answer.
+
+Otherwise, a change made in BigCommerce is expected to show up here almost
+immediately: the order webhook delivers it within seconds, and the scheduled
+resync picks up anything a webhook missed. If a direct re-read is still
+wanted -- a member's record looks wrong for a reason this document does not
+explain, or an admin simply wants to be sure -- the **Re-read from
+BigCommerce** button beside each order on the member's admin page reads that
+order from the store again. It is always safe to repeat, and it never emails
+anyone.
 
 ## 4. Each field on the card
 

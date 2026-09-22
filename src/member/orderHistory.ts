@@ -14,6 +14,8 @@ import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
 export interface MemberOrder {
   order_id: string;
+  /** `bigcommerce` or `squarespace`; only the first can be re-read from a store. */
+  source: string;
   product_name: string | null;
   status: string | null;
   created_on: string;
@@ -36,7 +38,7 @@ export async function getMemberOrderHistory(
   memberEmail: string,
 ): Promise<MemberOrder[]> {
   const { results } = await env.DB.prepare(
-    `SELECT order_id, product_name, status, created_on, expires_on,
+    `SELECT order_id, source, product_name, status, created_on, expires_on,
             (${COUNTS_AS_MEMBERSHIP}) AS counts
      FROM membership_orders
      WHERE member_email = ?

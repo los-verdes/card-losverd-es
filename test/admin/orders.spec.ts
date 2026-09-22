@@ -357,3 +357,160 @@ describe("emailing the new member their card", () => {
     expect(await memberEmailOf("1001")).toBe("friend@example.com");
   });
 });
+
+describe("POST /admin/orders/:orderId/reread", () => {
+  /** BigCommerce's copy of the seeded order 1001, with `overrides`. */
+  function storeOrder(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 1001,
+      customer_id: 42,
+      status: "Completed",
+      date_created: "2098-01-15T00:00:00.000Z",
+      date_modified: "2098-01-15T00:00:00.000Z",
+      billing_address: { first_name: "Buy", last_name: "Er", email: "buyer@example.com" },
+      ...overrides,
+    };
+  }
+
+  const MEMBERSHIP = [{ id: 1, product_id: 100, sku: "LOSV-MEM-0001", name: "Los Verdes Annual Membership", quantity: 1 }];
+
+  /** Answers the two calls a re-read makes; anything else fails the test. */
+  function mockStore(order: object | null, products: object[] = MEMBERSHIP) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/orders/1001/products")) return new Response(JSON.stringify(products), { status: 200 });
+      if (url.endsWith("/orders/1001")) {
+        return order === null ? new Response("", { status: 404 }) : new Response(JSON.stringify(order), { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+  }
+
+  beforeEach(() => {
+    env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
+    vi.spyOn(console, "info").mockImplementation(() => {});
+  });
+
+  function reread(from: "order" | "member" = "order") {
+    return post("/admin/orders/1001/reread", { from });
+  }
+
+  async function statusOf(orderId: string) {
+    return (await env.DB.prepare("SELECT status FROM membership_orders WHERE order_id = ?").bind(orderId).first<{ status: string }>())?.status;
+  }
+
+  it("applies what the store now says, and says it changed", async () => {
+    mockStore(storeOrder({ status: "Refunded" }));
+
+    const res = await reread();
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("/admin/orders/1001?reread=updated");
+    expect(await statusOf("1001")).toBe("Refunded");
+    expect(await (await request("/admin/orders/1001?reread=updated")).text()).toContain("It had changed");
+  });
+
+  it("says so when nothing had changed", async () => {
+    mockStore(storeOrder());
+    // The fixture row lacks what a sync records (SKU, membership count); the
+    // first read fills those in, as the sync that recorded a real order did.
+    await reread();
+
+    expect((await reread()).headers.get("Location")).toBe("/admin/orders/1001?reread=unchanged");
+  });
+
+  it("flags an order the store no longer returns, and leaves it counting", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mockStore(null);
+
+    expect((await reread()).headers.get("Location")).toBe("/admin/orders/1001?reread=missing");
+    const row = await env.DB.prepare("SELECT missing_since, status FROM membership_orders WHERE order_id = '1001'").first<{ missing_since: number | null; status: string }>();
+    expect(row?.missing_since).not.toBeNull();
+    expect(row?.status).toBe("Completed");
+  });
+
+  it("changes nothing when the store's copy carries no membership", async () => {
+    mockStore(storeOrder({ status: "Refunded" }), [{ id: 1, product_id: 7, sku: "SCARF", name: "Scarf", quantity: 1 }]);
+
+    expect((await reread()).headers.get("Location")).toBe("/admin/orders/1001?reread=no-membership");
+    expect(await statusOf("1001")).toBe("Completed");
+  });
+
+  it("reports a store it could not reach, rather than failing the page", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("nope", { status: 401 }));
+
+    expect((await reread()).headers.get("Location")).toBe("/admin/orders/1001?reread=unreachable");
+    expect(await statusOf("1001")).toBe("Completed");
+  });
+
+  it("never emails a card, even where a new order's webhook would be allowed to", async () => {
+    // Every other guard open: any address may be emailed, and every order
+    // date qualifies. Re-reading still stops short of the email step.
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    env.CARD_EMAIL_NEW_ORDERS_SINCE = "2000-01-01";
+    email = fakeEmailBinding();
+    env.EMAIL = email;
+    try {
+      mockStore(storeOrder());
+
+      await reread();
+
+      expect(sentTo()).toEqual([]);
+    } finally {
+      env.EMAIL = undefined;
+      env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
+    }
+  });
+
+  it("goes back to the member page when pressed there, with the result", async () => {
+    mockStore(storeOrder());
+    await reread();
+
+    const res = await reread("member");
+
+    expect(res.headers.get("Location")).toBe("/admin/members?q=buyer%40example.com&reread=unchanged&order=1001");
+  });
+
+  it("offers the button on the member page for BigCommerce orders only", async () => {
+    await insertOrder({ id: "5f00000000000000000000a9", email: "buyer@example.com", source: "squarespace", created: "2020-01-15T00:00:00Z" });
+    await refreshMemberFromOrders(env, "buyer@example.com", { firstName: "Buy", lastName: "Er" });
+
+    const body = await (await request("/admin/members?q=buyer%40example.com&reread=unchanged&order=1001")).text();
+
+    expect(body).toContain('action="/admin/orders/1001/reread"');
+    expect(body).not.toContain('action="/admin/orders/5f00000000000000000000a9/reread"');
+    expect(body).toContain("Order 1001: Re-read from BigCommerce. Nothing had changed.");
+  });
+
+  it("refuses a Squarespace-era order, which has no store to re-read", async () => {
+    await insertOrder({ id: "5f00000000000000000000b9", email: "old@example.com", source: "squarespace", created: "2020-01-15T00:00:00Z" });
+    forbidFetch();
+
+    expect((await post("/admin/orders/5f00000000000000000000b9/reread", {})).status).toBe(400);
+  });
+
+  it("is for admins only, and same-site only", async () => {
+    const fetchSpy = forbidFetch();
+
+    expect((await post("/admin/orders/1001/reread", {}, { as: MEMBER_ID })).status).toBe(403);
+    expect((await post("/admin/orders/1001/reread", {}, { origin: "https://evil.example" })).status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("is a 404 for an order we do not hold", async () => {
+    forbidFetch();
+
+    expect((await post("/admin/orders/9999/reread", {})).status).toBe(404);
+  });
+});
+
+describe("the order page", () => {
+  it("shows how many memberships an over-full order carried", async () => {
+    await env.DB.exec("UPDATE membership_orders SET membership_units = 3 WHERE order_id = '1001'");
+
+    const body = await (await request("/admin/orders/1001")).text();
+
+    expect(body).toMatch(/<th[^>]*>Memberships<\/th><td[^>]*>Carried 3 memberships; only this one was recorded\./);
+  });
+});

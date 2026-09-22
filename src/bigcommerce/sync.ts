@@ -598,28 +598,40 @@ export async function flagOrderMissingFromStore(
   return "flagged";
 }
 
-export async function syncBigCommerceOrder(
+/** What reading one order from the store found, and did about it. */
+export type OrderReadOutcome =
+  | { kind: "applied"; order: BigCommerceOrder; memberEmail: string }
+  | { kind: "missing"; flagged: MissingOrderOutcome }
+  | { kind: "no-membership" };
+
+/**
+ * Fetches one order and applies it exactly as a sync would: recorded,
+ * the member's card re-derived, installed passes told if anything they show
+ * changed. Never emails -- that is `syncBigCommerceOrder`'s alone, because
+ * the webhook is the only path a new order arrives on (src/email/newOrder.ts).
+ * An admin's re-read (#294) calls this directly for that reason.
+ */
+export async function readOrderFromStore(
   env: Env,
   storeHash: string,
   orderId: number | string,
-): Promise<void> {
+): Promise<OrderReadOutcome> {
   const client = new BigCommerceClient(storeHash, env.BIGCOMMERCE_ACCESS_TOKEN);
   // Fetched before the line items rather than alongside them: if the order is
   // gone, its products are gone too, and asking would only turn one clear
   // answer into a second failure.
   const order = await client.getOrderIfPresent(orderId);
   if (!order) {
-    await flagOrderMissingFromStore(env, orderId);
-    return;
+    return { kind: "missing", flagged: await flagOrderMissingFromStore(env, orderId) };
   }
   const products = await client.getOrderProducts(orderId);
 
   const membership = resolveMembership(products);
   if (!membership) {
     console.info(
-      `syncBigCommerceOrder(${orderId}): no membership SKU found in order line items, skipping`,
+      `readOrderFromStore(${orderId}): no membership SKU found in order line items, skipping`,
     );
-    return;
+    return { kind: "no-membership" };
   }
 
   const memberEmail = await applyMembershipOrder(
@@ -628,9 +640,20 @@ export async function syncBigCommerceOrder(
     membership,
     countMembershipUnits(products),
   );
-  // Webhook path only -- the resyncs call applyMembershipOrder directly
-  // (src/email/newOrder.ts).
-  await maybeEmailNewOrderCard(env, order, memberEmail);
+  return { kind: "applied", order, memberEmail };
+}
+
+export async function syncBigCommerceOrder(
+  env: Env,
+  storeHash: string,
+  orderId: number | string,
+): Promise<void> {
+  const outcome = await readOrderFromStore(env, storeHash, orderId);
+  // Webhook path only -- the resyncs call applyMembershipOrder directly, and
+  // an admin's re-read calls readOrderFromStore (src/email/newOrder.ts).
+  if (outcome.kind === "applied") {
+    await maybeEmailNewOrderCard(env, outcome.order, outcome.memberEmail);
+  }
 }
 
 const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
