@@ -294,12 +294,16 @@ describe("buildImportStatements (executed against D1)", () => {
       expires_on: "2022-05-04T12:00:00Z",
       modified_on: "2021-05-05T01:02:03Z",
       first_seen_via: "legacy_postgres",
+      // Its verdict, fixed at import: no store will describe it again.
+      frozen_counts: 1,
     });
     expect(results[1]).toMatchObject({
       order_id: "1001",
       source: "bigcommerce",
       customer_id: 42,
       modified_on: null,
+      // Scored by the paid-status rule, which the sync keeps current.
+      frozen_counts: null,
       // 2024 is a leap year, so 365 days lands a day "early".
       expires_on: "2024-03-09T08:30:00Z",
     });

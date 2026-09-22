@@ -1,4 +1,5 @@
 import "../setup/d1";
+import { legacyVerdict } from "../../src/legacy/import-sql";
 import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { unzipSync } from "fflate";
@@ -112,8 +113,8 @@ async function insertOrder(fields: {
 }) {
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, order_email, member_email, product_name, status,
-                                    created_on, expires_on, first_seen_via)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sync')`,
+                                    created_on, expires_on, first_seen_via, frozen_counts)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sync', ?)`,
   )
     .bind(
       fields.orderId,
@@ -124,6 +125,10 @@ async function insertOrder(fields: {
       fields.status === undefined ? "Completed" : fields.status,
       fields.createdOn ?? "2024-03-04",
       fields.expiresOn ?? "2025-03-04",
+      legacyVerdict({
+        source: fields.source === "squarespace" ? "squarespace" : "bigcommerce",
+        status: fields.status === undefined ? "Completed" : fields.status,
+      }),
     )
     .run();
 }
@@ -408,8 +413,8 @@ describe("GET / membership history", () => {
   });
 
   it("copes with a Squarespace-era order that has no product name or status", async () => {
-    // Many imported rows have neither, and a blank status still counts for
-    // that era (src/lib/membershipOrders.ts).
+    // Many imported rows have neither, and a blank status still counted for
+    // that era (legacyVerdict in src/legacy/import-sql.ts).
     await seedCurrentMember();
     await insertOrder({
       orderId: "0cd5ad745fbc40fd95697470",

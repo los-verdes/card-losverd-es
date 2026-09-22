@@ -471,8 +471,9 @@ paid, with part of it already sent — which the list was missing. A status
 nobody has thought of is the shape this failure takes.
 
 That is the rule for every order placed since February 2023, and so for every
-current membership. Orders from before then are scored differently, for
-reasons set out in [the appendix](#appendix-orders-from-before-bigcommerce).
+current membership. Orders from before then carry a verdict of their own,
+worked out once when they were imported, for reasons set out in
+[the appendix](#appendix-orders-from-before-bigcommerce).
 
 ## 6. "Member since" and its precedence chain
 
@@ -829,15 +830,20 @@ so these rows will never change again.
 That is why they are here rather than woven through the document: for every
 question about a current membership, the rules above are the whole answer.
 
-### They count unless they were cancelled
+### They counted unless they were cancelled
 
-The statuses that void one of these orders are `canceled`, `cancelled`,
-`refunded` and `declined` (`VOID_LEGACY_STATUSES`). Anything else counts,
-including a blank status.
+Whether each of these orders counts was decided once, when it was imported,
+and is stored with it (`membership_orders.frozen_counts`). The rule used then
+was that an order counted unless its status was `canceled`, `cancelled`,
+`refunded` or `declined` (`VOID_LEGACY_STATUSES` in
+`src/legacy/import-sql.ts`); anything else counted, including a blank status.
+In practice none had one: every row in the old system's database carries a
+status, checked against that database directly before the import.
 
-In practice none has one: every row in the old system's database carries a
-status, checked against that database directly before the import. The
-tolerance stays because it costs nothing.
+Storing the verdict rather than re-deriving it means the counting rule in the
+code describes only orders a store can still produce, and a report about one
+of those years says what it would have said then. If the paid-status list is
+ever changed, the old years do not quietly change with it.
 
 **Why this rule is the opposite way round from the BigCommerce one.** A
 BigCommerce order has to appear on a list of paid statuses to count. A
@@ -850,12 +856,12 @@ Squarespace used three statuses: `FULFILLED`, `PENDING` and `CANCELED`. Its
 and the money had arrived. BigCommerce's similar-looking `Pending` means
 roughly the reverse: **the payment has not come through yet.**
 
-So each store needs the rule that fits its own vocabulary. Judging these
-historical rows by the paid-only allow-list would throw away every `PENDING`
-one, all of them people who really did pay. Judging BigCommerce orders by this
-one would hand cards to people who never paid at all. Counting a Squarespace
-order unless it was cancelled is also simply what the old system did, so these
-rows keep the meaning they have always had.
+So each store needed the rule that fits its own vocabulary. Judging these
+historical rows by the paid-only allow-list would have thrown away every
+`PENDING` one, all of them people who really did pay. Judging BigCommerce
+orders by this one would hand cards to people who never paid at all. Counting
+a Squarespace order unless it was cancelled is also simply what the old system
+did, so these rows keep the meaning they have always had.
 
 ### The smaller differences
 

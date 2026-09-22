@@ -95,10 +95,9 @@ the same row.
 member's (`membership_orders.member_email`, which may differ from the order's
 billing email) that **counts as a membership** -- the same rule the reports
 use (`COUNTS_AS_MEMBERSHIP` in `src/lib/membershipOrders.ts`) -- and maps
-them to one `members` row. That rule differs by era, and the direction is
-worth remembering when reading it: a BigCommerce order counts only on a
-positively paid status, while a Squarespace-era one counts unless it was
-cancelled. `docs/membership-card-provenance.md` is where the statuses
+them to one `members` row. A BigCommerce order counts only on a positively
+paid status; a Squarespace-era one carries the verdict it was given at import
+(`frozen_counts`). `docs/membership-card-provenance.md` is where the statuses
 themselves are listed, and is the document to change if they move. Deriving from history is what lets a refund take effect (the
 refunded renewal simply stops counting), and it makes the result independent
 of the order in which orders sync: webhooks and the scheduled resync don't

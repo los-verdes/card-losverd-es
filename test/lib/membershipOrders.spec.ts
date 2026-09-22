@@ -25,6 +25,12 @@ async function insert(orderId: string, source: string, status: string | null) {
     .run();
 }
 
+async function setFrozen(orderId: string, verdict: number | null) {
+  await env.DB.prepare("UPDATE membership_orders SET frozen_counts = ? WHERE order_id = ?")
+    .bind(verdict, orderId)
+    .run();
+}
+
 /** The rule's raw value for one order. */
 async function countsValue(orderId: string): Promise<number | null> {
   const row = await env.DB.prepare(
@@ -61,9 +67,15 @@ describe("COUNTS_AS_MEMBERSHIP", () => {
     expect(await countsValue("1003")).toBe(0);
   });
 
-  it("still counts a statusless legacy order, where NULL is handled explicitly", async () => {
-    await insert("abc123def456abc123def456", "squarespace", null);
-    expect(await countsValue("abc123def456abc123def456")).toBe(1);
+  it("takes a stored verdict over the status, either way", async () => {
+    // Squarespace's PENDING meant paid; its verdict was fixed at import and
+    // must not be re-read through BigCommerce's vocabulary.
+    await insert("5f00000000000000000000e1", "squarespace", "PENDING");
+    await insert("5f00000000000000000000e2", "squarespace", "Completed");
+    await setFrozen("5f00000000000000000000e1", 1);
+    await setFrozen("5f00000000000000000000e2", 0);
+    expect(await countsValue("5f00000000000000000000e1")).toBe(1);
+    expect(await countsValue("5f00000000000000000000e2")).toBe(0);
   });
 
   it("selects only counting orders in a WHERE clause", async () => {
@@ -103,5 +115,38 @@ describe("COUNTS_AS_MEMBERSHIP", () => {
       `SELECT SUM(${COUNTS_AS_MEMBERSHIP}) AS counted, COUNT(*) AS total FROM membership_orders`,
     ).first<{ counted: number; total: number }>();
     expect(row).toEqual({ counted: 1, total: 2 });
+  });
+});
+
+describe("migration 0004, freezing the Squarespace-era verdicts", () => {
+  const MIGRATION = Object.values(
+    import.meta.glob("../../src/db/migrations/0004_*.sql", { query: "?raw", import: "default", eager: true }),
+  )[0] as string;
+  const backfill = MIGRATION.slice(MIGRATION.indexOf("UPDATE membership_orders")).trim();
+
+  it.each([
+    ["FULFILLED", 1],
+    ["PENDING", 1], // paid, not yet shipped
+    [null, 1],
+    ["CANCELED", 0],
+    ["cancelled", 0],
+    ["Refunded", 0],
+    ["DECLINED", 0],
+  ])("gives a Squarespace %s order the verdict %i", async (status, verdict) => {
+    await insert("5f00000000000000000000f1", "squarespace", status);
+
+    await env.DB.prepare(backfill).run();
+
+    expect(await countsValue("5f00000000000000000000f1")).toBe(verdict);
+  });
+
+  it("leaves BigCommerce orders to the paid-status rule", async () => {
+    await insert("1004", "bigcommerce", "Pending");
+
+    await env.DB.prepare(backfill).run();
+
+    const row = await env.DB.prepare("SELECT frozen_counts FROM membership_orders WHERE order_id = '1004'").first();
+    expect(row).toEqual({ frozen_counts: null });
+    expect(await countsValue("1004")).toBe(0);
   });
 });

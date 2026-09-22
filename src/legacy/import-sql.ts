@@ -306,6 +306,32 @@ function expiresOn(createdOn: string): string {
  *
  * No BEGIN/COMMIT: D1 rejects explicit transactions in executed SQL.
  */
+/**
+ * The statuses that void a Squarespace-era order. Anything else counts,
+ * including a blank status.
+ *
+ * The opposite way round from the BigCommerce rule on purpose. Squarespace's
+ * vocabulary was `FULFILLED`, `PENDING` and `CANCELED`, and its `PENDING`
+ * meant paid but not yet shipped -- roughly the reverse of BigCommerce's
+ * "payment has not come through". Judged by the paid-only list, every
+ * `PENDING` order would be thrown away, all of them people who paid. This is
+ * the old system's own rule (`AnnualMembership.is_canceled`), so the orders
+ * keep the meaning they always had.
+ */
+export const VOID_LEGACY_STATUSES = ["canceled", "cancelled", "refunded", "declined"];
+
+/**
+ * Whether a legacy order counts, stored with it as `frozen_counts` so the
+ * counting rule never has to know which store an order came from
+ * (src/lib/membershipOrders.ts). `null` for BigCommerce-era orders, which
+ * the sync keeps current and the paid-status rule scores. Migration 0004
+ * applied the same rule to the orders already imported.
+ */
+export function legacyVerdict(order: Pick<LegacyMembershipOrder, "source" | "status">): 0 | 1 | null {
+  if (order.source !== "squarespace") return null;
+  return order.status === null || !VOID_LEGACY_STATUSES.includes(order.status.toLowerCase()) ? 1 : 0;
+}
+
 export function buildImportStatements(data: LegacyExport): string[] {
   const statements: string[] = [];
 
@@ -339,11 +365,12 @@ export function buildImportStatements(data: LegacyExport): string[] {
   for (const o of data.membership_orders) {
     statements.push(
       `INSERT INTO membership_orders (order_id, source, order_number, channel_name, order_email, member_email, first_name, last_name, ` +
-        `customer_id, sku, product_name, status, created_on, expires_on, modified_on, first_seen_via) ` +
+        `customer_id, sku, product_name, status, created_on, expires_on, modified_on, first_seen_via, frozen_counts) ` +
         `VALUES (${literal(o.order_id)}, ${literal(o.source)}, ${literal(o.order_number)}, ${literal(o.channel_name)}, ` +
         `${literal(o.order_email)}, ${literal(o.member_email)}, ${literal(o.first_name)}, ${literal(o.last_name)}, ` +
         `${o.customer_id ?? "NULL"}, ${literal(o.sku)}, ${literal(o.product_name)}, ${literal(o.status)}, ` +
-        `${literal(o.created_on)}, ${literal(expiresOn(o.created_on))}, ${literal(o.modified_on)}, 'legacy_postgres') ` +
+        `${literal(o.created_on)}, ${literal(expiresOn(o.created_on))}, ${literal(o.modified_on)}, 'legacy_postgres', ` +
+        `${legacyVerdict(o) ?? "NULL"}) ` +
         `ON CONFLICT(order_id) DO UPDATE SET member_email = excluded.member_email, updated_at = unixepoch('subsec') * 1000 ` +
         // An admin's attribution (#70) wins over the export's.
         `WHERE NOT EXISTS (SELECT 1 FROM membership_order_attributions a WHERE a.order_id = membership_orders.order_id)`,

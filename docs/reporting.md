@@ -48,19 +48,18 @@ alike:
 
 ### What counts as a membership
 
-The rule is per store, because the two don't mean the same things by their
-statuses (`src/lib/membershipOrders.ts`, decided 2026-09-17):
+One rule, over the stores' own statuses (`src/lib/membershipOrders.ts`):
 
 * **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,
   `Awaiting Shipment`, `Completed`, `Partially Shipped`, or `Shipped`. An `Incomplete`,
   `Pending` or `Awaiting Payment` order gets no card and no report row, and
   neither does a `Refunded`, `Cancelled`, `Declined`, `Disputed` or
   `Partially Refunded` one.
-* **Squarespace-era orders** are closed history with their own vocabulary
-  (`FULFILLED`, `PENDING`, `CANCELED`), where `PENDING` means paid but not
-  yet shipped. They keep the legacy app's rule: everything counts except a
-  cancelled order. Applying BigCommerce's list to them would silently drop
-  real historical members.
+* **Squarespace-era orders** carry the verdict they were given when they were
+  imported (`frozen_counts`): they counted unless cancelled, refunded or
+  declined, because Squarespace's `PENDING` meant paid. A report on one of
+  those years therefore cannot change when the paid list does. The
+  provenance document's appendix has the reasoning.
 
 Membership cards use the same rule as the reports: the `members` sync derives
 each card from the member's counted orders (see
