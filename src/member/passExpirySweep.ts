@@ -103,6 +103,20 @@ export const LAPSED_REFRESH_BATCH = 100;
  *
  * One batch per call, walking members in id order. Returns the cursor for the
  * next batch, or `null` when there is none; the queue consumer chains them.
+ *
+ * **Run it once.** Nothing here skips a member whose pass is already up to
+ * date, so a second run pushes every lapsed member a pass identical to the one
+ * their phone holds: harmless, but it is an APNs push and a rebuild each, and
+ * Wallet may well say so in `/v1/log`, which the ops watch counts. The same
+ * goes for a batch the queue redelivers -- a failure partway retries the whole
+ * message from its cursor, and Queues is at-least-once regardless.
+ *
+ * A freshness guard was tried and taken out again: telling an up-to-date pass
+ * from a stale one needs both "rebuilt since native expiry shipped" and
+ * "rebuilt after the membership ended", because a pass built while the
+ * membership was still current carries the right expiry date and still reads
+ * "Active" on the back. Two subtle clauses guarding a deliberate one-off was
+ * the worse trade.
  */
 export async function refreshLapsedPasses(
   env: Env,
@@ -110,35 +124,16 @@ export async function refreshLapsedPasses(
   now: Date = new Date(),
 ): Promise<string | null> {
   const today = isoDate(now.getTime());
-  // A member is skipped only when their pass already states the expiry, which
-  // takes both of the clauses below and neither alone.
-  //
-  // Rebuilt in the last day: built by whatever is deployed now, so it carries
-  // the wallets' native expiry. A pass rebuilt before #295 shipped does not,
-  // however long ago the membership ended, and is exactly what this run is
-  // for.
-  //
-  // And rebuilt after the membership ended: a pass built while the membership
-  // was still current says so, because `effectiveStatus()` is worked out when
-  // the pass is built. A name changed on the morning of the last day produces
-  // one of those -- filed away by the wallets on time, still reading "Active"
-  // on the back -- and the daily sweep will not revisit a date it has already
-  // covered.
-  const alreadyFresh = now.getTime() - DAY_MS;
   const { results } = await env.DB.prepare(
     `SELECT m.member_id
        FROM members m
       WHERE m.member_id > ?1 AND m.expiration_date < ?2
-        AND NOT (
-          m.last_updated_at >= ?4
-          AND m.last_updated_at >= unixepoch(m.expiration_date || 'T23:59:59Z') * 1000
-        )
         AND NOT EXISTS (SELECT 1 FROM revoked_cards r WHERE r.member_id = m.member_id)
         AND NOT EXISTS (SELECT 1 FROM expelled_people e WHERE e.email = m.email)
       ORDER BY m.member_id
       LIMIT ?3`,
   )
-    .bind(afterMemberId, today, LAPSED_REFRESH_BATCH, alreadyFresh)
+    .bind(afterMemberId, today, LAPSED_REFRESH_BATCH)
     .all<{ member_id: string }>();
 
   for (const { member_id } of results) {

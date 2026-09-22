@@ -175,38 +175,23 @@ describe("queue messages", () => {
   });
 });
 
-describe("not pushing a pass twice", () => {
-  it("skips a lapsed member whose pass was refreshed in the last day", async () => {
-    // What the one-off found on staging: a membership refunded minutes
-    // earlier had already been refreshed by the order webhook, so pushing
-    // again handed Wallet a pass identical to the one it held.
+describe("run it once", () => {
+  it("refreshes a lapsed member whose pass is already up to date, rather than trying to tell", async () => {
+    // Deliberate: no freshness guard. Telling an up-to-date pass from a stale
+    // one takes two subtle clauses (rebuilt since native expiry shipped, and
+    // rebuilt after the membership ended), which is the worse trade for a
+    // one-off. The cost is that a second run pushes everyone again.
     const refreshedAt = NOW.getTime() - 3_600_000;
     await insertMember("LV-A", "2025-01-01");
     await env.DB.prepare("UPDATE members SET last_updated_at = ? WHERE member_id = 'LV-A'").bind(refreshedAt).run();
 
     expect(await refreshLapsedPasses(env, "", NOW)).toBeNull();
 
-    expect(await env.DB.prepare("SELECT last_updated_at FROM members WHERE member_id = 'LV-A'").first()).toEqual({
-      last_updated_at: refreshedAt,
-    });
-  });
-
-  it("still refreshes one rebuilt in the last day but before the membership ended", async () => {
-    // A name changed on the morning of the last day: recent, so it carries
-    // the native expiry, but built while the membership was still current, so
-    // it reads "Active" on the back. Nothing else will revisit it -- the
-    // daily sweep's first run covers yesterday only.
-    const rebuiltAt = Date.parse("2026-09-21T10:00:00Z");
-    await insertMember("LV-A", "2026-09-21");
-    await env.DB.prepare("UPDATE members SET last_updated_at = ? WHERE member_id = 'LV-A'").bind(rebuiltAt).run();
-
-    expect(await refreshLapsedPasses(env, "", NOW)).toBeNull();
-
-    // `touched()` cannot tell here: this member's timestamp was already past
-    // its threshold before the run. Only a move proves the push.
+    // `touched()` cannot tell here: the timestamp was already past its
+    // threshold before the run, so only a move proves the push.
     const row = await env.DB.prepare("SELECT last_updated_at FROM members WHERE member_id = 'LV-A'").first<{
       last_updated_at: number;
     }>();
-    expect(row!.last_updated_at).toBeGreaterThan(rebuiltAt);
+    expect(row!.last_updated_at).toBeGreaterThan(refreshedAt);
   });
 });
