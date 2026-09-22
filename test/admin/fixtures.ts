@@ -1,5 +1,4 @@
 import { env } from "cloudflare:test";
-import { legacyVerdict } from "../../src/legacy/import-sql";
 
 export interface OrderFixture {
   id: string;
@@ -11,12 +10,14 @@ export interface OrderFixture {
   status?: string | null;
   channel?: string | null;
   source?: "bigcommerce" | "squarespace";
+  /** The verdict an imported Squarespace-era row carries (`frozen_counts`); 1 unless given. */
+  counted?: 0 | 1;
 }
 
 /**
  * Inserts a synthetic `membership_orders` row. `expires_on` is the same
  * moment a calendar year later, close enough to 365 days for these tests.
- * A Squarespace-era row carries the verdict the legacy import gives one.
+ * A Squarespace-era row carries a stored verdict, as every imported one does.
  */
 export async function insertOrder(o: OrderFixture) {
   const expires = `${Number(o.created.slice(0, 4)) + 1}${o.created.slice(4)}`;
@@ -36,7 +37,7 @@ export async function insertOrder(o: OrderFixture) {
       o.status === undefined ? "Completed" : o.status,
       o.created,
       expires,
-      legacyVerdict({ source: o.source ?? "bigcommerce", status: o.status === undefined ? "Completed" : o.status }),
+      o.source === "squarespace" ? (o.counted ?? 1) : null,
     )
     .run();
 }

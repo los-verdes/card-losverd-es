@@ -29,7 +29,6 @@ import {
   parseRecipientAllowlist,
 } from "../email/send";
 import type { Env } from "../index";
-import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -468,98 +467,6 @@ function deliveryChecks(env: Env, live: boolean): CheckGroup {
   return { title: "Member-facing integrations", results };
 }
 
-/**
- * Whether the one-time legacy import left anybody without a membership they
- * ought to have.
- *
- * `COUNTS_AS_MEMBERSHIP` applies a paid-only allow-list to `bigcommerce`
- * rows, and plenty of imported orders fail it -- abandoned carts, mostly.
- * That on its own says nothing: somebody who abandoned a cart in 2024 and
- * bought a membership in 2025 holds a card either way. What matters is the
- * person left holding *no* counted order at all, and only that number is
- * worth putting in front of a reader.
- *
- * Reporting the raw order count instead read as a crisis -- "1410 orders
- * across 544 addresses" -- with an answer of zero underneath it, on a page
- * whose value depends entirely on being believed.
- *
- * The last step is the one that makes this an answer rather than a prompt.
- * Somebody left with no counted order is only a problem if the previous site
- * thought they were a member, and whether it did is knowable here:
- * `legacy_membership_cards` holds every card that site ever issued. So the
- * check joins it rather than telling a reader to go and look. See
- * los-verdes/card-losverd-es#89, which this measurement settled.
- */
-async function legacyImportChecks(env: Env): Promise<CheckGroup> {
-  const label = "Members left behind by the import";
-  const result = await attempt(label, async () => {
-    // Evaluated once per row in a CTE: the shared rule reads unqualified
-    // `frozen_counts` and `status`, so it has to sit against a bare
-    // `membership_orders` rather than an alias. Safe to compare against 0
-    // because the rule is two-valued (#107).
-    const row = await env.DB.prepare(
-      `WITH counted AS (
-         SELECT member_email, first_seen_via, source, ${COUNTS_AS_MEMBERSHIP} AS counts
-           FROM membership_orders
-       ),
-       imported AS (
-         SELECT * FROM counted WHERE first_seen_via = 'legacy_postgres' AND source = 'bigcommerce'
-       ),
-       stranded AS (
-         SELECT DISTINCT member_email FROM imported i
-          WHERE i.counts = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM counted c
-               WHERE c.member_email = i.member_email AND c.counts = 1
-            )
-       )
-       SELECT (SELECT COUNT(*) FROM imported) AS imported,
-              (SELECT COUNT(*) FROM imported WHERE counts = 0) AS discarded,
-              (SELECT COUNT(DISTINCT member_email) FROM imported WHERE counts = 0) AS people,
-              (SELECT COUNT(*) FROM stranded) AS stranded,
-              (SELECT COUNT(*) FROM stranded
-                WHERE member_email IN (SELECT email FROM legacy_membership_cards)) AS strandedWithCard`,
-    ).first<{
-      imported: number;
-      discarded: number;
-      people: number;
-      stranded: number;
-      strandedWithCard: number;
-    }>();
-
-    const imported = row?.imported ?? 0;
-    if (imported === 0) {
-      return skip(label, "No historical BigCommerce-era orders here yet -- run the legacy import first.");
-    }
-    const discarded = row?.discarded ?? 0;
-    const stranded = row?.stranded ?? 0;
-    const excluded =
-      discarded === 0
-        ? `All ${imported} imported BigCommerce-era orders carry a status that counts.`
-        : `${discarded} of ${imported} imported BigCommerce-era orders fail the paid-only allow-list (abandoned carts, mostly), across ${row?.people ?? 0} ${row?.people === 1 ? "address" : "addresses"}.`;
-
-    if (stranded === 0) {
-      return ok(label, `${excluded} Nobody is left holding no counted order at all.`);
-    }
-    const withCard = row?.strandedWithCard ?? 0;
-    if (withCard === 0) {
-      // The reassuring case, and the common one: these orders never conferred
-      // membership on the previous site either, so the rule agrees with it.
-      return ok(
-        label,
-        `${excluded} ${stranded} ${stranded === 1 ? "address holds" : "addresses hold"} no counted order at all, but the previous site never issued ${stranded === 1 ? "that person" : "any of them"} a card either -- so this rule matches what they had.`,
-      );
-    }
-    // A warning rather than a failure: the rule is working as written, and
-    // what to do about a given person is a judgement rather than a fix.
-    return warn(
-      label,
-      `${excluded} ${withCard} ${withCard === 1 ? "person was" : "people were"} issued a card by the previous site and ${withCard === 1 ? "holds" : "hold"} no counted order here, so ${withCard === 1 ? "that card goes" : "those cards go"} away at cutover. Settle before cutover: if the previous site treated them as members, the rule is what is wrong.`,
-    );
-  });
-  return { title: "Legacy import", results: [result] };
-}
-
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 const WEBHOOK_PATH = "/bigcommerce/order-webhook";
 const WEBHOOK_SCOPE = "store/order/*";
@@ -818,7 +725,6 @@ export async function runPreflightChecks(
   return [
     await identityChecks(env, requestUrl),
     await storageChecks(env),
-    await legacyImportChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live, requestUrl),

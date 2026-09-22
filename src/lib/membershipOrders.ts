@@ -7,9 +7,9 @@
  *
  * One rule, for the orders a store still describes: BigCommerce's paid
  * statuses. Squarespace-era orders, which no store will describe again,
- * carry the verdict they were given once and for all (`frozen_counts`,
- * migration 0004, and `legacyVerdict()` in src/legacy/import-sql.ts, which
- * explains why theirs was the opposite rule). A stored verdict wins wherever
+ * carry the verdict they were given once and for all (`frozen_counts`;
+ * migration 0004 records the rule that produced it, and why it was the
+ * opposite way round). A stored verdict wins wherever
  * there is one, so a closed year's figures cannot change because the paid
  * list was tidied.
  */

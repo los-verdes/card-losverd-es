@@ -1,5 +1,4 @@
 import "../setup/d1";
-import { legacyVerdict } from "../../src/legacy/import-sql";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
@@ -130,6 +129,8 @@ interface HistoryOrder {
   email?: string;
   status?: string | null;
   source?: "bigcommerce" | "squarespace";
+  /** The stored verdict of an imported Squarespace-era row; 1 unless given. */
+  counted?: 0 | 1;
   sku?: string | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -152,10 +153,7 @@ async function insertHistoryOrder(order: HistoryOrder) {
       order.status === undefined ? "Completed" : order.status,
       toIsoSeconds(createdOn),
       toIsoSeconds(membershipExpiry(createdOn)),
-      legacyVerdict({
-        source: order.source ?? "bigcommerce",
-        status: order.status === undefined ? "Completed" : order.status,
-      }),
+      order.source === "squarespace" ? (order.counted ?? 1) : null,
     )
     .run();
 }
@@ -321,7 +319,7 @@ describe("refreshMemberFromOrders", () => {
     await insertHistoryOrder({ orderId: "2", createdOn: "2080-01-15", status: "Declined" });
     await insertHistoryOrder({ orderId: "3", createdOn: "2095-01-15", status: "Refunded" });
     await insertHistoryOrder({ orderId: "4", createdOn: "2096-01-15", status: "Cancelled" });
-    await insertHistoryOrder({ orderId: "sq-5", createdOn: "2097-01-15", status: "CANCELED", source: "squarespace" });
+    await insertHistoryOrder({ orderId: "sq-5", createdOn: "2097-01-15", status: "CANCELED", source: "squarespace", counted: 0 });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 
@@ -349,15 +347,16 @@ describe("refreshMemberFromOrders", () => {
     expect((await getMemberByEmail("jane.doe@example.com"))?.expiration_date ?? null).toBe(expiration);
   });
 
-  // Squarespace-era history keeps the legacy rule: its PENDING means paid but
-  // unshipped, and many rows have no status at all.
+  // An imported order counts by the verdict stored with it, never by
+  // reading its status through BigCommerce's vocabulary: Squarespace's
+  // PENDING meant paid.
   it.each([
-    ["FULFILLED", "2099-01-15"],
-    ["PENDING", "2099-01-15"],
-    [null, "2099-01-15"],
-    ["CANCELED", null],
-  ])("a Squarespace-era %s order gives an expiration of %s", async (status, expiration) => {
-    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", status });
+    ["PENDING", 1, "2099-01-15"],
+    [null, 1, "2099-01-15"],
+    ["CANCELED", 0, null],
+    ["Completed", 0, null],
+  ] as const)("an imported %s order with verdict %i gives an expiration of %s", async (status, counted, expiration) => {
+    await insertHistoryOrder({ orderId: "sq-1", createdOn: "2098-01-15", source: "squarespace", status, counted });
 
     await refreshMemberFromOrders(env, "jane.doe@example.com", fallback);
 

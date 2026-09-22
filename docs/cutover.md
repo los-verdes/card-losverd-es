@@ -116,8 +116,10 @@ populated before anyone is pointed at it.
    For production that reload is the legacy import below, which is why the
    export file has to still be around.
 
-7. **Run the legacy Postgres export and import**
-   ([`scripts/legacy-export/`](../scripts/legacy-export/README.md)).
+7. **Run the legacy Postgres export and import** (`scripts/legacy-export/`,
+   removed once the import had been verified,
+   [#215](https://github.com/los-verdes/card-losverd-es/issues/215); it is in
+   the git history).
    Rehearse the load rather than trying to get it right once: until cutover
    the production database serves nobody, so it can be loaded, checked,
    emptied and loaded again as often as needed.
@@ -151,7 +153,7 @@ populated before anyone is pointed at it.
    problem long since resolved, as it is to describe anything current.
 
    Check the load with `just legacy-import-verify production <export.json>`
-   before going on. It compares D1's counts against the export they came from
+   (since removed with the rest of the import tooling) before going on. It compares D1's counts against the export they came from
    and exits non-zero if they disagree, which is the difference between
    knowing the import landed and assuming it.
 

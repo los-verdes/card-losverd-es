@@ -57,8 +57,8 @@ a one-time export of what only the legacy Postgres holds. Two decisions
 survive and are documented where they apply --
 [`legacy-pass-compatibility.md`](legacy-pass-compatibility.md) for why
 installed Wallet passes are not migrated, and
-[`scripts/legacy-export/`](../scripts/legacy-export/README.md) for the
-export itself. The rule that a later sync must not clobber a backfilled
+`scripts/legacy-export/` for the export itself (removed after the import
+was verified, #215; in the git history). The rule that a later sync must not clobber a backfilled
 `member_since` is enforced in `src/bigcommerce/sync.ts` and pinned by a
 test.
 

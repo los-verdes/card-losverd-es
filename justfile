@@ -103,7 +103,7 @@ db-rebuild env:
     just db-schema-compare {{ env }}
     echo
     echo "Rebuilt $db. Put back what it held:"
-    echo "  - production: the legacy import (just legacy-import-sql, apply it, then just legacy-import-verify {{ env }} <export.json>)"
+    echo "  - production: the imported pre-2023 history cannot be reloaded (the import tooling was removed in #215); restore with D1 Time Travel instead"
     echo "  - orders: just etl-run {{ env }} full-resync{{ if env == "production" { " --yes-production" } else { "" } }}   (never emails anyone)"
     echo "  - admins: just admin-grant {{ env }} <address> [<address> ...]   (no need to sign in first)"
     echo "  - Wallet passes already on phones: registrations are gone, so they get no updates until re-added"
@@ -353,14 +353,6 @@ verify-pkcs7-openssl:
     node .verify-pkcs7-bundle.mjs
     rm -f .verify-pkcs7-bundle.mjs
 
-# Legacy Postgres export -> D1 import SQL (one-time; see
-# scripts/legacy-export/README.md). Bundled first for the same reason as
-# verify-pkcs7-openssl above.
-legacy-import-sql export_json out_sql:
-    npx esbuild scripts/legacy-export/build-import-sql.ts --bundle --platform=node --format=esm --packages=external --outfile=.legacy-import-bundle.mjs
-    node .legacy-import-bundle.mjs {{export_json}} {{out_sql}}
-    rm -f .legacy-import-bundle.mjs
-
 # Prepare the provenance doc for Google Docs, for the Merch Team and the
 # Membership Committee to read and comment on. Upload the result to Drive, then
 # right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
@@ -369,9 +361,3 @@ legacy-import-sql export_json out_sql:
 provenance-gdoc out=".provenance-gdoc.md":
     node scripts/provenance-gdoc.mjs {{out}}
 
-# Check an import landed: compares D1's counts against the export it came from.
-# Exits non-zero when they disagree, so it can gate the next step rather than
-# being read and nodded at. Counts only -- it never reads a member's data.
-legacy-import-verify env export_json:
-    npx esbuild scripts/legacy-export/verify-import.ts --bundle --platform=node --format=esm --packages=external --outfile=.legacy-verify-bundle.mjs
-    node .legacy-verify-bundle.mjs {{env}} {{export_json}}; status=$?; rm -f .legacy-verify-bundle.mjs; exit $status

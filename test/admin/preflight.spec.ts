@@ -17,7 +17,6 @@ import {
   resetGoogleWalletTokenCache,
 } from "../../src/google/api";
 import worker from "../../src/index";
-import { insertOrder } from "./fixtures";
 import { fakeEmailBinding } from "../fixtures/emailBinding";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -575,100 +574,6 @@ describe("BigCommerce", () => {
       },
     ];
     expect(find(await check(), "Webhook token").status).toBe("ok");
-  });
-});
-
-describe("the legacy import", () => {
-  /**
-   * `insertOrder` in the shared fixtures always writes `first_seen_via =
-   * 'sync'`, and this group is entirely about rows that arrived the other
-   * way, so it inserts its own.
-   */
-  async function insertImportedOrder(orderId: string, status: string | null, email: string) {
-    await env.DB.prepare(
-      `INSERT INTO membership_orders (order_id, source, order_email, member_email, first_name, last_name,
-         status, created_on, expires_on, first_seen_via)
-       VALUES (?, 'bigcommerce', ?, ?, 'Test', 'Member', ?, '2019-04-01', '2020-04-01', 'legacy_postgres')`,
-    )
-      .bind(orderId, email, email, status)
-      .run();
-  }
-
-  async function insertLegacyCard(email: string) {
-    await env.DB.prepare(
-      `INSERT INTO legacy_membership_cards (serial_number, email, full_name, member_since, member_until)
-       VALUES (?, ?, 'Test Member', '2019-04-01', '2020-04-01')`,
-    )
-      .bind(`serial-${email}`, email)
-      .run();
-  }
-
-  const CHECK = "Members left behind by the import";
-
-  it("says nothing either way before the import has run", async () => {
-    expect(find(await check(), CHECK).status).toBe("skip");
-  });
-
-  it("passes when every imported order carries a status that counts", async () => {
-    await insertImportedOrder("101", "Completed", "one@example.com");
-    await insertImportedOrder("102", "Shipped", "two@example.com");
-    const result = find(await check(), CHECK);
-    expect(result.status).toBe("ok");
-    expect(result.detail).toContain("All 2");
-  });
-
-  it("does not raise an alarm for somebody who also holds an order that counts", async () => {
-    // The common shape by a wide margin, and the reason a raw order count is
-    // the wrong number to publish: an abandoned cart next to a real purchase
-    // costs its owner nothing.
-    await insertImportedOrder("101", "Completed", "one@example.com");
-    await insertImportedOrder("102", "Incomplete", "one@example.com");
-
-    const result = find(await check(), CHECK);
-
-    expect(result.status).toBe("ok");
-    expect(result.detail).toContain("1 of 2");
-    expect(result.detail).toContain("Nobody is left");
-  });
-
-  it("clears somebody left with nothing whom the previous site never carded either", async () => {
-    // Then the allow-list agrees with the old system rather than diverging
-    // from it, which is the whole question #89 was asking.
-    await insertImportedOrder("102", "Incomplete", "two@example.com");
-
-    const result = find(await check(), CHECK);
-
-    expect(result.status).toBe("ok");
-    expect(result.detail).toContain("never issued");
-  });
-
-  it("warns about somebody the previous site carded who now holds nothing", async () => {
-    // The one case that is a real regression: the old system treated them as
-    // a member, and this rule does not.
-    await insertImportedOrder("102", "Incomplete", "two@example.com");
-    await insertLegacyCard("two@example.com");
-
-    const result = find(await check(), CHECK);
-
-    expect(result.status).toBe("warn");
-    expect(result.detail).toContain("1 person was");
-    expect(result.detail).toContain("the rule is what is wrong");
-  });
-
-  it("counts only the carded people, not everyone the allow-list excluded", async () => {
-    await insertImportedOrder("101", "Incomplete", "one@example.com");
-    await insertImportedOrder("102", "Incomplete", "two@example.com");
-    await insertLegacyCard("two@example.com");
-
-    const result = find(await check(), CHECK);
-
-    expect(result.detail).toContain("2 addresses");
-    expect(result.detail).toContain("1 person was");
-  });
-
-  it("ignores orders that arrived through the store sync", async () => {
-    await insertOrder({ id: "201", email: "sync@example.com", created: "2025-01-01", status: null });
-    expect(find(await check(), CHECK).status).toBe("skip");
   });
 });
 

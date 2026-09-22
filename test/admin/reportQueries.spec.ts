@@ -27,7 +27,7 @@ beforeEach(async () => {
   await insertOrder({ id: "6", email: "moved@example.com", created: "2026-01-01T00:00:00Z" });
   // Never memberships: refunded, and cancelled in the Squarespace spelling.
   await insertOrder({ id: "7", email: "refunded@example.com", created: "2026-02-01T00:00:00Z", status: "Refunded" });
-  await insertOrder({ id: "sq-void", source: "squarespace", email: "void@example.com", created: "2026-02-02T00:00:00Z", status: "CANCELED" });
+  await insertOrder({ id: "sq-void", source: "squarespace", email: "void@example.com", created: "2026-02-02T00:00:00Z", status: "CANCELED", counted: 0 });
   // Not yet placed at AS_OF.
   await insertOrder({ id: "8", email: "future@example.com", created: "2026-08-01T00:00:00Z" });
 });

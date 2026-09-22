@@ -294,8 +294,8 @@ memberSince.post("/", csrf(), async (c) => {
   if ("error" in input) {
     return back({ error: input.error });
   }
-  // `source = 'manual'` is what makes this survive a re-run of the legacy
-  // import, which only ever overwrites its own rows.
+  // `source = 'manual'` is what tells this correction apart from a date the
+  // legacy import carried across, and what clearing a correction looks for.
   await c.env.DB.prepare(
     `INSERT INTO member_since_overrides (email, member_since, source, note, set_by)
      VALUES (?, ?, 'manual', ?, ?)

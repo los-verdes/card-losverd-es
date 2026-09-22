@@ -509,19 +509,18 @@ Overrides come from two places, recorded in the row's `source`:
 * **The old system's records** (`legacy_postgres`). A one-time export of the
   old application's own "member since" value, which it computed as the
   earliest membership order it had for that person. For early members this is
-  the only surviving record of when they joined, and it is loaded by the
-  scripts under `scripts/legacy-export/`.
+  the only surviving record of when they joined, and it was loaded once, by
+  the import that brought the old system's records across.
 * **Manual corrections** (`manual`). Set on the **Member since** admin page,
   which shows the date a member's orders imply alongside any correction
   already recorded, and takes a note saying why. Clearing a correction only
   removes a manual one, so a date that came from the old system cannot be
   deleted by accident. No database access or developer needed.
 
-A manual correction outranks the imported value: re-running the legacy import
-updates only rows that came from the import itself and leaves a manual row
-alone (`buildImportStatements()` in `src/legacy/import-sql.ts`). There is at
-most one override per email address, so the two sources never coexist for one
-person — the manual row simply survives.
+A manual correction outranks the imported value: the import only ever wrote
+rows of its own source and left a manual row alone. There is at most one
+override per email address, so the two sources never coexist for one person —
+a manual correction replaces the imported value outright.
 
 **On trustworthiness.** These sources are not equally reliable, and the
 current rule does not rank them by reliability, only by origin:
@@ -628,9 +627,9 @@ Two safeguards keep an attribution from being quietly undone. The routine
 BigCommerce sync refreshes everything the store reports about an order but
 deliberately never rewrites `member_email` (`recordMembershipOrder()` in
 `src/bigcommerce/orders.ts`), so a resync cannot hand a gift back to its
-buyer. And the one-time legacy import skips an order that has an attribution
-recorded against it, so an admin's decision outranks the historical export
-(`src/legacy/import-sql.ts`).
+buyer. And the one-time legacy import skipped any order that already had an
+attribution recorded against it, so an admin's decision outranked the
+historical export.
 
 What attribution does *not* change is the name on the order. The billing name
 stays the purchaser's, and since the card's holder name comes from the latest
@@ -818,7 +817,7 @@ Those older orders were recovered once, directly from the Postgres database
 behind the previous site
 ([`digital-membership`](https://github.com/los-verdes/digital-membership)),
 and imported into the same `membership_orders` table the current store's
-orders land in (`scripts/legacy-export/`, `src/legacy/import-sql.ts`).
+orders land in.
 
 **They cannot make anyone a current member.** Every one of them expired years
 ago, so nothing in this appendix affects who holds a valid card today. They
@@ -832,11 +831,11 @@ question about a current membership, the rules above are the whole answer.
 
 ### They counted unless they were cancelled
 
-Whether each of these orders counts was decided once, when it was imported,
-and is stored with it (`membership_orders.frozen_counts`). The rule used then
-was that an order counted unless its status was `canceled`, `cancelled`,
-`refunded` or `declined` (`VOID_LEGACY_STATUSES` in
-`src/legacy/import-sql.ts`); anything else counted, including a blank status.
+Whether each of these orders counts was worked out once and is stored with
+it (`membership_orders.frozen_counts`). The rule used was that an order
+counted unless its status was `canceled`, `cancelled`, `refunded` or
+`declined` (recorded in migration `0004_freeze_legacy_verdicts.sql`); anything
+else counted, including a blank status.
 In practice none had one: every row in the old system's database carries a
 status, checked against that database directly before the import.
 
