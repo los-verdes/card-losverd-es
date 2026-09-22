@@ -110,16 +110,19 @@ export async function refreshLapsedPasses(
   now: Date = new Date(),
 ): Promise<string | null> {
   const today = isoDate(now.getTime());
+  // Anything refreshed in the last day already carries what this would push,
+  // and pushing it again hands Wallet a pass identical to the one it holds.
+  const alreadyFresh = now.getTime() - DAY_MS;
   const { results } = await env.DB.prepare(
     `SELECT m.member_id
        FROM members m
-      WHERE m.member_id > ?1 AND m.expiration_date < ?2
+      WHERE m.member_id > ?1 AND m.expiration_date < ?2 AND m.last_updated_at < ?4
         AND NOT EXISTS (SELECT 1 FROM revoked_cards r WHERE r.member_id = m.member_id)
         AND NOT EXISTS (SELECT 1 FROM expelled_people e WHERE e.email = m.email)
       ORDER BY m.member_id
       LIMIT ?3`,
   )
-    .bind(afterMemberId, today, LAPSED_REFRESH_BATCH)
+    .bind(afterMemberId, today, LAPSED_REFRESH_BATCH, alreadyFresh)
     .all<{ member_id: string }>();
 
   for (const { member_id } of results) {

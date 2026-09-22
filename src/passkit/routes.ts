@@ -135,7 +135,13 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   const ifModifiedSince = c.req.header("if-modified-since");
   if (ifModifiedSince) {
     const since = Date.parse(ifModifiedSince);
-    if (!Number.isNaN(since) && member.last_updated_at <= since) {
+    // Compared to the second, because that is all an HTTP date carries. The
+    // `Last-Modified` below drops the milliseconds, so a device echoing it
+    // back would otherwise look older than the record it came from, and
+    // Wallet would be handed a pass identical to the one it holds -- which
+    // it reports as ignoring its `If-Modified-Since` (seen on staging).
+    const modified = Math.floor(member.last_updated_at / 1000) * 1000;
+    if (!Number.isNaN(since) && modified <= since) {
       return c.body(null, 304);
     }
   }
