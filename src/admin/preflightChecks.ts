@@ -79,27 +79,18 @@ export function daysUntil(when: Date, now: Date): number {
 }
 
 /**
- * Whether `PUBLIC_BASE_URL` agreeing (or not) with the host actually serving
- * this request is worth flagging.
+ * Whether `PUBLIC_BASE_URL` agrees with the host actually serving this
+ * request.
  *
- * This is the check that would catch the worst cutover mistake available to
- * us: `PUBLIC_BASE_URL` is baked into every QR code we sign and every pass we
- * issue, so a production Worker still claiming a `workers.dev` origin after
- * DNS moves would mint cards pointing at a hostname we intend to retire --
- * and nothing would look broken until those cards were scanned.
+ * The worst mistake available to us: `PUBLIC_BASE_URL` is baked into every QR
+ * code we sign and every pass we issue, so a Worker serving one host while
+ * configured for another mints cards pointing somewhere we do not intend to
+ * keep serving -- and nothing looks broken until those cards are scanned.
  *
- * The wrinkle is that a mismatch is *normal* before cutover. Production is
- * deployed and reachable at
- * `card-losverd-es-production.los-verdes.workers.dev` while `card.losverd.es`
- * still resolves to the legacy stack, and that is the expected state for
- * every pre-cutover run of this page.
- *
- * So the verdict turns on which side of the mismatch the `workers.dev` host
- * is on, which is the one thing here that *is* unambiguous. Being served at a
- * `workers.dev` host while configured for a custom domain is the pre-cutover
- * norm, and only worth a note. Being served at the custom domain is proof
- * cutover has happened -- at which point the configuration disagreeing with
- * it is the failure this check exists for.
+ * A mismatch used to be normal, while production was reachable only at its
+ * `workers.dev` host and `card.losverd.es` still resolved to the previous
+ * site. Both environments now have a custom domain of their own (#148, #272),
+ * so there is no such state left and any mismatch is a fault.
  */
 export function originVerdict(
   publicBaseUrl: string,
@@ -115,15 +106,9 @@ export function originVerdict(
   if (configured === requestOrigin) {
     return ok(name, `${configured} -- the host serving this page.`);
   }
-  if (requestOrigin.endsWith(".workers.dev")) {
-    return warn(
-      name,
-      `Configured as ${configured} but served from ${requestOrigin}. Expected before cutover; note that passes and QR codes issued now already point at ${configured}.`,
-    );
-  }
   return fail(
     name,
-    `Served from ${requestOrigin} but PUBLIC_BASE_URL is ${configured}. Cutover has happened and the configuration hasn't followed: cards signed here point at a host we don't intend to keep serving.`,
+    `Served from ${requestOrigin} but PUBLIC_BASE_URL is ${configured}: cards signed here point at a host we don't intend to keep serving.`,
   );
 }
 
@@ -386,7 +371,7 @@ async function googleWalletChecks(env: Env): Promise<CheckGroup> {
   return { title: "Google Wallet", results: [result] };
 }
 
-function deliveryChecks(env: Env, live: boolean): CheckGroup {
+function deliveryChecks(env: Env): CheckGroup {
   const results: CheckResult[] = [];
 
   // Reported on the page because "no email arrived" is otherwise a puzzle
@@ -397,14 +382,11 @@ function deliveryChecks(env: Env, live: boolean): CheckGroup {
     allowlist.includes(ALLOW_ANY_RECIPIENT)
       ? ok("Who we may email", "Any address (EMAIL_RECIPIENT_ALLOWLIST is `*`).")
       : allowlist.length === 0
-        ? // Empty is a deliberate guard before cutover and a broken service
-          // after it: this Worker is answering members, and /email-card is
-          // replying to every one of them with silence.
-          (live ? fail : warn)(
+        ? // Both environments serve members now, so nobody-at-all means
+          // /email-card answers every request with silence.
+          fail(
             "Who we may email",
-            live
-              ? "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty while this Worker is serving members, so every card anyone asks for is suppressed. Set it to `*`."
-              : "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty, so every send is suppressed and logged. Deliberate before cutover; set it to `*` at the flip.",
+            "Nobody -- EMAIL_RECIPIENT_ALLOWLIST is empty, so every card anyone asks for is suppressed. Set it to `*`.",
           )
         : warn(
             "Who we may email",
@@ -491,9 +473,9 @@ interface BigCommerceHook {
  * as a step to do "right after the flip", which is exactly the kind of step
  * that gets missed.
  *
- * `live` says whether this Worker is already serving its own
- * `PUBLIC_BASE_URL`. Before cutover a token mismatch is the expected state
- * and only worth noting; after it, it means orders are being dropped.
+ * Both environments now serve their own `PUBLIC_BASE_URL`, so a subscription
+ * pointing anywhere else, or carrying a token this Worker does not verify,
+ * means orders are being dropped right now.
  */
 /**
  * ` ("Shop Name")` when the token carries the "Information & Settings" scope,
@@ -515,11 +497,7 @@ async function storeLabel(
   }
 }
 
-async function bigCommerceChecks(
-  env: Env,
-  live: boolean,
-  requestUrl: string | null,
-): Promise<CheckGroup> {
+async function bigCommerceChecks(env: Env): Promise<CheckGroup> {
   const results: CheckResult[] = [];
   const { BIGCOMMERCE_STORE_HASH: storeHash, BIGCOMMERCE_ACCESS_TOKEN: accessToken } = env;
 
@@ -593,22 +571,6 @@ async function bigCommerceChecks(
       hook = subscribedTo(expected);
       if (!hook) {
         // Before cutover the subscription belongs on this Worker's own
-        // origin, not on PUBLIC_BASE_URL: that is still the legacy app's
-        // host, and `bigcommerce-ensure-webhook` refuses to take it over
-        // until the flip. Finding it there is the arrangement working, so
-        // reporting it as a failure would train a reader to scroll past the
-        // one state that really is broken.
-        const servingOrigin = requestUrl ? new URL(requestUrl).origin : null;
-        const here = servingOrigin ? subscribedTo(`${servingOrigin}${WEBHOOK_PATH}`) : undefined;
-        if (here && !live) {
-          // Kept, so the token check below can still verify it. What that
-          // subscription carries is worth knowing now rather than at cutover.
-          hook = here;
-          return warn(
-            "Order webhook",
-            `${WEBHOOK_SCOPE} delivers to ${here.destination} rather than ${expected}. Expected before cutover, while the legacy app still serves that origin; re-point it with \`just bigcommerce-ensure-webhook <env>\`.`,
-          );
-        }
         return fail(
           "Order webhook",
           `No ${WEBHOOK_SCOPE} subscription delivering to ${expected}. Register one with \`just bigcommerce-ensure-webhook\`.`,
@@ -627,15 +589,10 @@ async function bigCommerceChecks(
       const ours = `bearer ${await signWebhookToken(env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY, storeHash, env.BIGCOMMERCE_CLIENT_ID)}`;
       const registered = hook.headers?.Authorization ?? hook.headers?.authorization ?? "";
       if (registered === ours) return ok("Webhook token", "The registered header matches what this Worker verifies.");
-      return live
-        ? fail(
-            "Webhook token",
-            "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env>`.",
-          )
-        : warn(
-            "Webhook token",
-            "The registered header is not this Worker's. Expected before cutover, while the subscription still carries the legacy app's token -- but it must be updated as part of the flip.",
-          );
+      return fail(
+        "Webhook token",
+        "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env>`.",
+      );
     }),
   );
 
@@ -686,31 +643,14 @@ export async function runPreflightChecks(
   requestUrl: string | null,
   now: Date = new Date(),
 ): Promise<CheckGroup[]> {
-  // Whether this Worker is already serving the origin it issues passes for.
-  // Several checks read differently either side of that line -- a webhook
-  // still carrying the legacy app's token is expected before cutover and
-  // means dropped orders after it.
-  //
-  // A scheduled run (`requestUrl === null`) cannot tell: it has no request
-  // whose host it could compare. It assumes pre-cutover, which is the
-  // assumption that cannot raise a false alarm -- before cutover the strict
-  // reading would report a deliberate, known state as a failure every time
-  // it ran, and an alert that fires on a known-good state is one people
-  // learn to ignore. The page, which does have a request, still reports the
-  // strict verdict, and a post-cutover token mismatch also surfaces as the
-  // order resync going stale.
-  const live =
-    requestUrl !== null &&
-    originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin).status === "ok";
-
   return [
     await operationalSignals(env, now),
     await identityChecks(env, requestUrl),
     await storageChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
-    await bigCommerceChecks(env, live, requestUrl),
-    deliveryChecks(env, live),
+    await bigCommerceChecks(env),
+    deliveryChecks(env),
     await queueChecks(env),
   ];
 }

@@ -240,14 +240,15 @@ describe("originVerdict", () => {
     expect(result.status).toBe("ok");
   });
 
-  it("only notes a mismatch while the page is served from workers.dev", () => {
-    // The pre-cutover norm: production is configured for the real domain but
-    // only reachable at its workers.dev host until DNS moves.
+  it("fails on a mismatch whichever host is serving, now that both environments have their own", () => {
+    // This used to be the pre-cutover norm, while production was reachable
+    // only at its workers.dev host. Since #148 staging has a custom domain
+    // too, so nothing should be served from workers.dev at all.
     const result = originVerdict(
       "https://card.losverd.es",
       "https://card-losverd-es-production.los-verdes.workers.dev",
     );
-    expect(result.status).toBe("warn");
+    expect(result.status).toBe("fail");
     expect(result.detail).toContain("card.losverd.es");
   });
 
@@ -261,8 +262,8 @@ describe("originVerdict", () => {
     expect(result.status).toBe("fail");
   });
 
-  it("leaves staging green, since it is configured for its own workers.dev host", () => {
-    const staging = "https://card-losverd-es-staging.los-verdes.workers.dev";
+  it("leaves staging green, since it is configured for the host serving it", () => {
+    const staging = "https://stagingcard.losverd.es";
     expect(originVerdict(staging, staging).status).toBe("ok");
   });
 
@@ -442,12 +443,9 @@ describe("BigCommerce", () => {
     expect(find(await check(PRE_CUTOVER), "Order webhook").status).toBe("ok");
   });
 
-  it("recognises the pre-cutover arrangement rather than calling it a failure", async () => {
-    // Before cutover the subscription belongs on this Worker's own origin:
-    // PUBLIC_BASE_URL is still the legacy app's host, and
-    // `bigcommerce-ensure-webhook` refuses to take that over until the flip.
-    // Reporting the intended arrangement as a failure teaches whoever reads
-    // this page to scroll past the state that really is broken.
+  it("fails when the subscription delivers somewhere other than this environment", async () => {
+    // A hook left on a retired host delivers into nothing, and orders stop
+    // arriving with nothing else looking wrong.
     remote.hooks = [
       {
         scope: "store/order/*",
@@ -459,23 +457,8 @@ describe("BigCommerce", () => {
 
     const result = find(await check(PRE_CUTOVER), "Order webhook");
 
-    expect(result.status).toBe("warn");
-    expect(result.detail).toContain("just bigcommerce-ensure-webhook <env>");
-  });
-
-  it("checks the token on the pre-cutover subscription rather than skipping it", async () => {
-    // Worth knowing now that what we registered is what this Worker verifies.
-    // Finding out at the flip is finding out too late.
-    remote.hooks = [
-      {
-        scope: "store/order/*",
-        destination: "https://card-losverd-es-production.los-verdes.workers.dev/bigcommerce/order-webhook",
-        is_active: true,
-        headers: { Authorization: await registeredAuthorization() },
-      },
-    ];
-
-    expect(find(await check(PRE_CUTOVER), "Webhook token").status).toBe("ok");
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain("just bigcommerce-ensure-webhook");
   });
 
   it("still fails once cutover has happened and nothing delivers to the real origin", async () => {
@@ -492,21 +475,6 @@ describe("BigCommerce", () => {
     expect(find(await check(), "Order webhook").status).toBe("fail");
   });
 
-  it("only warns about a foreign webhook token before cutover", async () => {
-    // The production subscription carries the legacy app's token until the
-    // flip, so this is the expected state rather than a defect.
-    remote.hooks = [
-      {
-        scope: "store/order/*",
-        destination: WEBHOOK_DESTINATION,
-        is_active: true,
-        headers: { Authorization: "bearer the-legacy-apps-token" },
-      },
-    ];
-    const result = find(await check(PRE_CUTOVER), "Webhook token");
-    expect(result.status).toBe("warn");
-    expect(result.detail).toContain("before cutover");
-  });
 
   it("fails on a foreign webhook token once we are serving the real domain", async () => {
     // Same state, after the flip: every delivery is being rejected and orders
@@ -524,13 +492,10 @@ describe("BigCommerce", () => {
     expect(result.detail).toContain("just bigcommerce-ensure-webhook <env>");
   });
 
-  it("leaves a foreign webhook token a warning on a scheduled run, which cannot tell", async () => {
-    // A scheduled run has no request, so it cannot know whether this Worker
-    // is serving its own PUBLIC_BASE_URL yet. Reading it strictly would
-    // report the deliberate pre-cutover state as a failure on every run, and
-    // the weekly alert built on these verdicts (#95) would cry wolf until
-    // someone muted it. Assuming pre-cutover is the assumption that cannot
-    // raise a false alarm.
+  it("fails on a foreign webhook token on a scheduled run too, where nobody is reading a page", async () => {
+    // The weekly readiness post is built on these verdicts (#95), and a
+    // subscription carrying a token this Worker does not verify means every
+    // delivery is being rejected right now.
     remote.hooks = [
       {
         scope: "store/order/*",
@@ -542,7 +507,7 @@ describe("BigCommerce", () => {
 
     const result = find(await check(null), "Webhook token");
 
-    expect(result.status).toBe("warn");
+    expect(result.status).toBe("fail");
   });
 
   it("never reports either token's value", async () => {
@@ -580,27 +545,15 @@ describe("BigCommerce", () => {
 describe("who we may email", () => {
   const PRE_CUTOVER = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
 
-  it("reports an empty list as a deliberate guard before cutover", async () => {
-    // Which is what it is: production holds every member's real address, and
-    // the steps left before the flip each touch all of them at once.
-    env.EMAIL_RECIPIENT_ALLOWLIST = "";
-
-    const result = find(await check(PRE_CUTOVER), "Who we may email");
-
-    expect(result.status).toBe("warn");
-    expect(result.detail).toContain("at the flip");
-  });
-
-  it("fails on an empty list once the Worker is serving members", async () => {
-    // The same setting, now a broken service: /email-card answers everyone
-    // who asks with silence. This is the safety net for forgetting to put it
-    // back, which is the one mistake emptying it invites.
+  it("fails on an empty list, which is a service answering everyone with silence", async () => {
+    // Both environments serve members, so this is the safety net for
+    // forgetting to put the list back -- the one mistake emptying it invites.
     env.EMAIL_RECIPIENT_ALLOWLIST = "";
 
     const result = find(await check(), "Who we may email");
 
     expect(result.status).toBe("fail");
-    expect(result.detail).toContain("serving members");
+    expect(result.detail).toContain("every card anyone asks for is suppressed");
   });
 
   it("is content either way once it permits anybody", async () => {
