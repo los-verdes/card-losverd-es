@@ -1,23 +1,10 @@
 /**
- * Expelling somebody from the group, and lifting that again (#31).
+ * Expelling somebody from the group, and lifting that again (#31). Rare.
  *
- * An expulsion is the heavier of the two things an admin can do to a person here,
- * and the difference from a revoked card is worth keeping straight:
- *
- * - **A revoked card** stops the card working. They can still sign in and
- *   still exist here.
- * - **An expulsion** also stops them signing in at all, takes effect on sessions
- *   they already hold, and revokes whatever membership they have.
- *
- * The membership half is not written down anywhere. `MEMBER_SELECT` resolves
- * an expulsion into the same `revoked` status a revoked card produces, so lifting
- * an expulsion restores the membership by itself, and somebody who is both expelled
- * and separately revoked stays revoked when the expulsion is lifted.
- *
- * Indefinite on purpose. In practice these run a couple of years, but a date
- * that expired on its own would put a person back in without anybody
- * deciding they should be -- which is the Membership Committee's decision to
- * make and not software's to make for them.
+ * Unlike a revoked card, an expulsion also stops the person signing in,
+ * including on sessions they already hold. `MEMBER_SELECT` resolves it into
+ * the same `revoked` status a revoked card produces, so lifting it restores
+ * the membership by itself. Indefinite: only a person lifts it.
  */
 
 import type { Env } from "../index";
