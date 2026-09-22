@@ -70,7 +70,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 | `/login`, `/logout`, `/api/auth/*` | Login with Google or Apple via Auth.js, bridged to a signed `lv_session` cookie. `/login` also offers `/email-card`, for anyone who has neither account (`src/auth/`) | Public |
 | `/email-card` | No-login fallback: emails a member their card. Turnstile-protected and rate limited; never reveals whether an address is a member (`src/member/email-card.tsx`) | Public |
 | `/claim-membership` | "I bought my membership under a different address": mails a confirmation link to that address and, once followed, links the membership to the signed-in account. Exists for Apple's Hide My Email, whose relay address matches no order. Rate limited; never reveals whether an address is a member (`src/member/claimMembership.tsx`) | Signed in |
-| `/verify-pass` | What a card's QR code points at; shows the holder's current membership (`src/member/verify-pass.tsx`) | Any logged-in user |
+| `/verify-pass` | What a card's QR code points at; shows the holder's current membership, and to admins whether a lapsed one expired or was revoked (`src/member/verify-pass.tsx`) | Anyone with the card's signed QR link |
 | `/privacy-policy` | The privacy policy, linked from every member page and from Google's OAuth consent screen (`src/member/privacy.tsx`) | Anyone |
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |

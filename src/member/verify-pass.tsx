@@ -4,8 +4,19 @@
  * confirms the card is genuine (see src/lib/passSignature.ts) and shows the
  * holder's *current* membership (src/member/passHolder.ts).
  *
- * Behind `requireAuth`, as in the legacy app, so a photographed card doesn't
- * expose its holder's name and membership status to anyone.
+ * Public: whoever checks a card at a table or a door should not have to sign
+ * in first. The legacy app put it behind a login, which was friction rather
+ * than protection -- any Google or Apple account would do. What stops a
+ * stranger looking up an arbitrary card is the signature: without a real
+ * card's QR code there is nothing to open.
+ *
+ * What a photographed card could reveal is narrowed instead. Its name and
+ * "good through" date are printed on the card already. The one new thing a
+ * live lookup adds is *why* a membership is not current, and "revoked" --
+ * which expulsion resolves to as well -- is the Membership Committee's
+ * decision, not something to show whoever holds an old photo. So everyone
+ * gets valid or not; only a signed-in admin sees revoked as distinct from
+ * lapsed, and the date a membership lapsed.
  */
 
 import { Hono } from "hono";
@@ -16,42 +27,80 @@ import {
   passSignatureKeys,
   verifyPassSerialSignature,
 } from "../lib/passSignature";
-import { requireAuth, type AuthEnv } from "../middleware/auth";
+import type { Context } from "hono";
+import type { Env } from "../index";
+import { readSessionCookie, verifySessionToken } from "../auth/session";
 import { Page } from "./layout";
 import { lookupPassHolder, type PassHolder } from "./passHolder";
 
-export const VerificationResult: FC<{ holder: PassHolder }> = ({ holder }) => (
+/**
+ * What a public visitor is told about a card that is not current: that it is
+ * genuine, and nothing about why. No date either -- a revoked membership has
+ * none and a lapsed one does, so showing it would give the reason away.
+ */
+const NotCurrent: FC<{ holder: PassHolder }> = ({ holder }) => (
   <Page title="Card Verification">
-    <h1>
-      {holder.active
-        ? "MEMBERSHIP VALID"
-        : holder.revoked
-          ? "MEMBERSHIP REVOKED"
-          : "MEMBERSHIP EXPIRED"}
-    </h1>
-    {holder.revoked ? (
-      // Said plainly rather than left as "expired": the card is genuine
-      // either way, and somebody holding one up is owed an answer that does
-      // not sound like it could be fixed by renewing.
-      <p>This card is genuine, but this membership has been revoked.</p>
-    ) : (
-      !holder.active && (
-        <p>This card is genuine, but its holder has no current membership.</p>
-      )
-    )}
+    <h1>NOT A CURRENT MEMBERSHIP</h1>
+    <p>This card is genuine, but it does not belong to a current membership.</p>
     {holder.name && <p style="font-size: 1.5rem">{holder.name}</p>}
-    {holder.expirationDate && (
-      <p>
-        {holder.active ? "Good through " : "Expired "}
-        {formatShortDate(holder.expirationDate)}
-      </p>
-    )}
   </Page>
 );
 
-const verifyPass = new Hono<AuthEnv>();
+export const VerificationResult: FC<{ holder: PassHolder; detail: boolean }> = ({ holder, detail }) =>
+  !holder.active && !detail ? (
+    <NotCurrent holder={holder} />
+  ) : (
+    <Page title="Card Verification">
+      <h1>
+        {holder.active
+          ? "MEMBERSHIP VALID"
+          : holder.revoked
+            ? "MEMBERSHIP REVOKED"
+            : "MEMBERSHIP EXPIRED"}
+      </h1>
+      {holder.revoked ? (
+        // Said plainly rather than left as "expired": the card is genuine
+        // either way, and somebody holding one up is owed an answer that does
+        // not sound like it could be fixed by renewing.
+        <p>This card is genuine, but this membership has been revoked.</p>
+      ) : (
+        !holder.active && (
+          <p>This card is genuine, but its holder has no current membership.</p>
+        )
+      )}
+      {holder.name && <p style="font-size: 1.5rem">{holder.name}</p>}
+      {holder.expirationDate && (
+        <p>
+          {holder.active ? "Good through " : "Expired "}
+          {formatShortDate(holder.expirationDate)}
+        </p>
+      )}
+    </Page>
+  );
 
-verifyPass.get("/:serial", requireAuth, async (c) => {
+/** Whether the visitor is signed in as an admin; checked against the database, as `requireAdmin` does. */
+async function isSignedInAdmin(c: Context<{ Bindings: Env }>): Promise<boolean> {
+  const token = readSessionCookie(c);
+  if (!token || !c.env.SESSION_SIGNING_KEY) return false;
+  const session = await verifySessionToken(c.env.SESSION_SIGNING_KEY, token);
+  if (!session) return false;
+  const user = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(session.userId)
+    .first<{ is_admin: number }>();
+  return user?.is_admin === 1;
+}
+
+const verifyPass = new Hono<{ Bindings: Env }>();
+
+// A lookup about a person: never cached, and never indexed if a link to one
+// is shared somewhere public.
+verifyPass.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+  c.header("X-Robots-Tag", "noindex");
+});
+
+verifyPass.get("/:serial", async (c) => {
   const serial = c.req.param("serial");
   // Whether the scanned card was minted by the previous site, which matters
   // most in the weeks after cutover: those QR codes are the oldest thing
@@ -97,7 +146,7 @@ verifyPass.get("/:serial", requireAuth, async (c) => {
     card,
     key: keyUsed,
   });
-  return c.html(<VerificationResult holder={holder} />);
+  return c.html(<VerificationResult holder={holder} detail={await isSignedInAdmin(c)} />);
 });
 
 export default verifyPass;

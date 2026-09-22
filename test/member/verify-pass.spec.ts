@@ -22,21 +22,31 @@ afterEach(async () => {
   // Before `members`, which it references.
   await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM members");
+  await env.DB.exec("DELETE FROM users");
 });
 
-async function verify(serial: string, signature?: string, loggedIn = true) {
+type Viewer = "anonymous" | "member" | "admin";
+
+/**
+ * Defaults to an admin, the one viewer who sees the full detail (revoked as
+ * distinct from lapsed, and the date); the public view has tests of its own.
+ */
+async function verify(serial: string, signature?: string, viewer: Viewer = "admin") {
   const url = new URL(`https://card.losverd.es/verify-pass/${serial}`);
   if (signature !== undefined) url.searchParams.set("signature", signature);
   const headers = new Headers();
-  if (loggedIn) {
-    const token = await issueSessionToken(SESSION_KEY, { userId: 1, isAdmin: false });
+  if (viewer !== "anonymous") {
+    await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, is_admin) VALUES (1, 'viewer@example.com', ?)")
+      .bind(viewer === "admin" ? 1 : 0)
+      .run();
+    const token = await issueSessionToken(SESSION_KEY, { userId: 1, isAdmin: viewer === "admin" });
     headers.set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
   }
   return worker.fetch(new Request(url, { headers, redirect: "manual" }), env, createExecutionContext());
 }
 
-async function signedVerify(serial: string) {
-  return verify(serial, await signPassSerial(PASS_KEY, serial));
+async function signedVerify(serial: string, viewer: Viewer = "admin") {
+  return verify(serial, await signPassSerial(PASS_KEY, serial), viewer);
 }
 
 async function insertMember(fields: {
@@ -70,11 +80,37 @@ async function insertLegacyCard(email: string, memberUntil: string | null, fullN
 }
 
 describe("GET /verify-pass/:serial", () => {
-  it("requires login", async () => {
-    const res = await verify(LEGACY_SERIAL, await signPassSerial(PASS_KEY, LEGACY_SERIAL), false);
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toMatch(/^\/login(\?|$)/);
+  it("answers without signing in, uncached and unindexed", async () => {
+    // Whoever checks a card at a door should not have to sign in first; the
+    // signature is what stops a stranger opening an arbitrary card.
+    await insertMember({ memberId: "BC-1", email: "jane@example.com", expirationDate: "2099-01-01" });
+
+    const res = await signedVerify("BC-1", "anonymous");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
+    const html = await res.text();
+    expect(html).toContain("MEMBERSHIP VALID");
+    expect(html).toContain("Good through Jan 1, 2099");
   });
+
+  it.each<Viewer>(["anonymous", "member"])(
+    "tells a %s visitor only that a lapsed or revoked card is not current, with no date to tell them apart",
+    async (viewer) => {
+      await insertMember({ memberId: "BC-1", email: "lapsed@example.com", expirationDate: "2021-06-01" });
+      await insertMember({ memberId: "BC-2", email: "revoked@example.com", expirationDate: "2099-01-01" });
+      await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES ('BC-2')").run();
+
+      for (const serial of ["BC-1", "BC-2"]) {
+        const html = await (await signedVerify(serial, viewer)).text();
+
+        expect(html).toContain("NOT A CURRENT MEMBERSHIP");
+        expect(html).toContain("This card is genuine");
+        expect(html).not.toMatch(/REVOKED|revoked|EXPIRED|Expired /);
+      }
+    },
+  );
 
   it.each<[string, string | undefined]>([
     ["missing", undefined],

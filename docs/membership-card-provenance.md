@@ -365,8 +365,12 @@ Neither identifies a member. Records are always found by email address, so the
 card number never needs to be reproducible from anything else.
 
 The QR code encodes a signed verification link for that card number. Scanning
-it (and signing in) shows the holder's name and whether their membership is
-current *right now* — computed live, not read off the card
+it shows the holder's name and whether their membership is current *right
+now* — computed live, not read off the card. No sign-in is needed: the
+signature is what stops anyone opening a card they do not hold. Anyone
+scanning is told only "valid" or "not a current membership"; whether a
+membership lapsed or was revoked is shown only to a signed-in admin, since a
+revocation is the Membership Committee's decision
 (`src/member/verify-pass.tsx`, `lookupPassHolder()` in
 `src/member/passHolder.ts`). Cards issued by the old system and still in
 circulation resolve the same way: the old card's serial is looked up
