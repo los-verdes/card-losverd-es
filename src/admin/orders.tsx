@@ -37,9 +37,10 @@ export function orderPath(orderId: string): string {
 }
 
 /**
- * Re-reading one order from BigCommerce (#294): the provenance document's
- * first thing to try when a member's record looks wrong, without waiting for
- * the resync. What the admin is told afterwards, by outcome.
+ * Re-reading one order from BigCommerce (#294). Rarely needed -- the order
+ * webhook brings changes in within seconds, and the resync catches what it
+ * misses -- but there for an admin who wants to be sure, or whose member's
+ * record looks wrong. What the admin is told afterwards, by outcome.
  */
 export const REREAD_MESSAGES = {
   updated: "Re-read from BigCommerce. It had changed, and the membership is now up to date.",
