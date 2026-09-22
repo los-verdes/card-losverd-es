@@ -10,7 +10,7 @@
  * 1. **Webhook path only.** This is called from `syncBigCommerceOrder`, the
  *    path a BigCommerce order webhook takes. The scheduled resync and
  *    `loadAll` full resync go through `applyMembershipOrder` directly and
- *    never reach here; the legacy import writes D1 without running any of it.
+ *    never reach here; the legacy import wrote D1 without running any of it.
  *    Sufficient on its own.
  * 2. **A cutoff date.** `CARD_EMAIL_NEW_ORDERS_SINCE` (a plain var, empty by
  *    default) switches sending on, and only orders created on or after it are

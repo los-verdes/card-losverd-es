@@ -1,5 +1,4 @@
 import "../setup/d1";
-import { legacyVerdict } from "../../src/legacy/import-sql";
 import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { unzipSync } from "fflate";
@@ -125,10 +124,8 @@ async function insertOrder(fields: {
       fields.status === undefined ? "Completed" : fields.status,
       fields.createdOn ?? "2024-03-04",
       fields.expiresOn ?? "2025-03-04",
-      legacyVerdict({
-        source: fields.source === "squarespace" ? "squarespace" : "bigcommerce",
-        status: fields.status === undefined ? "Completed" : fields.status,
-      }),
+      // An imported Squarespace-era row carries a stored verdict.
+      fields.source === "squarespace" ? 1 : null,
     )
     .run();
 }
@@ -413,8 +410,8 @@ describe("GET / membership history", () => {
   });
 
   it("copes with a Squarespace-era order that has no product name or status", async () => {
-    // Many imported rows have neither, and a blank status still counted for
-    // that era (legacyVerdict in src/legacy/import-sql.ts).
+    // Many imported rows have neither; whether one counts is its stored
+    // verdict (`frozen_counts`), not its status.
     await seedCurrentMember();
     await insertOrder({
       orderId: "0cd5ad745fbc40fd95697470",

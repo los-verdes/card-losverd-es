@@ -33,11 +33,11 @@ alike:
    membership order it processes, from webhooks and scheduled resyncs alike.
    A resync refreshes the store's fields (so a refund lands) but never
    overwrites `member_email`.
-2. **The one-time legacy export** (`scripts/legacy-export/`) carries every
-   legacy order, BigCommerce and Squarespace. It is the only surviving record
-   of Squarespace-era orders, so it must run before the legacy database is
-   decommissioned. For an order the sync already recorded, it only fills in
-   `member_email`, and never for an order an admin has attributed.
+2. **The one-time legacy import** (September 2026; its tooling has since been
+   removed) carried every legacy order, BigCommerce and Squarespace. It is
+   the only surviving record of Squarespace-era orders. For an order the sync
+   had already recorded, it only filled in `member_email`, and never for an
+   order an admin had attributed.
 3. **Admins** attribute an order to someone other than its purchaser on
    `/admin/orders/<order id>` (linked from every order id in the reports).
    Entering an address first shows everywhere it already appears (member

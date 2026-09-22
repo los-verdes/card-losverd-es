@@ -369,7 +369,6 @@ Not built yet: MiniBC renewal data (see the provenance document), and a look at 
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync
 - [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md): what carries over from legacy passes and QR codes, and what doesn't
-- [`scripts/legacy-export/README.md`](scripts/legacy-export/README.md): the one-time legacy database export runbook
 - [`slack/README.md`](slack/README.md): the Slack app's manifest, the two scopes it needs, and why it declares nothing inbound
 - [`terraform/README.md`](terraform/README.md): infrastructure, remote state, API token scope
 - [`CLAUDE.md`](CLAUDE.md): how to work in this repository -- bot attribution on pushes, the no-bulk-email rule, no real personal data, warning triage, and the sharp edges

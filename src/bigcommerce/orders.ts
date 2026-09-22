@@ -44,7 +44,8 @@ export function bigCommerceOrderKey(orderId: number | string): string {
  * Idempotent upsert of one membership order. Everything the store reports is
  * refreshed on every sync (status changes such as refunds must land), except:
  * - `member_email`, which may have been re-pointed at the member's current
- *   address (by the legacy import today) and must survive a resync;
+ *   address (by the legacy import, or by an admin's attribution) and must
+ *   survive a resync;
  * - `first_seen_via`, which records provenance.
  *
  * Returns the row's `member_email`: the member this order belongs to.

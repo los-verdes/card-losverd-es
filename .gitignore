@@ -25,7 +25,6 @@ crash.*.log
 # Claude Code scratch state (background-agent worktrees, etc.) - not part of
 # this repo's history.
 .claude/
-.legacy-import-bundle.mjs
 # Apple pass certificate working directory: holds a private key until it is
 # stored in 1Password and pushed. Never commit.
 .apple-pass-cert/
