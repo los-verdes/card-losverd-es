@@ -94,7 +94,7 @@ export async function evaluateSignals(env: Env, now: Date = new Date()): Promise
       detail:
         reports === 0
           ? "No device reported a problem in the last day."
-          : `${reports} reports from devices in the last day (alerting above ${DEVICE_REPORTS_PER_DAY}). These are phones telling us their pass could not register or update; /admin/preflight links what they said.`,
+          : `${reports} reports from devices in the last day (alerting above ${DEVICE_REPORTS_PER_DAY}). These are phones telling us their pass could not register or update; "What phones reported" on /admin/preflight groups them by what went wrong.`,
     },
     staleness("Order resync", await hoursSinceJob(env, "sync_subscriptions_etl", now), 12, "six-hourly"),
     staleness("Pass expiry sweep", await hoursSinceJob(env, "pass_expiry_sweep", now), 36, "daily"),
