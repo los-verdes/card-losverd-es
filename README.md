@@ -34,7 +34,7 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 
 | Environment | Worker | BigCommerce store | URL |
 | :--- | :--- | :--- | :--- |
-| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://card-losverd-es-staging.los-verdes.workers.dev |
+| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://stagingcard.losverd.es |
 | **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card.losverd.es |
 
 `.github/workflows/deploy.yml`:
@@ -46,7 +46,7 @@ Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wr
 
 **Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
 
-`card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Production no longer answers on its `workers.dev` hostname. Staging sets `routes = []`, because named environments inherit routes and staging deploys first.
+`card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Staging is attached the same way, as `stagingcard.losverd.es` (`[[env.staging.routes]]`): named environments inherit routes and staging deploys first, so it must declare its own. With a route in place, neither environment answers on its `workers.dev` hostname.
 
 ## Keeping dependencies current
 
