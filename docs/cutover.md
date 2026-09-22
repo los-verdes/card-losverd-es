@@ -253,9 +253,28 @@ should.
 
 ## 5. Decommission GCP
 
-Through the legacy repository's own `terraform/` configuration -- `terraform
-destroy` or targeted state removal, not console or `gcloud` deletion, so
-Terraform state stays consistent with reality.
+Through the legacy repository's own `terraform/` configuration -- targeted
+`terraform destroy -target=...` or state removal, not console or `gcloud`
+deletion, so Terraform state stays consistent with reality.
+
+> **Targeted destroys only -- never the whole configuration, never the
+> project.** The GCP project (`lv-digital-membership`) still serves this
+> site: it holds the Google OAuth client behind `AUTH_GOOGLE_ID`, which every
+> Google sign-in goes through, and possibly the Google Wallet service account
+> (`GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`; its domain says which project). The
+> legacy Terraform manages more than the old site:
+>
+> - `terraform/bootstrap/` manages the **project itself** and the APIs enabled
+>   on it, including `walletobjects.googleapis.com`. Do not destroy it.
+> - `terraform/` manages the `website` and `worker` service accounts. If
+>   `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` is one of them, destroying it breaks
+>   Google Wallet passes.
+>
+> So destroy by target (Cloud Run, Cloud SQL, the VPC connector, the load
+> balancer, the scheduler jobs), keep billing on the project, and leave the
+> rest until the OAuth client and Wallet service account have an
+> organisation-owned home
+> ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)).
 
 Two gates first, both genuinely blocking:
 
@@ -272,7 +291,9 @@ instance to cold storage as a historical record rather than for restore;
 destroy the Cloud Run service, Cloud SQL instance, VPC connector and load
 balancer; and confirm the billing account shows no daily burn.
 
-Transferring the legacy GCP project itself is deliberately not on this list
--- it is being retired, not moved. What does need an organisation-owned home
-is the Google configuration that outlives it, which is tracked in
-[#158](https://github.com/los-verdes/card-losverd-es/issues/158).
+The project itself stays until the Google configuration this site still
+uses -- the OAuth client, and the Wallet service account if it lives there --
+has an organisation-owned home, whether by moving the project into a Los
+Verdes organisation or by recreating those pieces elsewhere
+([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Only then
+can what remains of it be deleted.
