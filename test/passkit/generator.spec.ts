@@ -141,8 +141,19 @@ describe("buildPassJson", () => {
     expect(parse(makeMember({ expirationDate: "2024-02-17" })).expirationDate).toBe("2024-02-17T23:59:59+00:00");
   });
 
-  it("states no expiry to Wallet without one on record, as for a revoked membership", () => {
-    expect("expirationDate" in parse(makeMember({ expirationDate: null }))).toBe(false);
+  it.each(["expired", "revoked"] as const)(
+    "expires a %s pass with no date on record at the moment it is built, so Wallet files it away",
+    (status) => {
+      // No counting orders left (refunded, or attributed to someone else), or
+      // revoked: there is no date to state, but the pass must not stay in
+      // Wallet's main list looking current.
+      const expected = `${BUILT_AT.toISOString().slice(0, 19)}+00:00`;
+      expect(parse(makeMember({ status, expirationDate: null })).expirationDate).toBe(expected);
+    },
+  );
+
+  it("states no expiry for a current membership without a date, which the rules never produce", () => {
+    expect("expirationDate" in parse(makeMember({ status: "active", expirationDate: null }))).toBe(false);
   });
 
   it("omits the expiry field when there's no expiration on record", () => {
