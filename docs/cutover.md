@@ -291,6 +291,20 @@ instance to cold storage as a historical record rather than for restore;
 destroy the Cloud Run service, Cloud SQL instance, VPC connector and load
 balancer; and confirm the billing account shows no daily burn.
 
+**Where this stands (2026-09-22).** The turndown has started
+([digital-membership#77](https://github.com/los-verdes/digital-membership/pull/77)):
+the Cloud Run service and its domain mapping, the Pub/Sub topic and
+subscription, and the scheduler jobs are gone. The old site had already
+stopped working properly, so nothing was lost by switching it off early.
+What remains, on purpose:
+
+- **The Cloud SQL instance** -- kept a couple more weeks, then destroyed.
+  It is also what the Data Studio report reads, so the reporting gate above
+  still applies to it.
+- **The statics bucket, the OAuth client and the Wallet components** --
+  kept indefinitely. Google sign-in was checked after the turndown and
+  still works against the same client.
+
 The project itself stays until the Google configuration this site still
 uses -- the OAuth client, and the Wallet service account if it lives there --
 has an organisation-owned home, whether by moving the project into a Los
