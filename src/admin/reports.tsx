@@ -184,6 +184,25 @@ const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> =
  *
  * `children` is the table's `<tbody>` (and `<tfoot>`, if it has totals).
  */
+/**
+ * How tall a report table may get before it scrolls in place. These tables run
+ * to thousands of rows -- the Slack cross-reference alone has four of them --
+ * and a page that long buries whatever follows it.
+ *
+ * A scrolling box rather than paging: paging four independent tables means
+ * either four sets of query parameters or client-side state, and the full data
+ * is a CSV link away regardless. Sorting still sorts the whole table, which
+ * paging would have broken.
+ */
+const TABLE_MAX_HEIGHT = "30rem";
+
+/**
+ * A heading that stays put while its table scrolls. The underline is a
+ * box-shadow rather than the usual border because `border-collapse: collapse`
+ * hands borders to the table, which scrolls away from the sticky cell.
+ */
+const STICKY_HEADING_STYLE = `${cellStyle}; position: sticky; top: 0; background: var(--bg); box-shadow: inset 0 -1px var(--rule)`;
+
 const ReportTable: FC<
   PropsWithChildren<{ headings: readonly string[]; csvHref: string; csvLabel: string; empty?: string; rowCount: number }>
 > = ({ headings, csvHref, csvLabel, empty, rowCount, children }) =>
@@ -194,12 +213,12 @@ const ReportTable: FC<
       <p>
         <a href={csvHref}>{csvLabel}</a>
       </p>
-      <div style="overflow-x: auto">
+      <div style={`overflow: auto; max-height: ${TABLE_MAX_HEIGHT}`}>
         <table data-sortable style="border-collapse: collapse; font-size: 0.9rem">
           <thead>
             <tr>
               {headings.map((heading) => (
-                <th style={cellStyle}>{heading}</th>
+                <th style={STICKY_HEADING_STYLE}>{heading}</th>
               ))}
             </tr>
           </thead>
