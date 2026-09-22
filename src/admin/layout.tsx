@@ -2,6 +2,7 @@
 
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
+import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
 import { AdminNav } from "./nav";
 import { TABLE_SORT_SCRIPT } from "./tableSort";
@@ -22,6 +23,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <AdminNav />
       <h1>{title}</h1>
       {children}
+      <SiteFooter />
       <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
       <script dangerouslySetInnerHTML={{ __html: TABLE_SORT_SCRIPT }} />
     </body>
