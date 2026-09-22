@@ -649,10 +649,8 @@ or a change, not an open-ended design exercise.
    marks an order paid — `Awaiting Fulfillment` and `Awaiting Shipment` both
    count — and the membership year is measured from the date the order was
    placed, not the date anything shipped. The automatic card-delivery email
-   now follows the same rule, so a member is told about their card at the
-   moment they have one. It used to wait for `Completed`, which in this store
-   is set by hand and often never reached, leaving orders parked in `Shipped`
-   with a working card nobody had mentioned.
+   follows the same rule, so a member is told about their card at the moment
+   they have one.
 
 2. **Should a refund or cancellation retroactively remove a membership?**
    Currently yes, and immediately: the order stops counting, so the card's
