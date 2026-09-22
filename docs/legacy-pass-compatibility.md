@@ -110,7 +110,16 @@ the pass *class*), so nothing is lost if the id changes.
 
 **D1 — Legacy serial mapping: none.** Legacy pass updates never worked
 (§3.1), so installed passes simply keep displaying until the member gets a
-new pass, which is the status quo. Consequence: the plan's Phase 2.2
+new pass, which is the status quo.
+
+Their phones keep asking to register for updates regardless, and report
+every failure to `/passkit/v1/log`: the previous site answered 404, and
+this one would answer 401. So a serial that is a known legacy card (its
+128-bit integer converted back to the UUID in `legacy_membership_cards`)
+is acknowledged instead -- `200` to register and unregister, with nothing
+stored, and `304` when a newer copy is asked for -- and the phone stops
+retrying (`src/passkit/legacyPasses.ts`). In the week after cutover that
+was about thirty old passes on about thirty phones. Consequence: the plan's Phase 2.2
 **pass-state migration (`auth_token` / `devices` / `registrations`) is
 dropped**, since it only existed to keep installed passes updating. Passes
 issued by this stack do receive updates (Phase 4.7 APNs), confirmed on a real

@@ -3,6 +3,7 @@ import type { Env } from "../index";
 import { getApplePassBundle, getMemberById } from "../member/artifacts";
 import { consumeRateLimit, type RateLimitRule } from "../lib/rateLimit";
 import { verifyPassAuthorization } from "../middleware/auth";
+import { isLegacyPassSerial } from "./legacyPasses";
 
 const passkit = new Hono<{ Bindings: Env }>();
 
@@ -18,6 +19,11 @@ passkit.post(
       c.req.param();
 
     const member = await getMemberById(c.env, serialNumber);
+    if (!member && (await isLegacyPassSerial(c.env, serialNumber))) {
+      // A pass from the previous site: acknowledged, nothing stored, so the
+      // phone stops retrying (./legacyPasses.ts).
+      return c.text("OK", 200);
+    }
     if (
       !member ||
       !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
@@ -115,6 +121,10 @@ passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   const { serialNumber } = c.req.param();
 
   const member = await getMemberById(c.env, serialNumber);
+  if (!member && (await isLegacyPassSerial(c.env, serialNumber))) {
+    // A pass from the previous site has no newer copy here (./legacyPasses.ts).
+    return c.body(null, 304);
+  }
   if (
     !member ||
     !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
@@ -149,6 +159,11 @@ passkit.delete(
     const { deviceLibraryIdentifier, serialNumber } = c.req.param();
 
     const member = await getMemberById(c.env, serialNumber);
+    if (!member && (await isLegacyPassSerial(c.env, serialNumber))) {
+      // A pass from the previous site: acknowledged, nothing stored, so the
+      // phone stops retrying (./legacyPasses.ts).
+      return c.text("OK", 200);
+    }
     if (
       !member ||
       !verifyPassAuthorization(c.req.header("authorization"), member.auth_token)
