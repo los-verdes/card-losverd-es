@@ -8,9 +8,11 @@
 
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import type { Env } from "../index";
 import { Page, SUPPORT_EMAIL } from "../member/layout";
+import { recordOpsEvent } from "../ops/events";
 
-export function handleServerError(err: Error, c: Context): Response | Promise<Response> {
+export async function handleServerError(err: Error, c: Context<{ Bindings: Env }>): Promise<Response> {
   // Deliberate responses thrown as exceptions (e.g. hono/csrf's 403).
   if (err instanceof HTTPException) {
     return err.getResponse();
@@ -25,6 +27,12 @@ export function handleServerError(err: Error, c: Context): Response | Promise<Re
     rayId,
     error: err.stack ?? String(err),
   });
+
+  // Counted as well as logged, so the hourly watch can see a rate rather
+  // than a line (src/ops/watch.ts). The path only, never the query string.
+  // Awaited rather than deferred: this runs only on a 500, and a count that
+  // depends on the request not being cancelled is not a count.
+  await recordOpsEvent(c.env, "unhandled_error", `${c.req.method} ${c.req.path}`);
 
   c.header("Cache-Control", "no-store");
   if (!c.req.header("accept")?.includes("text/html")) {
