@@ -169,11 +169,12 @@ max_retries = 0
 
 # The scheduled jobs (src/scheduled.ts), on the same schedules as staging: the
 # Slack members sync, the BigCommerce resync that repairs anything a webhook
-# missed, and the weekly readiness check. See [env.staging.triggers] at the end
+# missed, the weekly readiness check, and the daily refresh of lapsed
+# members' passes. See [env.staging.triggers] at the end
 # of this file for why each runs when it does. A resync never emails anyone
 # (src/email/newOrder.ts).
 [triggers]
-crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
+crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1", "30 0 * * *"]
 
 # =============================================================================
 # Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
@@ -278,11 +279,12 @@ max_retries = 0
 [env.staging.triggers]
 # "0 */6 * * *" the Slack members sync; "15 */6 * * *" the BigCommerce resync;
 # "0 9 * * 1" the weekly readiness check, which posts failures to Slack, and
-# an all-clear while READINESS_POST_WHEN_HEALTHY is "true". Each maps to a
-# message in src/scheduled.ts.
+# an all-clear while READINESS_POST_WHEN_HEALTHY is "true"; "30 0 * * *" the
+# daily refresh of passes whose membership lapsed yesterday (#295). Each maps
+# to a message in src/scheduled.ts.
 #
 # The Slack sync is offset a quarter-hour from the resync rather than sharing
 # its schedule: the queue runs one consumer at a time, so two jobs due
 # together would simply queue behind each other, and staggering them keeps a
 # slow run of one from delaying the other.
-crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
+crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1", "30 0 * * *"]

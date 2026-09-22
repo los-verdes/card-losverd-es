@@ -423,11 +423,16 @@ back of an Apple pass and the state Google Wallet is told are both worked out
 at the moment a pass is built (`effectiveStatus()` in
 `src/member/artifacts.ts`), from the expiry date and from those two tables.
 
-One real limit sits underneath all of this: a pass already on a phone is not
-rebuilt merely because a date passed. It is corrected the next time it is
-rebuilt — a renewal, an attribution, a re-download — so an installed pass can
-go on saying "active" for a while after the membership lapsed, even though
-every access check already refuses it.
+A pass already on a phone also knows when it ends. Both wallets are told the
+moment the membership runs out -- the end of its expiry date, UTC, the same
+moment the site stops calling it current -- and move the pass to their
+expired passes by themselves, even on a phone that is offline (Google may take
+up to a day). The pass's own contents, such as the "Expired" note on the back
+of an Apple pass, are rewritten by a daily job that refreshes the passes of
+every membership that lapsed the day before (`src/member/passExpirySweep.ts`).
+A pass for somebody with no membership left at all, or a revoked one, has no
+date to state; it states the moment it was rebuilt instead, so Apple Wallet
+files it away too, and Google's copy is marked expired or inactive.
 
 ### Which orders count
 
@@ -600,7 +605,11 @@ to `recipient@example.com`, that year's
 expiry moves off the buyer's card and onto the recipient's, and the recipient
 gets a membership record — and a new card — if they did not already have one.
 If the buyer has other counted orders, their own card simply falls back to the
-furthest expiry among those.
+furthest expiry among those. If they have none, they are no longer a member:
+their record is kept, with no expiry, so the same card comes back to life if
+they buy again. Their wallet passes are told, and both wallets move them to
+their expired passes. Scanning the card's QR code says the membership is not
+current either way, because it checks at the moment of the scan.
 
 Two safeguards keep an attribution from being quietly undone. The routine
 BigCommerce sync refreshes everything the store reports about an order but

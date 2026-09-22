@@ -204,7 +204,7 @@ secrets-status env:
 # re-running one after fixing what broke it. Production needs
 # --yes-production.
 #
-# Run a scheduled job now: slack, resync, full-resync or readiness
+# Run a scheduled job now: slack, resync, full-resync, readiness, or the one-off refresh-lapsed-passes
 etl-run env job *flags:
     CLOUDFLARE_API_TOKEN='op://{{ op_vault }}/lv-card-losverd-es-github-workflows/applier_token'     CLOUDFLARE_ACCOUNT_ID='{{ account_id }}'     op run -- node scripts/etl-run.mjs {{ env }} {{ job }} {{ flags }}
 

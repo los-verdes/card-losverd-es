@@ -16,6 +16,7 @@
 //   just etl-run staging resync       # the BigCommerce order resync
 //   just etl-run staging full-resync  # the same, over the whole store
 //   just etl-run staging readiness    # the readiness checks
+//   just etl-run staging refresh-lapsed-passes  # one-off: lapsed members' passes (#295)
 //   just etl-run production slack --yes-production
 
 import { sendQueueMessage } from "./lib/cloudflareQueue.ts";
@@ -47,6 +48,10 @@ const JOBS = {
   "full-resync": {
     message: { type: "sync_subscriptions_etl", loadAll: true },
     does: "Re-reads every order in the BigCommerce store, not just recent ones, and rebuilds every membership. For a database that was just rebuilt or imported (docs/cutover.md step 8). Never emails anyone.",
+  },
+  "refresh-lapsed-passes": {
+    message: { type: "refresh_lapsed_passes" },
+    does: "Refreshes the wallet passes of every member whose membership has already lapsed, so passes still saying \"active\" update (#295). A one-off; the daily sweep handles lapses from then on. Pushes to devices; never emails anyone.",
   },
   readiness: {
     message: { type: "run_readiness_check" },

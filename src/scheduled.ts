@@ -17,6 +17,9 @@ const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   // leaves four warnings before it lapses. It posts only when something has
   // actually failed (src/admin/readinessAlert.ts).
   "0 9 * * 1": { type: "run_readiness_check" },
+  // Daily, just after midnight UTC: a membership ends at 23:59:59 UTC on its
+  // expiry date, so by now yesterday's lapses are final (#295).
+  "30 0 * * *": { type: "run_pass_expiry_sweep" },
 };
 
 /**

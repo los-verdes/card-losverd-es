@@ -75,6 +75,11 @@ interface PassJson {
   logoText: string;
   authenticationToken: string;
   webServiceURL: string;
+  /**
+   * When Wallet should treat the pass as expired by itself, with no push
+   * (#295). See `passExpirationDate()`.
+   */
+  expirationDate?: string;
 }
 
 /**
@@ -147,7 +152,42 @@ export async function buildManifest(
  * pass, the last detail of a Google one -- so that a member can be asked what
  * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
-export const PASS_CONTENT_VERSION = "2026-09-18.1";
+export const PASS_CONTENT_VERSION = "2026-09-22.1";
+
+/**
+ * The moment a membership ends, for the wallets' own expiry fields (#295):
+ * the end of its expiry date, in UTC, because `isMembershipCurrent()` compares
+ * UTC dates -- a pass must not expire on the phone while the site still calls
+ * the membership current, or the other way round. Written with an explicit
+ * offset rather than `Z`, the form Apple's documentation uses.
+ */
+export function membershipEndsAt(expirationDate: string): string {
+  return `${expirationDate}T23:59:59+00:00`;
+}
+
+/**
+ * What an Apple pass states as its expiry.
+ *
+ * A membership with an expiry date ends when that date does. One without --
+ * somebody whose last counting order was refunded or attributed to someone
+ * else, or whose membership was revoked -- has no date to state, but must
+ * not be left looking current: Wallet would keep it in the main list as an
+ * ordinary card. So it states the moment it was built, already past by the
+ * time a phone shows it, and Wallet moves it to its expired passes. Google
+ * needs no equivalent: its object carries `state: EXPIRED` or `INACTIVE`,
+ * which Google acts on directly.
+ *
+ * `undefined` only for a current membership with no expiry, which the
+ * membership rules never produce; stating nothing is the safe answer there.
+ */
+export function passExpirationDate(
+  member: Pick<MemberPassInput, "status" | "expirationDate">,
+  builtAt: Date,
+): string | undefined {
+  if (member.expirationDate) return membershipEndsAt(member.expirationDate);
+  if (member.status !== "active") return `${builtAt.toISOString().slice(0, 19)}+00:00`;
+  return undefined;
+}
 
 export function buildPassJson(
   member: MemberPassInput,
@@ -251,6 +291,7 @@ export function buildPassJson(
     logoText: "Los Verdes",
     authenticationToken: member.authToken,
     webServiceURL: config.webServiceURL,
+    ...(passExpirationDate(member, builtAt) ? { expirationDate: passExpirationDate(member, builtAt) } : {}),
   };
 
   return new TextEncoder().encode(JSON.stringify(pass));
