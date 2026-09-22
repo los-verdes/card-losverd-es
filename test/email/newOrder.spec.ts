@@ -140,11 +140,22 @@ describe("a new order reaching Completed", () => {
     expect(sentTo()).toEqual(["new.member@example.com"]);
   });
 
-  it("waits for Completed: an order that arrives awaiting fulfillment emails only once it completes", async () => {
+  it("emails as soon as the order is paid for, without waiting to be marked Completed", async () => {
+    // Completed is set by hand in this store and often never reached, so an
+    // order sitting in Shipped used to mean a working card nobody was told
+    // about.
+    const awaiting = makeOrder({ status: "Awaiting Fulfillment" });
+    mockUpstreams([awaiting]);
+
+    await syncBigCommerceOrder(env, "store123", awaiting.id);
+
+    expect(sentTo()).toEqual(["new.member@example.com"]);
+  });
+
+  it("does not send again when that same order is later marked Completed", async () => {
     const awaiting = makeOrder({ status: "Awaiting Fulfillment" });
     mockUpstreams([awaiting]);
     await syncBigCommerceOrder(env, "store123", awaiting.id);
-    expect(sentTo()).toEqual([]);
 
     vi.restoreAllMocks();
     mockUpstreams([makeOrder()]);
@@ -152,6 +163,18 @@ describe("a new order reaching Completed", () => {
 
     expect(sentTo()).toEqual(["new.member@example.com"]);
   });
+
+  it.each(["Shipped", "Awaiting Shipment", "Partially Shipped"])(
+    "emails for an order that arrives as %s, which counts as a membership",
+    async (status) => {
+      const order = makeOrder({ status });
+      mockUpstreams([order]);
+
+      await syncBigCommerceOrder(env, "store123", order.id);
+
+      expect(sentTo()).toEqual(["new.member@example.com"]);
+    },
+  );
 
   it("sends nothing for an order that never counts as a membership", async () => {
     const order = makeOrder({ status: "Refunded" });

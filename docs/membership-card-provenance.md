@@ -454,7 +454,9 @@ excluded, and the exclusions fall into two groups: not yet paid (`Incomplete`,
 `Pending`, `Awaiting Payment`) and money returned or the sale undone
 (`Refunded`, `Partially Refunded`, `Cancelled`, `Declined`, `Disputed`, and
 any other status the store may report). The list is an allow-list, so an
-unfamiliar BigCommerce status does not confer membership. `Partially
+unfamiliar BigCommerce status does not confer membership. The same list
+decides when a new member is emailed their card, so a card that verifies is
+one its member has been told about. `Partially
 Refunded` sits in the second group on purpose: the status cannot say which
 part of the order was refunded, and the rule does not confer membership on a
 refund it cannot read.
@@ -646,10 +648,11 @@ or a change, not an open-ended design exercise.
    once the order ships?** Currently membership starts as soon as the store
    marks an order paid — `Awaiting Fulfillment` and `Awaiting Shipment` both
    count — and the membership year is measured from the date the order was
-   placed, not the date anything shipped. (A related wrinkle: the automatic
-   card-delivery email is only sent once an order reaches `Completed`,
-   so a member can be current for a while before the software emails them
-   their card.)
+   placed, not the date anything shipped. The automatic card-delivery email
+   now follows the same rule, so a member is told about their card at the
+   moment they have one. It used to wait for `Completed`, which in this store
+   is set by hand and often never reached, leaving orders parked in `Shipped`
+   with a working card nobody had mentioned.
 
 2. **Should a refund or cancellation retroactively remove a membership?**
    Currently yes, and immediately: the order stops counting, so the card's
