@@ -45,7 +45,12 @@ export const Page: FC<
     </head>
     <body class="member">
       {nav}
-      <main>{children}</main>
+      <main>
+        {children}
+        <p class="muted" style="margin-top: 2rem; font-size: 0.85rem">
+          <a href="/privacy-policy">Privacy</a>
+        </p>
+      </main>
       <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
       <WebAnalyticsBeacon />
     </body>
