@@ -10,6 +10,7 @@
 
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
+import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
 import { WebAnalyticsBeacon } from "./webAnalytics";
 
@@ -47,9 +48,7 @@ export const Page: FC<
       {nav}
       <main>
         {children}
-        <p class="muted" style="margin-top: 2rem; font-size: 0.85rem">
-          <a href="/privacy-policy">Privacy</a>
-        </p>
+        <SiteFooter />
       </main>
       <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
       <WebAnalyticsBeacon />
