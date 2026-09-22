@@ -164,7 +164,7 @@ action, or an answer to a question the issue poses.
   `just test-coverage` before pushing.
 - **Delete from tables that reference `members` before `members` itself.**
   D1 enforces the foreign keys, so a spec whose `afterEach` deletes members
-  while a `revoked_cards` or `banned_people` row survives fails the delete,
+  while a `revoked_cards` or `expelled_people` row survives fails the delete,
   leaves the rows behind, and the *next* test collides with them. The symptom
   is a `UNIQUE constraint` error in a test that looks unrelated to the one
   that actually broke.

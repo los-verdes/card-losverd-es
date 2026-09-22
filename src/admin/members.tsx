@@ -33,7 +33,7 @@ import {
   restoreCard,
   revokeCard,
 } from "../member/revocation";
-import { MAX_BAN_NOTE_LENGTH, banPerson, isBanned, liftBan } from "../member/ban";
+import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } from "../member/expulsion";
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
@@ -96,8 +96,8 @@ const Summary: FC<{
   orders: MemberOrder[];
   nameSetBy: string | null;
   nameSetByEmail: string | null;
-  banned: boolean;
-}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, banned }) => (
+  expelled: boolean;
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled }) => (
   <>
     <h2>{cardNameText(member)}</h2>
     {member.display_name && (
@@ -221,7 +221,7 @@ const Summary: FC<{
       </>
     )}
     <h3>Expelled from the group</h3>
-    {banned ? (
+    {expelled ? (
       <>
         <p class="danger">
           <strong>This person has been expelled from Los Verdes.</strong> They cannot sign
@@ -231,7 +231,7 @@ const Summary: FC<{
         </p>
         <form method="post" action={MEMBERS_PATH}>
           <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="unban" />
+          <input type="hidden" name="action" value="readmit" />
           <button type="submit">Lift this expulsion</button>
         </form>
       </>
@@ -246,15 +246,15 @@ const Summary: FC<{
         </p>
         <form method="post" action={MEMBERS_PATH}>
           <input type="hidden" name="email" value={member.email} />
-          <input type="hidden" name="action" value="ban" />
-          <label for="ban_note">
+          <input type="hidden" name="action" value="expel" />
+          <label for="expulsion_note">
             Why (kept, because whoever is asked about this later will not be you)
           </label>
           <input
-            id="ban_note"
-            name="ban_note"
+            id="expulsion_note"
+            name="expulsion_note"
             type="text"
-            maxlength={MAX_BAN_NOTE_LENGTH}
+            maxlength={MAX_EXPULSION_NOTE_LENGTH}
             autocomplete="off"
           />
           <button type="submit">Expel this person from the group</button>
@@ -402,12 +402,12 @@ members.get("/", async (c) => {
     if (!member) notFound = "No membership carries that card number.";
   }
 
-  const [footprint, orders, override, banned] = member
+  const [footprint, orders, override, expelled] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
         getDisplayName(c.env, member.email),
-        isBanned(c.env, member.email),
+        isExpelled(c.env, member.email),
       ])
     : [null, [], null, false];
 
@@ -444,13 +444,13 @@ members.get("/", async (c) => {
           Membership revoked. Their passes have been told.
         </p>
       )}
-      {c.req.query("saved") === "banned" && (
+      {c.req.query("saved") === "expelled" && (
         <p style="color: var(--success)">
           Expelled from the group. They can no longer sign in, and their membership
           is suppressed.
         </p>
       )}
-      {c.req.query("saved") === "unbanned" && (
+      {c.req.query("saved") === "readmitted" && (
         <p style="color: var(--success)">
           Expulsion lifted. Any membership it was suppressing is back.
         </p>
@@ -475,7 +475,7 @@ members.get("/", async (c) => {
           orders={orders}
           nameSetBy={override?.source ?? null}
           nameSetByEmail={override?.set_by_email ?? null}
-          banned={banned}
+          expelled={expelled}
         />
       )}
     </AdminPage>,
@@ -495,18 +495,18 @@ members.post("/", csrf(), async (c) => {
 
   if (!email) return back({ error: "No member to set a name for." });
 
-  if (form.action === "ban" || form.action === "unban") {
-    if (form.action === "unban") {
-      return (await liftBan(c.env, email, c.get("session").userId))
-        ? back({ saved: "unbanned" })
+  if (form.action === "expel" || form.action === "readmit") {
+    if (form.action === "readmit") {
+      return (await readmitPerson(c.env, email, c.get("session").userId))
+        ? back({ saved: "readmitted" })
         : back({ error: "That person has not been expelled." });
     }
     const note =
-      typeof form.ban_note === "string" && form.ban_note.trim() !== ""
-        ? form.ban_note.trim()
+      typeof form.expulsion_note === "string" && form.expulsion_note.trim() !== ""
+        ? form.expulsion_note.trim()
         : null;
-    return (await banPerson(c.env, email, note, c.get("session").userId))
-      ? back({ saved: "banned" })
+    return (await expelPerson(c.env, email, note, c.get("session").userId))
+      ? back({ saved: "expelled" })
       : back({ error: "That person has already been expelled." });
   }
 

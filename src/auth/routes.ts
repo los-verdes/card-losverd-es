@@ -3,8 +3,8 @@ import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import type { Env } from "../index";
-import { BANNED_REASON, LOGIN_PATH } from "../middleware/auth";
-import { isUserBanned } from "../member/ban";
+import { EXPELLED_REASON, LOGIN_PATH } from "../middleware/auth";
+import { isUserExpelled } from "../member/expulsion";
 import { recordOutcome } from "../lib/outcome";
 import { isAppleRelayAddress } from "../member/portal";
 import { LV_PROVIDER_CLAIM, LV_USER_ID_CLAIM, authConfig } from "./authjs";
@@ -44,7 +44,7 @@ auth.get(LOGIN_PATH, (c) => {
       signInHref: signIn.pathname + signIn.search,
       providers: configuredProviders(c.env),
       failed: c.req.query("error") !== undefined,
-      blocked: c.req.query("error") === BANNED_REASON,
+      blocked: c.req.query("error") === EXPELLED_REASON,
     }),
   );
 });
@@ -91,12 +91,12 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
   }
 
   // The one place a session is created from a sign-in, so the one place a
-  // ban has to be enforced for new ones. `requireAuth` covers sessions
+  // an expulsion has to be enforced for new ones. `requireAuth` covers sessions
   // already issued.
-  if (await isUserBanned(c.env, user.id)) {
-    console.warn("login bridge: not completing sign-in", { reason: BANNED_REASON });
-    recordOutcome("signin.refused", { reason: BANNED_REASON });
-    return c.redirect(`${LOGIN_PATH}?error=${BANNED_REASON}`);
+  if (await isUserExpelled(c.env, user.id)) {
+    console.warn("login bridge: not completing sign-in", { reason: EXPELLED_REASON });
+    recordOutcome("signin.refused", { reason: EXPELLED_REASON });
+    return c.redirect(`${LOGIN_PATH}?error=${EXPELLED_REASON}`);
   }
 
   const token = await issueSessionToken(c.env.SESSION_SIGNING_KEY, {

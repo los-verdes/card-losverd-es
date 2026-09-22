@@ -17,7 +17,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { restoreCard, revokedCards, type RevokedCard } from "../member/revocation";
-import { bannedPeople, liftBan, type BannedPerson } from "../member/ban";
+import { expelledPeople, readmitPerson, type ExpelledPerson } from "../member/expulsion";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 
@@ -52,19 +52,19 @@ const Row: FC<{ card: RevokedCard }> = ({ card }) => (
   </tr>
 );
 
-const BanRow: FC<{ person: BannedPerson }> = ({ person }) => (
+const ExpulsionRow: FC<{ person: ExpelledPerson }> = ({ person }) => (
   <tr>
     <td style={cellStyle}>
       <a href={`/admin/members?q=${encodeURIComponent(person.email)}`}>{person.email}</a>
     </td>
-    <td style={cellStyle}>{new Date(person.banned_at).toISOString().slice(0, 10)}</td>
-    <td style={cellStyle}>{person.banned_by_email ?? "unknown"}</td>
+    <td style={cellStyle}>{new Date(person.expelled_at).toISOString().slice(0, 10)}</td>
+    <td style={cellStyle}>{person.expelled_by_email ?? "unknown"}</td>
     <td style={cellStyle}>{person.has_membership ? "yes" : "no"}</td>
     <td style={cellStyle}>{person.note ?? ""}</td>
     <td style={cellStyle}>
       <form method="post" action={REVOCATIONS_PATH}>
         <input type="hidden" name="email" value={person.email} />
-        <input type="hidden" name="action" value="unban" />
+        <input type="hidden" name="action" value="readmit" />
         <button type="submit">Lift</button>
       </form>
     </td>
@@ -72,7 +72,7 @@ const BanRow: FC<{ person: BannedPerson }> = ({ person }) => (
 );
 
 revocations.get("/", async (c) => {
-  const [cards, banned] = await Promise.all([revokedCards(c.env), bannedPeople(c.env)]);
+  const [cards, expelled] = await Promise.all([revokedCards(c.env), expelledPeople(c.env)]);
   return c.html(
     <AdminPage title="Revoked and expelled">
       <h2>Revoked memberships</h2>
@@ -90,7 +90,7 @@ revocations.get("/", async (c) => {
       {c.req.query("saved") === "restored" && (
         <p style="color: var(--success)">Membership restored.</p>
       )}
-      {c.req.query("saved") === "unbanned" && (
+      {c.req.query("saved") === "readmitted" && (
         <p style="color: var(--success)">
           Expulsion lifted. Any membership it was suppressing is back.
         </p>
@@ -125,7 +125,7 @@ revocations.get("/", async (c) => {
         should be.
         Lifting one restores whatever membership it was suppressing.
       </p>
-      {banned.length === 0 ? (
+      {expelled.length === 0 ? (
         <p>Nobody has been expelled.</p>
       ) : (
         <div style="overflow-x: auto">
@@ -138,8 +138,8 @@ revocations.get("/", async (c) => {
               </tr>
             </thead>
             <tbody>
-              {banned.map((person) => (
-                <BanRow person={person} />
+              {expelled.map((person) => (
+                <ExpulsionRow person={person} />
               ))}
             </tbody>
           </table>
@@ -155,11 +155,11 @@ revocations.post("/", csrf(), async (c) => {
   const back = (params: Record<string, string>) =>
     c.redirect(`${REVOCATIONS_PATH}?${new URLSearchParams(params)}`, 303);
 
-  if (form.action === "unban") {
+  if (form.action === "readmit") {
     const email = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
     if (!email) return back({ error: "No expulsion to lift." });
-    return (await liftBan(c.env, email, c.get("session").userId))
-      ? back({ saved: "unbanned" })
+    return (await readmitPerson(c.env, email, c.get("session").userId))
+      ? back({ saved: "readmitted" })
       : back({ error: "That person has not been expelled." });
   }
 

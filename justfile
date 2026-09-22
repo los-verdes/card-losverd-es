@@ -92,11 +92,11 @@ db-rebuild env:
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
     npx wrangler d1 execute "$db" --remote "${envflag[@]}" --json \
-      --command "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 4) != '_cf_' ORDER BY name" \
+      --command "SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 4) != '_cf_' ORDER BY name" \
       > "$work/tables.json"
     node scripts/db-drop-sql.mjs "$work/tables.json" "$work/drop.sql"
     echo
-    read -r -p "Type '{{ env }}' to drop every table above in $db: " answer
+    read -r -p "Type '{{ env }}' to drop everything above in $db: " answer
     if [ "$answer" != "{{ env }}" ]; then echo "Not confirmed; nothing was changed."; exit 1; fi
     npx wrangler d1 execute "$db" --remote "${envflag[@]}" --file "$work/drop.sql"
     npx wrangler d1 migrations apply DB --remote "${envflag[@]}"

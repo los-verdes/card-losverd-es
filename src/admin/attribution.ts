@@ -99,7 +99,7 @@ export async function emailFootprint(
         `SELECT m.member_id, (r.member_id IS NOT NULL OR b.email IS NOT NULL) AS revoked, m.expiration_date
          FROM members m
               LEFT JOIN revoked_cards r ON r.member_id = m.member_id
-              LEFT JOIN banned_people b ON b.email = m.email
+              LEFT JOIN expelled_people b ON b.email = m.email
          WHERE m.email = ?1`,
       )
       .bind(email),

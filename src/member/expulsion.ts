@@ -1,18 +1,18 @@
 /**
  * Expelling somebody from the group, and lifting that again (#31).
  *
- * A ban is the heavier of the two things an admin can do to a person here,
+ * An expulsion is the heavier of the two things an admin can do to a person here,
  * and the difference from a revoked card is worth keeping straight:
  *
  * - **A revoked card** stops the card working. They can still sign in and
  *   still exist here.
- * - **A ban** also stops them signing in at all, takes effect on sessions
+ * - **An expulsion** also stops them signing in at all, takes effect on sessions
  *   they already hold, and revokes whatever membership they have.
  *
  * The membership half is not written down anywhere. `MEMBER_SELECT` resolves
- * a ban into the same `revoked` status a revoked card produces, so lifting
- * a ban restores the membership by itself, and somebody who is both banned
- * and separately revoked stays revoked when the ban is lifted.
+ * an expulsion into the same `revoked` status a revoked card produces, so lifting
+ * an expulsion restores the membership by itself, and somebody who is both expelled
+ * and separately revoked stays revoked when the expulsion is lifted.
  *
  * Indefinite on purpose. In practice these run a couple of years, but a date
  * that expired on its own would put a person back in without anybody
@@ -26,21 +26,21 @@ import { getMemberByEmail } from "./artifacts";
 import { notifyWalletsUpdated } from "./walletUpdates";
 
 /** Long enough to explain a decision, short enough to stay a note. */
-export const MAX_BAN_NOTE_LENGTH = 500;
+export const MAX_EXPULSION_NOTE_LENGTH = 500;
 
-export interface BannedPerson {
+export interface ExpelledPerson {
   email: string;
   note: string | null;
-  banned_by_email: string | null;
-  banned_at: number;
-  /** Whether they hold a membership this ban is currently suppressing. */
+  expelled_by_email: string | null;
+  expelled_at: number;
+  /** Whether they hold a membership this expulsion is currently suppressing. */
   has_membership: number;
 }
 
 /** Whether this address is expelled. Read on every authenticated request. */
-export async function isBanned(env: Env, email: string): Promise<boolean> {
+export async function isExpelled(env: Env, email: string): Promise<boolean> {
   const row = await env.DB.prepare(
-    "SELECT 1 AS present FROM banned_people WHERE email = ?",
+    "SELECT 1 AS present FROM expelled_people WHERE email = ?",
   )
     .bind(email.trim().toLowerCase())
     .first<{ present: number }>();
@@ -51,14 +51,14 @@ export async function isBanned(env: Env, email: string): Promise<boolean> {
  * Whether the person this session belongs to is expelled.
  *
  * By user id rather than address, because that is what a session carries.
- * One indexed lookup, on every authenticated request: a ban that only took
+ * One indexed lookup, on every authenticated request: an expulsion that only took
  * effect at the next sign-in would leave somebody inside for as long as
- * their session lasted, which is the opposite of what a ban is for.
+ * their session lasted, which is the opposite of what an expulsion is for.
  */
-export async function isUserBanned(env: Env, userId: number): Promise<boolean> {
+export async function isUserExpelled(env: Env, userId: number): Promise<boolean> {
   const row = await env.DB.prepare(
     `SELECT 1 AS present
-       FROM users u JOIN banned_people b ON b.email = lower(u.email)
+       FROM users u JOIN expelled_people b ON b.email = lower(u.email)
       WHERE u.id = ?`,
   )
     .bind(userId)
@@ -66,19 +66,19 @@ export async function isUserBanned(env: Env, userId: number): Promise<boolean> {
   return row !== null;
 }
 
-export async function banPerson(
+export async function expelPerson(
   env: Env,
   email: string,
   note: string | null,
-  bannedBy: number | null,
+  expelledBy: number | null,
 ): Promise<boolean> {
   const key = email.trim().toLowerCase();
   const result = await env.DB.prepare(
-    `INSERT INTO banned_people (email, note, banned_by)
+    `INSERT INTO expelled_people (email, note, expelled_by)
      VALUES (?1, ?2, ?3)
      ON CONFLICT(email) DO NOTHING`,
   )
-    .bind(key, note, bannedBy)
+    .bind(key, note, expelledBy)
     .run();
   // Already expelled: leave the original note, author and date alone rather
   // than restamping somebody else's decision.
@@ -86,7 +86,7 @@ export async function banPerson(
   await recordAuditEvent(env, {
     action: "person.expelled",
     subjectEmail: key,
-    actorEmail: await actorEmail(env, bannedBy),
+    actorEmail: await actorEmail(env, expelledBy),
     detail: note ? note : "No reason recorded",
   });
   await touchAndNotify(env, key);
@@ -100,13 +100,13 @@ export async function banPerson(
  * deleted, so that entry is the only surviving account of the reversal --
  * and an appeal is precisely when somebody asks who decided it.
  */
-export async function liftBan(
+export async function readmitPerson(
   env: Env,
   email: string,
   liftedBy: number | null = null,
 ): Promise<boolean> {
   const key = email.trim().toLowerCase();
-  const result = await env.DB.prepare("DELETE FROM banned_people WHERE email = ?")
+  const result = await env.DB.prepare("DELETE FROM expelled_people WHERE email = ?")
     .bind(key)
     .run();
   if ((result.meta.changes ?? 0) === 0) return false;
@@ -123,11 +123,11 @@ export async function liftBan(
 /**
  * `members.last_updated_at` is bumped by hand, as everywhere else a fact
  * lives outside that table: it is what Apple's polling endpoint compares
- * against, and without it the one place a ban would not reach is the passes
+ * against, and without it the one place an expulsion would not reach is the passes
  * already installed on the phone of the person being expelled.
  *
  * Harmless when there is no membership. Somebody can be expelled before they
- * have ever bought anything, and the ban applies if they later do.
+ * have ever bought anything, and the expulsion applies if they later do.
  */
 async function touchAndNotify(env: Env, email: string): Promise<void> {
   await env.DB.prepare(
@@ -140,13 +140,13 @@ async function touchAndNotify(env: Env, email: string): Promise<void> {
 }
 
 /** Everybody currently expelled, most recent first, with who decided it. */
-export async function bannedPeople(env: Env): Promise<BannedPerson[]> {
+export async function expelledPeople(env: Env): Promise<ExpelledPerson[]> {
   const { results } = await env.DB.prepare(
-    `SELECT b.email, b.note, u.email AS banned_by_email, b.banned_at,
+    `SELECT b.email, b.note, u.email AS expelled_by_email, b.expelled_at,
             EXISTS (SELECT 1 FROM members m WHERE m.email = b.email) AS has_membership
-       FROM banned_people b
-            LEFT JOIN users u ON u.id = b.banned_by
-      ORDER BY b.banned_at DESC`,
-  ).all<BannedPerson>();
+       FROM expelled_people b
+            LEFT JOIN users u ON u.id = b.expelled_by
+      ORDER BY b.expelled_at DESC`,
+  ).all<ExpelledPerson>();
   return results;
 }
