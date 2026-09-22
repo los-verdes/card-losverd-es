@@ -34,7 +34,8 @@ privacy.get("/", (c) =>
       <p>
         We compare members' email addresses with the Los Verdes Slack workspace, so the group can see which members
         have joined it. Only the volunteers who run memberships can see any of this, and it is stored with Cloudflare,
-        which hosts the site.
+        which hosts the site. The one exception is your card's QR code: scanning it shows the name on the card and
+        whether that membership is current.
       </p>
       <h2>What we don't do</h2>
       <p>
