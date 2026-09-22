@@ -190,12 +190,16 @@ crons = ["0 */6 * * *", "15 */6 * * *", "0 9 * * 1"]
 # =============================================================================
 [env.staging]
 name = "card-losverd-es-staging"
-# Routes are the one thing named environments inherit, so without this
-# staging -- deployed before production -- would claim production's custom
-# domain (card.losverd.es, declared at the top level). Staging is served on
-# its workers.dev hostname. `just check-wrangler-envs` fails if the two ever
-# share a route.
-routes = []
+# Routes are the one thing named environments inherit, so staging declares
+# its own; without them staging -- deployed before production -- would claim
+# production's custom domain (card.losverd.es, declared at the top level).
+# A sibling of card.losverd.es rather than a child, so the zone's Universal
+# SSL certificate covers both (#148). As in production, having a route retires
+# the workers.dev hostname. `just check-wrangler-envs` fails if the two
+# environments ever share a route.
+[[env.staging.routes]]
+pattern = "stagingcard.losverd.es"
+custom_domain = true
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -217,8 +221,8 @@ BIGCOMMERCE_CLIENT_ID = "g1vpjmv5bbedb6in9nzenavswbi18f9"
 PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
 PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
 PASSKIT_ORGANIZATION_NAME = "Los Verdes"
-PASSKIT_WEB_SERVICE_URL = "https://card-losverd-es-staging.los-verdes.workers.dev/passkit"
-PUBLIC_BASE_URL = "https://card-losverd-es-staging.los-verdes.workers.dev"
+PASSKIT_WEB_SERVICE_URL = "https://stagingcard.losverd.es/passkit"
+PUBLIC_BASE_URL = "https://stagingcard.losverd.es"
 GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
 GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_staging_v1"
 AUTH_APPLE_ID = "es.losverd.card.staging"
@@ -230,7 +234,7 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
-# Staging's own Turnstile widget, bound to the workers.dev hostname above.
+# Staging's own Turnstile widget, bound to stagingcard.losverd.es.
 TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 # On, so the new-order email runs here ahead of production. The allowlist
 # above keeps it to test mailboxes; the date is the day it was switched on,
