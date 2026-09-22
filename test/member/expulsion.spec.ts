@@ -171,13 +171,10 @@ describe("expelling somebody from the group", () => {
     expect(await readmitPerson(env, EMAIL)).toBe(false);
   });
 
-  it("still answers under the table's old name, for the Worker running while a deploy migrates", async () => {
-    // Migration 0003 renamed banned_people; the previous Worker reads it by
-    // that name until the new one takes over. Drop this with the view.
-    await expelPerson(env, EMAIL, "a recorded reason", USER_ID);
+  it("leaves nothing under the table's old name once its deploy-gap view is dropped", async () => {
+    // Migration 0003 kept a `banned_people` view for one deploy; 0005 drops it.
+    const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE name = 'banned_people'").first();
 
-    const row = await env.DB.prepare("SELECT email, note, banned_by FROM banned_people").first();
-
-    expect(row).toEqual({ email: EMAIL, note: "a recorded reason", banned_by: USER_ID });
+    expect(row).toBeNull();
   });
 });
