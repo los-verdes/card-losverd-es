@@ -22,6 +22,9 @@ describe("the privacy policy", () => {
     expect(body).toContain("<h1>Privacy</h1>");
     expect(body).toContain("never sell it or share it");
     expect(body).toContain(`mailto:${SUPPORT_EMAIL}`);
+    // Reached from Google's consent screen, so it can be somebody's first
+    // page here: it has to offer a way into the rest of the site.
+    expect(body).toContain('<a href="/">Your membership card</a>');
   });
 
   it("is linked from the sign-in page", async () => {
