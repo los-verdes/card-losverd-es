@@ -119,6 +119,17 @@ describe("messageShape", () => {
     expect(shape).toBe("Get pass task (serial number <id>; with web service url <url>) encountered error: 401");
   });
 
+  it("gathers reports that differ only by the timestamp every message opens with", () => {
+    // Wallet stamps each line to the second, so without this nothing ever
+    // groups: every report would be its own row.
+    const stamped = (at: string) => `[${at}] Register task encountered error: Authentication failure (401)`;
+
+    expect(messageShape(stamped("2026-09-21 20:50:07 -0500"))).toBe(
+      messageShape(stamped("2026-09-22 04:13:55 -0500")),
+    );
+    expect(messageShape(stamped("2026-09-21 20:50:07 -0500"))).toContain("<time>");
+  });
+
   it("keeps a message that follows no known phrasing rather than dropping it", () => {
     expect(messageShape("Something nobody has seen before")).toBe("Something nobody has seen before");
   });

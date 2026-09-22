@@ -56,6 +56,11 @@ const MASKS: [RegExp, string][] = [
   // First: a URL can contain anything below, and would be masked to pieces.
   // Stops at ")" because these arrive inside a parenthesised clause.
   [/https?:\/\/[^\s)]+/gi, "<url>"],
+  // Every message Wallet sends opens with its own timestamp, down to the
+  // second: "[2026-09-21 20:50:07 -0500] Register task ...". Without this
+  // nothing ever groups, because no two reports share a second. Also covers
+  // the ISO form, and a timestamp appearing mid-message.
+  [/\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?: ?(?:[+-]\d{2}:?\d{2}|Z))?/g, "<time>"],
   // The date Wallet echoes back when it complains about a conditional
   // request. Every retry carries a different one, and nothing else in the
   // message varies, so without this one fault becomes one row per attempt.
