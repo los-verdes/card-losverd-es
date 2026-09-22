@@ -190,4 +190,23 @@ describe("not pushing a pass twice", () => {
       last_updated_at: refreshedAt,
     });
   });
+
+  it("still refreshes one rebuilt in the last day but before the membership ended", async () => {
+    // A name changed on the morning of the last day: recent, so it carries
+    // the native expiry, but built while the membership was still current, so
+    // it reads "Active" on the back. Nothing else will revisit it -- the
+    // daily sweep's first run covers yesterday only.
+    const rebuiltAt = Date.parse("2026-09-21T10:00:00Z");
+    await insertMember("LV-A", "2026-09-21");
+    await env.DB.prepare("UPDATE members SET last_updated_at = ? WHERE member_id = 'LV-A'").bind(rebuiltAt).run();
+
+    expect(await refreshLapsedPasses(env, "", NOW)).toBeNull();
+
+    // `touched()` cannot tell here: this member's timestamp was already past
+    // its threshold before the run. Only a move proves the push.
+    const row = await env.DB.prepare("SELECT last_updated_at FROM members WHERE member_id = 'LV-A'").first<{
+      last_updated_at: number;
+    }>();
+    expect(row!.last_updated_at).toBeGreaterThan(rebuiltAt);
+  });
 });

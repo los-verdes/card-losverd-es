@@ -110,13 +110,29 @@ export async function refreshLapsedPasses(
   now: Date = new Date(),
 ): Promise<string | null> {
   const today = isoDate(now.getTime());
-  // Anything refreshed in the last day already carries what this would push,
-  // and pushing it again hands Wallet a pass identical to the one it holds.
+  // A member is skipped only when their pass already states the expiry, which
+  // takes both of the clauses below and neither alone.
+  //
+  // Rebuilt in the last day: built by whatever is deployed now, so it carries
+  // the wallets' native expiry. A pass rebuilt before #295 shipped does not,
+  // however long ago the membership ended, and is exactly what this run is
+  // for.
+  //
+  // And rebuilt after the membership ended: a pass built while the membership
+  // was still current says so, because `effectiveStatus()` is worked out when
+  // the pass is built. A name changed on the morning of the last day produces
+  // one of those -- filed away by the wallets on time, still reading "Active"
+  // on the back -- and the daily sweep will not revisit a date it has already
+  // covered.
   const alreadyFresh = now.getTime() - DAY_MS;
   const { results } = await env.DB.prepare(
     `SELECT m.member_id
        FROM members m
-      WHERE m.member_id > ?1 AND m.expiration_date < ?2 AND m.last_updated_at < ?4
+      WHERE m.member_id > ?1 AND m.expiration_date < ?2
+        AND NOT (
+          m.last_updated_at >= ?4
+          AND m.last_updated_at >= unixepoch(m.expiration_date || 'T23:59:59Z') * 1000
+        )
         AND NOT EXISTS (SELECT 1 FROM revoked_cards r WHERE r.member_id = m.member_id)
         AND NOT EXISTS (SELECT 1 FROM expelled_people e WHERE e.email = m.email)
       ORDER BY m.member_id
