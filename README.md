@@ -4,6 +4,20 @@ Digital membership card service for the [Los Verdes supporters group](https://ww
 
 It runs on Cloudflare Workers, D1 and R2, and replaced [`digital-membership`](https://github.com/los-verdes/digital-membership) (Python/Flask on GCP) when `card.losverd.es` moved over on 2026-09-21. Cards and QR codes issued by that site keep working here. Why this stack was chosen is in [`docs/architecture-decisions.md`](docs/architecture-decisions.md).
 
+## Start here
+
+- **[`docs/membership-card-provenance.md`](docs/membership-card-provenance.md) is the specification this repository follows**: what an order is, where every field on a card comes from, and how "current member" is decided. It is written for the Merch Team and the Membership Committee rather than for developers. Where it and the code disagree, the code is what is wrong.
+- **[`CLAUDE.md`](CLAUDE.md) is how to work here**: pushes attributed to the bot, the rule against emailing members in bulk, no real personal data, and the sharp edges that have each cost somebody an afternoon.
+- **[`docs/architecture-decisions.md`](docs/architecture-decisions.md)** is why the stack is what it is, and [`docs/cutover.md`](docs/cutover.md) is the record of how the site moved here. Everything else is under [More docs](#more-docs).
+
+## Status
+
+**In production** at `card.losverd.es` since 2026-09-21. Open work is in the issue tracker, where every open issue carries one of five labels: [`ready`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3Aready) for work with nothing in its way, [`waiting: decision`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+decision%22), [`waiting: credential or console`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+credential+or+console%22), [`after cutover`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22after+cutover%22) for work that was deliberately held until the move was done and is now simply next in line, or [`cutover step`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22cutover+step%22) for the move's own steps, none of which remain open.
+
+Deliberately dropped from the previous site: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
+
+Not built yet: MiniBC renewal data (see the provenance document), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
+
 ## Stack
 
 - **Runtime:** [Hono](https://hono.dev/) on Cloudflare Workers (TypeScript)
@@ -12,54 +26,6 @@ It runs on Cloudflare Workers, D1 and R2, and replaced [`digital-membership`](ht
 - **Async:** Cloudflare Queues and cron triggers
 - **Pages:** server-rendered Hono JSX, no client-side framework
 - **Infra:** Terraform (`terraform/`) for D1, R2, and queues; Wrangler for Worker deploys
-
-## Development
-
-Requires [Node.js](https://nodejs.org/), [just](https://github.com/casey/just), and a Cloudflare account with Workers/D1/R2 access.
-
-```bash
-npm install
-just dev             # local dev server (wrangler dev)
-just test            # run tests
-just test-coverage   # run tests with coverage
-just typecheck
-just lint
-```
-
-Infrastructure changes (Terraform) are a separate concern from app development above — see `terraform/README.md` if you need to touch `terraform/`.
-
-## Infrastructure & deployment
-
-There are two environments, each a separate Worker with its own D1 database, R2 bucket, queues (Terraform-provisioned via `for_each`, see `terraform/README.md`), vars, and secrets:
-
-| Environment | Worker | BigCommerce store | URL |
-| :--- | :--- | :--- | :--- |
-| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://stagingcard.losverd.es |
-| **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card.losverd.es |
-
-`.github/workflows/deploy.yml`:
-
-- **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.
-- **Manual "Run workflow" from any branch:** deploys that branch to **staging only**, to try a change against the test store before merging. Terraform is skipped for these runs, so unmerged infrastructure changes never apply.
-
-Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
-
-**Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
-
-`card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Staging is attached the same way, as `stagingcard.losverd.es` (`[[env.staging.routes]]`): named environments inherit routes and staging deploys first, so it must declare its own. With a route in place, neither environment answers on its `workers.dev` hostname.
-
-## Keeping dependencies current
-
-Twenty direct dependencies, and the intent is that keeping them current stays a few minutes a month rather than a standing chore. Dependabot (`.github/dependabot.yml`) does the watching; the design is about keeping the number of pull requests low rather than the number of updates high.
-
-- **One grouped PR a week** for every minor and patch update across all dependencies. Most weeks this is the only one, and reviewing it means reading a changelog rather than a diff.
-- **A second grouped PR** for GitHub Actions. Worth keeping current for its own sake: a runner deprecation is announced against action versions, so the way it reaches this repository is an action that has not been bumped.
-- **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group. As of 2026-09-19 ESLint is on 10; Vitest 5 waits on `@cloudflare/vitest-plugin` (1.1.13 pins `vitest ^4.1.0`) and TypeScript 7 on `typescript-eslint` (8.70 stops at `<6.1`), so re-check those two peer ranges before trying either.
-- **Nothing auto-merges.** CI passing is not the same as someone having decided the change is wanted, and these land code nobody has read.
-
-When a bump breaks something, close the PR rather than leaving it open: Dependabot will not re-raise the same version, but it will offer the next one. That is exactly the behaviour wanted for `satori`, which is [pinned at 0.32.0](https://github.com/los-verdes/card-losverd-es/issues/8) because of a Workers runtime incompatibility rather than anything in its API -- a Dependabot PR turns "someone should check whether this is fixed yet" into a CI run that answers it.
-
-Two pairings to keep in mind when reviewing, because the tests will tell you but the changelog won't: `wrangler` and `@cloudflare/vitest-plugin` both carry a workerd, and `@cloudflare/workers-types` should match the `compatibility_date` in `wrangler.toml`.
 
 ## What's here
 
@@ -108,6 +74,41 @@ Schema lives in `src/db/migrations/` (applied automatically on deploy). It was s
 | `devices`, `registrations`, `pass_device_logs` | Apple PassKit device state. |
 | `etl_sync_state`, `rate_limit_counters` | Sync watermarks; rate limiting for `/email-card`. |
 | `card_emails` | One row per order already emailed a card, written before sending so a retry can't send twice. |
+
+## Development
+
+Requires [Node.js](https://nodejs.org/), [just](https://github.com/casey/just), and a Cloudflare account with Workers/D1/R2 access.
+
+```bash
+npm install
+just dev             # local dev server (wrangler dev)
+just test            # run tests
+just test-coverage   # run tests with coverage
+just typecheck
+just lint
+```
+
+Infrastructure changes (Terraform) are a separate concern from app development above — see `terraform/README.md` if you need to touch `terraform/`.
+
+## Infrastructure & deployment
+
+There are two environments, each a separate Worker with its own D1 database, R2 bucket, queues (Terraform-provisioned via `for_each`, see `terraform/README.md`), vars, and secrets:
+
+| Environment | Worker | BigCommerce store | URL |
+| :--- | :--- | :--- | :--- |
+| **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://stagingcard.losverd.es |
+| **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card.losverd.es |
+
+`.github/workflows/deploy.yml`:
+
+- **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.
+- **Manual "Run workflow" from any branch:** deploys that branch to **staging only**, to try a change against the test store before merging. Terraform is skipped for these runs, so unmerged infrastructure changes never apply.
+
+Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
+
+**Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
+
+`card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Staging is attached the same way, as `stagingcard.losverd.es` (`[[env.staging.routes]]`): named environments inherit routes and staging deploys first, so it must declare its own. With a route in place, neither environment answers on its `workers.dev` hostname.
 
 ## Secrets
 
@@ -353,20 +354,25 @@ Two things, neither of which identifies anybody:
 - **Cloudflare Web Analytics** on member-facing pages (not admin ones): page views by path, referrer, country, browser, OS and device, plus load times. It sets no cookie. The site token is the public `WEB_ANALYTICS_TOKEN` var per environment; empty turns the beacon off. Read it in the Cloudflare dashboard under Web Analytics.
 - **Outcome lines** in Workers Logs: one structured line wherever the Worker decides something about a visitor -- sign-in completed or refused (and through which provider), card shown or "no membership" (with or without orders, Apple relay address or not), pass downloaded, `/email-card` and claim results, and what a QR scan found (including whether the card was minted by the previous site). The names are a closed list in `src/lib/outcome.ts`. Categories only: no address, name, order number or serial, and the tests fail if an address appears in one. Query them in the dashboard's Workers Logs by the `outcome` field; they are kept for seven days.
 
-## Status
+## Keeping dependencies current
 
-**In production** at `card.losverd.es` since 2026-09-21. Open work is in the issue tracker, where every open issue carries one of five labels: [`ready`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3Aready) for work with nothing in its way, [`waiting: decision`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+decision%22), [`waiting: credential or console`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22waiting%3A+credential+or+console%22), [`after cutover`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22after+cutover%22) for work that was deliberately held until the move was done and is now simply next in line, or [`cutover step`](https://github.com/los-verdes/card-losverd-es/issues?q=is%3Aissue+is%3Aopen+label%3A%22cutover+step%22) for the move's own steps, none of which remain open.
+Twenty direct dependencies, and the intent is that keeping them current stays a few minutes a month rather than a standing chore. Dependabot (`.github/dependabot.yml`) does the watching; the design is about keeping the number of pull requests low rather than the number of updates high.
 
-Deliberately dropped from the previous site: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
+- **One grouped PR a week** for every minor and patch update across all dependencies. Most weeks this is the only one, and reviewing it means reading a changelog rather than a diff.
+- **A second grouped PR** for GitHub Actions. Worth keeping current for its own sake: a runner deprecation is announced against action versions, so the way it reaches this repository is an action that has not been bumped.
+- **Majors arrive one at a time**, except for TypeScript, ESLint and Vitest, whose majors change how the code is written rather than what it depends on. Those are ignored by Dependabot and done deliberately, so a stale PR isn't sitting open for weeks. Their minor and patch updates still come through the group. As of 2026-09-19 ESLint is on 10; Vitest 5 waits on `@cloudflare/vitest-plugin` (1.1.13 pins `vitest ^4.1.0`) and TypeScript 7 on `typescript-eslint` (8.70 stops at `<6.1`), so re-check those two peer ranges before trying either.
+- **Nothing auto-merges.** CI passing is not the same as someone having decided the change is wanted, and these land code nobody has read.
 
-Not built yet: MiniBC renewal data (see the provenance document), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
+When a bump breaks something, close the PR rather than leaving it open: Dependabot will not re-raise the same version, but it will offer the next one. That is exactly the behaviour wanted for `satori`, which is [pinned at 0.32.0](https://github.com/los-verdes/card-losverd-es/issues/8) because of a Workers runtime incompatibility rather than anything in its API -- a Dependabot PR turns "someone should check whether this is fixed yet" into a CI run that answers it.
+
+Two pairings to keep in mind when reviewing, because the tests will tell you but the changelog won't: `wrangler` and `@cloudflare/vitest-plugin` both carry a workerd, and `@cloudflare/workers-types` should match the `compatibility_date` in `wrangler.toml`.
 
 ## More docs
 
 - [`docs/migration-plan.md`](docs/migration-plan.md): the phase index the code's `Phase N` comments refer to -- a record of how the rewrite was built, kept because those comments cite it
 - [`docs/architecture-decisions.md`](docs/architecture-decisions.md): why Cloudflare, why TypeScript, why one DNS cutover, and the non-profit context those rest on
 - [`docs/cutover.md`](docs/cutover.md): the record of how `card.losverd.es` moved over, with the follow-ups still open from it
-- [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): **the specification the rest of this repository follows** -- what an order is, where each card field comes from, and how "current member" is decided. Written for the Merch Team and the Membership Committee; where it and the code disagree, that is a defect to fix rather than a document to quietly update. `just provenance-gdoc` prepares a copy for Google Docs, for the people who would rather comment there -- the repository's copy stays the source of truth
+- [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): **the specification** ([above](#start-here)). `just provenance-gdoc` prepares a copy for Google Docs, for the people who would rather comment there; the repository's copy stays the source of truth
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync
 - [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md): what carries over from legacy passes and QR codes, and what doesn't
