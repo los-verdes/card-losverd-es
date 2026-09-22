@@ -1,6 +1,6 @@
 import { SignJWT, importPKCS8 } from "jose";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
-import { PASS_CONTENT_VERSION } from "../passkit/generator";
+import { PASS_CONTENT_VERSION, membershipEndsAt } from "../passkit/generator";
 
 /**
  * Google Wallet service-account credentials needed to sign a "Save to
@@ -129,6 +129,11 @@ export interface GenericObject {
   };
   hexBackgroundColor: string;
   state: GenericObjectState;
+  /**
+   * When Google should move the pass to "Expired passes" by itself, up to 24
+   * hours after `end` (#295). Absent when there is no expiry to state.
+   */
+  validTimeInterval?: { end: { date: string } };
   /** Required by Google on a generic object; omitting it fails the save with no usable error. */
   logo: {
     sourceUri: { uri: string };
@@ -237,6 +242,9 @@ export function buildGenericObject(
     },
     hexBackgroundColor: config.hexBackgroundColor,
     state: objectState(member.status),
+    ...(member.expirationDate
+      ? { validTimeInterval: { end: { date: membershipEndsAt(member.expirationDate) } } }
+      : {}),
     logo: {
       sourceUri: { uri: config.logoUri },
       contentDescription: localizedString(config.cardTitle),

@@ -423,11 +423,13 @@ back of an Apple pass and the state Google Wallet is told are both worked out
 at the moment a pass is built (`effectiveStatus()` in
 `src/member/artifacts.ts`), from the expiry date and from those two tables.
 
-One real limit sits underneath all of this: a pass already on a phone is not
-rebuilt merely because a date passed. It is corrected the next time it is
-rebuilt — a renewal, an attribution, a re-download — so an installed pass can
-go on saying "active" for a while after the membership lapsed, even though
-every access check already refuses it.
+A pass already on a phone also knows when it ends. Both wallets are told the
+moment the membership runs out -- the end of its expiry date, UTC, the same
+moment the site stops calling it current -- and move the pass to their
+expired passes by themselves, even on a phone that is offline (Google may take
+up to a day). The pass's own contents, such as the "Expired" note on the back
+of an Apple pass, are rewritten by a daily job that refreshes the passes of
+every membership that lapsed the day before (`src/member/passExpirySweep.ts`).
 
 ### Which orders count
 

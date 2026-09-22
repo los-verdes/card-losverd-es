@@ -9,6 +9,7 @@ import {
   type SubscriptionsEtlCursor,
 } from "../bigcommerce/sync";
 import { runReadinessCheck } from "../admin/readinessAlert";
+import { refreshLapsedPasses, runPassExpirySweep } from "../member/passExpirySweep";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 
 /**
@@ -29,6 +30,9 @@ export type EtlSyncMessage =
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" }
   | { type: "run_readiness_check" }
+  | { type: "run_pass_expiry_sweep" }
+  /** One batch of the one-off refresh; `afterMemberId` is set on follow-ups. */
+  | { type: "refresh_lapsed_passes"; afterMemberId?: string }
   /**
    * Fails on purpose, so the dead-letter path can be exercised in a real
    * environment (`scripts/queue-dlq-drill.mjs`). Nothing produces it but that
@@ -83,6 +87,15 @@ async function dispatchEtlSyncMessage(
     case "run_readiness_check":
       await runReadinessCheck(env);
       return;
+    case "run_pass_expiry_sweep":
+      await runPassExpirySweep(env);
+      return;
+    case "refresh_lapsed_passes": {
+      const next = await refreshLapsedPasses(env, message.afterMemberId);
+      // Only once the batch has succeeded, as with the resync chain.
+      if (next) await enqueueEtlSync(env, { type: "refresh_lapsed_passes", afterMemberId: next });
+      return;
+    }
     case "dlq_drill":
       // The one message whose failure is the point. Throwing takes it
       // through exactly what a real failure takes: the retries, the

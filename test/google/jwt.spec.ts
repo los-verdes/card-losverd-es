@@ -152,6 +152,15 @@ describe("buildGenericObject", () => {
     });
   });
 
+  it("tells Google when the pass expires, matching the Apple pass (#295)", () => {
+    const object = buildGenericObject(makeMember({ expirationDate: "2024-02-17" }), CONFIG);
+    expect(object.validTimeInterval).toEqual({ end: { date: "2024-02-17T23:59:59+00:00" } });
+  });
+
+  it("states no expiry to Google without one on record", () => {
+    expect(buildGenericObject(makeMember({ expirationDate: null }), CONFIG).validTimeInterval).toBeUndefined();
+  });
+
   it("omits the expiry text module when there's no expiration on record", () => {
     const object = buildGenericObject(makeMember({ expirationDate: null }), CONFIG);
     expect(object.textModulesData.some((m) => m.id === "membership_expiry")).toBe(false);

@@ -75,6 +75,12 @@ interface PassJson {
   logoText: string;
   authenticationToken: string;
   webServiceURL: string;
+  /**
+   * When Wallet should treat the pass as expired by itself, with no push
+   * (#295). Absent when there is no expiry to state, which includes every
+   * revoked membership.
+   */
+  expirationDate?: string;
 }
 
 /**
@@ -147,7 +153,18 @@ export async function buildManifest(
  * pass, the last detail of a Google one -- so that a member can be asked what
  * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
-export const PASS_CONTENT_VERSION = "2026-09-18.1";
+export const PASS_CONTENT_VERSION = "2026-09-22.1";
+
+/**
+ * The moment a membership ends, for the wallets' own expiry fields (#295):
+ * the end of its expiry date, in UTC, because `isMembershipCurrent()` compares
+ * UTC dates -- a pass must not expire on the phone while the site still calls
+ * the membership current, or the other way round. Written with an explicit
+ * offset rather than `Z`, the form Apple's documentation uses.
+ */
+export function membershipEndsAt(expirationDate: string): string {
+  return `${expirationDate}T23:59:59+00:00`;
+}
 
 export function buildPassJson(
   member: MemberPassInput,
@@ -251,6 +268,7 @@ export function buildPassJson(
     logoText: "Los Verdes",
     authenticationToken: member.authToken,
     webServiceURL: config.webServiceURL,
+    ...(member.expirationDate ? { expirationDate: membershipEndsAt(member.expirationDate) } : {}),
   };
 
   return new TextEncoder().encode(JSON.stringify(pass));

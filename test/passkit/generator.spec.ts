@@ -135,6 +135,16 @@ describe("buildPassJson", () => {
     ).toBe(false);
   });
 
+  it("tells Wallet when the pass expires: the end of the expiry day, UTC (#295)", () => {
+    // UTC because the site's own check compares UTC dates; the phone must
+    // not disagree with it about whether the membership is current.
+    expect(parse(makeMember({ expirationDate: "2024-02-17" })).expirationDate).toBe("2024-02-17T23:59:59+00:00");
+  });
+
+  it("states no expiry to Wallet without one on record, as for a revoked membership", () => {
+    expect("expirationDate" in parse(makeMember({ expirationDate: null }))).toBe(false);
+  });
+
   it("omits the expiry field when there's no expiration on record", () => {
     const pass = parse(makeMember({ expirationDate: null }));
     expect(
