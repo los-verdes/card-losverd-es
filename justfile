@@ -4,6 +4,8 @@ account_id := "42988f13a6daf00814bced22aff46f4e"
 # two change together: each environment's Worker is reachable at
 # `card-losverd-es-<env>.<this>.workers.dev`.
 
+export TF_STATE_TOKEN_EXPIRES_ON := "2027-09-21"
+
 # Default task: list available commands
 default:
     @just --list
