@@ -221,7 +221,14 @@ export async function slackCrossReference(
       WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}
       GROUP BY lower(member_email)
     ),
-    slack AS (
+    -- MATERIALIZED is load-bearing, not decoration. Left to itself SQLite
+    -- inlines this CTE, so the "current members not in Slack" query re-ran it
+    -- once per member: an anti-join probing lower(email), which no index on
+    -- slack_users can answer, so every probe scanned the whole workspace.
+    -- Building it once and letting SQLite index the result took that query
+    -- from 476ms to 13ms over 8,000 orders and 4,000 Slack accounts, and it
+    -- was growing with the product of the two.
+    slack AS MATERIALIZED (
       SELECT slack_id, COALESCE(NULLIF(real_name, ''), name) AS slack_name, lower(email) AS email
       FROM slack_users
       WHERE deleted = 0 AND is_bot = 0 AND is_app_user = 0 AND is_workflow_bot = 0 AND email IS NOT NULL
