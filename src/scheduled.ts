@@ -20,6 +20,9 @@ const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   // Daily, just after midnight UTC: a membership ends at 23:59:59 UTC on its
   // expiry date, so by now yesterday's lapses are final (#295).
   "30 0 * * *": { type: "run_pass_expiry_sweep" },
+  // Hourly, on the tens so it does not share a minute with the others: looks
+  // for operational trouble and says so once (#56, src/ops/watch.ts).
+  "10 * * * *": { type: "run_ops_watch" },
 };
 
 /**

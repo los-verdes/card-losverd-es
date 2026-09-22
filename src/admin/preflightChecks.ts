@@ -29,6 +29,7 @@ import {
   parseRecipientAllowlist,
 } from "../email/send";
 import type { Env } from "../index";
+import { evaluateSignals } from "../ops/signals";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -641,14 +642,8 @@ async function bigCommerceChecks(
   return { title: "BigCommerce", results };
 }
 
-/**
- * The order resync runs on a six-hourly cron, so two missed runs is the point
- * at which something is more likely wrong than merely late.
- */
-export const SYNC_STALE_AFTER_HOURS = 12;
-const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
-
-async function queueChecks(env: Env, now: Date): Promise<CheckGroup> {
+/** The bindings the queue work depends on; its freshness is a signal (src/ops/signals.ts). */
+async function queueChecks(env: Env): Promise<CheckGroup> {
   const results: CheckResult[] = [];
   results.push(
     env.ETL_SYNC_QUEUE
@@ -665,34 +660,6 @@ async function queueChecks(env: Env, now: Date): Promise<CheckGroup> {
       : fail("Queue names", `ETL_SYNC_QUEUE_NAME (${env.ETL_SYNC_QUEUE_NAME}) and ETL_SYNC_DLQ_NAME (${env.ETL_SYNC_DLQ_NAME}) name different environments.`),
   );
 
-  // The only job that records a watermark, and the one that matters: it is
-  // what keeps D1 a faithful cache of the store's orders. A cron that was
-  // never enabled and a cron that has been failing look the same from
-  // outside, and both look like nothing at all.
-  results.push(
-    await attempt("Order resync", async () => {
-      const row = await env.DB.prepare(
-        "SELECT last_run_at FROM etl_sync_state WHERE job_name = ?",
-      )
-        .bind(SUBSCRIPTIONS_ETL_JOB_NAME)
-        .first<{ last_run_at: number }>();
-      if (!row) {
-        return warn(
-          "Order resync",
-          "Has never completed here. Bringing an environment up includes enabling the cron triggers and running one full resync.",
-        );
-      }
-      const hours = Math.floor((now.getTime() - row.last_run_at) / 3_600_000);
-      const when = new Date(row.last_run_at).toISOString().replace("T", " ").slice(0, 16);
-      return hours >= SYNC_STALE_AFTER_HOURS
-        ? warn(
-            "Order resync",
-            `Last completed ${when}Z, ${hours} hours ago. It runs six-hourly, so this is either a cron that isn't enabled or one that is failing -- check the dead-letter alerts.`,
-          )
-        : ok("Order resync", `Last completed ${when}Z, ${hours} hours ago.`);
-    }),
-  );
-
   return { title: "Queues and scheduled work", results };
 }
 
@@ -700,6 +667,20 @@ async function queueChecks(env: Env, now: Date): Promise<CheckGroup> {
  * Runs every automated check. Groups are ordered roughly by how early a
  * failure would stop cutover.
  */
+/**
+ * What the hourly watch is looking at (#56), shown here too: it alerts only
+ * on a signal that keeps firing, so this page is where a signal that fired
+ * once, or is firing right now and has not yet been announced, is visible.
+ * Reported as warnings rather than failures -- the watch does the alerting,
+ * and the weekly readiness post should not say the same thing again.
+ */
+async function operationalSignals(env: Env, now: Date): Promise<CheckGroup> {
+  const results = (await evaluateSignals(env, now)).map((signal) =>
+    signal.firing || signal.notable ? warn(signal.name, signal.detail) : ok(signal.name, signal.detail),
+  );
+  return { title: "Operational signals", results };
+}
+
 export async function runPreflightChecks(
   env: Env,
   requestUrl: string | null,
@@ -723,13 +704,14 @@ export async function runPreflightChecks(
     originVerdict(env.PUBLIC_BASE_URL ?? "", new URL(requestUrl).origin).status === "ok";
 
   return [
+    await operationalSignals(env, now),
     await identityChecks(env, requestUrl),
     await storageChecks(env),
     await applePassChecks(env, now),
     await googleWalletChecks(env),
     await bigCommerceChecks(env, live, requestUrl),
     deliveryChecks(env, live),
-    await queueChecks(env, now),
+    await queueChecks(env),
   ];
 }
 

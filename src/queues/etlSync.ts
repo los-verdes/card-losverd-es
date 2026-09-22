@@ -10,6 +10,7 @@ import {
 } from "../bigcommerce/sync";
 import { runReadinessCheck } from "../admin/readinessAlert";
 import { refreshLapsedPasses, runPassExpirySweep } from "../member/passExpirySweep";
+import { runOpsWatch } from "../ops/watch";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 
 /**
@@ -31,6 +32,7 @@ export type EtlSyncMessage =
   | { type: "run_slack_members_etl" }
   | { type: "run_readiness_check" }
   | { type: "run_pass_expiry_sweep" }
+  | { type: "run_ops_watch" }
   /** One batch of the one-off refresh; `afterMemberId` is set on follow-ups. */
   | { type: "refresh_lapsed_passes"; afterMemberId?: string }
   /**
@@ -89,6 +91,9 @@ async function dispatchEtlSyncMessage(
       return;
     case "run_pass_expiry_sweep":
       await runPassExpirySweep(env);
+      return;
+    case "run_ops_watch":
+      await runOpsWatch(env);
       return;
     case "refresh_lapsed_passes": {
       const next = await refreshLapsedPasses(env, message.afterMemberId);
