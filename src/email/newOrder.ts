@@ -1,5 +1,5 @@
 /**
- * Emailing a member their card when a new membership order is completed
+ * Emailing a member their card when a new membership order is paid for
  * (los-verdes/card-losverd-es#70), so a new member never has to visit the
  * site at all.
  *
@@ -22,20 +22,30 @@
  *    once can't send a second copy. Sufficient on its own to keep it to one
  *    email per order.
  *
- * An order qualifies only while it *is* `Completed` -- the agreed rule
- * (2026-09-17) is to wait until the membership pack is on its way. There is
- * deliberately no "did it just become Completed" check: the sent log already
- * bounds this to one email, and a status this code compared against could
- * have been written by a queue retry or an earlier resync, which would drop
- * the email entirely.
+ * An order qualifies while it counts as a membership at all --
+ * `PAID_BIGCOMMERCE_STATUSES`, the same list the card, the QR code and the
+ * wallet passes go by. Deliberately the same list and not a second one: a
+ * card that verifies is a card its member should have been told about, and
+ * while these two disagreed, every order left sitting in `Shipped` had a
+ * working membership card nobody had mentioned to them.
+ *
+ * It waited for `Completed` until 2026-09-22, to let the email follow the
+ * membership pack out the door. In this store `Completed` is set by hand and
+ * often never reached, so in practice the email was waiting on a step that
+ * does not come.
+ *
+ * There is deliberately no "did it just become paid" check: the sent log
+ * already bounds this to one email, and a status this code compared against
+ * could have been written by a queue retry or an earlier resync, which would
+ * drop the email entirely.
  */
 
 import { bigCommerceOrderKey } from "../bigcommerce/orders";
 import type { BigCommerceOrder } from "../bigcommerce/sync";
 import type { Env } from "../index";
+import { PAID_BIGCOMMERCE_STATUSES } from "../lib/membershipOrders";
 import { emailCardTo, findCardRecipient } from "./card";
 
-const COMPLETED = "completed";
 const CUTOFF_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The cutoff as epoch ms, or null when unset or unusable (sending stays off). */
@@ -55,7 +65,7 @@ function cutoffMs(since: string | undefined): number | null {
 }
 
 /**
- * Emails the member their card for a completed new order, once. Returns
+ * Emails the member their card for a new paid order, once. Returns
  * whether a message was sent. Never throws: an order that syncs fine must not
  * fail its queue message over an email.
  */
@@ -68,7 +78,7 @@ export async function maybeEmailNewOrderCard(
   if (since === null) {
     return false;
   }
-  if (order.status?.toLowerCase() !== COMPLETED) {
+  if (!PAID_BIGCOMMERCE_STATUSES.includes(order.status?.toLowerCase() ?? "")) {
     return false;
   }
   const createdMs = Date.parse(order.date_created);
