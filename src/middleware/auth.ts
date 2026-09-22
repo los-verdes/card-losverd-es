@@ -23,7 +23,7 @@ import {
 } from "../auth/session";
 import type { Env } from "../index";
 import { timingSafeEqual } from "../lib/timingSafeEqual";
-import { isUserBanned } from "../member/ban";
+import { isUserExpelled } from "../member/expulsion";
 
 const AUTH_SCHEME_PREFIX = "ApplePass ";
 
@@ -51,7 +51,7 @@ export const LOGIN_PATH = "/login";
  * didn't complete, try again" is the wrong thing to tell somebody who has
  * been expelled, and they would keep trying.
  */
-export const BANNED_REASON = "account-blocked";
+export const EXPELLED_REASON = "account-blocked";
 export const NO_ACTIVE_MEMBERSHIP_PATH = "/no-active-membership";
 
 export type AuthEnv = {
@@ -107,13 +107,13 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
   }
 
   // Checked on every request rather than only when the session is renewed.
-  // A ban that waited for renewal would leave somebody inside for as long as
+  // An expulsion that waited for renewal would leave somebody inside for as long as
   // their existing session lasted, which is the opposite of the point. Costs
   // one indexed lookup; `requireAdmin` already pays the same for its own
   // check.
-  if (await isUserBanned(c.env, session.userId)) {
+  if (await isUserExpelled(c.env, session.userId)) {
     clearSessionCookie(c);
-    return c.redirect(`${LOGIN_PATH}?error=${BANNED_REASON}`);
+    return c.redirect(`${LOGIN_PATH}?error=${EXPELLED_REASON}`);
   }
 
   let renewedToken: string | null = null;

@@ -3,7 +3,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
-import { banPerson, bannedPeople, isBanned, isUserBanned, liftBan } from "../../src/member/ban";
+import { expelPerson, expelledPeople, isExpelled, isUserExpelled, readmitPerson } from "../../src/member/expulsion";
 import { revokeCard, restoreCard } from "../../src/member/revocation";
 import { effectiveStatus, getMemberByEmail, isMembershipCurrent } from "../../src/member/artifacts";
 import { lookupPassHolder } from "../../src/member/passHolder";
@@ -40,7 +40,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await env.DB.exec("DELETE FROM banned_people");
+  await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
@@ -62,7 +62,7 @@ async function getAs(path: string, userId: number | null = USER_ID) {
 
 describe("expelling somebody from the group", () => {
   it("takes their membership away, like a revoked card does", async () => {
-    await banPerson(env, EMAIL, "conduct", null);
+    await expelPerson(env, EMAIL, "conduct", null);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
     expect(effectiveStatus(member, TODAY)).toBe("revoked");
@@ -71,11 +71,11 @@ describe("expelling somebody from the group", () => {
   });
 
   it("stops a session they already hold, not just the next sign-in", async () => {
-    // A ban that waited for the next sign-in would leave somebody inside for
+    // An expulsion that waited for the next sign-in would leave somebody inside for
     // as long as their session lasted, which is the opposite of the point.
     expect((await getAs("/")).status).toBe(200);
 
-    await banPerson(env, EMAIL, null, null);
+    await expelPerson(env, EMAIL, null, null);
 
     const res = await getAs("/");
     expect(res.status).toBe(302);
@@ -98,8 +98,8 @@ describe("expelling somebody from the group", () => {
   });
 
   it("lifts cleanly, putting the membership back", async () => {
-    await banPerson(env, EMAIL, null, null);
-    await liftBan(env, EMAIL);
+    await expelPerson(env, EMAIL, null, null);
+    await readmitPerson(env, EMAIL);
 
     const member = (await getMemberByEmail(env, EMAIL))!;
     expect(effectiveStatus(member, TODAY)).toBe("active");
@@ -107,13 +107,13 @@ describe("expelling somebody from the group", () => {
     expect((await getAs("/")).status).toBe(200);
   });
 
-  it("leaves a separate card revocation standing when the ban is lifted", async () => {
-    // Two independent decisions. Resolving a ban into `revoked` rather than
+  it("leaves a separate card revocation standing when the expulsion is lifted", async () => {
+    // Two independent decisions. Resolving an expulsion into `revoked` rather than
     // writing a revocation row is what keeps them independent.
     await revokeCard(env, CARD, "a separate matter", null);
-    await banPerson(env, EMAIL, null, null);
+    await expelPerson(env, EMAIL, null, null);
 
-    await liftBan(env, EMAIL);
+    await readmitPerson(env, EMAIL);
 
     expect(effectiveStatus((await getMemberByEmail(env, EMAIL))!, TODAY)).toBe("revoked");
     await restoreCard(env, CARD);
@@ -121,7 +121,7 @@ describe("expelling somebody from the group", () => {
   });
 
   it("says a scanned card is not valid", async () => {
-    await banPerson(env, EMAIL, null, null);
+    await expelPerson(env, EMAIL, null, null);
 
     const holder = (await lookupPassHolder(env, CARD, TODAY))!;
     expect(holder.active).toBe(false);
@@ -131,43 +131,53 @@ describe("expelling somebody from the group", () => {
   it("stops them being listed as a current member", async () => {
     expect((await activeMemberships(env.DB, "2026-06-01")).totalMembers).toBe(1);
 
-    await banPerson(env, EMAIL, null, null);
+    await expelPerson(env, EMAIL, null, null);
 
     expect((await activeMemberships(env.DB, "2026-06-01")).totalMembers).toBe(0);
   });
 
   it("refuses to email a card to somebody expelled", async () => {
-    // Falls out of resolving the ban in one place rather than being handled
+    // Falls out of resolving the expulsion in one place rather than being handled
     // here, which is the point of resolving it there.
-    await banPerson(env, EMAIL, null, null);
+    await expelPerson(env, EMAIL, null, null);
 
     const member = await getMemberByEmail(env, EMAIL);
     expect(isMembershipCurrent(member!)).toBe(false);
   });
 
-  it("does not restamp a ban already recorded", async () => {
-    await banPerson(env, EMAIL, "the original reason", null);
+  it("does not restamp an expulsion already recorded", async () => {
+    await expelPerson(env, EMAIL, "the original reason", null);
 
-    expect(await banPerson(env, EMAIL, "a later hand", null)).toBe(false);
-    expect((await bannedPeople(env))[0].note).toBe("the original reason");
+    expect(await expelPerson(env, EMAIL, "a later hand", null)).toBe(false);
+    expect((await expelledPeople(env))[0].note).toBe("the original reason");
   });
 
   it("can bar somebody who has never bought anything", async () => {
-    // A ban is about a person, not a membership. It applies if they buy one
+    // An expulsion is about a person, not a membership. It applies if they buy one
     // later under the same address.
-    expect(await banPerson(env, "stranger@example.com", null, null)).toBe(true);
-    expect(await isBanned(env, "stranger@example.com")).toBe(true);
-    expect((await bannedPeople(env))[0].has_membership).toBeFalsy();
+    expect(await expelPerson(env, "stranger@example.com", null, null)).toBe(true);
+    expect(await isExpelled(env, "stranger@example.com")).toBe(true);
+    expect((await expelledPeople(env))[0].has_membership).toBeFalsy();
   });
 
   it("matches the address whatever case it was typed in", async () => {
-    await banPerson(env, "  Jane@Example.com  ", null, null);
+    await expelPerson(env, "  Jane@Example.com  ", null, null);
 
-    expect(await isBanned(env, EMAIL)).toBe(true);
-    expect(await isUserBanned(env, USER_ID)).toBe(true);
+    expect(await isExpelled(env, EMAIL)).toBe(true);
+    expect(await isUserExpelled(env, USER_ID)).toBe(true);
   });
 
-  it("says so rather than pretending, when there is no ban to lift", async () => {
-    expect(await liftBan(env, EMAIL)).toBe(false);
+  it("says so rather than pretending, when there is no expulsion to lift", async () => {
+    expect(await readmitPerson(env, EMAIL)).toBe(false);
+  });
+
+  it("still answers under the table's old name, for the Worker running while a deploy migrates", async () => {
+    // Migration 0003 renamed banned_people; the previous Worker reads it by
+    // that name until the new one takes over. Drop this with the view.
+    await expelPerson(env, EMAIL, "a recorded reason", USER_ID);
+
+    const row = await env.DB.prepare("SELECT email, note, banned_by FROM banned_people").first();
+
+    expect(row).toEqual({ email: EMAIL, note: "a recorded reason", banned_by: USER_ID });
   });
 });

@@ -93,7 +93,7 @@ export const MEMBER_IN_GOOD_STANDING = `NOT EXISTS (
       JOIN revoked_cards rc ON rc.member_id = mm.member_id
      WHERE mm.email = membership_orders.member_email
   ) AND NOT EXISTS (
-    SELECT 1 FROM banned_people bp
+    SELECT 1 FROM expelled_people bp
      WHERE bp.email = membership_orders.member_email
   )`;
 

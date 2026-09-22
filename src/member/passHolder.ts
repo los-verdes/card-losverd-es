@@ -52,13 +52,13 @@ export async function lookupPassHolder(
     // Joined rather than selected from `members` alone: the verification page
     // must show the same name as the card it is verifying,
     // and must not call a revoked membership merely expired -- which
-    // a ban produces as surely as a revoked card does.
+    // an expulsion produces as surely as a revoked card does.
     `SELECT m.first_name, m.last_name, m.expiration_date, d.display_name,
             COALESCE(r.member_id, b.email) AS revoked_card
        FROM members m
             LEFT JOIN member_display_names d ON d.email = m.email
             LEFT JOIN revoked_cards r ON r.member_id = m.member_id
-            LEFT JOIN banned_people b ON b.email = m.email
+            LEFT JOIN expelled_people b ON b.email = m.email
       WHERE m.email = ?`,
   )
     .bind(email)

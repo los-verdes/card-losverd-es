@@ -67,9 +67,9 @@ export interface MemberRecord {
  * "good through" that means anything. The underlying `members` row is left
  * alone, so lifting a revocation is a single delete.
  *
- * A ban does the same to the membership, resolved here rather than by
- * writing a second row, so that lifting the ban restores the membership by
- * itself. Somebody can be both banned and separately revoked; lifting one
+ * An expulsion does the same to the membership, resolved here rather than by
+ * writing a second row, so that lifting the expulsion restores the membership by
+ * itself. Somebody can be both expelled and separately revoked; lifting one
  * then correctly leaves the other standing.
  */
 const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
@@ -82,7 +82,7 @@ const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
        LEFT JOIN member_since_overrides o ON o.email = m.email
        LEFT JOIN member_display_names d ON d.email = m.email
        LEFT JOIN revoked_cards r ON r.member_id = m.member_id
-       LEFT JOIN banned_people b ON b.email = m.email`;
+       LEFT JOIN expelled_people b ON b.email = m.email`;
 
 /**
  * The name to put on a card, as the two fields every renderer expects.

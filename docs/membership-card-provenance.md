@@ -422,8 +422,8 @@ governs when one is appropriate, and how it is appealed.
 Expulsion is the heavier of the two, and the rarer. As well as taking the
 membership away it stops the person signing in at all, including on a session
 they already hold, and it carries no end date -- lifting it is a decision
-somebody makes rather than something that happens on its own (`banned_people`,
-a table named before this wording settled). A revocation is about a card; an
+somebody makes rather than something that happens on its own
+(`expelled_people`). A revocation is about a card; an
 expulsion is about a person, and so follows their address onto any membership
 they buy under it later.
 

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { readAuditLog } from "../../src/audit/log";
-import { banPerson, liftBan } from "../../src/member/ban";
+import { expelPerson, readmitPerson } from "../../src/member/expulsion";
 import { revokeCard, restoreCard } from "../../src/member/revocation";
 import { clearDisplayName, setDisplayName } from "../../src/member/displayName";
 
@@ -36,7 +36,7 @@ afterEach(async () => {
   // Append-only by design, so nothing in the code clears it and every test
   // would otherwise read the previous one's entries.
   await env.DB.exec("DELETE FROM audit_log");
-  await env.DB.exec("DELETE FROM banned_people");
+  await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM member_display_names");
   await env.DB.exec("DELETE FROM members");
@@ -58,13 +58,13 @@ async function get(path: string, asUser: number | null = ADMIN_ID) {
 
 describe("what the log records", () => {
   it("keeps an expulsion after it has been lifted, which nothing else does", async () => {
-    // The whole reason for the table. Lifting deletes the `banned_people`
+    // The whole reason for the table. Lifting deletes the `expelled_people`
     // row, so without this there is no record that it ever happened -- and an
     // appeal is exactly when somebody asks.
-    await banPerson(env, EMAIL, "a recorded reason", ADMIN_ID);
-    await liftBan(env, EMAIL, OTHER_ADMIN_ID);
+    await expelPerson(env, EMAIL, "a recorded reason", ADMIN_ID);
+    await readmitPerson(env, EMAIL, OTHER_ADMIN_ID);
 
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM banned_people").first<{ n: number }>())
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM expelled_people").first<{ n: number }>())
       .toEqual({ n: 0 });
 
     const entries = await readAuditLog(env, { email: EMAIL });
@@ -123,8 +123,8 @@ describe("what the log records", () => {
   });
 
   it("does not restamp a decision that was already in force", async () => {
-    await banPerson(env, EMAIL, "the first reason", ADMIN_ID);
-    await banPerson(env, EMAIL, "a second attempt", OTHER_ADMIN_ID);
+    await expelPerson(env, EMAIL, "the first reason", ADMIN_ID);
+    await expelPerson(env, EMAIL, "a second attempt", OTHER_ADMIN_ID);
 
     const entries = await readAuditLog(env, { email: EMAIL });
     expect(entries).toHaveLength(1);

@@ -11,6 +11,10 @@
 // `d1_migrations` is in the list on purpose -- it is what makes the
 // migrations apply again from the first.
 //
+// Views go first, and are not left behind: a compatibility view kept under a
+// renamed table's old name (as 0003 does for `banned_people`) would otherwise
+// survive the drop and collide with the migration that recreates the table.
+//
 // Usage: node scripts/db-drop-sql.mjs <tables.json> <drop.sql>
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -22,8 +26,9 @@ if (!input || !output) {
 }
 
 const [{ results }] = JSON.parse(readFileSync(input, "utf8"));
+const views = results.filter((row) => row.type === "view").map((row) => row.name).sort();
 const parentsOf = new Map(
-  results.map(({ name, sql }) => [
+  results.filter((row) => row.type !== "view").map(({ name, sql }) => [
     name,
     new Set(
       [...String(sql ?? "").matchAll(/REFERENCES\s+"?(\w+)"?/gi)]
@@ -59,11 +64,16 @@ writeFileSync(
   output,
   [
     "PRAGMA defer_foreign_keys = on;",
+    ...views.map((name) => `DROP VIEW IF EXISTS ${quote(name)};`),
     ...tables.map((name) => `DROP TABLE IF EXISTS ${quote(name)};`),
     "PRAGMA defer_foreign_keys = off;",
     "",
   ].join("\n"),
 );
 
+if (views.length > 0) {
+  console.log(`${views.length} ${views.length === 1 ? "view" : "views"} will be dropped:`);
+  for (const name of views) console.log(`  ${name}`);
+}
 console.log(`${tables.length} tables will be dropped:`);
 for (const name of tables) console.log(`  ${name}`);

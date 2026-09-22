@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { classify } from "../../src/admin/members";
 import { getDisplayName, setDisplayName } from "../../src/member/displayName";
-import { isBanned, banPerson } from "../../src/member/ban";
+import { isExpelled, expelPerson } from "../../src/member/expulsion";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
 import { cardNameText, getMemberByEmail } from "../../src/member/artifacts";
 
@@ -33,7 +33,7 @@ afterEach(async () => {
   // Before `members`: both reference it, and D1 enforces the constraint, so
   // the delete fails and the next test's fixtures collide with what is left.
   await env.DB.exec("DELETE FROM revoked_cards");
-  await env.DB.exec("DELETE FROM banned_people");
+  await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM member_display_names");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
@@ -250,7 +250,7 @@ describe("an admin setting the name on someone's card", () => {
 
   it("records which admin did it, not just that an admin did", async () => {
     // A note nobody can attribute answers half the question. Revocations and
-    // bans have said who since they were built; names had not.
+    // expulsions have said who since they were built; names had not.
     await post({ email: EMAIL, display_name: "Chuy" });
 
     expect((await getDisplayName(env, EMAIL))?.set_by_email).toBe("admin@example.com");
@@ -347,14 +347,14 @@ describe("revoking and expelling from the member page", () => {
   });
 
   it("expels a person, with the reason kept", async () => {
-    const res = await post({ email: EMAIL, action: "ban", ban_note: "a recorded reason" });
+    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason" });
 
-    expect(res.headers.get("Location")).toContain("saved=banned");
-    expect(await isBanned(env, EMAIL)).toBe(true);
+    expect(res.headers.get("Location")).toContain("saved=expelled");
+    expect(await isExpelled(env, EMAIL)).toBe(true);
   });
 
   it("offers a lift once expelled, and says what state they are in", async () => {
-    await banPerson(env, EMAIL, null, ADMIN_ID);
+    await expelPerson(env, EMAIL, null, ADMIN_ID);
 
     const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
 
@@ -363,18 +363,18 @@ describe("revoking and expelling from the member page", () => {
     expect(body).not.toContain("Expel this person from the group");
   });
 
-  it("lifts a ban", async () => {
-    await banPerson(env, EMAIL, null, ADMIN_ID);
+  it("lifts an expulsion", async () => {
+    await expelPerson(env, EMAIL, null, ADMIN_ID);
 
-    const res = await post({ email: EMAIL, action: "unban" });
+    const res = await post({ email: EMAIL, action: "readmit" });
 
-    expect(res.headers.get("Location")).toContain("saved=unbanned");
-    expect(await isBanned(env, EMAIL)).toBe(false);
+    expect(res.headers.get("Location")).toContain("saved=readmitted");
+    expect(await isExpelled(env, EMAIL)).toBe(false);
   });
 
   it.each([
     ["restore", "has not been revoked"],
-    ["unban", "has not been expelled"],
+    ["readmit", "has not been expelled"],
   ])("says so rather than pretending, when %s has nothing to undo", async (action) => {
     const res = await post({ email: EMAIL, action });
 
@@ -388,9 +388,9 @@ describe("revoking and expelling from the member page", () => {
   });
 
   it("shows what just happened", async () => {
-    const banned = await (await get("/admin/members?saved=banned")).text();
-    expect(banned).toContain("Expelled from the group");
-    const lifted = await (await get("/admin/members?saved=unbanned")).text();
+    const expelled = await (await get("/admin/members?saved=expelled")).text();
+    expect(expelled).toContain("Expelled from the group");
+    const lifted = await (await get("/admin/members?saved=readmitted")).text();
     expect(lifted).toContain("Expulsion lifted");
   });
 });

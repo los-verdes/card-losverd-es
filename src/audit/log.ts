@@ -36,8 +36,8 @@ export interface AuditEvent {
  * a new string appearing in the column.
  *
  * Named after the decision in the words the group uses for it -- the code of
- * conduct's "revoke" and "expel" rather than this codebase's older
- * `banned_people` -- because these lines are read by people, not by the code.
+ * conduct's "revoke" and "expel" -- because these lines are read by people,
+ * not by the code.
  */
 export const AUDIT_ACTIONS = [
   "membership.revoked",

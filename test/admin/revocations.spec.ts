@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
-import { banPerson, isBanned } from "../../src/member/ban";
+import { expelPerson, isExpelled } from "../../src/member/expulsion";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -27,7 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await env.DB.exec("DELETE FROM banned_people");
+  await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
@@ -85,7 +85,7 @@ describe("the revoked and expelled page", () => {
   });
 
   it("lists an expelled person, and whether they hold a membership", async () => {
-    await banPerson(env, EMAIL, "another reason", ADMIN_ID);
+    await expelPerson(env, EMAIL, "another reason", ADMIN_ID);
 
     const body = await (await request()).text();
 
@@ -94,8 +94,8 @@ describe("the revoked and expelled page", () => {
     expect(body).toContain("Expelled from the group");
   });
 
-  it("copes with a ban on somebody who has never bought anything", async () => {
-    await banPerson(env, "stranger@example.com", null, ADMIN_ID);
+  it("copes with an expulsion on somebody who has never bought anything", async () => {
+    await expelPerson(env, "stranger@example.com", null, ADMIN_ID);
 
     const res = await request();
 
@@ -113,14 +113,14 @@ describe("the revoked and expelled page", () => {
     expect(await isRevoked(env, CARD)).toBe(false);
   });
 
-  it("lifts a ban", async () => {
-    await banPerson(env, EMAIL, null, ADMIN_ID);
+  it("lifts an expulsion", async () => {
+    await expelPerson(env, EMAIL, null, ADMIN_ID);
 
-    const res = await request(form({ action: "unban", email: EMAIL }));
+    const res = await request(form({ action: "readmit", email: EMAIL }));
 
     expect(res.status).toBe(303);
-    expect(res.headers.get("Location")).toContain("saved=unbanned");
-    expect(await isBanned(env, EMAIL)).toBe(false);
+    expect(res.headers.get("Location")).toContain("saved=readmitted");
+    expect(await isExpelled(env, EMAIL)).toBe(false);
   });
 
   it("says so rather than pretending, when the card has not been revoked", async () => {
@@ -130,7 +130,7 @@ describe("the revoked and expelled page", () => {
   });
 
   it("says so rather than pretending, when the person has not been expelled", async () => {
-    const res = await request(form({ action: "unban", email: EMAIL }));
+    const res = await request(form({ action: "readmit", email: EMAIL }));
 
     expect(res.headers.get("Location")).toContain("error=");
   });
@@ -142,7 +142,7 @@ describe("the revoked and expelled page", () => {
   });
 
   it("refuses a lift with no person named", async () => {
-    const res = await request(form({ action: "unban", email: "  " }));
+    const res = await request(form({ action: "readmit", email: "  " }));
 
     expect(res.headers.get("Location")).toContain("error=");
   });
@@ -151,7 +151,7 @@ describe("the revoked and expelled page", () => {
     expect(await (await request({ path: "/admin/revocations?saved=restored" })).text()).toContain(
       "Membership restored",
     );
-    expect(await (await request({ path: "/admin/revocations?saved=unbanned" })).text()).toContain(
+    expect(await (await request({ path: "/admin/revocations?saved=readmitted" })).text()).toContain(
       "Expulsion lifted",
     );
     expect(
