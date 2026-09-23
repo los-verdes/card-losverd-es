@@ -29,12 +29,22 @@ export interface Signal {
   detail: string;
 }
 
-/** Hours since a watermark, or null when the job has never recorded one. */
+/**
+ * Hours since a job last completed, or null when it has never run here.
+ *
+ * `updated_at`, not `last_run_at`. Every job writes the moment it finished
+ * into the first; the second is a watermark meaning whatever that job needs it
+ * to mean. The resync's happens to be a time, so the two agreed and the
+ * difference did not show. The sweep's is the last expiry *date* it has
+ * covered, stored as midnight UTC and a full day behind by design -- so a
+ * sweep running perfectly every night looked 38 hours stale by the time the
+ * next one was due, and this signal was hours away from saying so in Slack.
+ */
 async function hoursSinceJob(env: Env, jobName: string, now: Date): Promise<number | null> {
-  const row = await env.DB.prepare("SELECT last_run_at FROM etl_sync_state WHERE job_name = ?")
+  const row = await env.DB.prepare("SELECT updated_at FROM etl_sync_state WHERE job_name = ?")
     .bind(jobName)
-    .first<{ last_run_at: number }>();
-  return row ? (now.getTime() - row.last_run_at) / 3_600_000 : null;
+    .first<{ updated_at: number }>();
+  return row ? (now.getTime() - row.updated_at) / 3_600_000 : null;
 }
 
 /**

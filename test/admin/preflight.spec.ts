@@ -636,8 +636,10 @@ describe("configuration", () => {
     const now = new Date("2026-09-18T12:00:00Z");
     const record = async (lastRunAt: number) =>
       env.DB.prepare(
+        // Both columns, as setWatermark does: the freshness signal reads
+        // updated_at, the moment the job finished.
         `INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES ('sync_subscriptions_etl', ?, ?)
-         ON CONFLICT(job_name) DO UPDATE SET last_run_at = excluded.last_run_at`,
+         ON CONFLICT(job_name) DO UPDATE SET last_run_at = excluded.last_run_at, updated_at = excluded.updated_at`,
       )
         .bind(lastRunAt, lastRunAt)
         .run();
