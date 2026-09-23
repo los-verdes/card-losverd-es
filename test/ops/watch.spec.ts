@@ -24,8 +24,9 @@ async function errors(count: number, at: Date = NOW) {
 
 /** A job that completed `hours` ago, so its freshness signal is quiet. */
 async function jobRan(jobName: string, hoursAgo: number, at: Date = NOW) {
-  await env.DB.prepare("INSERT OR REPLACE INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, 0)")
-    .bind(jobName, at.getTime() - hoursAgo * HOUR)
+  const finishedAt = at.getTime() - hoursAgo * HOUR;
+  await env.DB.prepare("INSERT OR REPLACE INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES (?, ?, ?)")
+    .bind(jobName, finishedAt, finishedAt)
     .run();
 }
 
@@ -74,6 +75,23 @@ describe("the signals", () => {
 
     expect(resync?.firing).toBe(true);
     expect(resync?.detail).toContain("13 hours ago");
+  });
+
+  it("stay quiet for a sweep whose watermark is a day behind, which is how a healthy one looks", async () => {
+    // The sweep's `last_run_at` is the last expiry date it covered, stored as
+    // midnight UTC, so it trails the run that wrote it by more than a day.
+    // Read as a completion time it made a nightly sweep look stale every
+    // night, just before the next one was due.
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES ('pass_expiry_sweep', ?, ?)",
+    )
+      .bind(Date.parse("2026-09-21T00:00:00Z"), NOW.getTime() - 2 * HOUR)
+      .run();
+
+    const sweep = (await evaluateSignals(env, NOW)).find((s) => s.name === "Pass expiry sweep");
+
+    expect(sweep?.firing).toBe(false);
+    expect(sweep?.detail).toContain("2 hours ago");
   });
 
   it("fire on a pile of device-reported pass failures, which is what went unnoticed before", async () => {
