@@ -125,6 +125,55 @@ export async function getMemberByEmail(
     .first<MemberRecord>();
 }
 
+/** A member found by name, with the Slack handle that matched them, if any. */
+export interface NameMatch extends MemberRecord {
+  slack_handle: string | null;
+}
+
+/** `LIKE` treats `%` and `_` as wildcards; an admin typing either means the character. */
+function likeContaining(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
+/**
+ * Members whose name contains `text`, for the admin name search (#320):
+ * the name their orders give, the name on their card, or their Slack name
+ * or handle. `slackHandleOnly` narrows it to the handle, for an admin who
+ * typed one.
+ *
+ * Through `MEMBER_SELECT` like every other member read, so a revoked or
+ * expelled person shows as such here without this knowing why.
+ *
+ * `LIKE` folds case for ASCII only, so `jose` does not find `José`. Worth a
+ * folded search column if that turns out to matter; the lists are short
+ * enough that nothing else needs an index.
+ */
+export async function findMembersByName(
+  env: Env,
+  text: string,
+  options: { slackHandleOnly?: boolean; limit: number },
+): Promise<NameMatch[]> {
+  const slackHandle = `(s.name LIKE ?1 ESCAPE '\\' OR json_extract(s.profile, '$.display_name') LIKE ?1 ESCAPE '\\')`;
+  const where = options.slackHandleOnly
+    ? `EXISTS (SELECT 1 FROM slack_users s WHERE s.email = m.email AND ${slackHandle})`
+    : `(m.first_name || ' ' || m.last_name) LIKE ?1 ESCAPE '\\'
+       OR d.display_name LIKE ?1 ESCAPE '\\'
+       OR EXISTS (SELECT 1 FROM slack_users s WHERE s.email = m.email
+                  AND (${slackHandle} OR s.real_name LIKE ?1 ESCAPE '\\'))`;
+  const { results } = await env.DB.prepare(
+    `SELECT found.*,
+            (SELECT COALESCE(NULLIF(json_extract(s.profile, '$.display_name'), ''), s.name)
+               FROM slack_users s WHERE s.email = found.email
+              ORDER BY s.deleted, s.synced_at DESC LIMIT 1) AS slack_handle
+       FROM (${MEMBER_SELECT} WHERE ${where}) AS found
+      ORDER BY found.last_name COLLATE NOCASE, found.first_name COLLATE NOCASE, found.email
+      LIMIT ?2`,
+  )
+    .bind(likeContaining(text), options.limit)
+    .all<NameMatch>();
+  return results;
+}
+
 /**
  * Whether a membership is current: not revoked, and good through today or
  * later. Asked of the date every time rather than stored, since a stored

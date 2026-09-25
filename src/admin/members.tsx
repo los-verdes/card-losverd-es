@@ -11,6 +11,12 @@
  * So this accepts any of the three identifiers a person might have to hand --
  * a card number, an email address, or an order number -- rather than making
  * the Merch Team work out which door to use.
+ *
+ * A second form finds people by part of a name or a Slack handle (#320), for
+ * when all anybody has is who somebody is. It is a separate form rather than
+ * a fourth shape of the first because the first treats anything unrecognised
+ * as an order number, and because a name matches many people where the other
+ * three match one.
  */
 
 import { Hono } from "hono";
@@ -19,7 +25,14 @@ import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
 import { isWellFormedEmail } from "../member/email-card";
-import { cardNameText, getMemberById, getMemberByEmail, type MemberRecord } from "../member/artifacts";
+import {
+  cardNameText,
+  findMembersByName,
+  getMemberById,
+  getMemberByEmail,
+  type MemberRecord,
+  type NameMatch,
+} from "../member/artifacts";
 import { getMemberOrderHistory, type MemberOrder } from "../member/orderHistory";
 import {
   MAX_DISPLAY_NAME_LENGTH,
@@ -82,6 +95,77 @@ const SearchForm: FC<{ q: string }> = ({ q }) => (
     <input id="q" name="q" type="text" value={q} autocomplete="off" placeholder="LV-..." />
     <button type="submit">Find</button>
   </form>
+);
+
+/** Fewer letters than this would list a good share of the membership. */
+export const MIN_NAME_SEARCH_LENGTH = 2;
+
+/** Enough to scan by eye; past it, more letters are the better answer. */
+export const NAME_SEARCH_LIMIT = 50;
+
+export type NameSearch =
+  | { kind: "empty" }
+  | { kind: "too-short" }
+  | { kind: "name"; value: string }
+  | { kind: "slack-handle"; value: string };
+
+/**
+ * What was typed into the name form. A leading `@` means a Slack handle,
+ * the way Slack itself writes one; the email form is where an address goes.
+ */
+export function parseNameSearch(raw: string): NameSearch {
+  const value = raw.trim();
+  if (value === "") return { kind: "empty" };
+  const handle = value.startsWith("@") ? value.slice(1).trim() : null;
+  const text = handle ?? value;
+  if (text.length < MIN_NAME_SEARCH_LENGTH) return { kind: "too-short" };
+  return handle === null ? { kind: "name", value: text } : { kind: "slack-handle", value: text };
+}
+
+const NameSearchForm: FC<{ name: string }> = ({ name }) => (
+  <form method="get" action={MEMBERS_PATH}>
+    <label for="name">Part of a name, or a Slack @handle</label>
+    <input id="name" name="name" type="text" value={name} autocomplete="off" placeholder="@..." />
+    <button type="submit">Find</button>
+  </form>
+);
+
+const NameResults: FC<{ matches: NameMatch[] }> = ({ matches }) => (
+  <>
+    <p>
+      {matches.length > NAME_SEARCH_LIMIT
+        ? `More than ${NAME_SEARCH_LIMIT} people match; the first ${NAME_SEARCH_LIMIT} are below. More letters will narrow it down.`
+        : `${matches.length} ${matches.length === 1 ? "person matches" : "people match"}.`}
+    </p>
+    <table style="border-collapse: collapse; font-size: 0.9rem">
+      <thead>
+        <tr>
+          {["Name on card", "Card #", "Email", "Slack", "Good through"].map((h) => (
+            <th style={cellStyle}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {matches.slice(0, NAME_SEARCH_LIMIT).map((match) => (
+          <tr>
+            <td style={cellStyle}>
+              <a href={`${MEMBERS_PATH}?q=${encodeURIComponent(match.member_id)}`}>{cardNameText(match)}</a>
+            </td>
+            <td style={cellStyle}>{match.member_id}</td>
+            <td style={cellStyle}>{match.email}</td>
+            <td style={cellStyle}>{match.slack_handle ? `@${match.slack_handle}` : ""}</td>
+            <td style={cellStyle}>
+              {match.revoked
+                ? "revoked or expelled"
+                : match.expiration_date
+                  ? formatShortDate(match.expiration_date)
+                  : "no counted orders"}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </>
 );
 
 const NAME_SET_BY: Record<string, string> = {
@@ -392,6 +476,24 @@ members.get("/", async (c) => {
     if (!orphan) notFound = "No membership is held under that address, and no orders either.";
   }
 
+  // One more than is shown, so the page can say there were more.
+  const nameSearch = parseNameSearch(c.req.query("name") ?? "");
+  const nameMatches =
+    nameSearch.kind === "name" || nameSearch.kind === "slack-handle"
+      ? await findMembersByName(c.env, nameSearch.value, {
+          slackHandleOnly: nameSearch.kind === "slack-handle",
+          limit: NAME_SEARCH_LIMIT + 1,
+        })
+      : null;
+  if (nameSearch.kind === "too-short") {
+    notFound = `Type at least ${MIN_NAME_SEARCH_LENGTH} letters of a name.`;
+  } else if (nameMatches?.length === 0) {
+    notFound =
+      nameSearch.kind === "slack-handle"
+        ? "Nobody with a membership has a Slack handle containing that."
+        : "Nobody with a membership has a name or Slack handle containing that.";
+  }
+
   return c.html(
     <AdminPage title="Find a member">
       <p>
@@ -399,6 +501,8 @@ members.get("/", async (c) => {
         always read out. An order number goes straight to that order.
       </p>
       <SearchForm q={c.req.query("q") ?? ""} />
+      <NameSearchForm name={c.req.query("name") ?? ""} />
+      {nameMatches && nameMatches.length > 0 && <NameResults matches={nameMatches} />}
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}

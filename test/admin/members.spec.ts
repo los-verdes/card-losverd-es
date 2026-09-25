@@ -3,7 +3,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
-import { classify } from "../../src/admin/members";
+import { NAME_SEARCH_LIMIT, classify, parseNameSearch } from "../../src/admin/members";
 import { getDisplayName, setDisplayName } from "../../src/member/displayName";
 import { isExpelled, expelPerson } from "../../src/member/expulsion";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
@@ -37,6 +37,7 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM member_display_names");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
+  await env.DB.exec("DELETE FROM slack_users");
   await env.DB.exec("DELETE FROM users");
 });
 
@@ -173,6 +174,162 @@ describe("finding a member", () => {
     const res = await get(`/admin/members?q=${encodeURIComponent(CARD)}`);
 
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+describe("working out what was typed into the name form", () => {
+  it.each([
+    ["", { kind: "empty" }],
+    ["   ", { kind: "empty" }],
+    ["j", { kind: "too-short" }],
+    ["@j", { kind: "too-short" }],
+    ["@", { kind: "too-short" }],
+    ["  Doe ", { kind: "name", value: "Doe" }],
+    ["jane doe", { kind: "name", value: "jane doe" }],
+    ["@janed", { kind: "slack-handle", value: "janed" }],
+    ["@ janed ", { kind: "slack-handle", value: "janed" }],
+  ])("%j", (typed, expected) => {
+    expect(parseNameSearch(typed)).toEqual(expected);
+  });
+});
+
+describe("finding members by name or Slack handle", () => {
+  const OTHER_CARD = "LV-6f1c8e40-0000-4000-8000-000000000002";
+
+  async function insertMember(memberId: string, first: string, last: string, email: string) {
+    await env.DB.prepare(
+      `INSERT INTO members (member_id, first_name, last_name, email,
+         expiration_date, member_since, auth_token, last_updated_at)
+       VALUES (?, ?, ?, ?, '2099-03-04', '2021-07-15', 'token', 1)`,
+    )
+      .bind(memberId, first, last, email)
+      .run();
+  }
+
+  async function insertSlack(email: string, name: string, realName: string, displayName: string, deleted = 0) {
+    await env.DB.prepare(
+      `INSERT INTO slack_users (slack_id, name, real_name, email, deleted, profile, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    )
+      .bind(`U${name}`, name, realName, email, deleted, JSON.stringify({ display_name: displayName }))
+      .run();
+  }
+
+  const memberLink = `<a href="/admin/members?q=${encodeURIComponent(CARD)}">`;
+
+  it("finds somebody by part of the name on their orders, whatever the case", async () => {
+    await insertMember(OTHER_CARD, "Rosa", "Verde", "rosa@example.com");
+
+    const body = await (await get("/admin/members?name=DOE")).text();
+
+    expect(body).toContain("1 person matches.");
+    expect(body).toContain(`${memberLink}Jane Doe</a>`);
+    expect(body).toContain("jane@example.com");
+    expect(body).not.toContain("rosa@example.com");
+  });
+
+  it("lists everybody who matches, by surname", async () => {
+    await insertMember(OTHER_CARD, "Janet", "Brown", "janet@example.com");
+
+    const body = await (await get("/admin/members?name=jane")).text();
+
+    expect(body).toContain("2 people match.");
+    expect(body.indexOf("janet@example.com")).toBeLessThan(body.indexOf("jane@example.com"));
+  });
+
+  it("matches across first and last name", async () => {
+    const body = await (await get("/admin/members?name=jane%20d")).text();
+
+    expect(body).toContain(`${memberLink}Jane Doe</a>`);
+  });
+
+  it("finds somebody by the name on their card, and lists them under it", async () => {
+    await setDisplayName(env, EMAIL, "Juana Verde", "member", null, null);
+
+    const body = await (await get("/admin/members?name=juana")).text();
+
+    expect(body).toContain(`${memberLink}Juana Verde</a>`);
+  });
+
+  it("finds somebody by their Slack name, and shows their handle", async () => {
+    await insertSlack(EMAIL, "jdoe", "Janie Q", "janie");
+
+    const body = await (await get("/admin/members?name=janie%20q")).text();
+
+    expect(body).toContain(`${memberLink}Jane Doe</a>`);
+    expect(body).toContain("@janie");
+  });
+
+  it("finds somebody by Slack handle, whether the current one or the legacy username", async () => {
+    await insertSlack(EMAIL, "jdoe", "Jane Doe", "janie");
+
+    expect(await (await get("/admin/members?name=%40jan")).text()).toContain(`${memberLink}Jane Doe</a>`);
+    expect(await (await get("/admin/members?name=%40jdo")).text()).toContain(`${memberLink}Jane Doe</a>`);
+  });
+
+  it("falls back to the legacy username when a Slack account has no display name", async () => {
+    await insertSlack(EMAIL, "jdoe", "Jane Doe", "");
+
+    expect(await (await get("/admin/members?name=jane")).text()).toContain("@jdoe");
+  });
+
+  it("matches only Slack handles when an @handle is typed", async () => {
+    await insertSlack(EMAIL, "jdoe", "Jane Doe", "jd");
+
+    const body = await (await get("/admin/members?name=%40jane")).text();
+
+    expect(body).not.toContain(memberLink);
+    expect(body).toContain("Nobody with a membership has a Slack handle containing that.");
+  });
+
+  it("takes % and _ literally rather than as wildcards", async () => {
+    const body = await (await get(`/admin/members?name=${encodeURIComponent("J%e")}`)).text();
+
+    expect(body).not.toContain(memberLink);
+    expect(body).toContain("Nobody with a membership has a name or Slack handle containing that.");
+  });
+
+  it("asks for more letters rather than listing everybody", async () => {
+    const body = await (await get("/admin/members?name=j")).text();
+
+    expect(body).toContain("Type at least 2 letters of a name.");
+    expect(body).not.toContain(memberLink);
+  });
+
+  it("says who is revoked or expelled, as the member page would", async () => {
+    await revokeCard(env, CARD, null, ADMIN_ID);
+
+    const body = await (await get("/admin/members?name=doe")).text();
+
+    expect(body).toContain("revoked or expelled");
+    expect(body).not.toContain("Mar 4, 2099");
+  });
+
+  it("says when a member has no counted orders", async () => {
+    await env.DB.prepare("UPDATE members SET expiration_date = NULL WHERE member_id = ?").bind(CARD).run();
+
+    expect(await (await get("/admin/members?name=doe")).text()).toContain("no counted orders");
+  });
+
+  it("stops at a readable number and says there were more", async () => {
+    // Padded, so they sort in number order and the one left off is the last.
+    const n = (i: number) => String(i).padStart(2, "0");
+    for (let i = 0; i <= NAME_SEARCH_LIMIT; i++) {
+      await insertMember(`LV-00000000-0000-4000-8000-0000000000${n(i)}`, "Rosa", `Verde${n(i)}`, `rosa${n(i)}@example.com`);
+    }
+
+    const body = await (await get("/admin/members?name=rosa")).text();
+
+    expect(body).toContain(`More than ${NAME_SEARCH_LIMIT} people match`);
+    expect(body.split(">Rosa Verde").length - 1).toBe(NAME_SEARCH_LIMIT);
+    expect(body).not.toContain(`rosa${n(NAME_SEARCH_LIMIT)}@example.com`);
+  });
+
+  it("offers both forms, keeping what was typed in each", async () => {
+    const body = await (await get("/admin/members?name=doe")).text();
+
+    expect(body).toContain('<input id="q" name="q" type="text" value=""');
+    expect(body).toContain('<input id="name" name="name" type="text" value="doe"');
   });
 });
 

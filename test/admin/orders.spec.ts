@@ -109,6 +109,22 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain('<form method="get" action="/admin/orders/1001">');
   });
 
+  it("links to the member it is attributed to", async () => {
+    const body = await (await request("/admin/orders/1001")).text();
+
+    // Once: the order email is the same address, so it is left as text.
+    expect(body.split('<a href="/admin/members?q=buyer%40example.com">buyer@example.com</a>')).toHaveLength(2);
+  });
+
+  it("also links the order email once the order has been pointed at somebody else", async () => {
+    await insertOrder({ id: "1002", email: "giver@example.com", memberEmail: "friend@example.com", created: "2098-02-01T00:00:00Z" });
+
+    const body = await (await request("/admin/orders/1002")).text();
+
+    expect(body).toContain('<a href="/admin/members?q=giver%40example.com">giver@example.com</a>');
+    expect(body).toContain('<a href="/admin/members?q=friend%40example.com">friend@example.com</a>');
+  });
+
   it("says so for an unknown order", async () => {
     const res = await request("/admin/orders/nope");
 
