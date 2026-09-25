@@ -183,7 +183,6 @@ const Summary: FC<{
   expelled: boolean;
 }> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled }) => (
   <>
-    <h2>{cardNameText(member)}</h2>
     {member.display_name && (
       <p class="muted">
         {(nameSetBy && NAME_SET_BY[nameSetBy]) ?? "That name was set for them"}
@@ -375,13 +374,11 @@ async function ordersMovedAway(db: D1Database, email: string): Promise<MovedOrde
  * simply not been built yet.
  */
 const OrdersWithoutMember: FC<{
-  email: string;
   footprint: EmailFootprint;
   orders: MemberOrder[];
   moved: MovedOrder[];
-}> = ({ email, footprint, orders, moved }) => (
+}> = ({ footprint, orders, moved }) => (
   <>
-    <h2>{email}</h2>
     <p>
       <strong>No membership is held under this address</strong>, but it is not unknown.
       Orders attributed to it: {footprint.memberOrders.total}. Counting towards a
@@ -494,14 +491,31 @@ members.get("/", async (c) => {
         : "Nobody with a membership has a name or Slack handle containing that.";
   }
 
-  return c.html(
-    <AdminPage title="Find a member">
-      <p>
-        The card number is on the back of every pass, so it is the one thing a member can
-        always read out. An order number goes straight to that order.
-      </p>
+  // Following a link from a report lands here, so the heading says whose page
+  // this is; the search forms follow the details rather than leading them.
+  const searchForms = (
+    <>
       <SearchForm q={c.req.query("q") ?? ""} />
       <NameSearchForm name={c.req.query("name") ?? ""} />
+    </>
+  );
+  const title = member
+    ? `Member: ${cardNameText(member) || member.email}`
+    : orphan
+      ? `Address: ${orphan.email}`
+      : "Find a member";
+
+  return c.html(
+    <AdminPage title={title}>
+      {!member && !orphan && (
+        <>
+          <p>
+            The card number is on the back of every pass, so it is the one thing a member can
+            always read out. An order number goes straight to that order.
+          </p>
+          {searchForms}
+        </>
+      )}
       {nameMatches && nameMatches.length > 0 && <NameResults matches={nameMatches} />}
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
@@ -542,6 +556,12 @@ members.get("/", async (c) => {
           nameSetByEmail={override?.set_by_email ?? null}
           expelled={expelled}
         />
+      )}
+      {(member || orphan) && (
+        <>
+          <h2>Find someone else</h2>
+          {searchForms}
+        </>
       )}
     </AdminPage>,
   );

@@ -155,7 +155,32 @@ describe("finding a member", () => {
     const res = await get("/admin/members");
 
     expect(res.status).toBe(200);
-    expect(await res.text()).not.toContain("No membership");
+    const body = await res.text();
+    expect(body).not.toContain("No membership");
+    expect(body).toContain("<h1>Find a member</h1>");
+    expect(body).not.toContain("Find someone else");
+  });
+
+  it("is headed with whose page it is, details first and the search after", async () => {
+    // Links from the reports land here; the heading is what says so.
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("<title>Member: Jane Doe | Los Verdes Admin</title>");
+    expect(body).toContain("<h1>Member: Jane Doe</h1>");
+    expect(body.indexOf("Card #")).toBeLessThan(body.indexOf("<h2>Find someone else</h2>"));
+    expect(body.indexOf("<h2>Find someone else</h2>")).toBeLessThan(body.indexOf('<input id="q"'));
+  });
+
+  it("heads the page with the name on their card, if they chose one", async () => {
+    await setDisplayName(env, EMAIL, "Juana Verde", "member", null, null);
+
+    expect(await (await get(`/admin/members?q=${EMAIL}`)).text()).toContain("<h1>Member: Juana Verde</h1>");
+  });
+
+  it("falls back to the address in the heading when there is no name at all", async () => {
+    await env.DB.prepare("UPDATE members SET first_name = '', last_name = '' WHERE member_id = ?").bind(CARD).run();
+
+    expect(await (await get(`/admin/members?q=${EMAIL}`)).text()).toContain(`<h1>Member: ${EMAIL}</h1>`);
   });
 
   it("is admin-only", async () => {
@@ -352,6 +377,15 @@ describe("an address with orders and no membership", () => {
       .bind(orderId, orderEmail, memberEmail, status)
       .run();
   }
+
+  it("is headed with the address, not as a search page", async () => {
+    await insertOrder("1001", "sam.rivera@example.com", "sam.rivera@example.com", "Refunded");
+
+    const body = await (await get("/admin/members?q=sam.rivera@example.com")).text();
+
+    expect(body).toContain("<h1>Address: sam.rivera@example.com</h1>");
+    expect(body).toContain("<h2>Find someone else</h2>");
+  });
 
   it("shows the orders and why none of them makes a membership", async () => {
     await insertOrder("1001", "sam.rivera@example.com", "sam.rivera@example.com", "Refunded");
