@@ -110,6 +110,16 @@ const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, fo
   );
 };
 
+/**
+ * An address as a link to the members page, which shows its member or, for
+ * an address with none, the orders it holds (#320). The path is spelled out:
+ * that page imports this module, so importing its constant back would be
+ * circular.
+ */
+const MemberLink: FC<{ email: string }> = ({ email }) => (
+  <a href={`/admin/members?q=${encodeURIComponent(email)}`}>{email}</a>
+);
+
 const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
   <table style="border-collapse: collapse; font-size: 0.9rem; margin-bottom: 1rem">
     <tbody>
@@ -118,8 +128,16 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
           ["Order", order.order_id],
           ["Source", order.source],
           ["Name", `${order.first_name ?? ""} ${order.last_name ?? ""}`.trim()],
-          ["Order email", order.order_email],
-          ["Attributed to", order.member_email],
+          // Linked only when it differs: the same address twice is one member.
+          [
+            "Order email",
+            order.order_email !== order.member_email ? (
+              <MemberLink email={order.order_email} />
+            ) : (
+              order.order_email
+            ),
+          ],
+          ["Attributed to", <MemberLink email={order.member_email} />],
           ["Started", order.created_on.slice(0, 10)],
           ["Expires", order.expires_on.slice(0, 10)],
           ["Status", `${order.status ?? ""}${order.counts ? "" : " (doesn't count as a membership)"}`],
