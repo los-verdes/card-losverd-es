@@ -9,6 +9,16 @@ import { TABLE_SORT_SCRIPT } from "./tableSort";
 
 export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap";
 
+/**
+ * An address as a link to the members page, which shows its member or, for
+ * an address with none, the orders it holds (#320). Admin tables that list
+ * members by address link them this way. The path is spelled out because
+ * the members page imports the pages that use this.
+ */
+export const MemberLink: FC<{ email: string }> = ({ email }) => (
+  <a href={`/admin/members?q=${encodeURIComponent(email)}`}>{email}</a>
+);
+
 export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
   <html lang="en">
     <head>

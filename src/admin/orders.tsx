@@ -28,7 +28,7 @@ import {
   type AttributionRecord,
   type EmailFootprint,
 } from "./attribution";
-import { AdminPage, cellStyle } from "./layout";
+import { AdminPage, MemberLink, cellStyle } from "./layout";
 
 const MAX_NOTE_LENGTH = 500;
 
@@ -110,16 +110,6 @@ const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, fo
   );
 };
 
-/**
- * An address as a link to the members page, which shows its member or, for
- * an address with none, the orders it holds (#320). The path is spelled out:
- * that page imports this module, so importing its constant back would be
- * circular.
- */
-const MemberLink: FC<{ email: string }> = ({ email }) => (
-  <a href={`/admin/members?q=${encodeURIComponent(email)}`}>{email}</a>
-);
-
 const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
   <table style="border-collapse: collapse; font-size: 0.9rem; margin-bottom: 1rem">
     <tbody>
@@ -184,8 +174,12 @@ const History: FC<{ records: AttributionRecord[] }> = ({ records }) =>
         {records.map((record) => (
           <tr>
             <td style={cellStyle}>{new Date(record.created_at).toISOString().slice(0, 16).replace("T", " ")}</td>
-            <td style={cellStyle}>{record.previous_member_email}</td>
-            <td style={cellStyle}>{record.member_email}</td>
+            <td style={cellStyle}>
+              <MemberLink email={record.previous_member_email} />
+            </td>
+            <td style={cellStyle}>
+              <MemberLink email={record.member_email} />
+            </td>
             <td style={cellStyle}>{record.admin_email ?? ""}</td>
             <td style={cellStyle}>{record.note ?? ""}</td>
           </tr>

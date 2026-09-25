@@ -14,7 +14,7 @@ import { parseIsoDate } from "../lib/dateFormat";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
-import { AdminPage, cellStyle } from "./layout";
+import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { MonthlyOrdersChart } from "./monthChart";
 import { orderPath } from "./orders";
 import {
@@ -67,17 +67,23 @@ type SlackColumn = keyof typeof SLACK_COLUMN_HEADINGS;
 const MEMBER_COLUMNS: SlackColumn[] = ["email", "first_name", "last_name", "expires_on"];
 const SLACK_COLUMNS: SlackColumn[] = ["slack_id", "slack_name"];
 
-/** The Slack page's four tables; `key` names each one's CSV download. */
+/**
+ * The Slack page's four tables; `key` names each one's CSV download.
+ * `members` says whether its addresses belong to members, and so link to
+ * them; the last table's are Slack accounts with no orders, which the
+ * members page would only report as unknown.
+ */
 const SLACK_TABLES: {
   key: string;
   field: Exclude<keyof SlackCrossReference, "slackSyncedAt">;
   title: string;
   columns: SlackColumn[];
+  members: boolean;
 }[] = [
-  { key: "current-in-slack", field: "currentInSlack", title: "Current members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
-  { key: "current-not-in-slack", field: "currentNotInSlack", title: "Current members not in Slack", columns: MEMBER_COLUMNS },
-  { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS] },
-  { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS] },
+  { key: "current-in-slack", field: "currentInSlack", title: "Current members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS], members: true },
+  { key: "current-not-in-slack", field: "currentNotInSlack", title: "Current members not in Slack", columns: MEMBER_COLUMNS, members: true },
+  { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS], members: true },
+  { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS], members: false },
 ];
 
 /** The consolidations page's two tables; `key` names each one's CSV download. */
@@ -242,8 +248,10 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
             <a href={orderPath(row.order_id)}>{row.order_id}</a>
           </td>
           <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
-          <td style={cellStyle}>{row.order_email}</td>
-          <td style={cellStyle}>{row.member_email === row.order_email ? "" : row.member_email}</td>
+          <td style={cellStyle}>
+            <MemberLink email={row.order_email} />
+          </td>
+          <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
           <td style={cellStyle}>{row.expires_on.slice(0, 10)}</td>
           <td style={cellStyle}>{row.channel_name ?? row.source}</td>
@@ -264,10 +272,17 @@ function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[
   });
 }
 
-/** One consolidations cell: order ids link to their admin page, timestamps read as dates. */
+/**
+ * One consolidations cell: order ids link to their admin page, addresses to
+ * their member, timestamps read as dates. `attributed_by` is an admin, not a
+ * member, so it stays text.
+ */
 function consolidationCell(row: AttributedOrderRow | DuplicateNameRow, column: string) {
   const value = row[column];
   if (column === "order_id") return <a href={orderPath(String(value))}>{String(value)}</a>;
+  if ((column === "order_email" || column === "member_email") && typeof value === "string") {
+    return <MemberLink email={value} />;
+  }
   if (column === "attributed_at") {
     return value === null ? "legacy import" : new Date(Number(value)).toISOString().slice(0, 16).replace("T", " ");
   }
@@ -482,10 +497,18 @@ reports.get("/slack", async (c) => {
               <tbody>
                 {rows.map((row) => (
                   <tr>
-                    {table.columns.map((column) => (
+                    {table.columns.map((column) => {
+                      const value = row[column];
+                      if (column === "email" && table.members && value) {
+                        return (
+                          <td style={cellStyle}>
+                            <MemberLink email={value} />
+                          </td>
+                        );
+                      }
                       // Dates shown as days; the CSV keeps the full timestamp.
-                      <td style={cellStyle}>{row[column]?.slice(0, column === "expires_on" ? 10 : undefined)}</td>
-                    ))}
+                      return <td style={cellStyle}>{value?.slice(0, column === "expires_on" ? 10 : undefined)}</td>;
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -610,7 +633,9 @@ reports.get("/missing", async (c) => {
               <td style={cellStyle}>
                 <a href={orderPath(row.order_id)}>{row.order_id}</a>
               </td>
-              <td style={cellStyle}>{row.member_email}</td>
+              <td style={cellStyle}>
+                <MemberLink email={row.member_email} />
+              </td>
               <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
               <td style={cellStyle}>{row.status ?? ""}</td>
               <td style={cellStyle}>
@@ -680,7 +705,9 @@ reports.get("/extra-memberships", async (c) => {
               <td style={cellStyle}>
                 <a href={orderPath(row.order_id)}>{row.order_id}</a>
               </td>
-              <td style={cellStyle}>{row.member_email}</td>
+              <td style={cellStyle}>
+                <MemberLink email={row.member_email} />
+              </td>
               <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
               <td style={cellStyle}>{row.status ?? ""}</td>
               <td style={cellStyle}>
