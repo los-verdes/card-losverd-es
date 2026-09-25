@@ -53,6 +53,7 @@ export const AUDIT_ACTIONS = [
   "card.suppressed",
   "admin.granted",
   "admin.revoked",
+  "audit_log.exported",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -72,6 +73,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "card.suppressed": "Card not sent (suppressed)",
   "admin.granted": "Admin access granted",
   "admin.revoked": "Admin access revoked",
+  "audit_log.exported": "Audit log downloaded",
 };
 
 /**
@@ -124,27 +126,54 @@ export interface AuditEntry {
 
 /**
  * Most recent first. `email` narrows it to one person's history, which is the
- * question asked from their own admin page.
+ * question asked from their own admin page. `before` pages back through it:
+ * only entries older than that id, which stays put however many are added
+ * while somebody reads, where an offset would shift under them.
  */
 export async function readAuditLog(
   env: Env,
-  options: { email?: string | null; limit?: number } = {},
+  options: { email?: string | null; before?: number | null; limit?: number } = {},
 ): Promise<AuditEntry[]> {
   const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
-  const email = options.email?.trim().toLowerCase();
-  const { results } = email
-    ? await env.DB.prepare(
-        `SELECT id, action, subject_email, actor_email, detail, created_at
-           FROM audit_log WHERE subject_email = ? ORDER BY id DESC LIMIT ?`,
-      )
-        .bind(email, limit)
-        .all<AuditEntry>()
-    : await env.DB.prepare(
-        `SELECT id, action, subject_email, actor_email, detail, created_at
-           FROM audit_log ORDER BY id DESC LIMIT ?`,
-      )
-        .bind(limit)
-        .all<AuditEntry>();
+  return selectAuditLog(env, options, limit);
+}
+
+/**
+ * All of it, or all of one person's, for the download. Uncapped, unlike the
+ * page: the file is where "everything" is meant to be found.
+ */
+export async function readWholeAuditLog(
+  env: Env,
+  options: { email?: string | null } = {},
+): Promise<AuditEntry[]> {
+  return selectAuditLog(env, options, null);
+}
+
+async function selectAuditLog(
+  env: Env,
+  options: { email?: string | null; before?: number | null },
+  limit: number | null,
+): Promise<AuditEntry[]> {
+  const email = options.email?.trim().toLowerCase() || null;
+  const before = options.before ?? null;
+  const where: string[] = [];
+  const binds: (string | number)[] = [];
+  if (email !== null) {
+    where.push("subject_email = ?");
+    binds.push(email);
+  }
+  if (before !== null) {
+    where.push("id < ?");
+    binds.push(before);
+  }
+  if (limit !== null) binds.push(limit);
+  const { results } = await env.DB.prepare(
+    `SELECT id, action, subject_email, actor_email, detail, created_at
+       FROM audit_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY id DESC${limit !== null ? " LIMIT ?" : ""}`,
+  )
+    .bind(...binds)
+    .all<AuditEntry>();
   return results;
 }
 

@@ -8,18 +8,34 @@
  * any other screen, because undoing them deletes the row.
  *
  * Filtered to one person by `?email=`, which is how the member page links
- * here. Unfiltered it is the recent-activity view: short, deliberately, since
- * a page nobody can read at a glance is a page nobody reads.
+ * here. Unfiltered it is the recent-activity view: a page at a time,
+ * deliberately, since a page nobody can read at a glance is a page nobody
+ * reads, with "Older entries" to go further back (#319).
+ *
+ * All of it, or one person's, downloads as CSV. Each download is itself
+ * recorded, because the file carries names, addresses and the reasons for
+ * decisions out of the admin pages.
  */
 
 import { Hono } from "hono";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
-import { AUDIT_ACTION_LABELS, readAuditLog, type AuditEntry } from "../audit/log";
+import {
+  AUDIT_ACTION_LABELS,
+  actorEmail,
+  readAuditLog,
+  readWholeAuditLog,
+  recordAuditEvent,
+  type AuditEntry,
+} from "../audit/log";
+import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 
 export const AUDIT_PATH = "/admin/audit";
+
+/** Entries per page. */
+export const AUDIT_PAGE_SIZE = 100;
 
 const audit = new Hono<AuthEnv & { Bindings: Env }>();
 audit.use("*", requireAdmin);
@@ -58,9 +74,56 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
   </tr>
 );
 
+/** The page's own address, keeping the filter and adding whatever else is asked. */
+function auditHref(email: string | null, params: Record<string, string> = {}): string {
+  const query = new URLSearchParams({ ...(email ? { email } : {}), ...params }).toString();
+  return query ? `${AUDIT_PATH}?${query}` : AUDIT_PATH;
+}
+
+/** A positive whole number, or nothing: an old or mangled link shows the newest page rather than an error. */
+function parseBefore(raw: string | undefined): number | null {
+  return raw !== undefined && /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : null;
+}
+
+const CSV_COLUMNS = ["id", "when_utc", "action", "what", "who_it_was_about", "detail", "who_did_it"] as const;
+
 audit.get("/", async (c) => {
   const email = c.req.query("email")?.trim().toLowerCase() || null;
-  const entries = await readAuditLog(c.env, { email });
+
+  if (c.req.query("format") === "csv") {
+    const entries = await readWholeAuditLog(c.env, { email });
+    // Recorded before the file goes out, and allowed to fail the download: an
+    // export nobody can see happened is the thing this log exists to prevent.
+    await recordAuditEvent(c.env, {
+      action: "audit_log.exported",
+      subjectEmail: email,
+      actorEmail: await actorEmail(c.env, c.get("session").userId),
+      detail: `Downloaded ${entries.length} ${entries.length === 1 ? "entry" : "entries"}${email ? ` for ${email}` : ""}`,
+    });
+    const rows = entries.map((entry) => ({
+      id: entry.id,
+      when_utc: new Date(entry.created_at).toISOString(),
+      action: entry.action,
+      what: AUDIT_ACTION_LABELS[entry.action] ?? entry.action,
+      who_it_was_about: entry.subject_email,
+      detail: entry.detail,
+      who_did_it: entry.actor_email,
+    }));
+    const stamp = new Date().toISOString().slice(0, 10);
+    return new Response(toCsv(CSV_COLUMNS, rows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="audit-log-${stamp}.csv"`,
+      },
+    });
+  }
+
+  const before = parseBefore(c.req.query("before"));
+  // One more than a page, to know whether there is an older one.
+  const fetched = await readAuditLog(c.env, { email, before, limit: AUDIT_PAGE_SIZE + 1 });
+  const entries = fetched.slice(0, AUDIT_PAGE_SIZE);
+  const olderHref =
+    fetched.length > AUDIT_PAGE_SIZE ? auditHref(email, { before: String(entries[entries.length - 1].id) }) : null;
   const showSubject = email === null;
   const headings = showSubject
     ? ["When (UTC)", "What", "Who it was about", "Detail", "Who did it"]
@@ -82,12 +145,24 @@ audit.get("/", async (c) => {
         </p>
       ) : (
         <p class="muted">
-          The most recent {entries.length === 0 ? "entries" : `${entries.length}`}. Follow an
+          {before === null ? "The most recent entries, a page at a time." : "Older entries."} Follow an
           address to see one person's history on its own.
         </p>
       )}
+      <p>
+        <a href={auditHref(email, { format: "csv" })}>
+          {email ? "Download their whole history as CSV" : "Download the whole log as CSV"}
+        </a>{" "}
+        <span class="muted">(the download is itself recorded here)</span>
+      </p>
       {entries.length === 0 ? (
-        <p>{email ? "Nothing has been recorded against this address." : "Nothing recorded yet."}</p>
+        <p>
+          {before !== null
+            ? "Nothing older than that."
+            : email
+              ? "Nothing has been recorded against this address."
+              : "Nothing recorded yet."}
+        </p>
       ) : (
         <div style="overflow-x: auto">
           <table style="border-collapse: collapse; font-size: 0.9rem">
@@ -105,6 +180,13 @@ audit.get("/", async (c) => {
             </tbody>
           </table>
         </div>
+      )}
+      {(olderHref || before !== null) && (
+        <p>
+          {before !== null && <a href={auditHref(email)}>Newest entries</a>}
+          {before !== null && olderHref && " · "}
+          {olderHref && <a href={olderHref}>Older entries</a>}
+        </p>
       )}
     </AdminPage>,
   );

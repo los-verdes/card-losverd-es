@@ -43,7 +43,7 @@ Not built yet: MiniBC renewal data (see the provenance document), and a look at 
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/members` | Find a member by the card number on their pass, their email, or an order number, or list everyone whose name or Slack handle contains some text (`?name=`, `@` for a handle only); set the name their card shows. An address with orders and no membership shows those orders and why none makes one (`src/admin/members.tsx`) | Admin |
 | `/admin/revocations` | Memberships revoked before they expired, and people expelled from the group; lifting either (`src/admin/revocations.tsx`) | Admin |
-| `/admin/audit` | What has been done to memberships and by whom -- including decisions since undone, which no other page shows (`src/admin/audit.tsx`) | Admin |
+| `/admin/audit` | What has been done to memberships and by whom -- including decisions since undone, which no other page shows. Pages back with `?before=`; `?format=csv` downloads all of it (or one person's, with `?email=`), and each download is itself recorded (`src/admin/audit.tsx`) | Admin |
 | `/admin/orders/:id` | One membership order, linked to its member; attribute it to someone other than its purchaser, with an audit trail, or re-read it from BigCommerce (`POST .../reread`, never emails) (`src/admin/orders.tsx`) | Admin |
 | `/admin/member-since` | Correct a member's "member since" date when their orders don't show when they really joined (`src/admin/memberSince.tsx`) | Admin |
 | `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |
