@@ -104,7 +104,7 @@ const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, fo
           {placedOrders} placed with it
         </li>
         <li>{!login ? "Has never logged in" : login.is_admin === 1 ? "Has logged in (admin)" : "Has logged in"}</li>
-        <li>{!slack ? "No Slack account" : `Slack: ${slack.name ?? slack.slack_id}${slack.deleted ? " (deactivated)" : ""}`}</li>
+        <li>{!slack ? "No Slack account" : `Slack: ${slack.handle ?? slack.slack_id}${slack.deleted ? " (deactivated)" : ""}`}</li>
       </ul>
     </div>
   );
