@@ -11,7 +11,7 @@ import type { Env } from "../index";
 import { restoreCard, revokedCards, type RevokedCard } from "../member/revocation";
 import { expelledPeople, readmitPerson, type ExpelledPerson } from "../member/expulsion";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
-import { AdminPage, cellStyle } from "./layout";
+import { AdminPage, MemberLink, cellStyle } from "./layout";
 
 const revocations = new Hono<AuthEnv & { Bindings: Env }>();
 revocations.use("*", requireAdmin);
@@ -47,7 +47,7 @@ const Row: FC<{ card: RevokedCard }> = ({ card }) => (
 const ExpulsionRow: FC<{ person: ExpelledPerson }> = ({ person }) => (
   <tr>
     <td style={cellStyle}>
-      <a href={`/admin/members?q=${encodeURIComponent(person.email)}`}>{person.email}</a>
+      <MemberLink email={person.email} />
     </td>
     <td style={cellStyle}>{new Date(person.expelled_at).toISOString().slice(0, 10)}</td>
     <td style={cellStyle}>{person.expelled_by_email ?? "unknown"}</td>

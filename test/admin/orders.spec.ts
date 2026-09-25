@@ -229,6 +229,18 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).not.toContain("No attribution changes yet.");
   });
 
+  it("links both sides of each history entry to their member", async () => {
+    await env.DB.prepare(
+      `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note)
+       VALUES ('1001', 'earlier@example.com', 'later@example.com', NULL, NULL)`,
+    ).run();
+
+    const body = await (await request("/admin/orders/1001")).text();
+
+    expect(body).toContain('<a href="/admin/members?q=earlier%40example.com">earlier@example.com</a>');
+    expect(body).toContain('<a href="/admin/members?q=later%40example.com">later@example.com</a>');
+  });
+
   it.each([
     ["an invalid address", "email=not-an-email", "Enter a valid email address."],
     ["the current attribution", "email=buyer@example.com", "This order is already attributed to buyer@example.com."],

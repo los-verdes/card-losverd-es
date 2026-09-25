@@ -144,7 +144,8 @@ describe("GET /admin/reports/active", () => {
     // A page number from an old bookmark is ignored rather than refused.
     const body = await (await get("/admin/reports/active?q=bulk&page=2")).text();
 
-    expect(body.match(/<td[^>]*>bulk\d+@example\.com<\/td>/g)).toHaveLength(MANY);
+    // Each address links to its member.
+    expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
     const csvLink = body.indexOf(`href="/admin/reports/active?q=bulk&amp;format=csv">Download all ${MANY} as CSV`);
     expect(csvLink).toBeGreaterThan(-1);
@@ -189,7 +190,7 @@ describe("GET /admin/reports/expired", () => {
     const body = await (await get("/admin/reports/expired")).text();
 
     expect(body).toContain("<strong>1</strong> lapsed members, as of 2026-06-01T12:00:00Z");
-    expect(body).toContain("lapsed@example.com");
+    expect(body).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
     expect(body).not.toContain("current@example.com");
   });
 
@@ -285,13 +286,16 @@ describe("GET /admin/reports/slack", () => {
     expect(body).toContain("as of 2026-06-01T12:00:00Z");
     expect(body).toContain("Slack accounts last synced 2026-06-01T00:00:00Z.");
     expect(body).toContain("Current members in Slack (1)");
-    expect(body).toMatch(/joined@example\.com<\/td><td[^>]*>Jo<\/td><td[^>]*>Ined<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
+    expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com">joined@example\.com<\/a><\/td><td[^>]*>Jo<\/td><td[^>]*>Ined<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
     expect(body).toContain("Current members not in Slack (1)");
-    expect(body).toMatch(/nameless@example\.com<\/td><td[^>]*><\/td><td[^>]*><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
+    expect(body).toMatch(/nameless@example\.com<\/a><\/td><td[^>]*><\/td><td[^>]*><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
     expect(body).toContain("Lapsed members in Slack (1)");
     expect(body).toContain("&lt;img src=x&gt;");
     expect(body).not.toContain("<img src=x>");
+    expect(body).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
     expect(body).toContain("Slack users with no membership orders (1)");
+    // A Slack account with no orders has no member to link to.
+    expect(body).toMatch(/<td[^>]*>guest@example\.com<\/td>/);
     expect(body).toContain('href="/admin/reports/slack?table=users-without-orders&amp;format=csv">Download all 1 as CSV');
     expect(body).not.toContain("Showing the first");
   });
@@ -360,9 +364,12 @@ describe("GET /admin/reports/consolidations", () => {
 
     expect(body).toContain("Orders attributed to another address (1)");
     expect(body).toContain('<a href="/admin/orders/10">10</a>');
-    expect(body).toContain("recipient@example.com");
+    expect(body).toContain('<a href="/admin/members?q=buyer%40example.com">buyer@example.com</a>');
+    expect(body).toContain('<a href="/admin/members?q=recipient%40example.com">recipient@example.com</a>');
+    expect(body).toContain('<a href="/admin/members?q=p.lee%40example.com">p.lee@example.com</a>');
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
-    expect(body).toContain("admin@example.com");
+    // Who made the change is an admin, not a member.
+    expect(body).toMatch(/<td[^>]*>admin@example\.com<\/td>/);
     expect(body).toContain("Billing names under more than one address (2)");
     expect(body).toContain("pat lee");
   });
@@ -436,7 +443,7 @@ describe("missing from BigCommerce", () => {
     const body = await (await get("/admin/reports/missing")).text();
 
     expect(body).toContain("20");
-    expect(body).toContain("gone@example.com");
+    expect(body).toContain('<a href="/admin/members?q=gone%40example.com">gone@example.com</a>');
     expect(body).toContain("still count");
     expect(body).toContain("2026-09-17");
     expect(body).toContain("counts, to 2027-02-01");
@@ -454,5 +461,18 @@ describe("missing from BigCommerce", () => {
 
   it("is listed on the reports index", async () => {
     expect(await (await get("/admin/reports")).text()).toContain('<a href="/admin/reports/missing">Missing from BigCommerce</a>');
+  });
+});
+
+describe("orders carrying more than one membership", () => {
+  it("lists the order and links its member", async () => {
+    await insertOrder({ id: "30", email: "several@example.com", created: "2026-02-01T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 3 WHERE order_id = '30'").run();
+
+    const body = await (await get("/admin/reports/extra-memberships")).text();
+
+    expect(body).toContain('<a href="/admin/orders/30">30</a>');
+    expect(body).toContain('<a href="/admin/members?q=several%40example.com">several@example.com</a>');
+    expect(body).toMatch(/<td[^>]*>3<\/td>/);
   });
 });
