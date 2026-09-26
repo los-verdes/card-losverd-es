@@ -465,7 +465,7 @@ describe("missing from BigCommerce", () => {
 });
 
 describe("orders carrying more than one membership", () => {
-  // Far off, so it is still in force whenever this runs.
+  // Far off, so it is still active whenever this runs.
   const LATER = "2098-02-01T00:00:00Z";
 
   it("lists the order and links its member", async () => {
