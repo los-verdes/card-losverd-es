@@ -50,7 +50,7 @@ import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } fro
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
-import { RereadButton, orderPath, rereadMessage } from "./orders";
+import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
 
 const members = new Hono<AuthEnv & { Bindings: Env }>();
 members.use("*", requireAdmin);
@@ -338,7 +338,7 @@ const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
       {orders.map((order) => (
         <tr>
           <td style={cellStyle}>
-            <a href={orderPath(order.order_id)}>{order.order_id}</a>
+            <OrderLink orderId={order.order_id} />
           </td>
           <td style={cellStyle}>{order.product_name ?? ""}</td>
           <td style={cellStyle}>{order.status ?? ""}</td>
@@ -417,7 +417,7 @@ const OrdersWithoutMember: FC<{
         <ul>
           {moved.map((order) => (
             <li>
-              <a href={orderPath(order.order_id)}>{order.order_id}</a>, now attributed to{" "}
+              <OrderLink orderId={order.order_id} />, now attributed to{" "}
               <a href={`${MEMBERS_PATH}?q=${encodeURIComponent(order.member_email)}`}>
                 {order.member_email}
               </a>

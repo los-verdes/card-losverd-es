@@ -16,6 +16,7 @@ import type { Env } from "../index";
 import { AdminNav } from "../admin/nav";
 import { recordOutcome } from "../lib/outcome";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
+import { fullOrderIdTitle, shortOrderId } from "../lib/orderIds";
 import { CLAIM_PATH } from "./claimMembership";
 import {
   displayOrderNumber,
@@ -167,7 +168,9 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
       orders.map((order) => (
         <div class="order">
           <p style="margin: 0">
-            <strong>Order #{displayOrderNumber(order.order_id)}</strong>
+            <strong title={fullOrderIdTitle(displayOrderNumber(order.order_id))}>
+              Order #{shortOrderId(displayOrderNumber(order.order_id))}
+            </strong>
             {order.product_name ? ` — ${order.product_name}` : ""}
           </p>
           <p class="muted">

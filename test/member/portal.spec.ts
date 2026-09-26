@@ -424,7 +424,8 @@ describe("GET / membership history", () => {
 
     const body = await (await get("/")).text();
 
-    expect(body).toContain("Order #0cd5ad745fbc40fd95697470");
+    expect(body).toContain('<strong title="0cd5ad745fbc40fd95697470">');
+    expect(body).toContain("Order #0cd5ad…7470");
     expect(body).toContain("Jun 1, 2019");
     expect(body).not.toContain("count towards membership");
     expect(body).not.toContain("null");

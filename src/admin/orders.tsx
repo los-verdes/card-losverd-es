@@ -13,6 +13,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { formatShortDate } from "../lib/dateFormat";
+import { fullOrderIdTitle, shortOrderId } from "../lib/orderIds";
 import { isMembershipCurrent } from "../member/artifacts";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
@@ -36,6 +37,13 @@ const MAX_NOTE_LENGTH = 500;
 export function orderPath(orderId: string): string {
   return `/admin/orders/${encodeURIComponent(orderId)}`;
 }
+
+/** An order id as a link to its admin page, shortened if it is a long Squarespace one. */
+export const OrderLink: FC<{ orderId: string }> = ({ orderId }) => (
+  <a href={orderPath(orderId)} title={fullOrderIdTitle(orderId)}>
+    {shortOrderId(orderId)}
+  </a>
+);
 
 /**
  * Re-reading one order from BigCommerce (#294). Rarely needed -- the order

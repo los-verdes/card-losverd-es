@@ -121,7 +121,11 @@ describe("GET /admin/reports/active", () => {
 
     const body = await (await get("/admin/reports/active?q=sparse")).text();
 
-    expect(body).toContain("5f00000000000000000000c3");
+    // Shortened, so it does not widen the column; the whole id is in the
+    // tooltip and behind the link.
+    expect(body).toContain(
+      '<a href="/admin/orders/5f00000000000000000000c3" title="5f00000000000000000000c3">5f0000…00c3</a>',
+    );
     expect(body).toMatch(/>squarespace<\/td>/);
   });
 

@@ -16,7 +16,7 @@ import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { MonthlyOrdersChart } from "./monthChart";
-import { orderPath } from "./orders";
+import { OrderLink } from "./orders";
 import {
   activeMemberships,
   attentionCounts,
@@ -248,7 +248,7 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
       {rows.map((row) => (
         <tr>
           <td style={cellStyle}>
-            <a href={orderPath(row.order_id)}>{row.order_id}</a>
+            <OrderLink orderId={row.order_id} />
           </td>
           <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
           <td style={cellStyle}>
@@ -282,7 +282,7 @@ function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[
  */
 function consolidationCell(row: AttributedOrderRow | DuplicateNameRow, column: string) {
   const value = row[column];
-  if (column === "order_id") return <a href={orderPath(String(value))}>{String(value)}</a>;
+  if (column === "order_id") return <OrderLink orderId={String(value)} />;
   if ((column === "order_email" || column === "member_email") && typeof value === "string") {
     return <MemberLink email={value} />;
   }
@@ -643,7 +643,7 @@ reports.get("/missing", async (c) => {
           {rows.map((row: MissingOrderRow) => (
             <tr>
               <td style={cellStyle}>
-                <a href={orderPath(row.order_id)}>{row.order_id}</a>
+                <OrderLink orderId={row.order_id} />
               </td>
               <td style={cellStyle}>
                 <MemberLink email={row.member_email} />
@@ -725,7 +725,7 @@ reports.get("/extra-memberships", async (c) => {
           {rows.map((row: ExtraMembershipOrderRow) => (
             <tr>
               <td style={cellStyle}>
-                <a href={orderPath(row.order_id)}>{row.order_id}</a>
+                <OrderLink orderId={row.order_id} />
               </td>
               <td style={cellStyle}>
                 <MemberLink email={row.member_email} />
