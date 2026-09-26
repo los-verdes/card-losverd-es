@@ -19,6 +19,7 @@ import { MonthlyOrdersChart } from "./monthChart";
 import { orderPath } from "./orders";
 import {
   activeMemberships,
+  attentionCounts,
   consolidations,
   expiredMemberships,
   listChannels,
@@ -27,6 +28,7 @@ import {
   ordersWithExtraMemberships,
   ordersByMonth,
   slackCrossReference,
+  type AttentionCounts,
   type AttributedOrderRow,
   type DuplicateNameRow,
   type MembershipOrderRow,
@@ -305,8 +307,13 @@ reports.onError((err, c) => {
   throw err;
 });
 
-reports.get("/", (c) =>
-  c.html(
+reports.get("/", async (c) => {
+  // The two reports of things wanting action are listed only when they have
+  // something in them, as in the nav (src/admin/nav.tsx); both show if the
+  // count fails, since that is not the same as nothing to look at.
+  const counts = await attentionCounts(c.env.DB, toIsoSeconds(new Date())).catch(() => null);
+  const worthALook = (key: keyof AttentionCounts) => counts === null || counts[key] > 0;
+  return c.html(
     <AdminPage title="Membership reports">
       <ul>
         <li>
@@ -328,18 +335,22 @@ reports.get("/", (c) =>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
           Slack accounts, and Slack users who never bought a membership.
         </li>
-        <li>
-          <a href="/admin/reports/extra-memberships">More than one membership</a>: orders that carried more than
-          one membership. Only one was recorded, so somebody paid for a card that does not exist.
-        </li>
-        <li>
-          <a href="/admin/reports/missing">Missing from BigCommerce</a>: orders the store no longer returns. They
-          still count; this is the list to decide about.
-        </li>
+        {worthALook("extraMemberships") && (
+          <li>
+            <a href="/admin/reports/extra-memberships">More than one membership</a>: orders that carried more than
+            one membership. Only one was recorded, so somebody paid for a card that does not exist.
+          </li>
+        )}
+        {worthALook("missing") && (
+          <li>
+            <a href="/admin/reports/missing">Missing from BigCommerce</a>: orders the store no longer returns. They
+            still count; this is the list to decide about.
+          </li>
+        )}
       </ul>
     </AdminPage>,
-  ),
-);
+  );
+});
 
 reports.get("/active", async (c) => {
   const path = "/admin/reports/active";
