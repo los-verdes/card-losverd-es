@@ -57,6 +57,7 @@ export async function renderMembershipCardPng(
   member: MembershipCardMember,
   logoPngBytes: Uint8Array,
   colors: CardThemeColors = CLASSIC_THEME.colors,
+  backgroundPngBytes?: Uint8Array,
 ): Promise<Uint8Array> {
   await Promise.all([ensureResvgInitialized(), ensureYogaInitialized()]);
 
@@ -67,6 +68,9 @@ export async function renderMembershipCardPng(
   // this code and inlined before Satori sees it. (Found in the Phase 1.0.2
   // spike; recorded here because this line is where it would be undone.)
   const logoDataUrl = `data:image/png;base64,${bytesToBase64(logoPngBytes)}`;
+  const backgroundDataUrl = backgroundPngBytes
+    ? `data:image/png;base64,${bytesToBase64(backgroundPngBytes)}`
+    : undefined;
   const qr = buildQrCodeImage(member.verifyUrl);
   const memberSinceLabel = member.memberSince
     ? `Member since ${formatMonthYear(member.memberSince)}`
@@ -78,7 +82,7 @@ export async function renderMembershipCardPng(
   const tree = buildCardTree(
     member,
     { memberSince: memberSinceLabel, expiration: expirationLabel },
-    { logoDataUrl, qrDataUrl: qr.dataUrl, qrSize: qr.size },
+    { logoDataUrl, qrDataUrl: qr.dataUrl, qrSize: qr.size, backgroundDataUrl },
     colors,
   );
 

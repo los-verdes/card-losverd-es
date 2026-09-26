@@ -1,4 +1,4 @@
-import { CLASSIC_THEME, type CardTheme } from "../themes/cardTheme";
+import { CLASSIC_THEME, googleHeroPath, type CardTheme } from "../themes/cardTheme";
 import { SignJWT, importPKCS8 } from "jose";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { PASS_CONTENT_VERSION, membershipEndsAt } from "../passkit/generator";
@@ -62,13 +62,19 @@ export const LOGO_ASSET_PATH = CLASSIC_THEME.assets.googleLogoPath;
 export interface GoogleWalletTheme {
   hexBackgroundColor: string;
   logoUri: string;
+  /** The theme's hero image and what it shows, for a theme that has one. */
+  heroImage?: { uri: string; description: string };
 }
 
-/** A card theme as Google needs it, the logo resolved against the environment's public origin. */
+/** A card theme as Google needs it, its images resolved against the environment's public origin. */
 export function googleWalletTheme(theme: CardTheme, baseUrl: string): GoogleWalletTheme {
+  const heroPath = googleHeroPath(theme);
   return {
     hexBackgroundColor: theme.colors.background.toUpperCase(),
     logoUri: new URL(theme.assets.googleLogoPath, baseUrl).toString(),
+    ...(heroPath
+      ? { heroImage: { uri: new URL(heroPath, baseUrl).toString(), description: theme.label } }
+      : {}),
   };
 }
 
@@ -151,6 +157,11 @@ export interface GenericObject {
   validTimeInterval?: { end: { date: string } };
   /** Required by Google on a generic object; omitting it fails the save with no usable error. */
   logo: {
+    sourceUri: { uri: string };
+    contentDescription: LocalizedString;
+  };
+  /** A theme's artwork, drawn across the pass (#333). Absent for a theme without one. */
+  heroImage?: {
     sourceUri: { uri: string };
     contentDescription: LocalizedString;
   };
@@ -265,6 +276,14 @@ export function buildGenericObject(
       sourceUri: { uri: theme.logoUri },
       contentDescription: localizedString(config.cardTitle),
     },
+    ...(theme.heroImage
+      ? {
+          heroImage: {
+            sourceUri: { uri: theme.heroImage.uri },
+            contentDescription: localizedString(theme.heroImage.description),
+          },
+        }
+      : {}),
   };
 }
 

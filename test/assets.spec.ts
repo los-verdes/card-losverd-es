@@ -1,7 +1,8 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
-import { PUBLIC_ASSETS } from "../src/assets";
+import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
+import { CLASSIC_THEME } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 
@@ -199,5 +200,25 @@ describe("the bundled stylesheet and font", () => {
 
   it("still 404s an unknown asset name", async () => {
     expect((await get("/assets/app.js")).status).toBe(404);
+  });
+});
+
+describe("publicAssets", () => {
+  it("publishes the crest, and nothing else while no theme has a hero image", () => {
+    expect(PUBLIC_ASSETS).toEqual({ "crest.png": "templates/card/crest.png" });
+  });
+
+  it("publishes each theme's Google hero image under its versioned name", () => {
+    const theme = {
+      ...CLASSIC_THEME,
+      id: "2026",
+      version: 2,
+      artwork: { googleHero: "templates/themes/2026/google-hero.png" },
+    };
+
+    expect(publicAssets([CLASSIC_THEME, theme])).toEqual({
+      "crest.png": "templates/card/crest.png",
+      "hero-2026-2.png": "templates/themes/2026/google-hero.png",
+    });
   });
 });

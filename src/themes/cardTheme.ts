@@ -37,6 +37,43 @@ export interface CardThemeAssets {
   googleLogoPath: string;
 }
 
+/**
+ * The artwork a theme draws on each surface: for a year, that year's scarf
+ * design. Each slot is optional, and a surface whose slot is empty looks the
+ * way it does today; "classic" leaves them all empty.
+ *
+ * The formats differ in what they can take. Only the card image can carry
+ * full background art; Apple's generic pass takes a thumbnail beside the
+ * member's name, and Google's a hero image across the bottom of the pass.
+ * Sizes are in `ARTWORK_SIZES`.
+ */
+export interface CardThemeArtwork {
+  /** R2 key of the card image's background art (`ARTWORK_SIZES.cardBackground`), drawn under everything else. */
+  cardBackground?: string;
+  /** R2 prefix holding the Apple pass's `thumbnail.png`, `thumbnail@2x.png` and `thumbnail@3x.png`. */
+  appleThumbnailPrefix?: string;
+  /** R2 key of the Google pass's hero image, served publicly at `googleHeroPath()`. */
+  googleHero?: string;
+}
+
+/**
+ * What each artwork slot needs, in pixels.
+ *
+ * - The card image is drawn at exactly this size, so art at any other size is
+ *   stretched to fit. Its rounded corners and border cover the edges.
+ * - Apple draws the thumbnail at 90 x 90 points, and accepts an aspect ratio
+ *   between 2:3 and 3:2; each file is that size at 1x, 2x and 3x.
+ * - Google wants a hero image 1032 pixels wide, at 3:1 or wider.
+ */
+export const ARTWORK_SIZES = {
+  cardBackground: { width: 1050, height: 660 },
+  appleThumbnail: { width: 90, height: 90, scales: [1, 2, 3] },
+  googleHero: { width: 1032, height: 336 },
+} as const;
+
+/** The Apple thumbnail's file names, one per scale in `ARTWORK_SIZES.appleThumbnail`. */
+export const APPLE_THUMBNAIL_FILES = ["thumbnail.png", "thumbnail@2x.png", "thumbnail@3x.png"] as const;
+
 export interface CardTheme {
   /** Stable identifier, stored against a member's choice. */
   id: string;
@@ -50,6 +87,7 @@ export interface CardTheme {
   version: number;
   colors: CardThemeColors;
   assets: CardThemeAssets;
+  artwork: CardThemeArtwork;
 }
 
 export const CLASSIC_THEME: CardTheme = {
@@ -69,7 +107,25 @@ export const CLASSIC_THEME: CardTheme = {
     applePrefix: "templates/apple/",
     googleLogoPath: "/assets/crest.png",
   },
+  artwork: {},
 };
+
+/** Every theme there is. Classic stays first: it is the fallback. */
+export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME];
+
+/**
+ * The public file name of a theme's Google hero image, served by
+ * `src/assets.ts`. It carries the theme's version, because Google keeps its
+ * own copy of an image and fetches it again only when the address changes.
+ */
+export function googleHeroFileName(theme: CardTheme): string {
+  return `hero-${theme.id}-${theme.version}.png`;
+}
+
+/** The public path of a theme's Google hero image, or `null` for a theme without one. */
+export function googleHeroPath(theme: CardTheme): string | null {
+  return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme)}` : null;
+}
 
 /**
  * The theme a member's card is drawn in. Every card is "classic" until
