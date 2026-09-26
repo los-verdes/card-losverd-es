@@ -358,7 +358,9 @@ verify-pkcs7-openssl:
 # Prepare the provenance doc for Google Docs, for the Merch Team and the
 # Membership Committee to read and comment on. Upload the result to Drive, then
 # right-click it and choose "Open with" -> "Google Docs". The repo's copy stays
-# the source of truth; re-run this and re-import whenever it changes.
+# the source of truth. The shared copy is refreshed in place on every merge
+# that changes it (.github/workflows/provenance-gdoc.yml), so this is for a
+# new copy, or for looking at what that job would upload.
 [arg("out", long)]
 provenance-gdoc out=".provenance-gdoc.md":
     node scripts/provenance-gdoc.mjs {{out}}
