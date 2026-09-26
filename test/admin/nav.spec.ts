@@ -62,7 +62,10 @@ describe("the admin navigation", () => {
 
   it("groups the links rather than running them together", async () => {
     // Eleven links in one row read as a wall. Each group carries the shared
-    // word so the links inside it only say what makes them different.
+    // word so the links inside it only say what makes them different. One
+    // missing order, so "Needs a look" has something in it and is shown.
+    await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = 1700000000000").run();
     const html = await (await get("/admin/reports")).text();
 
     const labels = [...html.matchAll(/class="nav-label">([^<]+)</g)].map((m) => m[1]);
@@ -88,13 +91,15 @@ describe("the links to reports of things wanting action", () => {
   const MISSING = "/admin/reports/missing";
   const EXTRA = "/admin/reports/extra-memberships";
 
-  it("step back when there is nothing in them", async () => {
+  it("step back one at a time: an empty one is muted beside one with something in it", async () => {
+    await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET missing_since = 1700000000000").run();
+
     const html = await (await get("/admin/members")).text();
 
-    for (const href of [MISSING, EXTRA]) {
-      expect(navAnchor(html, href)).toContain('class="nav-quiet"');
-      expect(navAnchor(html, href)).not.toContain("nav-count");
-    }
+    expect(navAnchor(html, EXTRA)).toContain('class="nav-quiet"');
+    expect(navAnchor(html, EXTRA)).not.toContain("nav-count");
+    expect(navAnchor(html, MISSING)).toContain("nav-count");
   });
 
   it("carry a count of what there is when there is something", async () => {
@@ -148,5 +153,24 @@ describe("the links to reports of things wanting action", () => {
     const html = String(await AdminNav({}));
 
     expect(navAnchor(html, MISSING)).toBe(`<a href="${MISSING}">Missing orders</a>`);
+  });
+});
+
+describe("the \"Needs a look\" group when there is nothing to look at", () => {
+  it("is left out altogether", async () => {
+    const html = await (await get("/admin/members")).text();
+
+    const labels = [...html.matchAll(/class="nav-label">([^<]+)</g)].map((m) => m[1]);
+    expect(labels).toEqual(["Reports", "Members", "This environment"]);
+    expect(html).not.toContain('href="/admin/reports/missing"');
+    expect(html).not.toContain('href="/admin/reports/extra-memberships"');
+  });
+
+  it("is still left out on its own pages", async () => {
+    // Reachable by address, and the page explains itself; the nav only says
+    // there is nothing here to look at.
+    const html = await (await get("/admin/reports/missing")).text();
+
+    expect(html).not.toContain('class="nav-label">Needs a look<');
   });
 });

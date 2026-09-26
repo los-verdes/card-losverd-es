@@ -24,7 +24,7 @@ interface NavLink {
   attention?: keyof AttentionCounts;
 }
 
-interface NavGroup {
+export interface NavGroup {
   label: string;
   links: NavLink[];
 }
@@ -95,8 +95,9 @@ async function currentAttentionCounts(): Promise<AttentionCounts | null> {
  * A link to a report of things wanting action says whether there are any.
  *
  * With rows, a badge carries the count; with none, the link is muted, so an
- * admin's eye goes to the one that has something in it. It stays a link
- * either way -- an empty report is still worth being able to confirm.
+ * admin's eye goes to the one that has something in it. When every report in
+ * a group is empty the whole group is left out (`isQuietGroup`), so these
+ * appear only when there is something to look at.
  */
 const NavItem: FC<{ link: NavLink; counts: AttentionCounts | null }> = ({ link, counts }) => {
   const count = link.attention && counts ? counts[link.attention] : null;
@@ -119,6 +120,20 @@ const NavItem: FC<{ link: NavLink; counts: AttentionCounts | null }> = ({ link, 
 };
 
 /**
+ * A group made only of reports of things wanting action, every one of them
+ * empty. Left out of the nav: an empty "Needs a look" group, and the
+ * explanations on its pages, confuse more admins than they reassure, so it
+ * appears only when there is something to look at.
+ *
+ * Shown whenever the counts are unknown, since a failed count is not the same
+ * as nothing to look at.
+ */
+export function isQuietGroup(group: NavGroup, counts: AttentionCounts | null): boolean {
+  if (counts === null) return false;
+  return group.links.every((link) => link.attention !== undefined && counts[link.attention] === 0);
+}
+
+/**
  * `current` marks the page being read, which matters more here than on the
  * admin pages: the member's own card is in this nav, so without it an admin
  * looking at their card sees a link offering to take them where they already
@@ -128,7 +143,7 @@ export const AdminNav: FC<{ current?: string }> = async ({ current }) => {
   const counts = await currentAttentionCounts();
   return (
     <nav class="admin-nav">
-      {ADMIN_NAV.map((group) => (
+      {ADMIN_NAV.filter((group) => !isQuietGroup(group, counts)).map((group) => (
         <span class="nav-group">
           <span class="nav-label">{group.label}</span>
           {group.links.map((link) =>

@@ -459,7 +459,10 @@ describe("missing from BigCommerce", () => {
     expect(await res.text()).toContain("21,gone2@example.com");
   });
 
-  it("is listed on the reports index", async () => {
+  it("is listed on the reports index when something is missing", async () => {
+    await insertOrder({ id: "22", email: "gone3@example.com", created: "2026-02-01T00:00:00Z" });
+    await flag("22", Date.UTC(2026, 8, 17));
+
     expect(await (await get("/admin/reports")).text()).toContain('<a href="/admin/reports/missing">Missing from BigCommerce</a>');
   });
 });
@@ -513,5 +516,51 @@ describe("orders carrying more than one membership", () => {
 
     expect(text).toContain("current@example.com");
     expect(text).not.toContain("expired@example.com");
+  });
+});
+
+describe("the reports index, for the reports of things wanting action", () => {
+  // Pinned, since whether an order carrying several memberships is listed
+  // depends on it being active now.
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("leaves both out when there is nothing in either", async () => {
+    const body = await (await get("/admin/reports")).text();
+
+    expect(body).not.toContain('href="/admin/reports/missing"');
+    expect(body).not.toContain('href="/admin/reports/extra-memberships"');
+    expect(body).toContain('<a href="/admin/reports/active">Active memberships</a>');
+  });
+
+  it("lists one as soon as it has something in it", async () => {
+    await insertOrder({ id: "40", email: "several@example.com", created: "2026-02-01T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
+
+    const body = await (await get("/admin/reports")).text();
+
+    // The index's own entries, by their wording: the nav links the same
+    // pages under shorter labels.
+    expect(body).toContain('<a href="/admin/reports/extra-memberships">More than one membership</a>');
+    expect(body).not.toContain(">Missing from BigCommerce</a>");
+  });
+
+  it("lists both when it cannot tell, rather than hiding something", async () => {
+    const prepare = env.DB.prepare.bind(env.DB);
+    vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      if (sql.includes("AS extraMemberships")) throw new Error("D1 is having a bad day");
+      return prepare(sql);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const body = await (await get("/admin/reports")).text();
+
+    expect(body).toContain('<a href="/admin/reports/missing">Missing from BigCommerce</a>');
+    expect(body).toContain('<a href="/admin/reports/extra-memberships">More than one membership</a>');
   });
 });
