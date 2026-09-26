@@ -465,11 +465,17 @@ describe("missing from BigCommerce", () => {
 });
 
 describe("orders carrying more than one membership", () => {
-  // Far off, so it is still active whenever this runs.
-  const LATER = "2098-02-01T00:00:00Z";
+  // The report lists only active orders, so "now" is pinned rather than left
+  // to whenever this runs; ACTIVE is an order still inside its year at NOW.
+  const NOW = "2026-06-01T12:00:00Z";
+  const ACTIVE = "2026-02-01T00:00:00Z";
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date(NOW), toFake: ["Date"] });
+  });
 
   it("lists the order and links its member", async () => {
-    await insertOrder({ id: "30", email: "several@example.com", created: LATER });
+    await insertOrder({ id: "30", email: "several@example.com", created: ACTIVE });
     await env.DB.prepare("UPDATE membership_orders SET membership_units = 3 WHERE order_id = '30'").run();
 
     const body = await (await get("/admin/reports/extra-memberships")).text();
@@ -481,8 +487,8 @@ describe("orders carrying more than one membership", () => {
   });
 
   it("leaves off orders that were refunded or have run out, and says how many (#324)", async () => {
-    await insertOrder({ id: "30", email: "current@example.com", created: LATER });
-    await insertOrder({ id: "31", email: "refunded@example.com", created: LATER, status: "Refunded" });
+    await insertOrder({ id: "30", email: "current@example.com", created: ACTIVE });
+    await insertOrder({ id: "31", email: "refunded@example.com", created: ACTIVE, status: "Refunded" });
     await insertOrder({ id: "32", email: "expired@example.com", created: "2020-02-01T00:00:00Z" });
     await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
 
@@ -504,8 +510,19 @@ describe("orders carrying more than one membership", () => {
     expect(body).toContain("1 other order carries more than one membership but has been refunded");
   });
 
+  it("stops listing an order at the instant its membership ends", async () => {
+    // Created a year before NOW, so it expires exactly at NOW: no longer active.
+    await insertOrder({ id: "33", email: "ends.now@example.com", created: "2025-06-01T12:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
+
+    const body = await (await get("/admin/reports/extra-memberships")).text();
+
+    expect(body).not.toContain("ends.now@example.com");
+    expect(body).toContain("1 other order carries more than one membership");
+  });
+
   it("downloads only what the page lists", async () => {
-    await insertOrder({ id: "30", email: "current@example.com", created: LATER });
+    await insertOrder({ id: "30", email: "current@example.com", created: ACTIVE });
     await insertOrder({ id: "32", email: "expired@example.com", created: "2020-02-01T00:00:00Z" });
     await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
 

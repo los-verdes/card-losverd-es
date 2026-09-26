@@ -3,7 +3,6 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { AdminNav } from "../../src/admin/nav";
-import { toIsoSeconds } from "../../src/bigcommerce/orders";
 import { missingOrders, ordersWithExtraMemberships } from "../../src/admin/reportQueries";
 import worker from "../../src/index";
 import { insertOrder } from "./fixtures";
@@ -21,6 +20,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM users");
 });
@@ -87,6 +87,13 @@ function navAnchor(html: string, href: string): string {
 describe("the links to reports of things wanting action", () => {
   const MISSING = "/admin/reports/missing";
   const EXTRA = "/admin/reports/extra-memberships";
+  // The extra-memberships count takes only active orders, so "now" is pinned
+  // rather than left to whenever this runs.
+  const NOW = "2026-06-01T12:00:00Z";
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date(NOW), toFake: ["Date"] });
+  });
 
   it("step back when there is nothing in them", async () => {
     const html = await (await get("/admin/members")).text();
@@ -100,8 +107,8 @@ describe("the links to reports of things wanting action", () => {
   it("carry a count of what there is when there is something", async () => {
     await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
     await insertOrder({ id: "1002", email: "b@example.com", created: "2026-02-10T00:00:00Z" });
-    // Far off, so it is still active whenever this runs: the report lists only those (#324).
-    await insertOrder({ id: "1003", email: "c@example.com", created: "2098-03-10T00:00:00Z" });
+    // Still active at NOW, which the report requires (#324).
+    await insertOrder({ id: "1003", email: "c@example.com", created: "2026-03-10T00:00:00Z" });
     await env.DB.prepare(
       "UPDATE membership_orders SET missing_since = 1700000000000 WHERE order_id IN ('1001', '1002')",
     ).run();
@@ -117,15 +124,15 @@ describe("the links to reports of things wanting action", () => {
   it("count exactly what the reports themselves list", async () => {
     // The nav counts with its own query, so the two could drift apart. A
     // badge saying 2 over a report listing 3 is worse than no badge.
-    await insertOrder({ id: "1001", email: "a@example.com", created: "2098-01-10T00:00:00Z" });
-    await insertOrder({ id: "1002", email: "b@example.com", created: "2098-02-10T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
+    await insertOrder({ id: "1002", email: "b@example.com", created: "2026-02-10T00:00:00Z", status: "Refunded" });
     await insertOrder({ id: "1004", email: "d@example.com", created: "2020-02-10T00:00:00Z" });
     await env.DB.prepare("UPDATE membership_orders SET missing_since = 1700000000000, membership_units = 3").run();
 
     const html = await (await get("/admin/members")).text();
 
     expect(navAnchor(html, MISSING)).toContain(`>${(await missingOrders(env.DB)).length}<`);
-    expect(navAnchor(html, EXTRA)).toContain(`>${(await ordersWithExtraMemberships(env.DB, toIsoSeconds(new Date()))).length}<`);
+    expect(navAnchor(html, EXTRA)).toContain(`>${(await ordersWithExtraMemberships(env.DB, NOW)).length}<`);
   });
 
   it("fall back to plain links, rather than failing the page, when the count fails", async () => {
