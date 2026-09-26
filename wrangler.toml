@@ -135,10 +135,11 @@ TURNSTILE_SITE_KEY = "0x4AAAAAAE-1rj-sdiipmGPH"
 # a backfill or resync from mailing existing members (src/email/newOrder.ts).
 # Empty switches sending off. Never move it to an earlier date.
 CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
-# The day card themes launched (#333): a card created on or after it starts
-# in its "member since" year's theme, and one created before keeps classic
-# until its holder chooses. Empty, until launch, starts every card in classic.
-CARD_THEME_DEFAULTS_SINCE = ""
+# Card themes (#333): "true" draws every card whose holder has not chosen a
+# theme in its "member since" year's theme; otherwise they stay classic.
+# Turning it on changes cards already on phones, so it goes out together
+# with a refresh of every pass (src/themes/eligibility.ts).
+CARD_THEME_YEAR_DEFAULTS = "false"
 
 # Queue names src/queues/index.ts routes batches by (they differ per
 # environment -- queue names are account-wide).
@@ -253,7 +254,7 @@ TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 # above keeps it to test mailboxes; the date is the day it was switched on,
 # as the production comment requires.
 CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
-CARD_THEME_DEFAULTS_SINCE = ""
+CARD_THEME_YEAR_DEFAULTS = "false"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
 ENVIRONMENT = "staging"
