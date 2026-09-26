@@ -32,7 +32,8 @@
         "esbenp.prettier-vscode",
         "ms-vscode.vscode-typescript-next",
         "christian-kohler.npm-intellisense",
-        "cloudflare.cloudflare"
+        "cloudflare.cloudflare-workers-bindings-extension",
+        "tonybaloney.vscode-pets"
       ],
       "settings": {
         "editor.formatOnSave": true,

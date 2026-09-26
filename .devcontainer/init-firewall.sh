@@ -61,7 +61,11 @@ while read -r cidr; do
     ipset add -exist allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
-# Resolve and add other allowed domains
+# Resolve and add other allowed domains.
+#
+# VS Code downloads extensions from <publisher>.gallerycdn.vsassets.io and
+# <publisher>.gallery.vsassets.io. Every publisher's name is a CNAME to the
+# same two CDNs, so one of each (Anthropic's, below) admits them all.
 for domain in \
     "registry.npmjs.org" \
     "api.anthropic.com" \
@@ -75,6 +79,8 @@ for domain in \
     "oauth2.googleapis.com" \
     "marketplace.visualstudio.com" \
     "vscode.blob.core.windows.net" \
+    "anthropic.gallerycdn.vsassets.io" \
+    "anthropic.gallery.vsassets.io" \
     "dash.cloudflare.com" \
     "tail.developers.workers.dev" \
     "docs.bigcommerce.com" \

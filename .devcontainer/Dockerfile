@@ -40,7 +40,13 @@ RUN apt-get update && \
   nano \
   vim \
   google-cloud-cli \
+  locales \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# zsh-in-docker's .zshrc exports LC_ALL=en_US.UTF-8, and VS Code takes its
+# environment from that shell, so every process inherits it. The base image
+# generates no locales, which makes each shell warn that it cannot set one.
+RUN sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen && locale-gen
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
