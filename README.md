@@ -112,6 +112,8 @@ There are two environments, each a separate Worker with its own D1 database, R2 
 | **staging** | `card-losverd-es-staging` (`[env.staging]` in `wrangler.toml`) | test store | https://stagingcard.losverd.es |
 | **production** | `card-losverd-es-production` (top-level `wrangler.toml`) | production store | https://card.losverd.es |
 
+The pages say which is which (`src/environment.tsx`): staging has an amber banner on every page, "[Staging]" at the start of every tab title and a black favicon, and production's admin nav starts with a "Production" label. Only `ENVIRONMENT = "production"` counts as production; any other value, or none, is shown as an unknown environment.
+
 `.github/workflows/deploy.yml`:
 
 - **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.

@@ -16,6 +16,7 @@
 
 import { Hono } from "hono";
 import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
+import { siteEnvironment } from "./environment";
 import type { Env } from "./index";
 import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
 import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTheme";
@@ -77,13 +78,23 @@ const FAVICON_MAX_AGE_SECONDS = 3_600;
  * the stylesheet, scales to every size a browser asks for, and can be read
  * and changed in a diff.
  */
-export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="${VERDE}"/>
-  <g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+function faviconSvg(background: string, ink: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="${background}"/>
+  <g fill="none" stroke="${ink}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
     <path d="M8.2 9.5V21.8H13.1"/>
     <path d="M17.6 9.5L21.5 21.8L25.4 9.5"/>
   </g>
 </svg>`;
+}
+
+export const FAVICON_SVG = faviconSvg(VERDE, "#fff");
+
+/**
+ * Every environment but production gets the same mark in verde on black, so
+ * its tabs can be told apart from production's at a glance (#338).
+ */
+export const STAGING_FAVICON_SVG = faviconSvg("#000", VERDE);
 
 const assets = new Hono<{ Bindings: Env }>();
 
@@ -113,9 +124,10 @@ assets.get("/bungee.woff", (c) =>
 
 // Every page links this, so a browser asks for it once per session rather
 // than falling back to /favicon.ico and being answered with a 404 on every
-// page view.
+// page view. Each environment has its own hostname, so caching one answer per
+// environment for the hour is safe.
 assets.get("/favicon.svg", (c) =>
-  c.body(FAVICON_SVG, 200, {
+  c.body(siteEnvironment(c.env.ENVIRONMENT) === "production" ? FAVICON_SVG : STAGING_FAVICON_SVG, 200, {
     "Content-Type": "image/svg+xml",
     "Cache-Control": `public, max-age=${FAVICON_MAX_AGE_SECONDS}`,
   }),

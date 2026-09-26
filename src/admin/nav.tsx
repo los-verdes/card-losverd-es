@@ -14,6 +14,7 @@
 import { tryGetContext } from "hono/context-storage";
 import type { FC } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
+import { ProductionLabel } from "../environment";
 import type { Env } from "../index";
 import { attentionCounts, type AttentionCounts } from "./reportQueries";
 
@@ -143,6 +144,7 @@ export const AdminNav: FC<{ current?: string }> = async ({ current }) => {
   const counts = await currentAttentionCounts();
   return (
     <nav class="admin-nav">
+      <ProductionLabel />
       {ADMIN_NAV.filter((group) => !isQuietGroup(group, counts)).map((group) => (
         <span class="nav-group">
           <span class="nav-label">{group.label}</span>

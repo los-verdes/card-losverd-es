@@ -60,6 +60,11 @@ export const APP_CSS = `:root {
   --danger: #b00020;
   --success: #137333;
   --warn: #a15c00;
+  /* The staging banner (#338): amber, the one colour nothing else on the
+     site uses, with near-black text (9.7:1). The same in both schemes, so
+     staging looks the same on every device. */
+  --env-banner-bg: #ffb000;
+  --env-banner-ink: #14181f;
 
   /* Lets the browser dark-render what we don't control: form fields, the
      canvas behind a short page, scrollbars. Without it those stay white and
@@ -379,6 +384,38 @@ nav.admin-nav .nav-label {
 
 nav.admin-nav a {
   white-space: nowrap;
+}
+
+/* Every page that is not production (#338). Across the top of the page's own
+   column, cancelling the body's padding and top margin, and it stays in view
+   as the page scrolls: the point is that it cannot be missed. */
+.env-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: -2rem -1rem 1.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--env-banner-bg);
+  color: var(--env-banner-ink);
+  font-weight: bold;
+  text-align: center;
+}
+
+body.admin .env-banner {
+  margin-top: -1.5rem;
+}
+
+/* "Production", first in the admin nav on the live site: an admin action
+   here is the real thing. */
+nav.admin-nav .env-label {
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--danger);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* On a member page the nav is the one wide thing on a narrow page, and the
