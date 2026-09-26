@@ -513,12 +513,21 @@ async function alertOnNewExtraMemberships(
   return true;
 }
 
+/** What applying one order did: whose it is, and whether their card changed. */
+interface AppliedOrder {
+  memberEmail: string;
+  /** The member's id, when the order left them with a membership record. */
+  memberId: string | null;
+  /** Whether anything the card shows changed, so installed passes were told. */
+  cardChanged: boolean;
+}
+
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   membership: BigCommerceOrderProduct,
   membershipUnits: number,
-): Promise<string> {
+): Promise<AppliedOrder> {
   if (membershipUnits > 1) {
     await alertOnNewExtraMemberships(env, order.id, membershipUnits);
   }
@@ -535,7 +544,7 @@ async function applyMembershipOrder(
   if (result?.passChanged) {
     await notifyWalletsUpdated(env, result.memberId);
   }
-  return memberEmail;
+  return { memberEmail, memberId: result?.memberId ?? null, cardChanged: result?.passChanged ?? false };
 }
 
 /**
@@ -634,7 +643,7 @@ export async function readOrderFromStore(
     return { kind: "no-membership" };
   }
 
-  const memberEmail = await applyMembershipOrder(
+  const { memberEmail } = await applyMembershipOrder(
     env,
     order,
     membership,
@@ -719,6 +728,10 @@ export interface SubscriptionsEtlCursor {
   afterId: number;
   /** Messages this chain has run so far, for the MAX_CHAIN_MESSAGES backstop. */
   messages: number;
+  /** Membership orders applied by the chain's earlier messages. */
+  ordersRead?: number;
+  /** Of those, how many changed their member's card. */
+  cardsChanged?: number;
 }
 
 export interface SubscriptionsEtlOptions {
@@ -732,6 +745,11 @@ export interface SubscriptionsEtlResult {
   ordersProcessed: number;
   /** Set when the chain isn't finished: enqueue a follow-up message carrying it. */
   next?: SubscriptionsEtlCursor;
+  /**
+   * Set when a full resync has just finished: the orders held here that it
+   * did not see are to be re-read one by one (`recheckUnlistedOrders`).
+   */
+  recheckUnlisted?: UnlistedRecheckCursor;
 }
 
 async function startSubscriptionsEtlChain(
@@ -790,7 +808,9 @@ export async function syncSubscriptionsEtl(
     return { ordersProcessed: 0 };
   }
 
+  const fullResync = cursor.modifiedSince === undefined;
   let ordersProcessed = 0;
+  let cardsChanged = 0;
   let afterId = cursor.afterId;
   let sliceFull = false;
   for (const order of orders) {
@@ -802,24 +822,42 @@ export async function syncSubscriptionsEtl(
     const products = await client.getOrderProducts(order.id);
     const membership = resolveMembership(products);
     if (membership) {
-      await applyMembershipOrder(
+      const applied = await applyMembershipOrder(
         env,
         order,
         membership,
         countMembershipUnits(products),
       );
       ordersProcessed++;
+      if (applied.cardChanged) {
+        cardsChanged++;
+        // A full resync re-reads what the webhooks and the incremental runs
+        // have already applied, so a card it changes had drifted.
+        if (fullResync) {
+          console.warn(`Full resync: order ${order.id} changed the card of ${applied.memberId ?? applied.memberEmail}`);
+        }
+      }
     }
     afterId = order.id;
   }
 
+  const totals = {
+    ordersRead: (cursor.ordersRead ?? 0) + ordersProcessed,
+    cardsChanged: (cursor.cardsChanged ?? 0) + cardsChanged,
+  };
+
   // A short page is the last one.
   if (!sliceFull && orders.length < ORDERS_PAGE_SIZE) {
     await setWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME, cursor.chainStartedAt);
-    return { ordersProcessed };
+    if (!fullResync) return { ordersProcessed };
+    await reportFullResync(env, totals);
+    return {
+      ordersProcessed,
+      recheckUnlisted: { since: cursor.chainStartedAt, afterId: 0, reread: 0, flagged: 0 },
+    };
   }
 
-  const next = { ...cursor, afterId, messages: cursor.messages + 1 };
+  const next = { ...cursor, afterId, messages: cursor.messages + 1, ...totals };
   if (next.messages >= MAX_CHAIN_MESSAGES) {
     console.error(
       `syncSubscriptionsEtl(): hit MAX_CHAIN_MESSAGES=${MAX_CHAIN_MESSAGES} safety cap at order id ${afterId}; ending the chain WITHOUT advancing the watermark`,
@@ -827,6 +865,95 @@ export async function syncSubscriptionsEtl(
     return { ordersProcessed };
   }
   return { ordersProcessed, next };
+}
+
+/**
+ * What a full resync found. It re-reads every order the webhooks and the
+ * incremental runs have already applied, so the expected result is that no
+ * card changes; one that did had drifted from its orders -- a rule changed
+ * since its member last bought, a webhook lost outside the lookback window,
+ * or a row changed by hand. Logged every time, and raised in Slack only when
+ * there is something to look at (#347).
+ */
+async function reportFullResync(
+  env: Env,
+  totals: { ordersRead: number; cardsChanged: number },
+): Promise<void> {
+  console.info(
+    `Full resync finished: ${totals.ordersRead} membership orders read, ${totals.cardsChanged} cards changed`,
+  );
+  if (totals.cardsChanged === 0) return;
+  await postSlackAlert(
+    env,
+    `The weekly full BigCommerce resync changed ${totals.cardsChanged} ` +
+      `card${totals.cardsChanged === 1 ? "" : "s"} (of ${totals.ordersRead} membership orders read). ` +
+      "A full re-read should change nothing, so each had drifted from its orders; " +
+      'Workers Logs has which ("Full resync: order").',
+  );
+}
+
+/** Progress through the orders a full resync did not see. */
+export interface UnlistedRecheckCursor {
+  /** When the full resync started: an order it saw was updated at or after this. */
+  since: number;
+  /** Highest order id already re-read. */
+  afterId: number;
+  /** Orders re-read so far. */
+  reread: number;
+  /** Of those, how many the store no longer has, newly flagged. */
+  flagged: number;
+}
+
+export const MAX_UNLISTED_RECHECKS_PER_MESSAGE = 50;
+
+/**
+ * After a full resync, re-reads each BigCommerce order held here that the
+ * store's order list did not return, one at a time, so an order deleted with
+ * no webhook delivered is flagged on the "Missing from BigCommerce" report as
+ * a webhook would have flagged it (`flagOrderMissingFromStore`). An order the
+ * list left out but the store still has is simply applied again.
+ *
+ * An order the resync saw has an `updated_at` at or after its start, since
+ * recording an order always moves it; one flagged earlier is left alone.
+ *
+ * Goes through `readOrderFromStore`, never `syncBigCommerceOrder`: this is a
+ * bulk path, and must not be able to email anyone (src/email/newOrder.ts).
+ */
+export async function recheckUnlistedOrders(
+  env: Env,
+  cursor: UnlistedRecheckCursor,
+): Promise<{ next?: UnlistedRecheckCursor }> {
+  const { results } = await env.DB.prepare(
+    `SELECT order_id FROM membership_orders
+      WHERE source = 'bigcommerce' AND missing_since IS NULL AND updated_at < ?
+        AND CAST(order_id AS INTEGER) > ?
+      ORDER BY CAST(order_id AS INTEGER)
+      LIMIT ?`,
+  )
+    .bind(cursor.since, cursor.afterId, MAX_UNLISTED_RECHECKS_PER_MESSAGE)
+    .all<{ order_id: string }>();
+
+  let { afterId, reread, flagged } = cursor;
+  for (const { order_id } of results) {
+    const outcome = await readOrderFromStore(env, env.BIGCOMMERCE_STORE_HASH, order_id);
+    reread++;
+    if (outcome.kind === "missing" && outcome.flagged === "flagged") flagged++;
+    afterId = Number(order_id);
+  }
+
+  const progress = { ...cursor, afterId, reread, flagged };
+  if (results.length === MAX_UNLISTED_RECHECKS_PER_MESSAGE) return { next: progress };
+
+  console.info(`Full resync: re-read ${reread} orders the store's list did not return; ${flagged} newly flagged missing`);
+  if (reread > 0) {
+    await postSlackAlert(
+      env,
+      `The weekly full BigCommerce resync found ${reread} order${reread === 1 ? "" : "s"} held here that the store's ` +
+        `order list no longer returns, and re-read each: ${flagged} ${flagged === 1 ? "is" : "are"} gone from the store ` +
+        'and now on the "Missing from BigCommerce" report; the rest were still there.',
+    );
+  }
+  return {};
 }
 
 /**

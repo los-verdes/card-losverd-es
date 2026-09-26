@@ -237,9 +237,25 @@ one is implemented fully:
     most 30s, per `X-Rate-Limit-Time-Reset-Ms`): the store's rate limit is
     shared by every app on it, and a queue retry would just hit it again.
 
-  Start a full historical resync by enqueuing
-  `{ "type": "sync_subscriptions_etl", "loadAll": true }`.
-* **`sync_customers_etl` — stubbed.** High-level: page through
+  **It runs on two schedules** (#347): every six hours incrementally
+  (`15 */6 * * *`), and every Sunday at 04:45 UTC as a full resync
+  (`45 4 * * 0`, `loadAll`). The full one is a backstop against drift the
+  incremental one cannot see -- a change to how membership is worked out,
+  which otherwise reaches only members whose orders change afterwards, or a
+  row changed by hand -- so:
+  * it counts the cards it changes across the chain, logs each ("Full
+    resync: order ..."), and posts a count to Slack when there are any;
+  * its last message enqueues `recheck_unlisted_orders`, which re-reads, 50
+    to a message, each BigCommerce order held here whose `updated_at` is
+    older than the chain's start (recording an order always moves it, so
+    these are the ones the store's list did not return). Each goes through
+    `readOrderFromStore`, which flags an order the store no longer has
+    (`flagOrderMissingFromStore`) and never emails anyone; the webhook path
+    that can email is not reachable from here.
+
+  Start a full resync by hand with `just etl-run <env> full-resync`, which
+  enqueues `{ "type": "sync_subscriptions_etl", "loadAll": true }`.
+* **`sync_customers_etl` — stubbed, and not scheduled.** High-level: page through
   `GET /v2/customers`, and for any customer whose email matches an
   existing `members` row with no linkage yet, backfill/correct identity
   fields (mirrors `member_card/bigcommerce.py::customer_etl`'s
@@ -248,7 +264,7 @@ one is implemented fully:
   here that role belongs to `membership_orders.member_email`, which an
   admin re-points by attributing the order (see the provenance document,
   "Gift purchases and re-attributed orders").
-* **`sync_minibc_subscriptions_etl` — stubbed.** High-level: call
+* **`sync_minibc_subscriptions_etl` — stubbed, and not scheduled.** High-level: call
   MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
   per `member_card/minibc.py`) for recurring-subscription state that
   doesn't flow through BigCommerce order webhooks at all, and reconcile

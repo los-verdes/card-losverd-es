@@ -2,10 +2,12 @@ import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
+import { fakeEmailBinding, type FakeEmailBinding } from "../fixtures/emailBinding";
 import {
   BigCommerceAuthError,
   BigCommerceClient,
   MAX_CHAIN_MESSAGES,
+  MAX_UNLISTED_RECHECKS_PER_MESSAGE,
   MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
   ORDERS_PAGE_SIZE,
   countMembershipUnits,
@@ -14,6 +16,7 @@ import {
   syncBigCommerceOrder,
   syncCustomersEtl,
   syncMinibcSubscriptionsEtl,
+  recheckUnlistedOrders,
   syncSubscriptionsEtl,
   type BigCommerceOrder,
   type BigCommerceOrderProduct,
@@ -747,7 +750,10 @@ describe("syncSubscriptionsEtl", () => {
     const result = await syncSubscriptionsEtl(env, { loadAll: true });
     const after = Date.now();
 
-    expect(result).toEqual({ ordersProcessed: 2 });
+    expect(result).toEqual({
+      ordersProcessed: 2,
+      recheckUnlisted: { since: expect.any(Number), afterId: 0, reread: 0, flagged: 0 },
+    });
     expect(await countMembers()).toBe(2);
     expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
     expect(await getMemberByEmail("bo.jones@example.com")).not.toBeNull();
@@ -785,6 +791,8 @@ describe("syncSubscriptionsEtl", () => {
         chainStartedAt: expect.any(Number),
         afterId: ORDERS_PAGE_SIZE,
         messages: 1,
+        ordersRead: 0,
+        cardsChanged: 0,
       },
     });
     expect(result.next).not.toHaveProperty("modifiedSince");
@@ -809,7 +817,10 @@ describe("syncSubscriptionsEtl", () => {
 
     expect(requests.list[0].get("min_id")).toBe("250");
     expect(requests.productsForOrderIds).toEqual([251]);
-    expect(result).toEqual({ ordersProcessed: 1 });
+    expect(result).toEqual({
+      ordersProcessed: 1,
+      recheckUnlisted: { since: cursor.chainStartedAt, afterId: 0, reread: 0, flagged: 0 },
+    });
     expect(await readWatermark()).toBe(cursor.chainStartedAt);
   });
 
@@ -823,7 +834,10 @@ describe("syncSubscriptionsEtl", () => {
 
     const result = await syncSubscriptionsEtl(env, { cursor });
 
-    expect(result).toEqual({ ordersProcessed: 0 });
+    expect(result).toEqual({
+      ordersProcessed: 0,
+      recheckUnlisted: { since: cursor.chainStartedAt, afterId: 0, reread: 0, flagged: 0 },
+    });
     expect(await readWatermark()).toBe(cursor.chainStartedAt);
   });
 
@@ -1299,5 +1313,191 @@ describe("a store that refuses our credentials", () => {
     await expect(client.getOrderIfPresent(1)).rejects.toBeInstanceOf(
       BigCommerceAuthError,
     );
+  });
+});
+
+describe("the weekly full resync (#347)", () => {
+  const SLACK = "https://hooks.slack.example/alert";
+  const realSlack = env.SLACK_ALERT_WEBHOOK_URL;
+  let email: FakeEmailBinding;
+  let slackPosts: string[];
+  let orderReads: number[];
+  let info: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
+    env.BIGCOMMERCE_STORE_HASH = "store123";
+    env.SLACK_ALERT_WEBHOOK_URL = SLACK;
+    // Sending switched on and every order eligible by date, so that nothing
+    // but the path taken stands between these runs and an email.
+    env.CARD_EMAIL_NEW_ORDERS_SINCE = "2000-01-01";
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    email = fakeEmailBinding();
+    env.EMAIL = email;
+    slackPosts = [];
+    orderReads = [];
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    info = vi.spyOn(console, "info").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    env.SLACK_ALERT_WEBHOOK_URL = realSlack;
+    env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
+    env.EMAIL = undefined;
+    await env.DB.exec("DELETE FROM card_emails");
+    await env.DB.exec("DELETE FROM membership_orders");
+    await env.DB.exec("DELETE FROM members");
+    await env.DB.exec("DELETE FROM etl_sync_state");
+  });
+
+  /** The store: its order list, which orders it still has, and Slack. */
+  function mockStore(list: BigCommerceOrder[], stillHas: Set<number> = new Set(list.map((o) => o.id))) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === SLACK) {
+        slackPosts.push(JSON.parse(String(init?.body)).text);
+        return new Response("ok");
+      }
+      if (url.includes("/orders?")) {
+        const afterId = Number(new URL(url).searchParams.get("min_id"));
+        const page = list.filter((order) => order.id >= afterId);
+        return page.length > 0 ? new Response(JSON.stringify(page)) : new Response(null, { status: 204 });
+      }
+      if (/\/orders\/\d+\/products$/.test(url)) return new Response(JSON.stringify(makeProducts()));
+      const single = url.match(/\/orders\/(\d+)$/);
+      if (single) {
+        const id = Number(single[1]);
+        orderReads.push(id);
+        return stillHas.has(id)
+          ? new Response(JSON.stringify(makeOrder({ id })))
+          : new Response(JSON.stringify([{ status: 404, message: "The requested resource was not found." }]), { status: 404 });
+      }
+      throw new Error(`Unexpected fetch() call in test: ${url}`);
+    });
+  }
+
+  it("says nothing when a full re-read changes no card", async () => {
+    mockStore([makeOrder({ id: 1 })]);
+    await syncSubscriptionsEtl(env, { loadAll: true });
+    slackPosts = [];
+
+    const result = await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(result.ordersProcessed).toBe(1);
+    expect(slackPosts).toEqual([]);
+    expect(info).toHaveBeenCalledWith("Full resync finished: 1 membership orders read, 0 cards changed");
+  });
+
+  it("counts the cards it changes across the whole chain, and says so", async () => {
+    mockStore([makeOrder({ id: 121 })]);
+
+    // The last message of a chain whose earlier ones read 120 orders and
+    // changed 2 cards; this one creates a member, which is a changed card.
+    await syncSubscriptionsEtl(env, {
+      loadAll: true,
+      cursor: { chainStartedAt: Date.now(), afterId: 120, messages: 1, ordersRead: 120, cardsChanged: 2 },
+    });
+
+    expect(slackPosts).toHaveLength(1);
+    expect(slackPosts[0]).toContain("changed 3 cards (of 121 membership orders read)");
+  });
+
+  it("carries its totals to the next message", async () => {
+    mockStore(Array.from({ length: 250 }, (_, i) => makeOrder({ id: i + 1 })));
+
+    const { next } = await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(next).toMatchObject({ ordersRead: MAX_MEMBERSHIP_ORDERS_PER_MESSAGE, cardsChanged: 1 });
+  });
+
+  it("hands the orders it did not see to a recheck, from when it started", async () => {
+    mockStore([makeOrder({ id: 1 })]);
+    const before = Date.now();
+
+    const { recheckUnlisted } = await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(recheckUnlisted).toMatchObject({ afterId: 0, reread: 0, flagged: 0 });
+    expect(recheckUnlisted!.since).toBeGreaterThanOrEqual(before);
+  });
+
+  it("leaves an incremental run alone: no report, no recheck", async () => {
+    mockStore([makeOrder({ id: 1 })]);
+
+    const result = await syncSubscriptionsEtl(env);
+
+    expect(result).toEqual({ ordersProcessed: 1 });
+    expect(slackPosts).toEqual([]);
+  });
+
+  describe("recheckUnlistedOrders", () => {
+    const SINCE = Date.parse("2026-09-27T04:45:00Z");
+
+    async function holdOrder(orderId: string, updatedAt: number, fields: { source?: string; missingSince?: number } = {}) {
+      await env.DB.prepare(
+        `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on,
+                                        first_seen_via, updated_at, missing_since)
+         VALUES (?, ?, 'held@example.com', 'held@example.com', 'Completed', '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z',
+                 'sync', ?, ?)`,
+      )
+        .bind(orderId, fields.source ?? "bigcommerce", updatedAt, fields.missingSince ?? null)
+        .run();
+    }
+
+    it("re-reads only the BigCommerce orders the resync did not see, flagging those the store no longer has", async () => {
+      await holdOrder("2001", SINCE - 1); // unseen, gone from the store
+      await holdOrder("2002", SINCE - 1); // unseen, still in the store
+      await holdOrder("2003", SINCE + 1); // seen by the resync
+      await holdOrder("5f00000000000000000000e5", SINCE - 1, { source: "squarespace" });
+      await holdOrder("2004", SINCE - 1, { missingSince: SINCE - 1000 }); // already flagged
+      mockStore([], new Set([2002]));
+
+      const result = await recheckUnlistedOrders(env, { since: SINCE, afterId: 0, reread: 0, flagged: 0 });
+
+      expect(result).toEqual({});
+      expect(orderReads).toEqual([2001, 2002]);
+      const flagged = await env.DB.prepare("SELECT order_id FROM membership_orders WHERE missing_since IS NOT NULL ORDER BY order_id").all();
+      expect(flagged.results.map((row) => row.order_id)).toEqual(["2001", "2004"]);
+      expect(slackPosts.at(-1)).toContain("found 2 orders held here that the store's order list no longer returns");
+      expect(slackPosts.at(-1)).toContain("1 is gone from the store");
+    });
+
+    it("never emails anyone, even for an order a new-order email would cover", async () => {
+      await holdOrder("2002", SINCE - 1);
+      mockStore([], new Set([2002]));
+
+      await recheckUnlistedOrders(env, { since: SINCE, afterId: 0, reread: 0, flagged: 0 });
+
+      expect(orderReads).toEqual([2002]);
+      expect(email.sent).toEqual([]);
+      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM card_emails").first<{ n: number }>())!.n).toBe(0);
+    });
+
+    it("works through them in batches, carrying its tallies", async () => {
+      const count = MAX_UNLISTED_RECHECKS_PER_MESSAGE + 1;
+      for (let id = 1; id <= count; id++) await holdOrder(String(3000 + id), SINCE - 1);
+      mockStore([], new Set());
+
+      const first = await recheckUnlistedOrders(env, { since: SINCE, afterId: 0, reread: 0, flagged: 0 });
+      expect(first.next).toMatchObject({
+        afterId: 3000 + MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+        reread: MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+        flagged: MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+      });
+
+      const second = await recheckUnlistedOrders(env, first.next!);
+      expect(second).toEqual({});
+      expect(orderReads).toHaveLength(count);
+      expect(slackPosts.at(-1)).toContain(`found ${count} orders`);
+    });
+
+    it("says nothing when the resync saw every order held here", async () => {
+      await holdOrder("2003", SINCE + 1);
+      mockStore([]);
+
+      expect(await recheckUnlistedOrders(env, { since: SINCE, afterId: 0, reread: 0, flagged: 0 })).toEqual({});
+      expect(orderReads).toEqual([]);
+      expect(slackPosts).toEqual([]);
+    });
   });
 });

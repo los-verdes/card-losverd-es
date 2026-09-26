@@ -1,7 +1,7 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ORDERS_PAGE_SIZE } from "../../src/bigcommerce/sync";
+import { MAX_UNLISTED_RECHECKS_PER_MESSAGE, ORDERS_PAGE_SIZE } from "../../src/bigcommerce/sync";
 import {
   enqueueEtlSync,
   handleEtlSyncBatch,
@@ -283,7 +283,7 @@ describe("handleEtlSyncBatch", () => {
       );
     }
 
-    it("acks a chain's last slice without enqueueing a follow-up", async () => {
+    function mockEmptyStore() {
       vi.spyOn(globalThis, "fetch").mockImplementation(
         async (input: RequestInfo | URL) => {
           const url = typeof input === "string" ? input : input.toString();
@@ -293,6 +293,11 @@ describe("handleEtlSyncBatch", () => {
           throw new Error(`Unexpected fetch() call in test: ${url}`);
         },
       );
+    }
+
+    it("acks a full resync's last slice, handing on to the recheck of orders it did not see", async () => {
+      mockEmptyStore();
+      vi.spyOn(console, "info").mockImplementation(() => {});
 
       const message = makeMessage({
         type: "sync_subscriptions_etl",
@@ -303,6 +308,24 @@ describe("handleEtlSyncBatch", () => {
 
       expect(message.ack).toHaveBeenCalledOnce();
       expect(message.retry).not.toHaveBeenCalled();
+      expect(sent).toEqual([
+        {
+          type: "recheck_unlisted_orders",
+          cursor: { since: expect.any(Number), afterId: 0, reread: 0, flagged: 0 },
+        },
+      ]);
+    });
+
+    it("acks an incremental chain's last slice without enqueueing anything", async () => {
+      mockEmptyStore();
+      const message = makeMessage({
+        type: "sync_subscriptions_etl",
+        cursor: { chainStartedAt: Date.UTC(2026, 8, 1), modifiedSince: Date.UTC(2026, 7, 31), afterId: 0, messages: 0 },
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(message.ack).toHaveBeenCalledOnce();
       expect(sent).toEqual([]);
     });
 
@@ -321,7 +344,7 @@ describe("handleEtlSyncBatch", () => {
       expect(sent).toEqual([
         {
           type: "sync_subscriptions_etl",
-          cursor: { ...cursor, afterId: ORDERS_PAGE_SIZE, messages: 5 },
+          cursor: { ...cursor, afterId: ORDERS_PAGE_SIZE, messages: 5, ordersRead: 0, cardsChanged: 0 },
         },
       ]);
       expect(message.ack).toHaveBeenCalledOnce();
@@ -344,6 +367,8 @@ describe("handleEtlSyncBatch", () => {
             chainStartedAt: expect.any(Number),
             afterId: ORDERS_PAGE_SIZE,
             messages: 1,
+            ordersRead: 0,
+            cardsChanged: 0,
           },
         },
       ]);
@@ -362,6 +387,73 @@ describe("handleEtlSyncBatch", () => {
       expect(sent).toEqual([]);
       expect(message.ack).not.toHaveBeenCalled();
       expect(message.retry).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("recheck_unlisted_orders", () => {
+    const realQueue = env.ETL_SYNC_QUEUE;
+    const SINCE = Date.parse("2026-09-27T04:45:00Z");
+    let sent: EtlSyncMessage[];
+
+    beforeEach(() => {
+      sent = [];
+      (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
+        send: async (message: EtlSyncMessage) => {
+          sent.push(message);
+        },
+      } as unknown as Queue<EtlSyncMessage>;
+      env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
+      env.BIGCOMMERCE_STORE_HASH = "store123";
+      vi.spyOn(console, "info").mockImplementation(() => {});
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(async () => {
+      env.ETL_SYNC_QUEUE = realQueue;
+      await env.DB.exec("DELETE FROM membership_orders");
+    });
+
+    it("acks, enqueueing nothing, when the resync saw every order", async () => {
+      const message = makeMessage({
+        type: "recheck_unlisted_orders",
+        cursor: { since: SINCE, afterId: 0, reread: 0, flagged: 0 },
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(message.ack).toHaveBeenCalledOnce();
+      expect(sent).toEqual([]);
+    });
+
+    it("enqueues the next batch after a full one, then acks", async () => {
+      for (let id = 1; id <= MAX_UNLISTED_RECHECKS_PER_MESSAGE; id++) {
+        await env.DB.prepare(
+          `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via, updated_at)
+           VALUES (?, 'bigcommerce', 'held@example.com', 'held@example.com', '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z', 'sync', ?)`,
+        )
+          .bind(String(id), SINCE - 1)
+          .run();
+      }
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("[]", { status: 404 }));
+      const message = makeMessage({
+        type: "recheck_unlisted_orders",
+        cursor: { since: SINCE, afterId: 0, reread: 0, flagged: 0 },
+      });
+
+      await handleEtlSyncBatch(makeBatch([message]), env);
+
+      expect(sent).toEqual([
+        {
+          type: "recheck_unlisted_orders",
+          cursor: {
+            since: SINCE,
+            afterId: MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+            reread: MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+            flagged: MAX_UNLISTED_RECHECKS_PER_MESSAGE,
+          },
+        },
+      ]);
+      expect(message.ack).toHaveBeenCalledOnce();
     });
   });
 
