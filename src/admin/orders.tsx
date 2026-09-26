@@ -19,6 +19,7 @@ import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { emailMemberCard } from "../email/card";
 import { readOrderFromStore } from "../bigcommerce/sync";
 import { recordOutcome } from "../lib/outcome";
+import { toIsoSeconds } from "../bigcommerce/orders";
 import {
   attributeOrder,
   emailFootprint,
@@ -135,7 +136,12 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
             ? ([
                 [
                   "Memberships",
-                  `Carried ${order.membership_units} memberships; only this one was recorded. See the "More than one membership" report.`,
+                  // The report lists only orders still in force (#324), so it is
+                  // only pointed at while this one is.
+                  `Carried ${order.membership_units} memberships; only this one was recorded. ` +
+                    (order.counts && order.expires_on > toIsoSeconds(new Date())
+                      ? 'See the "More than one membership" report.'
+                      : "It no longer counts or has expired, so nobody is owed a card for it any more."),
                 ],
               ] as const)
             : []),

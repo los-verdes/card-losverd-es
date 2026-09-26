@@ -540,5 +540,15 @@ describe("the order page", () => {
     const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toMatch(/<th[^>]*>Memberships<\/th><td[^>]*>Carried 3 memberships; only this one was recorded\./);
+    expect(body).toContain('See the &quot;More than one membership&quot; report.');
+  });
+
+  it("does not send people to the report for an order it no longer lists", async () => {
+    await env.DB.exec("UPDATE membership_orders SET membership_units = 3, status = 'Refunded' WHERE order_id = '1001'");
+
+    const body = await (await request("/admin/orders/1001")).text();
+
+    expect(body).toContain("It no longer counts or has expired, so nobody is owed a card for it any more.");
+    expect(body).not.toContain("More than one membership&quot; report");
   });
 });

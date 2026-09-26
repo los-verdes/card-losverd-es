@@ -385,7 +385,17 @@ export interface ExtraMembershipOrderRow {
 }
 
 /**
- * Orders carrying more than one membership, most memberships first.
+ * An order carrying more than one membership that is still worth a person's
+ * time (#324): it counts, and its membership has not ended by `?1`. One that
+ * was refunded, or whose year is over, owes nobody a card any more, and
+ * listing it only teaches people to ignore the list. Shared by the report and
+ * the nav's count, so the two cannot disagree.
+ */
+const EXTRA_MEMBERSHIPS_IN_FORCE = `membership_units > 1 AND ${COUNTS_AS_MEMBERSHIP} AND expires_on > ?1`;
+
+/**
+ * Orders carrying more than one membership, most memberships first, as of
+ * `asOf`.
  *
  * The storefront is configured so this never happens, and a good deal here
  * depends on it -- an order has one row and one membership to give. This
@@ -394,21 +404,36 @@ export interface ExtraMembershipOrderRow {
  * Each row means somebody paid for a membership that no card exists for.
  * The order still confers the one membership it is recorded as; the extras
  * have nowhere to go, so putting them right is a person's job. An order
- * corrected in BigCommerce drops off this list on the next sync.
+ * corrected in BigCommerce drops off this list on the next sync, and one
+ * that stops counting or reaches its expiry drops off by itself.
  */
 export async function ordersWithExtraMemberships(
   db: D1Database,
+  asOf: string,
 ): Promise<ExtraMembershipOrderRow[]> {
   const { results } = await db
     .prepare(
       `SELECT order_id, member_email, first_name, last_name, status, created_on, expires_on,
               membership_units, (${COUNTS_AS_MEMBERSHIP}) AS counts
          FROM membership_orders
-        WHERE membership_units > 1
+        WHERE ${EXTRA_MEMBERSHIPS_IN_FORCE}
         ORDER BY membership_units DESC, created_on, order_id`,
     )
+    .bind(asOf)
     .all<ExtraMembershipOrderRow>();
   return results;
+}
+
+/** How many orders carrying more than one membership the report leaves off, so it can say so. */
+export async function extraMembershipOrdersSetAside(db: D1Database, asOf: string): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM membership_orders
+        WHERE membership_units > 1 AND NOT (${EXTRA_MEMBERSHIPS_IN_FORCE})`,
+    )
+    .bind(asOf)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 export async function missingOrders(db: D1Database): Promise<MissingOrderRow[]> {
@@ -437,13 +462,14 @@ export interface AttentionCounts {
  * conditions are the reports' own `WHERE` clauses, and a test holds the two
  * in agreement.
  */
-export async function attentionCounts(db: D1Database): Promise<AttentionCounts> {
+export async function attentionCounts(db: D1Database, asOf: string): Promise<AttentionCounts> {
   const row = await db
     .prepare(
       `SELECT COALESCE(SUM(missing_since IS NOT NULL), 0) AS missing,
-              COALESCE(SUM(membership_units > 1), 0) AS extraMemberships
+              COALESCE(SUM(${EXTRA_MEMBERSHIPS_IN_FORCE}), 0) AS extraMemberships
          FROM membership_orders`,
     )
+    .bind(asOf)
     .first<AttentionCounts>();
   return row ?? { missing: 0, extraMemberships: 0 };
 }
