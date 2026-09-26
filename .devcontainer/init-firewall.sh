@@ -145,6 +145,3 @@ if ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
 else
     echo "Firewall verification passed - able to reach https://api.github.com as expected"
 fi
-
-# Named volumes are created owned by root.
-sudo chown -R node:node /home/node

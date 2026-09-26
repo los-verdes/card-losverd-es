@@ -57,9 +57,12 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
-# Create config directories and set permissions
-RUN mkdir -p /home/node/.claude && \
-  chown -R node:node /home/node/.claude
+# Every named volume's mount point, owned by node. Docker fills a new, empty
+# volume from the image's directory at that path, ownership included, so
+# volumes start out node's; a mount point missing from the image would make
+# the volume root's.
+RUN mkdir -p /home/node/.claude /home/node/.config/gh /home/node/.config/gcloud /home/node/.config/.wrangler && \
+  chown -R node:node /home/node/.claude /home/node/.config
 
 # Git talks to GitHub over HTTPS only, authenticated by whoever `gh` is
 # logged in as (for automation, verde-bot: see CLAUDE.md). There is no SSH
