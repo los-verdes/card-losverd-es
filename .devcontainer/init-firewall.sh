@@ -88,6 +88,8 @@ for domain in \
     "api.bigcommerce.com" \
     "los-verdes-sandbox.mybigcommerce.com" \
     "store.losverdesatx.org" \
+    "card.losverd.es" \
+    "stagingcard.losverd.es" \
     "update.code.visualstudio.com"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
