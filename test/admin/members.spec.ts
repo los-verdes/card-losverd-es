@@ -585,3 +585,60 @@ describe("revoking and expelling from the member page", () => {
     expect(lifted).toContain("Expulsion lifted");
   });
 });
+
+describe("their Slack account on the member page", () => {
+  async function slack(name: string | null, displayName: string | null, deleted = 0) {
+    await env.DB.prepare(
+      `INSERT INTO slack_users (slack_id, name, real_name, email, deleted, profile, synced_at)
+       VALUES ('U0SLACK', ?, 'Jane Doe', ?, ?, ?, 0)`,
+    )
+      .bind(name, EMAIL, deleted, displayName === null ? null : JSON.stringify({ display_name: displayName }))
+      .run();
+  }
+
+  async function slackCell() {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+    return body.match(/<th[^>]*>Slack<\/th><td[^>]*>([^<]*)<\/td>/)?.[1];
+  }
+
+  it("shows the handle Slack shows today", async () => {
+    await slack("jdoe", "janie");
+
+    expect(await slackCell()).toBe("@janie");
+  });
+
+  it("falls back to the legacy username when no display name was set", async () => {
+    await slack("jdoe", "");
+
+    expect(await slackCell()).toBe("@jdoe");
+  });
+
+  it("says a matched account has no handle rather than inventing one", async () => {
+    await slack(null, null);
+
+    expect(await slackCell()).toBe("matched");
+  });
+
+  it("says when the account has been deactivated", async () => {
+    await slack("jdoe", "janie", 1);
+
+    expect(await slackCell()).toBe("@janie (account deactivated)");
+  });
+
+  it("says when there is no Slack account for the address", async () => {
+    expect(await slackCell()).toBe("no match");
+  });
+
+  it("shows the handle for an address with orders and no membership too", async () => {
+    await env.DB.exec("DELETE FROM members");
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
+       VALUES ('1001', 'bigcommerce', ?1, ?1, 'Refunded', '2026-03-01T10:00:00Z', '2027-03-01T10:00:00Z', 'sync')`,
+    )
+      .bind(EMAIL)
+      .run();
+    await slack("jdoe", "janie");
+
+    expect(await (await get(`/admin/members?q=${EMAIL}`)).text()).toContain("Slack: @janie.");
+  });
+});

@@ -168,6 +168,13 @@ const NameResults: FC<{ matches: NameMatch[] }> = ({ matches }) => (
   </>
 );
 
+/** Their Slack handle where the account has one, and whether it still works. */
+function slackText(slack: EmailFootprint["slack"]): string {
+  if (!slack) return "no match";
+  const who = slack.handle ? `@${slack.handle}` : "matched";
+  return slack.deleted ? `${who} (account deactivated)` : who;
+}
+
 const NAME_SET_BY: Record<string, string> = {
   member: "They set that name themselves",
   admin: "An admin set that name for them",
@@ -223,7 +230,7 @@ const Summary: FC<{
         <tr>
           <th style={cellStyle}>Slack</th>
           <td style={cellStyle}>
-            {footprint.slack ? (footprint.slack.deleted ? "account deactivated" : "yes") : "no match"}
+            {slackText(footprint.slack)}
           </td>
         </tr>
       </tbody>
@@ -421,7 +428,7 @@ const OrdersWithoutMember: FC<{
     )}
     <p class="muted">
       Signed in before: {footprint.login ? "yes" : "no"}. Slack:{" "}
-      {footprint.slack ? (footprint.slack.deleted ? "account deactivated" : "yes") : "no match"}.
+      {slackText(footprint.slack)}.
     </p>
   </>
 );

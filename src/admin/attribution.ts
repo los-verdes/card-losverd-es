@@ -86,7 +86,11 @@ export interface EmailFootprint {
   /** Orders placed with the address, whoever they're attributed to now. */
   placedOrders: number;
   login: { is_admin: number } | null;
-  slack: { slack_id: string; name: string | null; deleted: number } | null;
+  /**
+   * `handle` is what Slack shows as their @name today: the profile's display
+   * name, or the legacy username for an account that never set one.
+   */
+  slack: { slack_id: string; name: string | null; handle: string | null; deleted: number } | null;
 }
 
 export async function emailFootprint(
@@ -111,7 +115,12 @@ export async function emailFootprint(
       .bind(email),
     db.prepare("SELECT COUNT(*) AS total FROM membership_orders WHERE order_email = ?1").bind(email),
     db.prepare("SELECT is_admin FROM users WHERE email = ?1").bind(email),
-    db.prepare("SELECT slack_id, name, deleted FROM slack_users WHERE lower(email) = ?1 ORDER BY deleted, slack_id LIMIT 1").bind(email),
+    db
+      .prepare(
+        `SELECT slack_id, name, COALESCE(NULLIF(json_extract(profile, '$.display_name'), ''), name) AS handle, deleted
+           FROM slack_users WHERE lower(email) = ?1 ORDER BY deleted, slack_id LIMIT 1`,
+      )
+      .bind(email),
   ]);
   const first = <T>(result: D1Result<Record<string, unknown>>) => (result.results[0] as T | undefined) ?? null;
   return {
