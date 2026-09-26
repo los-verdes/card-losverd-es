@@ -1,141 +1,128 @@
 #!/bin/bash
-set -euox pipefail  # Exit on error, undefined vars, and pipeline failures
-IFS=$'\n\t'       # Stricter word splitting
+# Outbound firewall for the dev container, run as root on every container
+# start (devcontainer.json's postStartCommand).
+#
+# Traffic is allowed by name, not by address. Every outbound HTTPS
+# connection is redirected to a local proxy (egress-proxy.conf), which reads
+# the requested name and connects only to names in allowed-domains.txt. The
+# only other traffic out is DNS to the container's own resolver; everything
+# else is refused. Filtering by address could not do this: CDNs serve
+# thousands of sites from the same addresses, so admitting one name's
+# address admitted every site sharing it.
+#
+# Denied connections are logged in /var/log/egress-proxy/access.log.
+set -euo pipefail
+IFS=$'\n\t'
 
-# 1. Extract Docker DNS info BEFORE any flushing
+CONF_DIR=/etc/egress-proxy
+PROXY_CONF=$CONF_DIR/egress-proxy.conf
+PROXY_USER=www-data
+PROXY_PORT=8443
+
+# 1. Build the proxy's configuration and check it, before touching any rule.
+
+# The allowlist, as nginx map entries. Each line must be a hostname, with an
+# optional leading dot.
+allowed=$(sed -E 's/#.*//; s/[[:space:]]+//g; /^$/d' "$CONF_DIR/allowed-domains.txt" | tr 'A-Z' 'a-z')
+if invalid=$(grep -vE '^\.?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' <<<"$allowed"); then
+    echo "ERROR: not a hostname in allowed-domains.txt: $invalid" >&2
+    exit 1
+fi
+sed 's/$/ allow;/' <<<"$allowed" >"$CONF_DIR/allowed-domains.map"
+
+# The container's DNS servers, which the proxy uses and which are the only
+# DNS servers anything may query.
+mapfile -t nameservers < <(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ { print $2 }' /etc/resolv.conf)
+if [ "${#nameservers[@]}" -eq 0 ]; then
+    echo "ERROR: no IPv4 nameserver in /etc/resolv.conf" >&2
+    exit 1
+fi
+printf 'resolver %s ipv6=off valid=30s;\n' "$(IFS=' '; echo "${nameservers[*]}")" >"$CONF_DIR/resolver.conf"
+
+mkdir -p /var/log/egress-proxy
+nginx -t -q -c "$PROXY_CONF"
+
+# 2. Close everything, then open what is allowed. Policies go to DROP first,
+# so a failure from here on leaves the container with no way out rather than
+# an open one.
+
+# Docker's embedded DNS (127.0.0.11) relies on NAT rules; keep them.
 DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
 
-# Flush existing rules and delete existing ipsets
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT DROP
 iptables -F
 iptables -X
 iptables -t nat -F
 iptables -t nat -X
 iptables -t mangle -F
 iptables -t mangle -X
-ipset destroy allowed-domains 2>/dev/null || true
 
-# 2. Selectively restore ONLY internal Docker DNS resolution
 if [ -n "$DOCKER_DNS_RULES" ]; then
     echo "Restoring Docker DNS rules..."
     iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
     iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
     echo "$DOCKER_DNS_RULES" | xargs -L 1 iptables -t nat
-else
-    echo "No Docker DNS rules to restore"
 fi
 
-# First allow DNS and localhost before any restrictions
-# Allow outbound DNS
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-# Allow inbound DNS responses
-iptables -A INPUT -p udp --sport 53 -j ACCEPT
-# No outbound SSH: git uses HTTPS (see the Dockerfile), and port 22 open to
-# any host would be the one way around the allowlist below.
-# Allow localhost
+# No IPv6 at all, other than loopback.
+if ip6tables -L -n >/dev/null 2>&1; then
+    ip6tables -P INPUT DROP
+    ip6tables -P FORWARD DROP
+    ip6tables -P OUTPUT DROP
+    ip6tables -F
+    ip6tables -A INPUT -i lo -j ACCEPT
+    ip6tables -A OUTPUT -o lo -j ACCEPT
+fi
+
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
-
-# Create ipset with CIDR support
-ipset create allowed-domains hash:net
-
-# Fetch GitHub meta information and aggregate + add their IP ranges
-echo "Fetching GitHub IP ranges..."
-gh_ranges=$(curl -s https://api.github.com/meta)
-if [ -z "$gh_ranges" ]; then
-    echo "ERROR: Failed to fetch GitHub IP ranges"
-    exit 1
-fi
-
-if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
-    echo "ERROR: GitHub API response missing required fields"
-    exit 1
-fi
-
-echo "Processing GitHub IPs..."
-while read -r cidr; do
-    if [[ ! "$cidr" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-        echo "ERROR: Invalid CIDR range from GitHub meta: $cidr"
-        exit 1
-    fi
-    echo "Adding GitHub range $cidr"
-    ipset add -exist allowed-domains "$cidr"
-done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
-
-# Resolve and add other allowed domains.
-#
-# VS Code downloads extensions from <publisher>.gallerycdn.vsassets.io and
-# <publisher>.gallery.vsassets.io. Every publisher's name is a CNAME to the
-# same two CDNs, so one of each (Anthropic's, below) admits them all.
-for domain in \
-    "registry.npmjs.org" \
-    "api.anthropic.com" \
-    "api.cloudflare.com" \
-    "bigquery.googleapis.com" \
-    "storage.googleapis.com" \
-    "compute.googleapis.com" \
-    "sqladmin.googleapis.com" \
-    "sentry.io" \
-    "statsig.com" \
-    "oauth2.googleapis.com" \
-    "marketplace.visualstudio.com" \
-    "vscode.blob.core.windows.net" \
-    "anthropic.gallerycdn.vsassets.io" \
-    "anthropic.gallery.vsassets.io" \
-    "dash.cloudflare.com" \
-    "tail.developers.workers.dev" \
-    "docs.bigcommerce.com" \
-    "developer.bigcommerce.com" \
-    "api.bigcommerce.com" \
-    "los-verdes-sandbox.mybigcommerce.com" \
-    "store.losverdesatx.org" \
-    "card.losverd.es" \
-    "stagingcard.losverd.es" \
-    "update.code.visualstudio.com"; do
-    echo "Resolving $domain..."
-    ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
-    if [ -z "$ips" ]; then
-        echo "ERROR: Failed to resolve $domain"
-        exit 1
-    fi
-
-    while read -r ip; do
-        if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo "ERROR: Invalid IP from DNS for $domain: $ip"
-            exit 1
-        fi
-        echo "Adding $ip for $domain"
-        ipset add -exist allowed-domains "$ip"
-    done < <(echo "$ips")
-done
-
-# Get host IP from default route
-HOST_IP=$(ip route | grep default | cut -d" " -f3)
-if [ -z "$HOST_IP" ]; then
-    echo "ERROR: Failed to detect host IP"
-    exit 1
-fi
-
-HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
-echo "Host network detected as: $HOST_NETWORK"
-
-# Set up remaining iptables rules
-iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
-
-# Set default policies to DROP first
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT DROP
-
-# First allow established connections for already approved traffic
 iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# Then allow only specific outbound traffic to allowed domains
-iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
+for ns in "${nameservers[@]}"; do
+    iptables -A OUTPUT -d "$ns" -p udp --dport 53 -j ACCEPT
+    iptables -A OUTPUT -d "$ns" -p tcp --dport 53 -j ACCEPT
+done
 
-# Explicitly REJECT all other outbound traffic for immediate feedback
+# The proxy serves this container only.
+iptables -A INPUT -p tcp --dport "$PROXY_PORT" ! -i lo -j DROP
+
+# The Docker host's network, for VS Code and forwarded ports.
+HOST_IP=$(ip route | awk '/^default/ { print $3; exit }')
+if [ -z "$HOST_IP" ]; then
+    echo "ERROR: Failed to detect host IP" >&2
+    exit 1
+fi
+HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
+echo "Host network detected as: $HOST_NETWORK"
+iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
+iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
+
+# Every other process's HTTPS goes to the proxy; the proxy alone goes out.
+# The redirect targets the container's own address: a connection redirected
+# to 127.0.0.1 keeps its outbound route and never reaches loopback, and the
+# setting that would change that (route_localnet) is read-only in here.
+OWN_IP=$(ip -4 route get 192.0.2.1 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }')
+if [ -z "$OWN_IP" ]; then
+    echo "ERROR: Failed to detect the container's own address" >&2
+    exit 1
+fi
+iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
+iptables -t nat -A OUTPUT -d "$HOST_NETWORK" -j RETURN
+iptables -t nat -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner "$PROXY_USER" -j DNAT --to-destination "$OWN_IP:$PROXY_PORT"
+iptables -A OUTPUT -p tcp --dport 443 -m owner --uid-owner "$PROXY_USER" -j ACCEPT
+
+# Refuse the rest at once, rather than letting it time out.
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
+
+# 3. Start the proxy, or have a running one pick up the new configuration.
+if pgrep -x nginx >/dev/null; then
+    nginx -c "$PROXY_CONF" -s reload
+else
+    nginx -c "$PROXY_CONF"
+fi
 
 echo "Firewall configuration complete"
 echo "Verifying firewall rules..."
@@ -146,7 +133,6 @@ else
     echo "Firewall verification passed - unable to reach https://example.com as expected"
 fi
 
-# Verify GitHub API access
 if ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
     echo "ERROR: Firewall verification failed - unable to reach https://api.github.com"
     exit 1
