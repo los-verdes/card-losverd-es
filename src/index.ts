@@ -120,6 +120,12 @@ export interface Env {
    * their card; empty means never (src/email/newOrder.ts).
    */
   CARD_EMAIL_NEW_ORDERS_SINCE?: string;
+  /**
+   * Date (YYYY-MM-DD) from which a new card starts in its "member since"
+   * year's theme rather than classic; empty means every card starts in
+   * classic (src/themes/eligibility.ts).
+   */
+  CARD_THEME_DEFAULTS_SINCE?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the sender, in wrangler.toml `[vars]`.
