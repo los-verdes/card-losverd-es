@@ -33,3 +33,18 @@ jobs:
         run: |
           docker exec devcontainer sh -c \
             'tail -n 100 /var/log/egress-proxy/access.log /var/log/egress-proxy/error.log' || true
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker exec --user root devcontainer sh -c '
+            set -x
+            cat /etc/resolv.conf
+            iptables-save
+            ss -ltnp
+            ps -eo user,pid,args | grep -v " ps "
+            cat /etc/egress-proxy/resolver.conf
+            nginx -T -c /etc/egress-proxy/egress-proxy.conf 2>&1 | tail -n 40
+            curl -sv --max-time 10 --connect-to ::127.0.0.1:8443 https://api.github.com/zen
+            curl -sv --max-time 10 https://api.github.com/zen
+            sysctl net.ipv4.conf.all.route_localnet
+          ' 2>&1 || true

@@ -31,7 +31,7 @@ RUN apt-get update && \
   gnupg2 \
   gh \
   iptables \
-  nginx-core \
+  nginx \
   libnginx-mod-stream \
   iproute2 \
   dnsutils \
