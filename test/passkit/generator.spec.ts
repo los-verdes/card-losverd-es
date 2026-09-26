@@ -3,6 +3,7 @@ import { unzipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import { getTestCertChain } from "../fixtures/certChain";
 import type { PassSigningCredentials } from "../../src/passkit/signer";
+import { CLASSIC_THEME } from "../../src/themes/cardTheme";
 import {
   assemblePassBundle,
   buildManifest,
@@ -376,5 +377,46 @@ describe("pass cache (R2)", () => {
     expect(
       await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000),
     ).toBeNull();
+  });
+});
+
+describe("the card theme on a pass (#333)", () => {
+  afterEach(async () => {
+    await invalidateCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023");
+  });
+
+  it("takes its colours from the theme", () => {
+    const json = JSON.parse(
+      new TextDecoder().decode(
+        buildPassJson(makeMember({ colors: { ...CLASSIC_THEME.colors, background: "#123456", passText: "#fedcba" } }), CONFIG),
+      ),
+    );
+
+    expect(json.backgroundColor).toBe("rgb(18, 52, 86)");
+    expect(json.foregroundColor).toBe("rgb(254, 220, 186)");
+  });
+
+  it("is classic when no theme is given", () => {
+    const json = JSON.parse(new TextDecoder().decode(buildPassJson(makeMember(), CONFIG)));
+
+    expect(json.backgroundColor).toBe("rgb(0, 177, 64)");
+    expect(json.foregroundColor).toBe("rgb(0, 0, 0)");
+  });
+
+  it("misses the cache when the member's theme, or the theme itself, has changed", async () => {
+    await putCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, new Uint8Array([1]), "2026@1");
+
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, "2026@1")).not.toBeNull();
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, "2026@2")).toBeNull();
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, "classic@1")).toBeNull();
+  });
+
+  it("reads a pass cached before themes existed as classic, so introducing themes re-signs nothing", async () => {
+    await env.ASSETS.put("cache/pkpass/pass.es.losverd.membership/LV-10023.pkpass", new Uint8Array([1]), {
+      customMetadata: { lastUpdatedAt: "1000", passContentVersion: PASS_CONTENT_VERSION },
+    });
+
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, "classic@1")).not.toBeNull();
+    expect(await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000, "2026@1")).toBeNull();
   });
 });

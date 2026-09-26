@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGenericObject,
   googleWalletConfig,
+  googleWalletTheme,
   buildSaveToWalletPayload,
   buildSaveToWalletUrl,
   signSaveToWalletJwt,
@@ -10,6 +11,7 @@ import {
   type GoogleWalletCredentials,
   type MemberWalletInput,
 } from "../../src/google/jwt";
+import { CLASSIC_THEME } from "../../src/themes/cardTheme";
 
 const CONFIG: GoogleWalletConfig = {
   issuerId: "3388000000022222222",
@@ -257,5 +259,35 @@ describe("buildSaveToWalletUrl", () => {
     expect(buildSaveToWalletUrl("header.payload.signature")).toBe(
       "https://pay.google.com/gp/v/save/header.payload.signature",
     );
+  });
+});
+
+describe("the card theme on a Google pass (#333)", () => {
+  const THEME = {
+    ...CLASSIC_THEME,
+    id: "2026",
+    colors: { ...CLASSIC_THEME.colors, background: "#123abc" },
+    assets: { ...CLASSIC_THEME.assets, googleLogoPath: "/assets/themes/2026/logo.png" },
+  };
+
+  it("resolves the theme's logo against the environment's public origin", () => {
+    expect(googleWalletTheme(THEME, "https://stagingcard.losverd.es")).toEqual({
+      hexBackgroundColor: "#123ABC",
+      logoUri: "https://stagingcard.losverd.es/assets/themes/2026/logo.png",
+    });
+  });
+
+  it("puts the theme's colour and logo on the member's object", () => {
+    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es"));
+
+    expect(object.hexBackgroundColor).toBe("#123ABC");
+    expect(object.logo?.sourceUri.uri).toBe("https://card.losverd.es/assets/themes/2026/logo.png");
+  });
+
+  it("matches the environment's classic branding for the classic theme", () => {
+    expect(googleWalletTheme(CLASSIC_THEME, "https://card.losverd.es")).toEqual({
+      hexBackgroundColor: CONFIG.hexBackgroundColor,
+      logoUri: CONFIG.logoUri,
+    });
   });
 });

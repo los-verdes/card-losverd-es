@@ -16,6 +16,7 @@ import {
   buildSaveToWalletUrl,
   buildSkinnySaveToWalletPayload,
   googleWalletConfig,
+  googleWalletTheme,
   signSaveToWalletPayload,
 } from "../google/jwt";
 import type { Env } from "../index";
@@ -25,6 +26,7 @@ import {
   getCachedPass,
   putCachedPass,
 } from "../passkit/generator";
+import { resolveCardTheme, themeCacheTag } from "../themes/cardTheme";
 
 export interface MemberRecord {
   member_id: string;
@@ -249,11 +251,13 @@ export async function getApplePassBundle(
   member: MemberRecord,
 ): Promise<Uint8Array> {
   const passTypeIdentifier = env.PASSKIT_PASS_TYPE_IDENTIFIER;
+  const theme = resolveCardTheme();
   const cached = await getCachedPass(
     env.ASSETS,
     passTypeIdentifier,
     member.member_id,
     member.last_updated_at,
+    themeCacheTag(theme),
   );
   if (cached) {
     return cached;
@@ -261,7 +265,7 @@ export async function getApplePassBundle(
 
   const assets: Record<string, Uint8Array> = {};
   for (const name of PASS_TEMPLATE_ASSETS) {
-    assets[name] = await readTemplateAsset(env, `templates/apple/${name}`);
+    assets[name] = await readTemplateAsset(env, `${theme.assets.applePrefix}${name}`);
   }
   const bundle = await assemblePassBundle(
     {
@@ -272,6 +276,7 @@ export async function getApplePassBundle(
       memberSince: member.member_since,
       authToken: member.auth_token,
       verifyUrl: await verifyUrl(env, member),
+      colors: theme.colors,
     },
     {
       passTypeIdentifier,
@@ -293,6 +298,7 @@ export async function getApplePassBundle(
     member.member_id,
     member.last_updated_at,
     bundle,
+    themeCacheTag(theme),
   );
   return bundle;
 }
@@ -313,6 +319,7 @@ export async function renderCardImage(
   // that is a top-level module import in the bundle, and a lazy import of the
   // JavaScript does not move it.
   const { renderMembershipCardPng } = await import("../cardimage/render");
+  const theme = resolveCardTheme();
   return renderMembershipCardPng(
     {
       ...cardName(member),
@@ -321,7 +328,8 @@ export async function renderCardImage(
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
     },
-    await readTemplateAsset(env, "templates/card/crest.png"),
+    await readTemplateAsset(env, theme.assets.cardCrest),
+    theme.colors,
   );
 }
 
@@ -372,6 +380,7 @@ async function googleWalletObjectFor(
       verifyUrl: await verifyUrl(env, member),
     },
     config,
+    googleWalletTheme(resolveCardTheme(), env.PUBLIC_BASE_URL),
   );
   return { config, credentials, object };
 }
