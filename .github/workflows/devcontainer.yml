@@ -52,4 +52,27 @@ jobs:
             iptables -L OUTPUT -v -n
             iptables-legacy-save 2>&1 | head -n 30
             ls /proc/net/ | grep -iE "ip_tables|nf_" || true
+
+            : "--- experiment 1: where does a redirected packet go?"
+            iptables -I OUTPUT 1 -p tcp -d 127.0.0.1 --dport 8443 -o lo
+            iptables -I OUTPUT 1 -p tcp -d 127.0.0.1 --dport 8443 ! -o lo
+            iptables -I OUTPUT 1 -p tcp --dport 443 ! -o lo
+            iptables -Z OUTPUT
+            curl -s -o /dev/null --max-time 5 https://api.github.com/zen; echo "curl exit $?"
+            iptables -L OUTPUT -v -n | head -n 6
+
+            : "--- experiment 2: route_localnet"
+            sysctl -w net.ipv4.conf.all.route_localnet=1 net.ipv4.conf.lo.route_localnet=1 net.ipv4.conf.eth0.route_localnet=1
+            curl -s -o /dev/null --max-time 5 https://api.github.com/zen; echo "curl exit $?"
+            sysctl -w net.ipv4.conf.all.route_localnet=0 net.ipv4.conf.lo.route_localnet=0 net.ipv4.conf.eth0.route_localnet=0
+
+            : "--- experiment 3: DNAT to the container address instead"
+            ip=$(ip -4 -o addr show eth0 | awk "{print \$4}" | cut -d/ -f1)
+            sed "s/listen 127.0.0.1:8443;/listen $ip:8443;/" /etc/egress-proxy/egress-proxy.conf > /etc/egress-proxy/exp.conf
+            nginx -c /etc/egress-proxy/egress-proxy.conf -s stop; sleep 1
+            nginx -c /etc/egress-proxy/exp.conf
+            iptables -t nat -R OUTPUT 3 -p tcp --dport 443 -m owner ! --uid-owner www-data -j DNAT --to-destination "$ip:8443"
+            iptables -t nat -L OUTPUT -v -n
+            curl -s --max-time 5 https://api.github.com/zen; echo " curl exit $?"
+            curl -s -o /dev/null --max-time 5 https://example.com/; echo "example.com curl exit $?"
           ' 2>&1 || true
