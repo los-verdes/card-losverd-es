@@ -1,12 +1,12 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
 import {
   getThemeOptions,
   membershipYears,
-  themeDefaultsSince,
   themeOptions,
+  themeYearDefaultsEnabled,
 } from "../../src/themes/eligibility";
 
 function yearTheme(year: number): CardTheme {
@@ -19,9 +19,6 @@ const Y2021 = yearTheme(2021);
 const Y2022 = yearTheme(2022);
 const Y2024 = yearTheme(2024);
 const THEMES = [CLASSIC_THEME, Y2024, Y2019, Y2022, Y2021];
-
-const LAUNCH = Date.parse("2027-01-01T00:00:00Z");
-const BEFORE_LAUNCH = LAUNCH - 1;
 
 function order(created_on: string, expires_on: string) {
   return { created_on: `${created_on}T12:00:00Z`, expires_on: `${expires_on}T12:00:00Z` };
@@ -53,41 +50,40 @@ describe("themeOptions", () => {
   const history = {
     orders: [order("2021-07-04", "2022-07-04"), order("2024-05-01", "2025-05-01")],
     memberSince: "2021-07-04",
-    cardCreatedAt: BEFORE_LAUNCH,
   };
 
   it("offers classic, then each published year theme from a year the member was active, in year order", () => {
     // 2025 was an active year too, but has no theme.
-    expect(ids(themeOptions(history, null, THEMES).themes)).toEqual(["classic", "2021", "2022", "2024"]);
+    expect(ids(themeOptions(history, false, THEMES).themes)).toEqual(["classic", "2021", "2022", "2024"]);
   });
 
   it("offers the member-since year even when it is before the first order", () => {
-    const options = themeOptions({ ...history, memberSince: "2019-02-01" }, null, THEMES);
+    const options = themeOptions({ ...history, memberSince: "2019-02-01" }, false, THEMES);
     expect(ids(options.themes)).toEqual(["classic", "2019", "2021", "2022", "2024"]);
   });
 
   it("offers only classic to somebody with no orders and no member-since date", () => {
-    const options = themeOptions({ orders: [], memberSince: null, cardCreatedAt: LAUNCH }, LAUNCH, THEMES);
+    const options = themeOptions({ orders: [], memberSince: null }, true, THEMES);
     expect(ids(options.themes)).toEqual(["classic"]);
     expect(options.defaultTheme).toBe(CLASSIC_THEME);
   });
 
-  it("starts every card in classic while no launch date is set", () => {
-    expect(themeOptions({ ...history, cardCreatedAt: LAUNCH + 1 }, null, THEMES).defaultTheme).toBe(CLASSIC_THEME);
+  it("keeps every card in classic while year defaults are off", () => {
+    expect(themeOptions(history, false, THEMES).defaultTheme).toBe(CLASSIC_THEME);
   });
 
-  it("keeps a card created before launch in classic", () => {
-    expect(themeOptions(history, LAUNCH, THEMES).defaultTheme).toBe(CLASSIC_THEME);
+  it("draws a card in its member-since year's theme once year defaults are on", () => {
+    expect(themeOptions(history, true, THEMES).defaultTheme).toBe(Y2021);
   });
 
-  it("starts a card created on or after launch in its member-since year's theme", () => {
-    expect(themeOptions({ ...history, cardCreatedAt: LAUNCH }, LAUNCH, THEMES).defaultTheme).toBe(Y2021);
+  it("follows a corrected member-since date", () => {
+    expect(themeOptions({ ...history, memberSince: "2019-02-01" }, true, THEMES).defaultTheme).toBe(Y2019);
   });
 
   it("falls back to classic when the member-since year has no theme", () => {
     const options = themeOptions(
-      { orders: [order("2023-02-01", "2024-02-01")], memberSince: "2023-02-01", cardCreatedAt: LAUNCH },
-      LAUNCH,
+      { orders: [order("2023-02-01", "2024-02-01")], memberSince: "2023-02-01" },
+      true,
       THEMES,
     );
     expect(ids(options.themes)).toEqual(["classic", "2024"]);
@@ -95,108 +91,70 @@ describe("themeOptions", () => {
   });
 
   it("offers only classic from the real registry, which has no year themes yet", () => {
-    expect(themeOptions({ ...history, cardCreatedAt: LAUNCH }, LAUNCH)).toEqual({
-      themes: [CLASSIC_THEME],
-      defaultTheme: CLASSIC_THEME,
-    });
+    expect(themeOptions(history, true)).toEqual({ themes: [CLASSIC_THEME], defaultTheme: CLASSIC_THEME });
   });
 });
 
-describe("themeDefaultsSince", () => {
+describe("themeYearDefaultsEnabled", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    env.CARD_THEME_YEAR_DEFAULTS = "false";
   });
 
-  it.each([undefined, "", "   "])("is off when unset (%j)", (value) => {
-    expect(themeDefaultsSince(value)).toBeNull();
+  it("is off as configured in wrangler.toml", async () => {
+    expect(await themeYearDefaultsEnabled(env)).toBe(false);
   });
 
-  it("reads a date as the start of that day, UTC", () => {
-    expect(themeDefaultsSince(" 2027-01-01 ")).toBe(LAUNCH);
+  it.each(["true", " TRUE ", "True"])("is on for %j", async (value) => {
+    env.CARD_THEME_YEAR_DEFAULTS = value;
+    expect(await themeYearDefaultsEnabled(env)).toBe(true);
   });
 
-  it.each(["2027-1-1", "January 2027", "2027-13-45"])("is off, and says so, for %j", (value) => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(themeDefaultsSince(value)).toBeNull();
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("CARD_THEME_DEFAULTS_SINCE"), { value });
+  it.each(["", "false", "yes", "1", undefined])("is off for %j", async (value) => {
+    env.CARD_THEME_YEAR_DEFAULTS = value;
+    expect(await themeYearDefaultsEnabled(env)).toBe(false);
   });
 });
 
 describe("getThemeOptions", () => {
   const EMAIL = "pat@example.com";
+  const member = { email: EMAIL, member_since: "2021-07-04" };
 
   afterEach(async () => {
-    env.CARD_THEME_DEFAULTS_SINCE = "";
+    env.CARD_THEME_YEAR_DEFAULTS = "false";
     await env.DB.exec("DELETE FROM membership_orders");
-    await env.DB.exec("DELETE FROM members");
   });
 
-  async function insertMember(createdAt: number) {
-    await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, member_since, auth_token, last_updated_at, created_at)
-       VALUES ('BC-1', 'Pat', 'Lee', ?, '2021-07-04', 'token', 1, ?)`,
-    )
-      .bind(EMAIL, createdAt)
-      .run();
-  }
-
-  async function insertOrder(orderId: string, status: string, createdOn: string, expiresOn: string) {
+  async function insertOrder(orderId: string, status: string, createdOn: string, expiresOn: string, email = EMAIL) {
     await env.DB.prepare(
       `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
        VALUES (?, 'bigcommerce', ?, ?, ?, ?, ?, 'sync')`,
     )
-      .bind(orderId, EMAIL, EMAIL, status, `${createdOn}T12:00:00Z`, `${expiresOn}T12:00:00Z`)
+      .bind(orderId, email, email, status, `${createdOn}T12:00:00Z`, `${expiresOn}T12:00:00Z`)
       .run();
   }
 
-  it("counts only orders that count as a membership", async () => {
-    await insertMember(BEFORE_LAUNCH);
+  it("counts only this member's orders that count as a membership", async () => {
     await insertOrder("1001", "Completed", "2021-07-04", "2022-07-04");
     await insertOrder("1002", "Refunded", "2024-05-01", "2025-05-01");
+    await insertOrder("1003", "Completed", "2019-03-01", "2020-03-01", "someone.else@example.com");
 
-    const options = await getThemeOptions(env, { member_id: "BC-1", member_since: "2021-07-04" }, THEMES);
-
-    expect(ids(options.themes)).toEqual(["classic", "2021", "2022"]);
+    expect(ids((await getThemeOptions(env, member, THEMES)).themes)).toEqual(["classic", "2021", "2022"]);
   });
 
   it("uses the member-since date it is given, which carries any correction", async () => {
-    await insertMember(BEFORE_LAUNCH);
-
-    const options = await getThemeOptions(env, { member_id: "BC-1", member_since: "2019-02-01" }, THEMES);
-
+    const options = await getThemeOptions(env, { ...member, member_since: "2019-02-01" }, THEMES);
     expect(ids(options.themes)).toEqual(["classic", "2019"]);
   });
 
-  it("starts a card in its member-since year's theme once created on or after the launch date", async () => {
-    env.CARD_THEME_DEFAULTS_SINCE = "2027-01-01";
-    await insertMember(LAUNCH);
+  it("defaults to the member-since year's theme only once year defaults are on", async () => {
     await insertOrder("1001", "Completed", "2021-07-04", "2022-07-04");
+    expect((await getThemeOptions(env, member, THEMES)).defaultTheme).toBe(CLASSIC_THEME);
 
-    const options = await getThemeOptions(env, { member_id: "BC-1", member_since: "2021-07-04" }, THEMES);
-
-    expect(options.defaultTheme).toBe(Y2021);
-  });
-
-  it("keeps an earlier card in classic after launch", async () => {
-    env.CARD_THEME_DEFAULTS_SINCE = "2027-01-01";
-    await insertMember(BEFORE_LAUNCH);
-    await insertOrder("1001", "Completed", "2021-07-04", "2022-07-04");
-
-    const options = await getThemeOptions(env, { member_id: "BC-1", member_since: "2021-07-04" }, THEMES);
-
-    expect(options.defaultTheme).toBe(CLASSIC_THEME);
+    env.CARD_THEME_YEAR_DEFAULTS = "true";
+    expect((await getThemeOptions(env, member, THEMES)).defaultTheme).toBe(Y2021);
   });
 
   it("offers the real registry by default", async () => {
-    await insertMember(BEFORE_LAUNCH);
-
-    expect(await getThemeOptions(env, { member_id: "BC-1", member_since: "2021-07-04" })).toEqual({
-      themes: [CLASSIC_THEME],
-      defaultTheme: CLASSIC_THEME,
-    });
-  });
-
-  it("refuses a member who is not on record", async () => {
-    await expect(getThemeOptions(env, { member_id: "BC-404", member_since: null })).rejects.toThrow("No member BC-404");
+    expect(await getThemeOptions(env, member)).toEqual({ themes: [CLASSIC_THEME], defaultTheme: CLASSIC_THEME });
   });
 });
