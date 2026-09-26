@@ -47,4 +47,9 @@ jobs:
             curl -sv --max-time 10 --connect-to ::127.0.0.1:8443 https://api.github.com/zen
             curl -sv --max-time 10 https://api.github.com/zen
             sysctl net.ipv4.conf.all.route_localnet
+            iptables -V
+            iptables -t nat -L OUTPUT -v -n
+            iptables -L OUTPUT -v -n
+            iptables-legacy-save 2>&1 | head -n 30
+            ls /proc/net/ | grep -iE "ip_tables|nf_" || true
           ' 2>&1 || true
