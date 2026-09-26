@@ -51,4 +51,9 @@ grep -q ' deny example\.com ' /var/log/egress-proxy/access.log \
     && pass "refusals are logged" \
     || fail "no 'deny example.com' line in /var/log/egress-proxy/access.log"
 
+# Refusals are not errors, so anything in the error log is worth a look.
+[ ! -s /var/log/egress-proxy/error.log ] \
+    && pass "the proxy's error log is empty" \
+    || fail "the proxy logged errors: see /var/log/egress-proxy/error.log"
+
 exit "$failed"
