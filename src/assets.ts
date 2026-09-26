@@ -18,11 +18,24 @@ import { Hono } from "hono";
 import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import type { Env } from "./index";
 import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
+import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTheme";
 
-/** Public file name -> R2 key. */
-export const PUBLIC_ASSETS: Record<string, string> = {
-  "crest.png": "templates/card/crest.png",
-};
+/**
+ * Public file name -> R2 key: the crest Google shows as the pass logo, and
+ * each theme's Google hero image, which Google fetches the same way.
+ */
+export function publicAssets(themes: readonly CardTheme[]): Record<string, string> {
+  return {
+    "crest.png": "templates/card/crest.png",
+    ...Object.fromEntries(
+      themes.flatMap((theme) =>
+        theme.artwork.googleHero ? [[googleHeroFileName(theme), theme.artwork.googleHero]] : [],
+      ),
+    ),
+  };
+}
+
+export const PUBLIC_ASSETS = publicAssets(CARD_THEMES);
 
 /**
  * A day. These images change only when the branding does, and Google caches

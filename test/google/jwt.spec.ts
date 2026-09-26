@@ -290,4 +290,28 @@ describe("the card theme on a Google pass (#333)", () => {
       logoUri: CONFIG.logoUri,
     });
   });
+  it("adds the theme's hero image, at an address that changes with its version", () => {
+    const withHero = {
+      ...THEME,
+      label: "2026",
+      version: 2,
+      artwork: { googleHero: "templates/themes/2026/google-hero.png" },
+    };
+    const theme = googleWalletTheme(withHero, "https://card.losverd.es");
+    expect(theme.heroImage).toEqual({
+      uri: "https://card.losverd.es/assets/hero-2026-2.png",
+      description: "2026",
+    });
+
+    const object = buildGenericObject(makeMember(), CONFIG, theme);
+    expect(object.heroImage).toEqual({
+      sourceUri: { uri: "https://card.losverd.es/assets/hero-2026-2.png" },
+      contentDescription: { defaultValue: { language: "en-US", value: "2026" } },
+    });
+  });
+
+  it("leaves the hero image off a theme without one", () => {
+    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es"));
+    expect(object).not.toHaveProperty("heroImage");
+  });
 });

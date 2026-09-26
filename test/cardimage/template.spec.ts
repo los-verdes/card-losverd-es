@@ -140,3 +140,25 @@ describe("buildCardTree with a theme", () => {
     expect(tree.props.style?.backgroundColor).toBe(CLASSIC_THEME.colors.background);
   });
 });
+
+describe("buildCardTree with background art", () => {
+  const LABELS = { memberSince: null, expiration: null };
+
+  it("draws the art across the whole card, under everything else", () => {
+    const tree = buildCardTree(makeMember(), LABELS, { ...IMAGES, backgroundDataUrl: "data:image/png;base64,BBBB" });
+
+    expect(tree.props.style).toMatchObject({
+      backgroundImage: "url(data:image/png;base64,BBBB)",
+      backgroundSize: "1050px 660px",
+      backgroundRepeat: "no-repeat",
+      // The theme's colour stays, for any part the art leaves transparent.
+      backgroundColor: CLASSIC_THEME.colors.background,
+    });
+  });
+
+  it("leaves the background plain without art", () => {
+    const tree = buildCardTree(makeMember(), LABELS, IMAGES);
+
+    expect(tree.props.style).not.toHaveProperty("backgroundImage");
+  });
+});

@@ -51,6 +51,8 @@ export interface CardImages {
   qrDataUrl: string;
   /** QR image is always square; this is both width and height in px. */
   qrSize: number;
+  /** `data:image/png;base64,...` background art, or absent for a plain background. */
+  backgroundDataUrl?: string;
 }
 
 /**
@@ -185,6 +187,15 @@ export function buildCardTree(
         height: CARD_HEIGHT,
         padding: 56,
         backgroundColor: colors.background,
+        // Art is drawn over the background colour and under the border, and
+        // stretched to the card's full size (ARTWORK_SIZES.cardBackground).
+        ...(images.backgroundDataUrl
+          ? {
+              backgroundImage: `url(${images.backgroundDataUrl})`,
+              backgroundSize: `${CARD_WIDTH}px ${CARD_HEIGHT}px`,
+              backgroundRepeat: 'no-repeat',
+            }
+          : {}),
         borderRadius: 48,
         border: `14px solid ${colors.border}`,
         fontFamily: 'Bungee',

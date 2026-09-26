@@ -26,7 +26,12 @@ import {
   getCachedPass,
   putCachedPass,
 } from "../passkit/generator";
-import { resolveCardTheme, themeCacheTag } from "../themes/cardTheme";
+import {
+  APPLE_THUMBNAIL_FILES,
+  resolveCardTheme,
+  themeCacheTag,
+  type CardTheme,
+} from "../themes/cardTheme";
 
 export interface MemberRecord {
   member_id: string;
@@ -233,8 +238,9 @@ async function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
   return new Uint8Array(await object.arrayBuffer());
 }
 
-// Matches Phase 3.1's R2 `templates/apple/` layout -- no strip.png or
-// thumbnail.png: it's a `generic`-style pass, which doesn't render a strip.
+// Matches Phase 3.1's R2 `templates/apple/` layout -- no strip.png: it's a
+// `generic`-style pass, which doesn't render a strip. A theme with artwork
+// adds its thumbnail (APPLE_THUMBNAIL_FILES) from its own prefix.
 const PASS_TEMPLATE_ASSETS = [
   "icon.png",
   "icon@2x.png",
@@ -245,13 +251,14 @@ const PASS_TEMPLATE_ASSETS = [
 /**
  * The member's signed `.pkpass`, served from the R2 cache (keyed to
  * `last_updated_at`) when possible; only pays the signing cost on a miss.
+ * Drawn in the member's own theme unless `theme` names another.
  */
 export async function getApplePassBundle(
   env: Env,
   member: MemberRecord,
+  theme: CardTheme = resolveCardTheme(),
 ): Promise<Uint8Array> {
   const passTypeIdentifier = env.PASSKIT_PASS_TYPE_IDENTIFIER;
-  const theme = resolveCardTheme();
   const cached = await getCachedPass(
     env.ASSETS,
     passTypeIdentifier,
@@ -266,6 +273,12 @@ export async function getApplePassBundle(
   const assets: Record<string, Uint8Array> = {};
   for (const name of PASS_TEMPLATE_ASSETS) {
     assets[name] = await readTemplateAsset(env, `${theme.assets.applePrefix}${name}`);
+  }
+  const thumbnailPrefix = theme.artwork.appleThumbnailPrefix;
+  if (thumbnailPrefix) {
+    for (const name of APPLE_THUMBNAIL_FILES) {
+      assets[name] = await readTemplateAsset(env, `${thumbnailPrefix}${name}`);
+    }
   }
   const bundle = await assemblePassBundle(
     {
@@ -305,11 +318,13 @@ export async function getApplePassBundle(
 
 /**
  * The member's card image (PNG). Uses a dedicated 256px crest rather than the
- * pass icon, which at 58px is too small for the ~120px crest on the card.
+ * pass icon, which at 58px is too small for the 240px crest on the card.
+ * Drawn in the member's own theme unless `theme` names another.
  */
 export async function renderCardImage(
   env: Env,
   member: MemberRecord,
+  theme: CardTheme = resolveCardTheme(),
 ): Promise<Uint8Array> {
   // Imported here rather than at the top of the file. This module is imported
   // by nearly everything that touches a member, and the renderer brings satori
@@ -319,7 +334,6 @@ export async function renderCardImage(
   // that is a top-level module import in the bundle, and a lazy import of the
   // JavaScript does not move it.
   const { renderMembershipCardPng } = await import("../cardimage/render");
-  const theme = resolveCardTheme();
   return renderMembershipCardPng(
     {
       ...cardName(member),
@@ -330,6 +344,9 @@ export async function renderCardImage(
     },
     await readTemplateAsset(env, theme.assets.cardCrest),
     theme.colors,
+    theme.artwork.cardBackground
+      ? await readTemplateAsset(env, theme.artwork.cardBackground)
+      : undefined,
   );
 }
 

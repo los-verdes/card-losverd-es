@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import sampleLogoPng from "../fixtures/sample-logo.png";
+import sampleBackgroundPng from "../fixtures/sample-card-background.png";
 import { renderMembershipCardPng } from "../../src/cardimage/render";
+import { CLASSIC_THEME } from "../../src/themes/cardTheme";
 import type { MembershipCardMember } from "../../src/cardimage/template";
 
 // PNG file signature: 0x89 'P' 'N' 'G' \r \n 0x1A \n
@@ -52,5 +54,18 @@ describe("renderMembershipCardPng", () => {
 
     expect(Array.from(png.slice(0, 8))).toEqual(PNG_MAGIC);
     expect(png.byteLength).toBeGreaterThan(5_000);
+  });
+
+  it("draws background art when the theme has some", async () => {
+    const plain = await renderMembershipCardPng(makeMember(), LOGO_BYTES);
+    const withArt = await renderMembershipCardPng(
+      makeMember(),
+      LOGO_BYTES,
+      CLASSIC_THEME.colors,
+      new Uint8Array(sampleBackgroundPng),
+    );
+
+    expect(Array.from(withArt.slice(0, 8))).toEqual(PNG_MAGIC);
+    expect(withArt).not.toEqual(plain);
   });
 });
