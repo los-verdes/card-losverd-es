@@ -453,6 +453,8 @@ export async function missingOrders(db: D1Database): Promise<MissingOrderRow[]> 
 export interface AttentionCounts {
   missing: number;
   extraMemberships: number;
+  /** Revoked memberships plus expelled people: what `/admin/revocations` lists. */
+  revocations: number;
 }
 
 /**
@@ -466,10 +468,11 @@ export async function attentionCounts(db: D1Database, asOf: string): Promise<Att
   const row = await db
     .prepare(
       `SELECT COALESCE(SUM(missing_since IS NOT NULL), 0) AS missing,
-              COALESCE(SUM(${ACTIVE_EXTRA_MEMBERSHIPS}), 0) AS extraMemberships
+              COALESCE(SUM(${ACTIVE_EXTRA_MEMBERSHIPS}), 0) AS extraMemberships,
+              (SELECT COUNT(*) FROM revoked_cards) + (SELECT COUNT(*) FROM expelled_people) AS revocations
          FROM membership_orders`,
     )
     .bind(asOf)
     .first<AttentionCounts>();
-  return row ?? { missing: 0, extraMemberships: 0 };
+  return row ?? { missing: 0, extraMemberships: 0, revocations: 0 };
 }

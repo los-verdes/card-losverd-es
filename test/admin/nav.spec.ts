@@ -3,7 +3,9 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { AdminNav } from "../../src/admin/nav";
-import { missingOrders, ordersWithExtraMemberships } from "../../src/admin/reportQueries";
+import { attentionCounts, missingOrders, ordersWithExtraMemberships } from "../../src/admin/reportQueries";
+import { expelledPeople } from "../../src/member/expulsion";
+import { revokedCards } from "../../src/member/revocation";
 import worker from "../../src/index";
 import { insertOrder } from "./fixtures";
 
@@ -179,5 +181,67 @@ describe("the \"Needs a look\" group when there is nothing to look at", () => {
     const html = await (await get("/admin/reports/missing")).text();
 
     expect(html).not.toContain('class="nav-label">Needs a look<');
+  });
+});
+
+describe("the link to revoked and expelled people", () => {
+  const REVOCATIONS = "/admin/revocations";
+
+  afterEach(async () => {
+    // Before members: both reference it, and D1 enforces the keys.
+    await env.DB.exec("DELETE FROM revoked_cards");
+    await env.DB.exec("DELETE FROM expelled_people");
+    await env.DB.exec("DELETE FROM members");
+  });
+
+  async function insertMember(memberId: string, email: string) {
+    await env.DB.prepare(
+      "INSERT INTO members (member_id, first_name, last_name, email, auth_token, last_updated_at) VALUES (?, 'Pat', 'Lee', ?, 'token', 1)",
+    )
+      .bind(memberId, email)
+      .run();
+  }
+
+  it("is left out while nobody is revoked or expelled, even on its own page", async () => {
+    for (const path of ["/admin/members", REVOCATIONS]) {
+      expect(navLinks(await (await get(path)).text())).not.toContain(REVOCATIONS);
+    }
+  });
+
+  it("appears once a membership is revoked, and leads somewhere", async () => {
+    await insertMember("LV-1", "pat@example.com");
+    await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES ('LV-1')").run();
+
+    expect(navLinks(await (await get("/admin/members")).text())).toContain(REVOCATIONS);
+    expect((await get(REVOCATIONS)).status).toBe(200);
+  });
+
+  it("appears once somebody is expelled, whether or not they hold a membership", async () => {
+    await env.DB.prepare("INSERT INTO expelled_people (email) VALUES ('sam@example.com')").run();
+
+    expect(navLinks(await (await get("/admin/members")).text())).toContain(REVOCATIONS);
+  });
+
+  it("counts what the page itself lists", async () => {
+    await insertMember("LV-1", "pat@example.com");
+    await insertMember("LV-2", "lee@example.com");
+    await env.DB.prepare("INSERT INTO revoked_cards (member_id) VALUES ('LV-1'), ('LV-2')").run();
+    await env.DB.prepare("INSERT INTO expelled_people (email) VALUES ('pat@example.com'), ('sam@example.com')").run();
+
+    const counts = await attentionCounts(env.DB, "2026-06-01T12:00:00Z");
+
+    expect(counts.revocations).toBe((await revokedCards(env)).length + (await expelledPeople(env)).length);
+    expect(counts.revocations).toBe(4);
+  });
+
+  it("is shown when the counts cannot be had, rather than hidden by a failure", async () => {
+    const prepare = env.DB.prepare.bind(env.DB);
+    vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      if (sql.includes("AS revocations")) throw new Error("D1 is having a bad day");
+      return prepare(sql);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(navLinks(await (await get("/admin/members")).text())).toContain(REVOCATIONS);
   });
 });
