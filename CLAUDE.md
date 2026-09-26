@@ -109,16 +109,19 @@ human approval still stands between the branch and `main`.
 
 **Automation acts as `verde-bot`, and that includes pushes.** GitHub takes
 "last pusher" from whoever authenticated the push, not from the commit
-author. `origin` is an SSH remote, so a plain `git push` authenticates as
-the key's owner -- which makes the maintainer the last pusher on a PR he
-then cannot approve. Push over HTTPS with the token inline, and never write
-it into `.git/config`:
+author, so a push authenticated as the maintainer makes them the last pusher
+on a PR they then cannot approve. In the dev container (`.devcontainer/`;
+see the README), `gh` is logged in as `verde-bot` only, and git sends every
+GitHub fetch and push through `gh` -- the image rewrites the SSH `origin` to
+HTTPS -- so a plain `git push` and `gh pr create` both act as `verde-bot`.
+Check once per session, before the first push:
 
 ```bash
-GH_TOKEN="$(gh auth token --hostname github.com --user verde-bot)" gh pr create ...
-git push "https://verde-bot:$(gh auth token --hostname github.com --user verde-bot)@github.com/los-verdes/card-losverd-es.git" <branch>
+gh api user --jq .login   # must print verde-bot
 ```
 
+Anything else means the container's credentials have changed; stop and say
+so rather than pushing. Never write a token into `.git/config`.
 `gh api repos/los-verdes/card-losverd-es/activity` reports the actor per
 push, which is the field the ruleset reads.
 
@@ -127,7 +130,8 @@ built the same thing twice, having read a stale copy of the state. Re-fetch,
 and check open PRs and remote branches touching the same files, before
 writing code.
 
-**Git work happens in a worktree**, not the main checkout. The stash stack
+**Git work happens in a worktree**, not the main checkout; run `npm ci` in a
+new one before testing. The stash stack
 is shared across worktrees, so never use a bare `git stash` -- prefer a
 temporary commit, or `git stash push -u -m "<tag>"` and recover the entry by
 tag.
@@ -149,10 +153,10 @@ action, or an answer to a question the issue poses.
 - Auto-merge goes quiet when a PR conflicts, which looks identical to
   waiting for review. `gh pr list --json number,mergeStateStatus` shows
   `DIRTY`; re-enable it after resolving.
-- Force-pushing a rebased branch by URL needs an explicit lease --
-  `--force-with-lease=refs/heads/<branch>:<old sha>` -- because a bare one
-  has no remote-tracking ref to compare against and is rejected as stale.
-- `gh pr create` after a push by URL needs `--head <branch> --base main`.
+- The dev container's outbound firewall admits only the hosts listed in
+  `.devcontainer/init-firewall.sh`; `EHOSTUNREACH` or a connection that
+  fails at once means a host is missing there. Add it to the list rather
+  than working around the firewall; it applies on the next container start.
 - `gh pr edit` can fail with a Projects-classic GraphQL error;
   `gh api -X PATCH repos/.../pulls/N -F body=@file` works, and the same
   shape edits an issue body.
