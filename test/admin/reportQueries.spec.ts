@@ -14,7 +14,7 @@ import { insertOrder, insertSlackUser } from "./fixtures";
 const AS_OF = "2026-06-01T12:00:00Z";
 
 beforeEach(async () => {
-  // Current, and renewed early: two orders in force at AS_OF, one member.
+  // Current, and renewed early: two orders active at AS_OF, one member.
   await insertOrder({ id: "1", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2025-07-01T00:00:00Z" });
   await insertOrder({ id: "2", email: "renewer@example.com", first: "Rene", last: "Wer", created: "2026-05-20T00:00:00Z", channel: "bigcommerce_iphone" });
   // Current, Squarespace-era style row with no status or channel.
@@ -39,7 +39,7 @@ afterEach(async () => {
 });
 
 describe("activeMemberships", () => {
-  it("lists orders in force at the instant, newest first, skipping voided ones", async () => {
+  it("lists orders active at the instant, newest first, skipping voided ones", async () => {
     const result = await activeMemberships(env.DB, AS_OF);
 
     expect(result.rows.map((r) => r.order_id)).toEqual(["2", "6", "5f00000000000000000000b2", "1"]);
@@ -53,7 +53,7 @@ describe("activeMemberships", () => {
     expect(result.rows.map((r) => r.order_id)).toEqual(["4", "5"]);
   });
 
-  it("treats the expiry instant itself as no longer in force", async () => {
+  it("treats the expiry instant itself as no longer active", async () => {
     const atExpiry = await activeMemberships(env.DB, "2025-03-01T00:00:00Z", { search: "lapsed" });
     const justBefore = await activeMemberships(env.DB, "2025-02-28T23:59:59Z", { search: "lapsed" });
 

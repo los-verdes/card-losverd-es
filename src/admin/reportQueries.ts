@@ -70,7 +70,7 @@ export interface ActiveMembershipsResult {
   totalMembers: number;
 }
 
-/** Every membership order in force at `asOf`, newest first. */
+/** Every membership order active at `asOf`, newest first. */
 export async function activeMemberships(
   db: D1Database,
   asOf: string,
@@ -108,7 +108,7 @@ export interface ExpiredMembershipsResult {
 
 /**
  * Lapsed members as of `asOf`: each member's most recent membership order,
- * where that order had already expired and they held nothing in force.
+ * where that order had already expired and they held no active membership.
  *
  * Grouped by `member_email` rather than the legacy report's order email, so
  * someone who renewed under a new address isn't listed as lapsed under the
@@ -201,7 +201,7 @@ export interface SlackCrossReference {
  * Membership orders cross-referenced with Slack accounts by lowercased email,
  * as of `asOf`. "Current" and "lapsed" match the active and expired reports:
  * a member is current if their latest-expiring membership order placed by
- * `asOf` is still in force, and lapsed otherwise. Slack users "without
+ * `asOf` is still active, and lapsed otherwise. Slack users "without
  * orders" have no membership order (void and test orders don't count) placed
  * by `asOf` under their email.
  *
@@ -391,7 +391,7 @@ export interface ExtraMembershipOrderRow {
  * listing it only teaches people to ignore the list. Shared by the report and
  * the nav's count, so the two cannot disagree.
  */
-const EXTRA_MEMBERSHIPS_IN_FORCE = `membership_units > 1 AND ${COUNTS_AS_MEMBERSHIP} AND expires_on > ?1`;
+const ACTIVE_EXTRA_MEMBERSHIPS = `membership_units > 1 AND ${COUNTS_AS_MEMBERSHIP} AND expires_on > ?1`;
 
 /**
  * Orders carrying more than one membership, most memberships first, as of
@@ -416,7 +416,7 @@ export async function ordersWithExtraMemberships(
       `SELECT order_id, member_email, first_name, last_name, status, created_on, expires_on,
               membership_units, (${COUNTS_AS_MEMBERSHIP}) AS counts
          FROM membership_orders
-        WHERE ${EXTRA_MEMBERSHIPS_IN_FORCE}
+        WHERE ${ACTIVE_EXTRA_MEMBERSHIPS}
         ORDER BY membership_units DESC, created_on, order_id`,
     )
     .bind(asOf)
@@ -429,7 +429,7 @@ export async function extraMembershipOrdersSetAside(db: D1Database, asOf: string
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM membership_orders
-        WHERE membership_units > 1 AND NOT (${EXTRA_MEMBERSHIPS_IN_FORCE})`,
+        WHERE membership_units > 1 AND NOT (${ACTIVE_EXTRA_MEMBERSHIPS})`,
     )
     .bind(asOf)
     .first<{ n: number }>();
@@ -466,7 +466,7 @@ export async function attentionCounts(db: D1Database, asOf: string): Promise<Att
   const row = await db
     .prepare(
       `SELECT COALESCE(SUM(missing_since IS NOT NULL), 0) AS missing,
-              COALESCE(SUM(${EXTRA_MEMBERSHIPS_IN_FORCE}), 0) AS extraMemberships
+              COALESCE(SUM(${ACTIVE_EXTRA_MEMBERSHIPS}), 0) AS extraMemberships
          FROM membership_orders`,
     )
     .bind(asOf)

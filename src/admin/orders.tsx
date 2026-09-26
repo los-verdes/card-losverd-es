@@ -136,7 +136,7 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
             ? ([
                 [
                   "Memberships",
-                  // The report lists only orders still in force (#324), so it is
+                  // The report lists only orders whose membership is still active (#324), so it is
                   // only pointed at while this one is.
                   `Carried ${order.membership_units} memberships; only this one was recorded. ` +
                     (order.counts && order.expires_on > toIsoSeconds(new Date())

@@ -310,7 +310,7 @@ reports.get("/", (c) =>
     <AdminPage title="Membership reports">
       <ul>
         <li>
-          <a href="/admin/reports/active">Active memberships</a>: every membership order in force today, or on
+          <a href="/admin/reports/active">Active memberships</a>: every active membership order today, or on
           any past date.
         </li>
         <li>
@@ -354,7 +354,7 @@ reports.get("/active", async (c) => {
   ]);
   return c.html(
     <AdminPage title="Active memberships">
-      <p>Membership orders in force at the chosen moment. Unpaid, cancelled, refunded, and test orders are left out.</p>
+      <p>Membership orders active at the chosen moment. Unpaid, cancelled, refunded, and test orders are left out.</p>
       <FilterForm path={path} req={req} channels={channels} />
       <p>
         <strong>{result.totalMembers}</strong> members holding <strong>{result.totalOrders}</strong> orders, as of{" "}

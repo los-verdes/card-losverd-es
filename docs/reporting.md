@@ -16,7 +16,7 @@ per membership order, ever. It is a port of the legacy
 `annual_membership` table.
 
 * **`created_on` / `expires_on`**: ISO8601 UTC text. `expires_on` is
-  `created_on` + 365 days, stored so that "in force at instant T" is the
+  `created_on` + 365 days, stored so that "active at instant T" is the
   indexed range query `created_on <= T AND expires_on > T`.
 * **`order_email` / `member_email`**: the address typed on the order, and the
   address the membership is currently attributed to. They differ when a
@@ -82,7 +82,7 @@ table, rendered on the server as SVG (`src/admin/monthChart.tsx`).
 
 | Page | Shows | Legacy report page it replaces |
 | :--- | :--- | :--- |
-| `/admin/reports/active` | Orders in force now, or at the end of any past date (`?as_of=YYYY-MM-DD`, UTC). Counts distinct members and orders. | Active Memberships |
+| `/admin/reports/active` | Active membership orders now, or at the end of any past date (`?as_of=YYYY-MM-DD`, UTC). Counts distinct members and orders. | Active Memberships |
 | `/admin/reports/expired` | Each lapsed member's most recent order, as of now or a past date. | Expired Memberships |
 | `/admin/reports/orders` | Orders per month for a year against the year before. | Membership Orders |
 | `/admin/reports/consolidations` | Two tables: orders whose membership is attributed to another address (with who changed it, when, and why), and billing names appearing under several addresses. Each order links to its admin page. | Membership Consolidations |
@@ -131,7 +131,7 @@ that is a deliberate revocation of a membership, which is
 Members are matched to `slack_users` on lowercased `member_email`, so a member
 who joined Slack under another address shows as not in Slack. "Current" and
 "lapsed" follow the active and expired pages: whether the member's
-latest-expiring order is still in force. Only live human accounts count as
+latest-expiring order is still active. Only live human accounts count as
 being in Slack: deactivated accounts (`deleted = 1`), bots, app and workflow
 users, and accounts without an email (such as Slackbot) are ignored. Guests
 and pending invites count. The page shows when the Slack sync last ran, since

@@ -100,7 +100,7 @@ describe("the links to reports of things wanting action", () => {
   it("carry a count of what there is when there is something", async () => {
     await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
     await insertOrder({ id: "1002", email: "b@example.com", created: "2026-02-10T00:00:00Z" });
-    // Far off, so it is still in force whenever this runs: the report lists only those (#324).
+    // Far off, so it is still active whenever this runs: the report lists only those (#324).
     await insertOrder({ id: "1003", email: "c@example.com", created: "2098-03-10T00:00:00Z" });
     await env.DB.prepare(
       "UPDATE membership_orders SET missing_since = 1700000000000 WHERE order_id IN ('1001', '1002')",
