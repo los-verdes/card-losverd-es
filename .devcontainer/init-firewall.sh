@@ -86,6 +86,9 @@ for ns in "${nameservers[@]}"; do
     iptables -A OUTPUT -d "$ns" -p tcp --dport 53 -j ACCEPT
 done
 
+# The proxy serves this container only.
+iptables -A INPUT -p tcp --dport "$PROXY_PORT" ! -i lo -j DROP
+
 # The Docker host's network, for VS Code and forwarded ports.
 HOST_IP=$(ip route | awk '/^default/ { print $3; exit }')
 if [ -z "$HOST_IP" ]; then
@@ -98,9 +101,17 @@ iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
 iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
 
 # Every other process's HTTPS goes to the proxy; the proxy alone goes out.
+# The redirect targets the container's own address: a connection redirected
+# to 127.0.0.1 keeps its outbound route and never reaches loopback, and the
+# setting that would change that (route_localnet) is read-only in here.
+OWN_IP=$(ip -4 route get 192.0.2.1 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }')
+if [ -z "$OWN_IP" ]; then
+    echo "ERROR: Failed to detect the container's own address" >&2
+    exit 1
+fi
 iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
 iptables -t nat -A OUTPUT -d "$HOST_NETWORK" -j RETURN
-iptables -t nat -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner "$PROXY_USER" -j REDIRECT --to-ports "$PROXY_PORT"
+iptables -t nat -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner "$PROXY_USER" -j DNAT --to-destination "$OWN_IP:$PROXY_PORT"
 iptables -A OUTPUT -p tcp --dport 443 -m owner --uid-owner "$PROXY_USER" -j ACCEPT
 
 # Refuse the rest at once, rather than letting it time out.
