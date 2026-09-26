@@ -23,6 +23,12 @@ interface NavLink {
   label: string;
   /** For a report that lists things wanting action: which count sizes it. */
   attention?: keyof AttentionCounts;
+  /**
+   * For a page that is empty nearly always: left out of the nav while this
+   * count is zero, like an empty "Needs a look" group. Still shown when the
+   * counts are unknown.
+   */
+  onlyWhenAny?: keyof AttentionCounts;
 }
 
 export interface NavGroup {
@@ -58,7 +64,9 @@ export const ADMIN_NAV: NavGroup[] = [
     links: [
       { href: "/admin/members", label: "Find" },
       { href: "/admin/member-since", label: "Member since" },
-      { href: "/admin/revocations", label: "Revoked & expelled" },
+      // Rare, and done from a member's own page; the list is only worth a
+      // place in the nav once there is something on it.
+      { href: "/admin/revocations", label: "Revoked & expelled", onlyWhenAny: "revocations" },
       { href: "/admin/audit", label: "Audit log" },
     ],
   },
@@ -121,6 +129,15 @@ const NavItem: FC<{ link: NavLink; counts: AttentionCounts | null }> = ({ link, 
 };
 
 /**
+ * A link marked `onlyWhenAny` whose count is zero: left out, on every page
+ * including its own, as an empty "Needs a look" group is. Shown whenever the
+ * counts are unknown.
+ */
+export function isHiddenLink(link: NavLink, counts: AttentionCounts | null): boolean {
+  return link.onlyWhenAny !== undefined && counts !== null && counts[link.onlyWhenAny] === 0;
+}
+
+/**
  * A group made only of reports of things wanting action, every one of them
  * empty. Left out of the nav: an empty "Needs a look" group, and the
  * explanations on its pages, confuse more admins than they reassure, so it
@@ -148,7 +165,7 @@ export const AdminNav: FC<{ current?: string }> = async ({ current }) => {
       {ADMIN_NAV.filter((group) => !isQuietGroup(group, counts)).map((group) => (
         <span class="nav-group">
           <span class="nav-label">{group.label}</span>
-          {group.links.map((link) =>
+          {group.links.filter((link) => !isHiddenLink(link, counts)).map((link) =>
             link.href === current ? (
               <span class="nav-here" aria-current="page">
                 {link.label}
