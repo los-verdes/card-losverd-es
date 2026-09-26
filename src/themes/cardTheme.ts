@@ -80,6 +80,11 @@ export interface CardTheme {
   /** What a member sees when choosing. */
   label: string;
   /**
+   * The calendar year a year theme belongs to; absent for any other theme.
+   * Who may use it is `themeOptions()`'s to answer (src/themes/eligibility.ts).
+   */
+  year?: number;
+  /**
    * Bump when this theme's colours or images change. Cached Apple passes are
    * tagged with it, so a changed theme is not served from an old cache (the
    * same discipline as `PASS_CONTENT_VERSION`, for one theme rather than all).
