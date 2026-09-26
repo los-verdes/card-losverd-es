@@ -90,7 +90,7 @@ just lint
 
 ### Development container
 
-`.devcontainer/` defines a container with everything above plus `gh`, `gcloud`, `sqlite3` and Claude Code, behind an outbound firewall that allows only the hosts this project talks to (`init-firewall.sh`). Nothing from the host is shared into it: no SSH or GPG agent, no git config, no credential helper.
+`.devcontainer/` defines a container with everything above plus `gh`, `gcloud`, `sqlite3` and Claude Code, behind an outbound firewall that allows only the hosts this project talks to. Those are listed by name in `allowed-domains.txt`; `init-firewall.sh` sends every outbound HTTPS connection through a local proxy that checks the requested name against that list, and refuses everything but HTTPS and DNS. Refusals are logged in `/var/log/egress-proxy/access.log`, and `test-firewall.sh` checks the firewall from inside the container. Nothing from the host is shared into it: no SSH or GPG agent, no git config, no credential helper.
 
 - **On Windows, clone into WSL's filesystem** (for example `~/src` in an Ubuntu terminal), not under `C:\`. A checkout on `C:\` reaches the container through a slow file-sharing layer, slow enough that the test pool's workers time out starting, and it brings Windows git settings (no symlinks, case-insensitive names) with it.
 - **Open the folder in VS Code and choose "Reopen in Container".** The first build installs dependencies (`npm ci`).

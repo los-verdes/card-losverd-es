@@ -1,0 +1,52 @@
+# Names the dev container may reach, over HTTPS (port 443) only. Everything
+# else is refused; see init-firewall.sh for how.
+#
+# One name per line; `#` starts a comment. A leading dot admits the domain
+# and every name under it: `.github.com` covers github.com and
+# api.github.com. The list is built into the image, so a change here applies
+# after the container is rebuilt.
+
+# GitHub: git, gh, release downloads
+.github.com
+.githubusercontent.com
+
+# Anthropic: Claude Code, its sign-in and updates, and the claude.ai
+# connectors (mcp-proxy.anthropic.com)
+.anthropic.com
+.claude.ai
+.claude.com
+sentry.io
+statsig.com
+
+# npm
+registry.npmjs.org
+
+# Cloudflare: Wrangler, `wrangler tail`
+api.cloudflare.com
+dash.cloudflare.com
+tail.developers.workers.dev
+
+# Google Cloud: gcloud, and what is left of the old deployment
+oauth2.googleapis.com
+bigquery.googleapis.com
+storage.googleapis.com
+compute.googleapis.com
+sqladmin.googleapis.com
+
+# VS Code: extensions and server updates
+marketplace.visualstudio.com
+.gallerycdn.vsassets.io
+.gallery.vsassets.io
+vscode.blob.core.windows.net
+update.code.visualstudio.com
+
+# BigCommerce: documentation, API, and both storefronts
+docs.bigcommerce.com
+developer.bigcommerce.com
+api.bigcommerce.com
+los-verdes-sandbox.mybigcommerce.com
+store.losverdesatx.org
+
+# This project
+card.losverd.es
+stagingcard.losverd.es
