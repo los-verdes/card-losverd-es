@@ -57,12 +57,22 @@ async function memberEmailOf(orderId: string) {
     ?.member_email;
 }
 
+/**
+ * "Now" for every test here. Whether an order is active, and whether a card
+ * can be emailed for it, both depend on the date, so it is pinned rather than
+ * left to whenever the suite runs, and orders are placed just before it.
+ */
+const NOW = "2026-10-01T12:00:00Z";
+/** When the seeded orders were placed: before NOW, so their memberships are active, and after the card email cutoff. */
+const PLACED = "2026-09-25T00:00:00Z";
+
 beforeEach(async () => {
+  vi.useFakeTimers({ now: new Date(NOW), toFake: ["Date"] });
   env.SESSION_SIGNING_KEY = SESSION_KEY;
   vi.spyOn(console, "warn").mockImplementation(() => {});
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'admin@example.com', 1)").bind(ADMIN_ID).run();
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'member@example.com', 0)").bind(MEMBER_ID).run();
-  await insertOrder({ id: "1001", email: "buyer@example.com", first: "Buy", last: "Er", created: "2098-01-15T00:00:00Z" });
+  await insertOrder({ id: "1001", email: "buyer@example.com", first: "Buy", last: "Er", created: PLACED });
 });
 
 afterEach(async () => {
@@ -118,7 +128,7 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("also links the order email once the order has been pointed at somebody else", async () => {
-    await insertOrder({ id: "1002", email: "giver@example.com", memberEmail: "friend@example.com", created: "2098-02-01T00:00:00Z" });
+    await insertOrder({ id: "1002", email: "giver@example.com", memberEmail: "friend@example.com", created: PLACED });
 
     const body = await (await request("/admin/orders/1002")).text();
 
@@ -134,13 +144,13 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("is linked from the report tables", async () => {
-    const body = await (await request("/admin/reports/active?as_of=2098-06-01")).text();
+    const body = await (await request("/admin/reports/active?as_of=2026-12-01")).text();
 
     expect(body).toContain('<a href="/admin/orders/1001">1001</a>');
   });
 
   it("reviews an entered address, showing where it already appears, before anything changes", async () => {
-    await insertOrder({ id: "2002", email: "friend@example.com", created: "2098-03-01T00:00:00Z" });
+    await insertOrder({ id: "2002", email: "friend@example.com", created: PLACED });
 
     const res = await request("/admin/orders/1001?email=%20Friend@Example.com%20&note=gift");
 
@@ -155,7 +165,7 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("says no card email will go out when the order does not count as a membership", async () => {
-    await insertOrder({ id: "4004", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "4004", email: "refunded@example.com", created: PLACED, status: "Refunded" });
 
     const body = await (await request("/admin/orders/4004?email=friend@example.com")).text();
 
@@ -199,7 +209,7 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("flags an order that doesn't count as a membership, and copes with missing fields", async () => {
-    await insertOrder({ id: "3003", email: "refunded@example.com", created: "2098-01-15T00:00:00Z", status: "Refunded" });
+    await insertOrder({ id: "3003", email: "refunded@example.com", created: PLACED, status: "Refunded" });
     await env.DB.exec("UPDATE membership_orders SET first_name = NULL, last_name = NULL, status = NULL WHERE order_id = '3003'");
 
     const body = await (await request("/admin/orders/3003")).text();
@@ -394,8 +404,9 @@ describe("POST /admin/orders/:orderId/reread", () => {
       id: 1001,
       customer_id: 42,
       status: "Completed",
-      date_created: "2098-01-15T00:00:00.000Z",
-      date_modified: "2098-01-15T00:00:00.000Z",
+      // The seeded order's own date, so an unchanged re-read finds nothing new.
+      date_created: "2026-09-25T00:00:00.000Z",
+      date_modified: "2026-09-25T00:00:00.000Z",
       billing_address: { first_name: "Buy", last_name: "Er", email: "buyer@example.com" },
       ...overrides,
     };
