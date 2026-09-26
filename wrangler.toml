@@ -10,6 +10,14 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 head_sampling_rate = 1
 
+# Workers traces: every invocation's subrequests (fetch, D1, R2, queues) as
+# timed spans in the dashboard, so slow requests show where the time went.
+# Each span is billed as one event against the same allowance as the logs
+# above. Staging inherits this, like the rest of [observability].
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
 # Non-JS static assets bundled directly into the Worker via Wrangler's
 # esbuild-based bundler at build time (rather than fetched at request time or
 # read from R2). `src/cardimage/render.ts` needs this for the raw Bungee

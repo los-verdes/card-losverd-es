@@ -108,6 +108,8 @@ Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wr
 
 **Logs:** Workers Logs is on for both environments (`[observability]` in `wrangler.toml`), so console output and uncaught errors are kept for 7 days and searchable in the Cloudflare dashboard under the Worker's **Observability** tab. `npx wrangler tail [--env staging]` still streams them live.
 
+**Traces:** Workers traces are on as well (`[observability.traces]`), so each invocation's subrequests (fetch, D1, R2, queues) appear as timed spans under the same **Observability** tab. Start there when a request is slow: it shows which call the time went to. Each span counts as one event against the same allowance as the logs.
+
 `card.losverd.es` is attached to the production Worker as a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`): Cloudflare manages its DNS record and certificate, so neither is in Terraform. Staging is attached the same way, as `stagingcard.losverd.es` (`[[env.staging.routes]]`): named environments inherit routes and staging deploys first, so it must declare its own. With a route in place, neither environment answers on its `workers.dev` hostname.
 
 ## Secrets
