@@ -47,7 +47,7 @@ const JOBS = {
   },
   "full-resync": {
     message: { type: "sync_subscriptions_etl", loadAll: true },
-    does: "Re-reads every order in the BigCommerce store, not just recent ones, and rebuilds every membership. For a database that was just rebuilt or imported (docs/cutover.md step 8). Never emails anyone.",
+    does: "Re-reads every order in the BigCommerce store, not just recent ones, and rebuilds every membership. Runs by itself every Sunday; by hand, for a database that was just rebuilt or imported (docs/cutover.md step 8). Never emails anyone.",
   },
   "refresh-lapsed-passes": {
     message: { type: "refresh_lapsed_passes" },

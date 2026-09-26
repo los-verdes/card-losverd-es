@@ -114,14 +114,16 @@ deciding to end somebody's membership is a judgement, and a 404 from an API
 is not a good enough reason to make it automatically -- a BigCommerce incident
 would otherwise become mass membership loss.
 
-An order is flagged when a webhook prompts a sync and the store answers that
-the order no longer exists. The flag clears itself if a later sync finds the
+An order is flagged when the store answers that it no longer exists: when a
+webhook prompts a sync, or when the weekly full resync asks about an order it
+holds that the store's order list did not return. The flag clears itself if a later sync finds the
 order again, so a 404 during an outage does not leave a mark to tidy up by
 hand.
 
 Two things it does not cover. It catches **deletion**, not **archival**: an
-archived order simply stops appearing in the order list, and the resync walks
-forward from a cursor rather than looking for absences, so nothing notices.
+archived order stops appearing in the order list, but the store still returns
+it when asked for by id, so the weekly resync's check of absent orders reads
+it, applies it again, and nothing notices.
 And there is deliberately no button here to stop a flagged order counting --
 that is a deliberate revocation of a membership, which is
 [#31](https://github.com/los-verdes/card-losverd-es/issues/31).

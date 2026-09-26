@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { scheduled } from "../src/scheduled";
+import { CRON_TO_MESSAGE, scheduled } from "../src/scheduled";
 import type { EtlSyncMessage } from "../src/queues/etlSync";
 
 function makeCtx() {
@@ -47,9 +47,10 @@ describe("scheduled()", () => {
   const cases: [string, EtlSyncMessage][] = [
     ["0 */6 * * *", { type: "run_slack_members_etl" }],
     ["15 */6 * * *", { type: "sync_subscriptions_etl" }],
-    ["30 * * * *", { type: "sync_customers_etl" }],
-    ["30 */12 * * *", { type: "sync_minibc_subscriptions_etl" }],
+    ["45 4 * * 0", { type: "sync_subscriptions_etl", loadAll: true }],
     ["0 9 * * 1", { type: "run_readiness_check" }],
+    ["30 0 * * *", { type: "run_pass_expiry_sweep" }],
+    ["10 * * * *", { type: "run_ops_watch" }],
   ];
 
   for (const [cron, expectedMessage] of cases) {
@@ -76,5 +77,23 @@ describe("scheduled()", () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("*/5 * * * *"),
     );
+  });
+});
+
+describe("the cron schedule", () => {
+  // Inlined at transform time; node:fs is not available in this pool.
+  const wranglerToml = Object.values(
+    import.meta.glob("../wrangler.toml", { query: "?raw", import: "default", eager: true }),
+  )[0] as string;
+
+  it("is exactly what src/scheduled.ts maps, in both environments", () => {
+    // A job mapped but never scheduled, or scheduled but never mapped, fails
+    // silently: the first simply never runs, the second only warns.
+    const schedules = [...wranglerToml.matchAll(/^crons = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]) as string[]);
+
+    expect(schedules).toHaveLength(2);
+    for (const crons of schedules) {
+      expect([...crons].sort()).toEqual(Object.keys(CRON_TO_MESSAGE).sort());
+    }
   });
 });

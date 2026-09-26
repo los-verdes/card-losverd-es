@@ -187,9 +187,10 @@ A copy arrives by two routes, which run the same code:
 * **The store tells us.** A webhook fires when an order is placed or changes,
   and the order is fetched and recorded within seconds
   (`POST /bigcommerce/order-webhook`).
-* **We re-read the store.** A scheduled resync walks the store's order list
-  and re-reads everything modified recently, whether or not a webhook for it
-  ever arrived (`sync_subscriptions_etl`).
+* **We re-read the store.** Every six hours a scheduled resync walks the
+  store's order list and re-reads everything modified recently, whether or
+  not a webhook for it ever arrived, and once a week, early on Sunday, it
+  re-reads every order in the store (`sync_subscriptions_etl`).
 
 ### Why the copy can be trusted
 
@@ -212,11 +213,19 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   a long run as orders change; an id cursor does not, so a run cannot skip
   orders because the store re-sorted them mid-walk.
 * **Re-reading the whole store is a normal operation**, not an emergency
-  measure, and it is the intended answer to "are we certain this is right?".
+  measure: it is the intended answer to "are we certain this is right?", and
+  it happens every week. Since everything it reads has already been applied,
+  the expected result is that no card changes. A card it does change had
+  drifted from its orders -- a counting rule changed since its member last
+  bought, say, or a webhook lost for longer than the six-hourly resync looks
+  back -- and each weekly run says in Slack how many it changed.
 * **An order that disappears is flagged, not dropped.** If BigCommerce stops
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
-  alone. If the order reappears, the flag clears itself.
+  alone. If the order reappears, the flag clears itself. The weekly re-read
+  also asks the store, one at a time, about every order held here that its
+  order list did not return, so an order deleted without a webhook is caught
+  within a week.
   Revoking memberships on the strength of one unanswered request would
   turn a storefront incident into members losing their cards en masse.
 
