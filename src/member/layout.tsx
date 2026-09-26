@@ -9,6 +9,7 @@
  */
 
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
+import { EnvironmentBanner, titlePrefix } from "../environment";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
@@ -40,11 +41,12 @@ export const Page: FC<
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{title} | Los Verdes</title>
+      <title>{`${titlePrefix()}${title} | Los Verdes`}</title>
       <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
       <link rel="stylesheet" href={STYLESHEET_PATH} />
     </head>
     <body class="member">
+      <EnvironmentBanner />
       {nav}
       <main>
         {children}
