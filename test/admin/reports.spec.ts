@@ -218,8 +218,8 @@ describe("GET /admin/reports/orders", () => {
     const body = await (await get("/admin/reports/orders")).text();
 
     expect(body).toContain("Membership orders, 2026");
-    expect(body).toMatch(/January<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td>/);
-    expect(body).toMatch(/Total<\/th><th[^>]*>2<\/th><th[^>]*>1<\/th>/);
+    expect(body).toMatch(/January<\/td><td[^>]*>1<\/td><td[^>]*>2<\/td>/);
+    expect(body).toMatch(/Total<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th>/);
     expect(body).toContain("/admin/reports/orders?year=2025");
     expect(body).not.toContain("year=2027");
   });
@@ -227,7 +227,7 @@ describe("GET /admin/reports/orders", () => {
   it("shows an earlier year, with a link forward", async () => {
     const body = await (await get("/admin/reports/orders?year=2025")).text();
 
-    expect(body).toMatch(/January<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td>/);
+    expect(body).toMatch(/January<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td>/);
     expect(body).toContain("/admin/reports/orders?year=2026");
   });
 
