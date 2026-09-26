@@ -1,0 +1,3 @@
+# The dev container builds on Linux; a CRLF checkout on Windows breaks its
+# shell script and Dockerfile.
+.devcontainer/** text eol=lf

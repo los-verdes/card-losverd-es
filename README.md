@@ -88,6 +88,19 @@ just typecheck
 just lint
 ```
 
+### Development container
+
+`.devcontainer/` defines a container with everything above plus `gh`, `gcloud`, `sqlite3` and Claude Code, behind an outbound firewall that allows only the hosts this project talks to (`init-firewall.sh`). Nothing from the host is shared into it: no SSH or GPG agent, no git config, no credential helper.
+
+- **On Windows, clone into WSL's filesystem** (for example `~/src` in an Ubuntu terminal), not under `C:\`. A checkout on `C:\` reaches the container through a slow file-sharing layer, slow enough that the test pool's workers time out starting, and it brings Windows git settings (no symlinks, case-insensitive names) with it.
+- **Open the folder in VS Code and choose "Reopen in Container".** The first build installs dependencies (`npm ci`).
+- **In VS Code's own (host) user settings**, turn off *Dev › Containers: Copy Git Config* and set *Git Credential Helper Config Location* to `none`, or VS Code copies the host's git identity and credential helper in.
+- **Sign in once, inside the container.** Each login lives in a named volume, so it survives a rebuild:
+  - `gh auth login`: git uses it for every fetch and push (SSH remotes are rewritten to HTTPS). Automation signs in as `verde-bot`; see `CLAUDE.md`.
+  - `npx wrangler login --device` for deploys and remote D1 by hand.
+  - A read-only Cloudflare API token, if you have one, goes in `~/.config/.wrangler/cloudflare-api-token` (`chmod 600`), and is used as `CLOUDFLARE_API_TOKEN="$(cat ~/.config/.wrangler/cloudflare-api-token)"`.
+- **1Password's CLI is not installed**, so recipes that use `op run` (secrets, the D1 export) run on the host.
+
 Infrastructure changes (Terraform) are a separate concern from app development above — see `terraform/README.md` if you need to touch `terraform/`.
 
 ## Infrastructure & deployment

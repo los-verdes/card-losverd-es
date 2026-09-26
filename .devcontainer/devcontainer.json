@@ -1,0 +1,86 @@
+// Development container for card-losverd-es, used for both people and coding
+// assistants. See "Development container" in the README for first-time setup.
+//
+// Nothing from the host machine is shared in: no SSH or GPG agent, no git
+// config or credential helper, no host directories besides the checkout.
+// Credentials are created inside the container and kept in the named volumes
+// below, so they survive a rebuild but never touch the host.
+{
+  "name": "card-losverd-es",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "TZ": "${localEnv:TZ:America/Chicago}",
+      "CLAUDE_CODE_VERSION": "latest",
+      "GIT_DELTA_VERSION": "0.18.2",
+      "ZSH_IN_DOCKER_VERSION": "1.2.0"
+    }
+  },
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW"
+  ],
+  "forwardPorts": [
+    8787, // wrangler dev
+    8976 // wrangler login's OAuth callback
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "christian-kohler.npm-intellisense",
+        "cloudflare.cloudflare"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "bash",
+            "icon": "terminal-bash"
+          },
+          "zsh": {
+            "path": "zsh"
+          }
+        }
+      }
+    }
+  },
+  "containerUser": "node",
+  "remoteUser": "node",
+  // Named after the checkout's folder rather than the container's id, so a
+  // rebuild (or a fresh container for the same checkout) finds them again.
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-commandhistory,target=/commandhistory,type=volume",
+    "source=${localWorkspaceFolderBasename}-claude,target=/home/node/.claude,type=volume",
+    "source=${localWorkspaceFolderBasename}-gh,target=/home/node/.config/gh,type=volume",
+    "source=${localWorkspaceFolderBasename}-gcloud,target=/home/node/.config/gcloud,type=volume",
+    // Also holds the read-only Cloudflare API token, `cloudflare-api-token`.
+    "source=${localWorkspaceFolderBasename}-wrangler,target=/home/node/.config/.wrangler,type=volume"
+  ],
+  "remoteEnv": {
+    // VS Code forwards the host's SSH agent unless told otherwise.
+    "SSH_AUTH_SOCK": ""
+  },
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    // Claude Code runs its commands in bash; interactive terminals stay zsh.
+    "CLAUDE_CODE_SHELL": "/bin/bash",
+    // A Cloudflare login may see more than one account; non-interactive
+    // commands need to be told which.
+    "CLOUDFLARE_ACCOUNT_ID": "42988f13a6daf00814bced22aff46f4e",
+    "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+  },
+  // Runs once, before the firewall first comes up.
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand"
+}
