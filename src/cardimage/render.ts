@@ -23,6 +23,7 @@ import bungeeFontData from './assets/bungee-latin-400-normal.woff';
 import { bytesToBase64 } from '../lib/base64';
 import { formatMonthYear, formatShortDate } from '../lib/dateFormat';
 import { buildQrCodeImage } from './qr';
+import { CLASSIC_THEME, type CardThemeColors } from '../themes/cardTheme';
 import { buildCardTree, CARD_WIDTH, CARD_HEIGHT, type MembershipCardMember } from './template';
 
 let resvgInitPromise: Promise<void> | null = null;
@@ -55,6 +56,7 @@ function ensureYogaInitialized(): Promise<void> {
 export async function renderMembershipCardPng(
   member: MembershipCardMember,
   logoPngBytes: Uint8Array,
+  colors: CardThemeColors = CLASSIC_THEME.colors,
 ): Promise<Uint8Array> {
   await Promise.all([ensureResvgInitialized(), ensureYogaInitialized()]);
 
@@ -77,6 +79,7 @@ export async function renderMembershipCardPng(
     member,
     { memberSince: memberSinceLabel, expiration: expirationLabel },
     { logoDataUrl, qrDataUrl: qr.dataUrl, qrSize: qr.size },
+    colors,
   );
 
   const svg = await satori(tree as never, {

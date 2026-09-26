@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCardTree, CREST_SIZE, type MembershipCardMember, type SatoriElement } from "../../src/cardimage/template";
 import CREST_PNG from "../../assets/templates/card/crest.png";
+import { CLASSIC_THEME } from "../../src/themes/cardTheme";
 
 const IMAGES = {
   logoDataUrl: "data:image/png;base64,AAAA",
@@ -93,5 +94,49 @@ describe("the crest", () => {
     const height = header.getUint32(20);
 
     expect(CREST_SIZE).toBeLessThanOrEqual(Math.min(width, height));
+  });
+});
+
+describe("buildCardTree with a theme", () => {
+  const THEMED = {
+    ...CLASSIC_THEME.colors,
+    background: "#123456",
+    border: "#654321",
+    text: "#fedcba",
+    secondaryText: "#abcdef",
+    qrLabel: "#0f0f0f",
+  };
+
+  /** Every style value in the tree, flattened. */
+  function styleValues(el: SatoriElement | string): unknown[] {
+    if (typeof el === "string") return [];
+    const own = Object.values(el.props.style ?? {});
+    const children = el.props.children;
+    const kids = children === undefined ? [] : Array.isArray(children) ? children : [children];
+    return [...own, ...kids.flatMap(styleValues)];
+  }
+
+  it("draws in the theme's colours, and none of the classic ones", () => {
+    const tree = buildCardTree(makeMember(), { memberSince: "Member since Jul 2021", expiration: "Good through Jan 15, 2027" }, IMAGES, THEMED);
+    const values = styleValues(tree);
+
+    expect(tree.props.style?.backgroundColor).toBe("#123456");
+    expect(tree.props.style?.border).toBe("14px solid #654321");
+    for (const colour of ["#fedcba", "#abcdef", "#0f0f0f"]) expect(values).toContain(colour);
+    for (const classic of ["#00b140", "#046a29", "#d8f5e4"]) {
+      expect(values.some((v) => typeof v === "string" && v.includes(classic))).toBe(false);
+    }
+  });
+
+  it("keeps the QR code's box white whatever the theme, for the scanner's sake", () => {
+    const tree = buildCardTree(makeMember(), { memberSince: null, expiration: null }, IMAGES, THEMED);
+
+    expect(styleValues(tree)).toContain("#ffffff");
+  });
+
+  it("draws in classic when no theme is given", () => {
+    const tree = buildCardTree(makeMember(), { memberSince: null, expiration: null }, IMAGES);
+
+    expect(tree.props.style?.backgroundColor).toBe(CLASSIC_THEME.colors.background);
   });
 });

@@ -1,3 +1,4 @@
+import { CLASSIC_THEME, type CardTheme } from "../themes/cardTheme";
 import { SignJWT, importPKCS8 } from "jose";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { PASS_CONTENT_VERSION, membershipEndsAt } from "../passkit/generator";
@@ -48,14 +49,28 @@ export interface GoogleWalletConfig {
  */
 export const GOOGLE_WALLET_BRANDING = {
   cardTitle: "Los Verdes",
-  hexBackgroundColor: "#00B140",
+  hexBackgroundColor: CLASSIC_THEME.colors.background.toUpperCase(),
 } as const;
 
 /**
  * Path the pass logo is served from (`src/assets.ts`). Google fetches this
  * itself, so it is resolved against the environment's public origin.
  */
-export const LOGO_ASSET_PATH = "/assets/crest.png";
+export const LOGO_ASSET_PATH = CLASSIC_THEME.assets.googleLogoPath;
+
+/** A card theme's Google branding for one member (#333): what varies per object rather than per class. */
+export interface GoogleWalletTheme {
+  hexBackgroundColor: string;
+  logoUri: string;
+}
+
+/** A card theme as Google needs it, the logo resolved against the environment's public origin. */
+export function googleWalletTheme(theme: CardTheme, baseUrl: string): GoogleWalletTheme {
+  return {
+    hexBackgroundColor: theme.colors.background.toUpperCase(),
+    logoUri: new URL(theme.assets.googleLogoPath, baseUrl).toString(),
+  };
+}
 
 /**
  * The whole config for an environment, from the three things that differ
@@ -204,6 +219,7 @@ function objectState(status: MemberWalletInput["status"]): GenericObjectState {
 export function buildGenericObject(
   member: MemberWalletInput,
   config: GoogleWalletConfig,
+  theme: GoogleWalletTheme = { hexBackgroundColor: config.hexBackgroundColor, logoUri: config.logoUri },
 ): GenericObject {
   const textModulesData: TextModuleData[] = [];
   if (member.memberSince) {
@@ -240,13 +256,13 @@ export function buildGenericObject(
       value: member.verifyUrl,
       alternateText: member.memberId,
     },
-    hexBackgroundColor: config.hexBackgroundColor,
+    hexBackgroundColor: theme.hexBackgroundColor,
     state: objectState(member.status),
     ...(member.expirationDate
       ? { validTimeInterval: { end: { date: membershipEndsAt(member.expirationDate) } } }
       : {}),
     logo: {
-      sourceUri: { uri: config.logoUri },
+      sourceUri: { uri: theme.logoUri },
       contentDescription: localizedString(config.cardTitle),
     },
   };

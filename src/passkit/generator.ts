@@ -1,3 +1,4 @@
+import { CLASSIC_THEME, appleRgb, type CardThemeColors } from "../themes/cardTheme";
 import { zipSync } from "fflate";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { signManifestDetached, type PassSigningCredentials } from "./signer";
@@ -14,6 +15,8 @@ export interface MemberPassInput {
   authToken: string;
   /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
   verifyUrl: string;
+  /** The card theme's colours (#333); "classic" when omitted. */
+  colors?: CardThemeColors;
 }
 
 /** Static, non-secret PassKit identifiers -- one set per deployment environment. */
@@ -286,8 +289,8 @@ export function buildPassJson(
       messageEncoding: "iso-8859-1",
       altText: "",
     },
-    backgroundColor: "rgb(0, 177, 64)",
-    foregroundColor: "rgb(0, 0, 0)",
+    backgroundColor: appleRgb((member.colors ?? CLASSIC_THEME.colors).background),
+    foregroundColor: appleRgb((member.colors ?? CLASSIC_THEME.colors).passText),
     logoText: "Los Verdes",
     authenticationToken: member.authToken,
     webServiceURL: config.webServiceURL,
@@ -348,6 +351,15 @@ function cacheKey(passTypeIdentifier: string, serialNumber: string): string {
  */
 const LAST_UPDATED_AT_METADATA = "lastUpdatedAt";
 const CONTENT_VERSION_METADATA = "passContentVersion";
+/**
+ * A third tag, the card theme and its version (#333), so a pass is rebuilt
+ * when a member's theme changes or a theme's colours or images do. Passes
+ * cached before themes existed carry no tag and were all built in "classic"
+ * version 1, which is what an absent tag is read as -- so introducing the tag
+ * does not re-sign every cached pass.
+ */
+const THEME_METADATA = "theme";
+const UNTAGGED_THEME = "classic@1";
 
 /**
  * Reads a previously-generated `.pkpass` from R2's Phase 3.3 cache, or
@@ -358,12 +370,14 @@ export async function getCachedPass(
   passTypeIdentifier: string,
   serialNumber: string,
   lastUpdatedAt: number,
+  themeTag: string = UNTAGGED_THEME,
 ): Promise<Uint8Array | null> {
   const object = await bucket.get(cacheKey(passTypeIdentifier, serialNumber));
   if (
     !object ||
     object.customMetadata?.[LAST_UPDATED_AT_METADATA] !== String(lastUpdatedAt) ||
-    object.customMetadata?.[CONTENT_VERSION_METADATA] !== PASS_CONTENT_VERSION
+    object.customMetadata?.[CONTENT_VERSION_METADATA] !== PASS_CONTENT_VERSION ||
+    (object.customMetadata?.[THEME_METADATA] ?? UNTAGGED_THEME) !== themeTag
   ) {
     return null;
   }
@@ -377,12 +391,14 @@ export async function putCachedPass(
   serialNumber: string,
   lastUpdatedAt: number,
   bytes: Uint8Array,
+  themeTag: string = UNTAGGED_THEME,
 ): Promise<void> {
   await bucket.put(cacheKey(passTypeIdentifier, serialNumber), bytes, {
     httpMetadata: { contentType: "application/vnd.apple.pkpass" },
     customMetadata: {
       [LAST_UPDATED_AT_METADATA]: String(lastUpdatedAt),
       [CONTENT_VERSION_METADATA]: PASS_CONTENT_VERSION,
+      [THEME_METADATA]: themeTag,
     },
   });
 }

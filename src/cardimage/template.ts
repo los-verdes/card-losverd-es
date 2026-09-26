@@ -13,6 +13,8 @@
 // supplied by the caller rather than a bundled synthetic placeholder -- see
 // render.ts.
 
+import { CLASSIC_THEME, type CardThemeColors } from '../themes/cardTheme';
+
 export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
@@ -25,9 +27,9 @@ export const CARD_HEIGHT = 660;
  */
 export const CREST_SIZE = 240;
 
-const BRIGHT_VERDE = '#00b140';
-const BORDER_VERDE = '#046a29';
-const WHITE = '#ffffff';
+// The QR code's box stays white whatever the theme: a scanner needs the
+// contrast, and it is not the theme's to change.
+const QR_BOX = '#ffffff';
 
 export interface MembershipCardMember {
   firstName: string;
@@ -80,6 +82,7 @@ export function buildCardTree(
   member: MembershipCardMember,
   labels: CardLabels,
   images: CardImages,
+  colors: CardThemeColors = CLASSIC_THEME.colors,
 ): SatoriElement {
   // The real crest (see render.ts) is already circular within its own
   // square canvas, so a further borderRadius mask is a no-op visually, not
@@ -100,8 +103,8 @@ export function buildCardTree(
     props: {
       style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end' },
       children: [
-        textNode('LOS VERDES', { fontSize: 56, lineHeight: 1.05, color: WHITE }),
-        textNode('MEMBERSHIP CARD', { fontSize: 36, lineHeight: 1.15, color: WHITE }),
+        textNode('LOS VERDES', { fontSize: 56, lineHeight: 1.05, color: colors.text }),
+        textNode('MEMBERSHIP CARD', { fontSize: 36, lineHeight: 1.15, color: colors.text }),
       ],
     },
   };
@@ -121,12 +124,12 @@ export function buildCardTree(
   };
 
   const memberInfoChildren: (SatoriElement | string)[] = [
-    textNode(`${member.firstName} ${member.lastName}`.trim(), { fontSize: 46, color: WHITE }),
+    textNode(`${member.firstName} ${member.lastName}`.trim(), { fontSize: 46, color: colors.text }),
   ];
   for (const label of [labels.memberSince, labels.expiration]) {
     if (label) {
       memberInfoChildren.push(
-        textNode(label, { fontSize: 20, color: '#d8f5e4', marginTop: 8 }),
+        textNode(label, { fontSize: 20, color: colors.secondaryText, marginTop: 8 }),
       );
     }
   }
@@ -146,13 +149,13 @@ export function buildCardTree(
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        backgroundColor: WHITE,
+        backgroundColor: QR_BOX,
         padding: 16,
         borderRadius: 20,
       },
       children: [
         { type: 'img', props: { src: images.qrDataUrl, width: images.qrSize, height: images.qrSize } },
-        textNode(member.memberId, { fontSize: 14, color: BRIGHT_VERDE, marginTop: 8 }),
+        textNode(member.memberId, { fontSize: 14, color: colors.qrLabel, marginTop: 8 }),
       ],
     },
   };
@@ -181,9 +184,9 @@ export function buildCardTree(
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
         padding: 56,
-        backgroundColor: BRIGHT_VERDE,
+        backgroundColor: colors.background,
         borderRadius: 48,
-        border: `14px solid ${BORDER_VERDE}`,
+        border: `14px solid ${colors.border}`,
         fontFamily: 'Bungee',
       },
       children: [topRow, bottomRow],
