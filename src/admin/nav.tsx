@@ -13,6 +13,7 @@
 
 import { tryGetContext } from "hono/context-storage";
 import type { FC } from "hono/jsx";
+import { toIsoSeconds } from "../bigcommerce/orders";
 import type { Env } from "../index";
 import { attentionCounts, type AttentionCounts } from "./reportQueries";
 
@@ -83,7 +84,7 @@ async function currentAttentionCounts(): Promise<AttentionCounts | null> {
   const db = tryGetContext<{ Bindings: Env }>()?.env.DB;
   if (!db) return null;
   try {
-    return await attentionCounts(db);
+    return await attentionCounts(db, toIsoSeconds(new Date()));
   } catch (error) {
     console.warn("Admin nav: could not count rows needing a look", error);
     return null;

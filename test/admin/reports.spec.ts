@@ -465,8 +465,11 @@ describe("missing from BigCommerce", () => {
 });
 
 describe("orders carrying more than one membership", () => {
+  // Far off, so it is still in force whenever this runs.
+  const LATER = "2098-02-01T00:00:00Z";
+
   it("lists the order and links its member", async () => {
-    await insertOrder({ id: "30", email: "several@example.com", created: "2026-02-01T00:00:00Z" });
+    await insertOrder({ id: "30", email: "several@example.com", created: LATER });
     await env.DB.prepare("UPDATE membership_orders SET membership_units = 3 WHERE order_id = '30'").run();
 
     const body = await (await get("/admin/reports/extra-memberships")).text();
@@ -474,5 +477,41 @@ describe("orders carrying more than one membership", () => {
     expect(body).toContain('<a href="/admin/orders/30">30</a>');
     expect(body).toContain('<a href="/admin/members?q=several%40example.com">several@example.com</a>');
     expect(body).toMatch(/<td[^>]*>3<\/td>/);
+    expect(body).not.toContain("Only orders that still count");
+  });
+
+  it("leaves off orders that were refunded or have run out, and says how many (#324)", async () => {
+    await insertOrder({ id: "30", email: "current@example.com", created: LATER });
+    await insertOrder({ id: "31", email: "refunded@example.com", created: LATER, status: "Refunded" });
+    await insertOrder({ id: "32", email: "expired@example.com", created: "2020-02-01T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
+
+    const body = await (await get("/admin/reports/extra-memberships")).text();
+
+    expect(body).toContain("current@example.com");
+    expect(body).not.toContain("refunded@example.com");
+    expect(body).not.toContain("expired@example.com");
+    expect(body).toContain("2 other orders carry more than one membership but have been refunded");
+  });
+
+  it("says so in the singular, and lists nothing, when the only such order has run out", async () => {
+    await insertOrder({ id: "32", email: "expired@example.com", created: "2020-02-01T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
+
+    const body = await (await get("/admin/reports/extra-memberships")).text();
+
+    expect(body).toContain("No order carries more than one membership.");
+    expect(body).toContain("1 other order carries more than one membership but has been refunded");
+  });
+
+  it("downloads only what the page lists", async () => {
+    await insertOrder({ id: "30", email: "current@example.com", created: LATER });
+    await insertOrder({ id: "32", email: "expired@example.com", created: "2020-02-01T00:00:00Z" });
+    await env.DB.prepare("UPDATE membership_orders SET membership_units = 2").run();
+
+    const text = await (await get("/admin/reports/extra-memberships?format=csv")).text();
+
+    expect(text).toContain("current@example.com");
+    expect(text).not.toContain("expired@example.com");
   });
 });

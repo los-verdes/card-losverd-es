@@ -133,8 +133,10 @@ reasoning is there if the question comes back.
 memberships on it are counted across every line item, quantities included, and
 the number is recorded against the order
 (`membership_orders.membership_units`). An order carrying more than one is
-listed on the admin reports under "More than one membership", and the first
-time one is seen it is announced in Slack.
+listed on the admin reports under "More than one membership" for as long as
+it still counts and has not expired -- after that nobody is owed a card for
+it, so the report says only how many such orders it leaves off -- and the
+first time one is seen it is announced in Slack.
 
 What the check deliberately does not do is change who is a member. The order
 still confers the one membership it is recorded as, exactly as it did before —

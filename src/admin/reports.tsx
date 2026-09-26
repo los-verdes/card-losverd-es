@@ -23,6 +23,7 @@ import {
   expiredMemberships,
   listChannels,
   missingOrders,
+  extraMembershipOrdersSetAside,
   ordersWithExtraMemberships,
   ordersByMonth,
   slackCrossReference,
@@ -671,7 +672,8 @@ const EXTRA_MEMBERSHIP_COLUMNS = [
  * will fix by itself because there is nowhere for a second membership to go.
  */
 reports.get("/extra-memberships", async (c) => {
-  const rows = await ordersWithExtraMemberships(c.env.DB);
+  const asOf = toIsoSeconds(new Date());
+  const rows = await ordersWithExtraMemberships(c.env.DB, asOf);
   if (c.req.query("format") === "csv") {
     return new Response(toCsv([...EXTRA_MEMBERSHIP_COLUMNS], rows), {
       headers: {
@@ -680,6 +682,7 @@ reports.get("/extra-memberships", async (c) => {
       },
     });
   }
+  const setAside = await extraMembershipOrdersSetAside(c.env.DB, asOf);
   return c.html(
     <AdminPage title="More than one membership">
       <p>
@@ -692,6 +695,14 @@ reports.get("/extra-memberships", async (c) => {
         rest right is a person&#39;s job: refund the extra, or place the membership under the right address. An order
         corrected in BigCommerce drops off this list on the next sync.
       </p>
+      {setAside > 0 && (
+        <p class="muted">
+          Only orders that still count and have not expired are listed. {setAside}{" "}
+          {setAside === 1 ? "other order carries" : "other orders carry"} more than one membership but{" "}
+          {setAside === 1 ? "has" : "have"} been refunded, cancelled or run out, so nobody is owed a card for{" "}
+          {setAside === 1 ? "it" : "them"} any more.
+        </p>
+      )}
       <ReportTable
         headings={["Order", "Member", "Name", "Status", "Membership", "Memberships on order"]}
         csvHref="/admin/reports/extra-memberships?format=csv"
