@@ -80,7 +80,7 @@ export const MonthlyOrdersChart: FC<{ months: MonthlyOrders[]; year: number }> =
         })}
       </svg>
       <figcaption>
-        <span class="swatch this-year" /> {year} <span class="swatch previous-year" /> {year - 1}
+        <span class="swatch previous-year" /> {year - 1} <span class="swatch this-year" /> {year}
       </figcaption>
     </figure>
   );

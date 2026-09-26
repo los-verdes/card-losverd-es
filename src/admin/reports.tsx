@@ -433,7 +433,7 @@ reports.get("/orders", async (c) => {
       </p>
       <MonthlyOrdersChart months={months} year={year} />
       <ReportTable
-        headings={["Month (UTC)", String(year), String(year - 1)]}
+        headings={["Month (UTC)", String(year - 1), String(year)]}
         csvHref={`/admin/reports/orders?year=${year}&format=csv`}
         csvLabel="Download as CSV"
         rowCount={months.length}
@@ -444,16 +444,16 @@ reports.get("/orders", async (c) => {
               <td style={cellStyle} data-sort={m.month}>
                 {MONTH_NAMES[i]}
               </td>
-              <td style={cellStyle}>{m.orders}</td>
               <td style={cellStyle}>{m.previous_year_orders}</td>
+              <td style={cellStyle}>{m.orders}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <th style={cellStyle}>Total</th>
-            <th style={cellStyle}>{total}</th>
             <th style={cellStyle}>{previousTotal}</th>
+            <th style={cellStyle}>{total}</th>
           </tr>
         </tfoot>
       </ReportTable>
