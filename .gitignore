@@ -32,3 +32,6 @@ crash.*.log
 .legacy-export/
 # esbuild output for the Google Wallet checker (see the justfile recipe).
 .google-wallet-check.mjs
+
+# npm pack output, e.g. from inspecting a package before depending on it.
+*.tgz
