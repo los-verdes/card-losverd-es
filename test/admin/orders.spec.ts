@@ -67,6 +67,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
@@ -534,6 +535,18 @@ describe("POST /admin/orders/:orderId/reread", () => {
 });
 
 describe("the order page", () => {
+  // Whether the page points at the "More than one membership" report depends
+  // on the order being active now, so "now" is pinned and the order given
+  // ordinary dates around it rather than far-future ones.
+  const NOW = "2026-06-01T12:00:00Z";
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ now: new Date(NOW), toFake: ["Date"] });
+    await env.DB.exec(
+      "UPDATE membership_orders SET created_on = '2026-01-15T00:00:00Z', expires_on = '2027-01-15T00:00:00Z' WHERE order_id = '1001'",
+    );
+  });
+
   it("shows how many memberships an over-full order carried", async () => {
     await env.DB.exec("UPDATE membership_orders SET membership_units = 3 WHERE order_id = '1001'");
 
@@ -550,5 +563,15 @@ describe("the order page", () => {
 
     expect(body).toContain("It no longer counts or has expired, so nobody is owed a card for it any more.");
     expect(body).not.toContain("More than one membership&quot; report");
+  });
+
+  it("stops pointing at the report once a counting order has run out", async () => {
+    await env.DB.exec(
+      "UPDATE membership_orders SET membership_units = 3, created_on = '2025-01-15T00:00:00Z', expires_on = '2026-01-15T00:00:00Z' WHERE order_id = '1001'",
+    );
+
+    const body = await (await request("/admin/orders/1001")).text();
+
+    expect(body).toContain("It no longer counts or has expired");
   });
 });
