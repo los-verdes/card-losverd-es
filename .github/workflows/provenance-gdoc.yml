@@ -1,0 +1,74 @@
+name: Provenance Google Doc
+
+# Keeps the shared Google Doc copy of docs/membership-card-provenance.md in
+# step with main, in place: same link, same sharing, version history kept.
+# It replaces the Doc only while nobody has commented on or edited it
+# (scripts/provenance-gdoc-push.mjs); otherwise it fails and says why.
+#
+# Google sign-in is keyless: GitHub's OIDC token is exchanged, through
+# Workload Identity Federation, for a service account that can edit that one
+# Doc. Until the three repository variables below are set it does nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/membership-card-provenance.md'
+      - 'scripts/provenance-gdoc.mjs'
+      - 'scripts/provenance-gdoc-push.mjs'
+      - 'scripts/lib/provenanceGdocGuard.ts'
+      - '.github/workflows/provenance-gdoc.yml'
+  workflow_dispatch:
+    inputs:
+      doc_id:
+        description: 'A Doc to refresh instead of the shared one, for a trial (the service account needs edit access to it)'
+        required: false
+      dry_run:
+        description: 'Only check whether the Doc could be replaced'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: provenance-gdoc
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ vars.PROVENANCE_GDOC_SERVICE_ACCOUNT }}
+      DOC_ID: ${{ inputs.doc_id || vars.PROVENANCE_GDOC_ID }}
+    steps:
+      - name: Check it is set up
+        id: config
+        run: |
+          if [ -n "$WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$SERVICE_ACCOUNT" ] && [ -n "$DOC_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Provenance Google Doc::Not set up yet: GCP_WORKLOAD_IDENTITY_PROVIDER, PROVENANCE_GDOC_SERVICE_ACCOUNT and PROVENANCE_GDOC_ID are repository variables."
+          fi
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/checkout@v7
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - if: steps.config.outputs.ready == 'true'
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive
+      - if: steps.config.outputs.ready == 'true'
+        name: Refresh the Doc
+        env:
+          GOOGLE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PROVENANCE_GDOC_ID: ${{ env.DOC_ID }}
+          GDOC_REFRESHER: ${{ env.SERVICE_ACCOUNT }}
+        run: node scripts/provenance-gdoc-push.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
