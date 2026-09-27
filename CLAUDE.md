@@ -153,10 +153,12 @@ action, or an answer to a question the issue poses.
 - Auto-merge goes quiet when a PR conflicts, which looks identical to
   waiting for review. `gh pr list --json number,mergeStateStatus` shows
   `DIRTY`; re-enable it after resolving.
-- The dev container's outbound firewall admits only the hosts listed in
-  `.devcontainer/init-firewall.sh`; `EHOSTUNREACH` or a connection that
-  fails at once means a host is missing there. Add it to the list rather
-  than working around the firewall; it applies on the next container start.
+- The dev container's outbound firewall admits HTTPS only to the names in
+  `.devcontainer/allowed-domains.txt`, and nothing but HTTPS and DNS. A
+  refused HTTPS connection fails during the TLS handshake and is logged as
+  `deny <name>` in `/var/log/egress-proxy/access.log`; other ports fail at
+  once with `EHOSTUNREACH`. Add the name to the list rather than working
+  around the firewall; it applies once the container is rebuilt.
 - `gh pr edit` can fail with a Projects-classic GraphQL error;
   `gh api -X PATCH repos/.../pulls/N -F body=@file` works, and the same
   shape edits an issue body.

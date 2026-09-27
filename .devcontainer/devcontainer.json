@@ -80,7 +80,13 @@
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
   },
   // Runs once, before the firewall first comes up.
-  "postCreateCommand": "npm ci",
+  //
+  // Wrangler's usage telemetry goes to sparrow.cloudflare.com, which the
+  // firewall refuses, so it is switched off where Wrangler keeps the setting
+  // (~/.config/.wrangler, a volume). Not by environment: WRANGLER_SEND_METRICS
+  // is outranked by that saved setting, and DO_NOT_TRACK would also switch off
+  // Claude Code's feature flags.
+  "postCreateCommand": "npm ci && npx wrangler telemetry disable",
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }

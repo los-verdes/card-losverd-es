@@ -1,0 +1,46 @@
+name: Dev container
+
+# Builds the dev container's image and checks its outbound firewall from
+# inside a running container, since neither can be tried from within the dev
+# container itself.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/devcontainer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  firewall:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build --tag card-devcontainer .devcontainer
+      - name: Start a container and bring up its firewall
+        run: |
+          docker run --detach --name devcontainer \
+            --cap-add=NET_ADMIN --cap-add=NET_RAW \
+            card-devcontainer sleep infinity
+          docker exec devcontainer sudo /usr/local/bin/init-firewall.sh
+      - name: Check what gets through
+        run: docker exec devcontainer test-firewall.sh
+      - name: Proxy logs
+        if: always()
+        run: |
+          docker exec devcontainer sh -c \
+            'tail -n 100 /var/log/egress-proxy/access.log /var/log/egress-proxy/error.log' || true
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker exec --user root devcontainer sh -c '
+            set -x
+            cat /etc/resolv.conf /etc/egress-proxy/resolver.conf
+            iptables -t nat -L OUTPUT -v -n
+            iptables -L -v -n
+            ss -ltnp
+            ps -eo user,pid,args
+          ' 2>&1 || true

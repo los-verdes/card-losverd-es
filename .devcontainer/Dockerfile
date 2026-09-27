@@ -5,7 +5,7 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 
-# Install basic development tools and iptables/ipset
+# Install basic development tools, and iptables and nginx for the firewall
 RUN apt-get update && \
   apt-get install -y curl gnupg && \
   echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
@@ -31,10 +31,10 @@ RUN apt-get update && \
   gnupg2 \
   gh \
   iptables \
-  ipset \
+  nginx \
+  libnginx-mod-stream \
   iproute2 \
   dnsutils \
-  aggregate \
   jq \
   sqlite3 \
   nano \
@@ -124,10 +124,13 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 
-# Copy and set up firewall script
-COPY init-firewall.sh /usr/local/bin/
+# Firewall: the script, the egress proxy's configuration and the allowlist,
+# all root's, so nothing running as node can widen what the firewall admits.
+COPY init-firewall.sh test-firewall.sh /usr/local/bin/
+COPY egress-proxy.conf allowed-domains.txt /etc/egress-proxy/
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh && \
+RUN chmod 0755 /usr/local/bin/init-firewall.sh /usr/local/bin/test-firewall.sh && \
+  chmod 0644 /etc/egress-proxy/* && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node
