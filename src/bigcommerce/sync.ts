@@ -916,6 +916,13 @@ export const MAX_UNLISTED_RECHECKS_PER_MESSAGE = 50;
  * An order the resync saw has an `updated_at` at or after its start, since
  * recording an order always moves it; one flagged earlier is left alone.
  *
+ * Only orders that count as a membership are asked about. The store's order
+ * list leaves out Incomplete orders (abandoned checkouts), so the resync
+ * never sees them, and the store stops returning old ones altogether: asked
+ * for by id, an Incomplete order from 2023 is a 404 (checked against the
+ * staging store, 2026-09-27). Asking about them would flag every old
+ * abandoned checkout as missing, when none of them affects a card.
+ *
  * Goes through `readOrderFromStore`, never `syncBigCommerceOrder`: this is a
  * bulk path, and must not be able to email anyone (src/email/newOrder.ts).
  */
@@ -926,6 +933,7 @@ export async function recheckUnlistedOrders(
   const { results } = await env.DB.prepare(
     `SELECT order_id FROM membership_orders
       WHERE source = 'bigcommerce' AND missing_since IS NULL AND updated_at < ?
+        AND ${COUNTS_AS_MEMBERSHIP}
         AND CAST(order_id AS INTEGER) > ?
       ORDER BY CAST(order_id AS INTEGER)
       LIMIT ?`,

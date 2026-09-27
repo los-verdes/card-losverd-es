@@ -223,9 +223,12 @@ wrong. What they buy is that mistakes are correctable and do not accumulate:
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
   alone. If the order reappears, the flag clears itself. The weekly re-read
-  also asks the store, one at a time, about every order held here that its
-  order list did not return, so an order deleted without a webhook is caught
-  within a week.
+  also asks the store, one at a time, about every order held here that counts
+  towards a membership and that its order list did not return, so an order
+  deleted without a webhook is caught within a week. Orders that count for
+  nothing are not asked about: the list leaves out abandoned checkouts
+  ("Incomplete"), and the store stops answering for old ones altogether, so
+  asking would flag every old abandoned checkout as missing.
   Revoking memberships on the strength of one unanswered request would
   turn a storefront incident into members losing their cards en masse.
 

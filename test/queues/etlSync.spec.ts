@@ -428,8 +428,8 @@ describe("handleEtlSyncBatch", () => {
     it("enqueues the next batch after a full one, then acks", async () => {
       for (let id = 1; id <= MAX_UNLISTED_RECHECKS_PER_MESSAGE; id++) {
         await env.DB.prepare(
-          `INSERT INTO membership_orders (order_id, source, order_email, member_email, created_on, expires_on, first_seen_via, updated_at)
-           VALUES (?, 'bigcommerce', 'held@example.com', 'held@example.com', '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z', 'sync', ?)`,
+          `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via, updated_at)
+           VALUES (?, 'bigcommerce', 'held@example.com', 'held@example.com', 'Completed', '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z', 'sync', ?)`,
         )
           .bind(String(id), SINCE - 1)
           .run();

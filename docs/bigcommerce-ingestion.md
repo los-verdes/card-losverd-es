@@ -246,9 +246,14 @@ one is implemented fully:
   * it counts the cards it changes across the chain, logs each ("Full
     resync: order ..."), and posts a count to Slack when there are any;
   * its last message enqueues `recheck_unlisted_orders`, which re-reads, 50
-    to a message, each BigCommerce order held here whose `updated_at` is
-    older than the chain's start (recording an order always moves it, so
-    these are the ones the store's list did not return). Each goes through
+    to a message, each BigCommerce order held here that counts as a
+    membership and whose `updated_at` is older than the chain's start
+    (recording an order always moves it, so these are the ones the store's
+    list did not return). Only counting orders: `GET /v2/orders` leaves out
+    Incomplete orders unless asked for `status_id=0`, and `GET /v2/orders/{id}`
+    answers 404 for an old one (checked against the staging store,
+    2026-09-27), so re-reading them would flag every old abandoned checkout
+    as missing. Each goes through
     `readOrderFromStore`, which flags an order the store no longer has
     (`flagOrderMissingFromStore`) and never emails anyone; the webhook path
     that can email is not reachable from here.

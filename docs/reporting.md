@@ -116,7 +116,8 @@ would otherwise become mass membership loss.
 
 An order is flagged when the store answers that it no longer exists: when a
 webhook prompts a sync, or when the weekly full resync asks about an order it
-holds that the store's order list did not return. The flag clears itself if a later sync finds the
+holds that counts towards a membership and that the store's order list did
+not return. The flag clears itself if a later sync finds the
 order again, so a 404 during an outage does not leave a mark to tidy up by
 hand.
 

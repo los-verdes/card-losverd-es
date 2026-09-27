@@ -1433,14 +1433,18 @@ describe("the weekly full resync (#347)", () => {
   describe("recheckUnlistedOrders", () => {
     const SINCE = Date.parse("2026-09-27T04:45:00Z");
 
-    async function holdOrder(orderId: string, updatedAt: number, fields: { source?: string; missingSince?: number } = {}) {
+    async function holdOrder(
+      orderId: string,
+      updatedAt: number,
+      fields: { source?: string; missingSince?: number; status?: string } = {},
+    ) {
       await env.DB.prepare(
         `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on,
                                         first_seen_via, updated_at, missing_since)
-         VALUES (?, ?, 'held@example.com', 'held@example.com', 'Completed', '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z',
+         VALUES (?, ?, 'held@example.com', 'held@example.com', ?, '2026-01-15T00:00:00Z', '2027-01-15T00:00:00Z',
                  'sync', ?, ?)`,
       )
-        .bind(orderId, fields.source ?? "bigcommerce", updatedAt, fields.missingSince ?? null)
+        .bind(orderId, fields.source ?? "bigcommerce", fields.status ?? "Completed", updatedAt, fields.missingSince ?? null)
         .run();
     }
 
@@ -1450,6 +1454,9 @@ describe("the weekly full resync (#347)", () => {
       await holdOrder("2003", SINCE + 1); // seen by the resync
       await holdOrder("5f00000000000000000000e5", SINCE - 1, { source: "squarespace" });
       await holdOrder("2004", SINCE - 1, { missingSince: SINCE - 1000 }); // already flagged
+      // An abandoned checkout: never in the store's list, and an old one is a
+      // 404 when asked for by id. It confers nothing, so it is not asked about.
+      await holdOrder("2005", SINCE - 1, { status: "Incomplete" });
       mockStore([], new Set([2002]));
 
       const result = await recheckUnlistedOrders(env, { since: SINCE, afterId: 0, reread: 0, flagged: 0 });
