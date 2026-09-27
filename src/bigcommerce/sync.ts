@@ -883,12 +883,14 @@ async function reportFullResync(
     `Full resync finished: ${totals.ordersRead} membership orders read, ${totals.cardsChanged} cards changed`,
   );
   if (totals.cardsChanged === 0) return;
+  const one = totals.cardsChanged === 1;
+  // "Full", not "weekly": the same run can be started by hand (`just etl-run`).
   await postSlackAlert(
     env,
-    `The weekly full BigCommerce resync changed ${totals.cardsChanged} ` +
-      `card${totals.cardsChanged === 1 ? "" : "s"} (of ${totals.ordersRead} membership orders read). ` +
-      "A full re-read should change nothing, so each had drifted from its orders; " +
-      'Workers Logs has which ("Full resync: order").',
+    `The full BigCommerce resync changed ${totals.cardsChanged} card${one ? "" : "s"} ` +
+      `(of ${totals.ordersRead} membership orders read). A full re-read should change nothing, ` +
+      `so ${one ? "that card had" : "those cards had"} drifted from ${one ? "its" : "their"} orders. ` +
+      `Workers Logs has ${one ? "which" : "which ones"}: search for "Full resync: order".`,
   );
 }
 
@@ -956,7 +958,7 @@ export async function recheckUnlistedOrders(
   if (reread > 0) {
     await postSlackAlert(
       env,
-      `The weekly full BigCommerce resync found ${reread} order${reread === 1 ? "" : "s"} held here that the store's ` +
+      `The full BigCommerce resync found ${reread} order${reread === 1 ? "" : "s"} held here that the store's ` +
         `order list no longer returns, and re-read each: ${flagged} ${flagged === 1 ? "is" : "are"} gone from the store ` +
         'and now on the "Missing from BigCommerce" report; the rest were still there.',
     );

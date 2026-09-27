@@ -1400,7 +1400,21 @@ describe("the weekly full resync (#347)", () => {
     });
 
     expect(slackPosts).toHaveLength(1);
-    expect(slackPosts[0]).toContain("changed 3 cards (of 121 membership orders read)");
+    // After the environment label postSlackAlert puts in front.
+    expect(slackPosts[0]).toContain(
+      "The full BigCommerce resync changed 3 cards (of 121 membership orders read). " +
+        "A full re-read should change nothing, so those cards had drifted from their orders. " +
+        'Workers Logs has which ones: search for "Full resync: order".',
+    );
+  });
+
+  it("says so in the singular for one card", async () => {
+    mockStore([makeOrder({ id: 1 })]);
+
+    await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(slackPosts[0]).toContain("changed 1 card (of 1 membership orders read)");
+    expect(slackPosts[0]).toContain("so that card had drifted from its orders. Workers Logs has which:");
   });
 
   it("carries its totals to the next message", async () => {
