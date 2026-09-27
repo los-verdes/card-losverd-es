@@ -177,12 +177,30 @@ function orderBody(order) {
 
 // -- Talking to the store -----------------------------------------------------
 
+/**
+ * The file is either the bare token, or the text BigCommerce hands over when
+ * an API account is created ("ACCESS TOKEN: ...", "API PATH: ...", and so
+ * on). In the second case the API path names the store the account belongs
+ * to, which has to be staging's.
+ */
+function tokenFromFile(text) {
+  const field = (name) => new RegExp(`^${name}:\\s*(\\S+)`, "im").exec(text)?.[1];
+  const accessToken = field("ACCESS TOKEN");
+  if (!accessToken) return text.trim();
+  const store = /stores\/([a-z0-9]+)/.exec(field("API PATH") ?? "")?.[1];
+  if (store && store !== stagingHash) {
+    console.error(`The token file's API path is for store ${store}, not staging's (${stagingHash}); refusing.`);
+    process.exit(2);
+  }
+  return accessToken;
+}
+
 let cachedToken;
 function token() {
   if (cachedToken) return cachedToken;
   if (process.env.BIGCOMMERCE_SEED_TOKEN) return (cachedToken = process.env.BIGCOMMERCE_SEED_TOKEN.trim());
   const file = join(homedir(), ".config/.wrangler/bigcommerce-staging-orders-token");
-  if (existsSync(file)) return (cachedToken = readFileSync(file, "utf8").trim());
+  if (existsSync(file)) return (cachedToken = tokenFromFile(readFileSync(file, "utf8")));
   console.error("No token: set BIGCOMMERCE_SEED_TOKEN, or put one in ~/.config/.wrangler/bigcommerce-staging-orders-token.");
   process.exit(2);
 }
