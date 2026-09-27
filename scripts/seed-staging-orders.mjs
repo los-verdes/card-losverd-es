@@ -28,7 +28,7 @@
  *   node scripts/seed-staging-orders.mjs --create [--from N] [--limit N]
  *
  * The token is an API account on the staging store with Orders: modify, from
- * BIGCOMMERCE_SEED_TOKEN or ~/.config/.wrangler/bigcommerce-staging-orders-token.
+ * BIGCOMMERCE_SEED_TOKEN or ~/.config/.wrangler/bigcommerce-staging-orders.json.
  * It refuses any store but staging's (from wrangler.toml).
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -177,32 +177,27 @@ function orderBody(order) {
 
 // -- Talking to the store -----------------------------------------------------
 
-/**
- * The file is either the bare token, or the text BigCommerce hands over when
- * an API account is created ("ACCESS TOKEN: ...", "API PATH: ...", and so
- * on). In the second case the API path names the store the account belongs
- * to, which has to be staging's.
- */
-function tokenFromFile(text) {
-  const field = (name) => new RegExp(`^${name}:\\s*(\\S+)`, "im").exec(text)?.[1];
-  const accessToken = field("ACCESS TOKEN");
-  if (!accessToken) return text.trim();
-  const store = /stores\/([a-z0-9]+)/.exec(field("API PATH") ?? "")?.[1];
-  if (store && store !== stagingHash) {
-    console.error(`The token file's API path is for store ${store}, not staging's (${stagingHash}); refusing.`);
-    process.exit(2);
-  }
-  return accessToken;
-}
-
 let cachedToken;
+/**
+ * From BIGCOMMERCE_SEED_TOKEN, or from the API account's details saved as
+ * JSON (`access_token`, `api_path`, ...), whose API path has to name
+ * staging's store.
+ */
 function token() {
   if (cachedToken) return cachedToken;
   if (process.env.BIGCOMMERCE_SEED_TOKEN) return (cachedToken = process.env.BIGCOMMERCE_SEED_TOKEN.trim());
-  const file = join(homedir(), ".config/.wrangler/bigcommerce-staging-orders-token");
-  if (existsSync(file)) return (cachedToken = tokenFromFile(readFileSync(file, "utf8")));
-  console.error("No token: set BIGCOMMERCE_SEED_TOKEN, or put one in ~/.config/.wrangler/bigcommerce-staging-orders-token.");
-  process.exit(2);
+  const file = join(homedir(), ".config/.wrangler/bigcommerce-staging-orders.json");
+  if (!existsSync(file)) {
+    console.error("No token: set BIGCOMMERCE_SEED_TOKEN, or save the API account as ~/.config/.wrangler/bigcommerce-staging-orders.json.");
+    process.exit(2);
+  }
+  const account = JSON.parse(readFileSync(file, "utf8"));
+  const store = /stores\/([a-z0-9]+)/.exec(account.api_path ?? "")?.[1];
+  if (store !== stagingHash) {
+    console.error(`${file} is for store ${store ?? "(none named)"}, not staging's (${stagingHash}); refusing.`);
+    process.exit(2);
+  }
+  return (cachedToken = account.access_token);
 }
 
 const API = `https://api.bigcommerce.com/stores/${stagingHash}/v2`;
