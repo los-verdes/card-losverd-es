@@ -9,6 +9,10 @@ import { enqueueEtlSync, type EtlSyncMessage } from "./queues/etlSync";
  *
  * `sync_customers_etl` and `sync_minibc_subscriptions_etl` are stubs
  * (src/bigcommerce/sync.ts) and are not scheduled.
+ *
+ * Days of the week are written by name. Cloudflare numbers them 1 (Sunday)
+ * to 7 (Saturday), not cron's usual 0 to 6, so a number misleads anyone
+ * reading it and 0 is refused outright at deploy.
  */
 export const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   "0 */6 * * *": { type: "run_slack_members_etl" },
@@ -17,12 +21,12 @@ export const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   // Weekly, early Sunday UTC: every order in the store, as a backstop
   // against drift the incremental runs cannot see (#347). It reports what it
   // changed and re-reads anything the store's list no longer returns.
-  "45 4 * * 0": { type: "sync_subscriptions_etl", loadAll: true },
+  "45 4 * * SUN": { type: "sync_subscriptions_etl", loadAll: true },
   // Weekly rather than daily: the slowest thing it watches is the Apple pass
   // certificate, which warns thirty days out, so a week's granularity still
   // leaves four warnings before it lapses. It posts only when something has
   // actually failed (src/admin/readinessAlert.ts).
-  "0 9 * * 1": { type: "run_readiness_check" },
+  "0 9 * * SUN": { type: "run_readiness_check" },
   // Daily, just after midnight UTC: a membership ends at 23:59:59 UTC on its
   // expiry date, so by now yesterday's lapses are final (#295).
   "30 0 * * *": { type: "run_pass_expiry_sweep" },

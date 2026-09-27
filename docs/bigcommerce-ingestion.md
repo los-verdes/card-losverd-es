@@ -239,7 +239,7 @@ one is implemented fully:
 
   **It runs on two schedules** (#347): every six hours incrementally
   (`15 */6 * * *`), and every Sunday at 04:45 UTC as a full resync
-  (`45 4 * * 0`, `loadAll`). The full one is a backstop against drift the
+  (`45 4 * * SUN`, `loadAll`). The full one is a backstop against drift the
   incremental one cannot see -- a change to how membership is worked out,
   which otherwise reaches only members whose orders change afterwards, or a
   row changed by hand -- so:
