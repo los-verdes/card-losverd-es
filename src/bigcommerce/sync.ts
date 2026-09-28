@@ -854,7 +854,9 @@ export async function syncSubscriptionsEtl(
         // A full resync re-reads what the webhooks and the incremental runs
         // have already applied, so a card it changes had drifted.
         if (fullResync) {
-          console.warn(`Full resync: order ${order.id} changed the card of ${applied.memberId ?? applied.memberEmail}`);
+          // The card number, never the address: a card changes only for a member
+          // with one, and Workers Logs keeps lines for seven days.
+          console.warn(`Full resync: order ${order.id} changed card ${applied.memberId}`);
         }
       }
     }

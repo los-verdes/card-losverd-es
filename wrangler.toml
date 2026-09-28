@@ -6,9 +6,16 @@ compatibility_flags = ["nodejs_compat"]
 # Workers Logs: keeps every invocation's console output and uncaught errors
 # for 7 days, searchable in the dashboard, rather than only while
 # `wrangler tail` is attached. Workers Paid includes 20M log events a month.
+#
+# Query strings are left out of the request URL in both logs and traces,
+# because the admin search pages carry what was searched for there -- often
+# a member's address or name -- and nothing else logged here identifies a
+# person (src/lib/outcome.ts). Our own lines already log paths only
+# (src/lib/serverError.ts). Staging inherits this.
 [observability]
 enabled = true
 head_sampling_rate = 1
+redact_query_string = true
 
 # Workers traces: every invocation's subrequests (fetch, D1, R2, queues) as
 # timed spans in the dashboard, so slow requests show where the time went.
