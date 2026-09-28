@@ -529,8 +529,16 @@ reports.get("/over-time", async (c) => {
   const span = Date.parse(today) - Date.parse(firstDay);
   const throughHistory = (ms: number) => (span > 0 ? (ms - Date.parse(firstDay)) / span : 0);
   const allYears = `${firstYear}–${thisYear}`;
+  // Every day since the first order as one line: the page's big picture,
+  // drawn whichever years are being compared.
+  const memberHistory: LineSeries[] = [
+    { label: allYears, points: members.map((point) => ({ x: throughHistory(Date.parse(point.day)), value: point.members })) },
+  ];
+  const historyLabels = available
+    .map((year) => ({ x: throughHistory(yearStart(year)), text: String(year) }))
+    .filter((label) => label.x >= 0);
   const memberLines: LineSeries[] = timeline
-    ? [{ label: allYears, points: members.map((point) => ({ x: throughHistory(Date.parse(point.day)), value: point.members })) }]
+    ? memberHistory
     : years.map((year) => ({
         label: String(year),
         points: members
@@ -557,7 +565,7 @@ reports.get("/over-time", async (c) => {
         })),
       }));
   const xLabels = timeline
-    ? available.map((year) => ({ x: throughHistory(yearStart(year)), text: String(year) })).filter((label) => label.x >= 0)
+    ? historyLabels
     : MONTH_NAMES.map((name, month) => ({ x: (midMonth(2025, month) - yearStart(2025)) / YEAR_MS, text: name.slice(0, 3) }));
 
   const lastYearToday = `${thisYear - 1}${today.slice(4)}`;
@@ -599,6 +607,17 @@ reports.get("/over-time", async (c) => {
       <p class="muted">
         Each day counted as the <a href="/admin/reports/active">Active memberships</a> report counts that day.
       </p>
+      {!timeline && (
+        <>
+          <h3>Since {firstYear}</h3>
+          <LineChart
+            series={memberHistory}
+            xLabels={historyLabels}
+            description={`Active members each day from ${firstDay} to ${today}; the download has every day.`}
+          />
+          <h3>Year by year</h3>
+        </>
+      )}
       <LineChart
         series={memberLines}
         xLabels={xLabels}

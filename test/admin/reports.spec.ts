@@ -606,10 +606,14 @@ describe("GET /admin/reports/over-time", () => {
     // 1 Jun 2025: long, and lapsed until a month later.
     expect(body).toContain("<strong>2</strong> active members today, against <strong>2</strong> on this day last year.");
     expect(body).toContain("<strong>2</strong> membership orders so far this year, against <strong>1</strong> by this day last year.");
-    expect(body.match(/<figure class="line-chart">/g)).toHaveLength(2);
-    // One line per year in each chart, the latest in verde.
-    expect(body.match(/<path class="line /g)).toHaveLength(6);
-    expect(body.match(/<path class="line latest"/g)).toHaveLength(2);
+    // Members since the first order, members year by year, orders year by year.
+    expect(body.match(/<figure class="line-chart">/g)).toHaveLength(3);
+    expect(body).toContain("<h3>Since 2024</h3>");
+    expect(body.indexOf("<h3>Since 2024</h3>")).toBeLessThan(body.indexOf("<h3>Year by year</h3>"));
+    expect(body).toContain("<title>2024–2026</title>");
+    // One line for the whole history, then one per year in each comparison.
+    expect(body.match(/<path class="line /g)).toHaveLength(7);
+    expect(body.match(/<path class="line latest"/g)).toHaveLength(3);
     expect(body).toMatch(/<th[^>]*>On the 1st of<\/th><th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
     expect(body).toMatch(/<input type="checkbox" name="year" value="2024" checked/);
     expect(body.indexOf("<h2>Active members</h2>")).toBeLessThan(body.indexOf("<h2>Membership orders</h2>"));
@@ -623,7 +627,7 @@ describe("GET /admin/reports/over-time", () => {
     expect(members).toMatch(/>January<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td>/);
     // 1 Jul 2025: lapsed has lapsed; 1 Jul 2026 has not happened yet.
     expect(members).toMatch(/>July<\/td><td[^>]*>1<\/td><td[^>]*><\/td>/);
-    expect(body.match(/<path class="line /g)).toHaveLength(4);
+    expect(body.match(/<path class="line /g)).toHaveLength(5);
   });
 
   it("gives orders per month with a total per year, blank for months still to come", async () => {
@@ -640,7 +644,9 @@ describe("GET /admin/reports/over-time", () => {
   it("shows every year as one line in each chart", async () => {
     const body = await (await get("/admin/reports/over-time?view=timeline")).text();
 
+    // The since-the-start chart would only repeat the members line.
     expect(body.match(/<path class="line /g)).toHaveLength(2);
+    expect(body).not.toContain("<h3>Since 2024</h3>");
     expect(body).toContain("<title>2024–2026</title>");
     expect(body).toMatch(/<th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
     expect(body).toContain('<a href="/admin/reports/over-time">Compare years instead</a>');
