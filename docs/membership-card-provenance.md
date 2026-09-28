@@ -106,28 +106,10 @@ this app counts the number of memberships on an order
 listed on the admin reports under "More than one membership" for as long as
 it still counts and has not expired.
 
-### BigCommerce is the record; this is a copy
+### BigCommerce is the record; the app is a copy
 
-**The storefront is authoritative.** Nothing in this app creates an
-order, and no screen in it can add one by hand. Every BigCommerce order here
-was read from the store, is keyed by the store's own order id
-(`membership_orders.order_id`) -- the same number the Merch Team sees in the
-store's admin and a member sees on their receipt -- and is refreshed from the
-store whenever it is read again.
-
-The exception is the orders from before February 2023, which were loaded once
-from the old system's database and have no storefront left to be re-read from.
-Everything in this section applies to BigCommerce orders; the imported ones
-cannot be repaired by reading them again, which is one reason they are
-described separately in
-[the appendix](#appendix-orders-from-before-bigcommerce).
-
-There is exactly one piece of order information this system holds that the
-storefront does not: who the membership is attributed to
-(`membership_orders.member_email`), which is what makes gifts and corrected
-addresses possible — see
-[section 8](#8-gift-purchases-and-re-attributed-orders). That field is
-deliberately never overwritten by a re-read. Every other field is the store's.
+**The storefront is authoritative.** Nothing in this app creates / modifies an
+order. Every order recorded here was read from the store.
 
 A copy arrives by two routes, which run the same code:
 
@@ -139,62 +121,41 @@ A copy arrives by two routes, which run the same code:
   not a webhook for it ever arrived, and once a week, early on Sunday, it
   re-reads every order in the store (`sync_subscriptions_etl`).
 
-### Why the copy can be trusted
+One thing on an order record are this app's rather than the store's: who the
+membership is attributed to (`membership_orders.member_email`; see
+[section 8](#8-gift-purchases-and-re-attributed-orders)).
 
-These are properties of how the copy is kept, not a promise that nothing goes
-wrong. What they buy is that mistakes are correctable and do not accumulate:
+The card can still say something the orders don't. A chosen card name, a
+corrected "member since" date, etc. are kept as records of their own. [Section 4](#4-each-field-on-the-card) covers each card field and where it comes from.
+
+### Keeping orders in sync
+
+Here is how the strategy around keeping orders in sync with the LV store:
 
 * **Re-reading an order is always safe.** Recording an order overwrites any
   existing row for that order id rather than adding a second one, so the same
-  order can be processed any number of times with an identical result. That is
-  what makes repair cheap: the fix for anything that looks wrong is to read it
-  again.
-* **Every field is replaced from the store, never merged.** A correction made
+  order can be processed any number of times.
+* **Every order field is replaced from the store, never merged.** A correction made
   in BigCommerce — an amended name, a fixed email, a changed status —
-  overwrites what we hold the next time that order is read. The copy cannot
-  drift by accumulating edits, because it never edits; it overwrites.
-* **The resync overlaps on purpose.** It re-reads a trailing window rather
-  than resuming exactly where it left off, so an order modified right at the
-  edge of the previous run's window is read twice rather than missed once.
-* **It walks by order id, not by page number.** Page numbers shift underneath
-  a long run as orders change; an id cursor does not, so a run cannot skip
-  orders because the store re-sorted them mid-walk.
+  overwrites what we hold the next time that order is read.
 * **Re-reading the whole store is a normal operation**, not an emergency
   measure: it is the intended answer to "are we certain this is right?", and
   it happens every week. Since everything it reads has already been applied,
-  the expected result is that no card changes. A card it does change had
-  drifted from its orders -- a counting rule changed since its member last
-  bought, say, or a webhook lost for longer than the six-hourly resync looks
-  back -- and each weekly run says in Slack how many it changed.
+  the expected result is that no card changes.
 * **An order that disappears is flagged, not dropped.** If BigCommerce stops
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
-  alone. If the order reappears, the flag clears itself. The weekly re-read
-  also asks the store, one at a time, about every order held here that counts
-  towards a membership and that its order list did not return, so an order
-  deleted without a webhook is caught within a week. Orders that count for
-  nothing are not asked about: the list leaves out abandoned checkouts
-  ("Incomplete"), and the store stops answering for old ones altogether, so
-  asking would flag every old abandoned checkout as missing.
-  Revoking memberships on the strength of one unanswered request would
-  turn a storefront incident into members losing their cards en masse.
+  alone.
 
 ### What this does not catch
 
-* **Archived orders.** Deleting an order in BigCommerce archives it: the
-  order is still there, marked as deleted, and this system keeps syncing it
-  as if it were not. An archived order therefore keeps counting towards its
-  member's membership, and nothing flags it. Whether it should -- or
-  whether archiving should work like a refund -- is worth confirming with
-  the Merch Team, who are the ones who would archive an order.
+* **Archived orders.** The app doesn't considered "archived" orders. Whether it
+  should is worth confirming with the Merch Team.
 * **Memberships sold under an unlisted SKU**, as above.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
   not built, so a MiniBC renewal reaches this system only if it also produces
-  a BigCommerce order.
-
-None of these can invent a membership that was never bought; each of them can
-leave this system holding a stale answer.
+  a BigCommerce order. (Though we can technically reference MiniBC if given the need.)
 
 Otherwise, a change made in BigCommerce is expected to show up here almost
 immediately: the order webhook delivers it within seconds, and the scheduled
