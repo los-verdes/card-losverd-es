@@ -1,28 +1,21 @@
 # Where Membership Card Information Comes From
 
-This document is written for the Merch Team, who administer the storefront and
-answer the questions that arrive at `merchteam@losverdesatx.org`. It explains
-where the information printed on a Los Verdes membership card comes from, and
-how the software decides whether someone counts as a current member today.
-When a member writes in to say their card has incorrect details, this is the
-document that helps surface which rules produced what they are looking at.
+This document is written for Los Verdes and its members. In particular, these
+standing committees within Los Verdes are the primary audience:
 
-The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
-These rules describe how membership works, so a change to any of them is
-worth their input. Beyond that, a subset of processes around membership are
-theirs outright: for instance, anything that settles a person's standing in
-the group, such as disciplinary action.
+* the Merch Team: they administer the storefront (which is the primary data
+source for membership cards) and answer membership questions and the like that
+arrive at `merchteam@losverdesatx.org`.
+* the Membership Committee (`mc@losverdesatx.org`): they have "Membership" in
+their name plus some process membership are their purview explicitly (e.g. for
+instance, anything that settles a person's standing in the group, such as
+disciplinary action.)
 
-This is a description of what the code does right now. It documents the
-current implementation explicitly, for reference, _and also_ to invite
-feedback and proposals to change that implementation. Code and database names
-appear in `backticks` after each plain-English statement, for anyone who wants
-to check a claim against the source.
-
-Because it is how the group's stakeholders see the way membership works, this
-document is the specification the rest of the repository follows. Where it and
-the code disagree, the code should be updated to match this document (or the
-document amended).
+It turns out that deciding what is on someone's "membership card" is effectively
+the same as deciding who is an active Los Verdes member. So we have documented
+the membership card site's ("app's") current implementation here both for
+reference _and also_ to invite feedback and proposals to change that
+implementation / rules for deciding membership.
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
 gathers the places where the software had to pick a rule and where a different
@@ -843,3 +836,12 @@ generate. Scanning one still works: the serial is looked up
 then computed live by exactly the rules above. The old card is a pointer to a
 person, not a record of their membership, which is why it stays correct as
 their membership changes.
+
+## Appendix: additional footnotes
+
+Given that this document is intended to be specification for Los Verdes membership
+is also the specification for the associated codebase / repository. Where it and
+the code disagree, the code should be updated to match this document.
+
+On style: code and database names here appear in `backticks` after each
+plain-English statement, for anyone who wants to check a claim against the source.
