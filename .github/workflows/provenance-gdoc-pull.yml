@@ -1,0 +1,77 @@
+name: Pull the provenance Google Doc
+
+# Brings edits made in the shared Google Doc copy back into
+# docs/membership-card-provenance.md, as a pull request to review
+# (scripts/provenance-gdoc-pull.mjs; `just provenance-gdoc-pull` does the same
+# locally). Only what somebody changed in the Doc moves. The pull request also
+# records how far the Doc has been pulled, so once it is merged the refresh
+# (provenance-gdoc.yml) replaces the Doc again rather than refusing over edits
+# that are now in the repository. Open comments are counted, never quoted:
+# this repository and its logs are public.
+on:
+  workflow_dispatch:
+    inputs:
+      doc_id:
+        description: 'A Doc to pull from instead of the shared one'
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: provenance-gdoc
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    env:
+      WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ vars.PROVENANCE_GDOC_SERVICE_ACCOUNT }}
+      DOC_ID: ${{ inputs.doc_id || vars.PROVENANCE_GDOC_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The Doc names the commit it was taken from, which may be older than main.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive
+      - name: Pull the Doc's edits
+        env:
+          GOOGLE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PROVENANCE_GDOC_ID: ${{ env.DOC_ID }}
+        run: node scripts/provenance-gdoc-pull.mjs --summary "$RUNNER_TEMP/summary.md" --public
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to pull: the Doc says what the repository says."
+            exit 0
+          fi
+          branch="provenance-gdoc-pull/${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git add docs/membership-card-provenance.md docs/membership-card-provenance.gdoc.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Bring the provenance Google Doc's edits back into the repository"
+          git push -q origin "$branch"
+          {
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Taken from the shared Google Doc by the \"Pull the provenance Google Doc\" workflow. Only passages changed in the Doc moved; review them as any edit to the specification."
+            echo
+            echo "**Reviewer:** a pull request opened by this workflow does not start CI by itself. Close and reopen it to run the checks."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "$branch" \
+            --title "Bring the provenance Google Doc's edits back" --body-file "$RUNNER_TEMP/body.md" \
+            || echo "::warning title=Pull request not opened::The branch $branch is pushed; open a pull request from it by hand. Opening one from a workflow needs \"Allow GitHub Actions to create and approve pull requests\" in the repository's Actions settings."

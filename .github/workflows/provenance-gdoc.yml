@@ -25,6 +25,7 @@ on:
       - 'scripts/lib/provenanceGdocGuard.ts'
       - 'scripts/lib/diagramImages.ts'
       - 'scripts/lib/fitDocImages.ts'
+      - 'docs/membership-card-provenance.gdoc.json'
       - '.github/workflows/provenance-gdoc.yml'
   workflow_dispatch:
     inputs:

@@ -28,6 +28,8 @@ tail.developers.workers.dev
 
 # Google Cloud: gcloud, and what is left of the old deployment
 oauth2.googleapis.com
+# Google Drive's API, for `just provenance-gdoc-pull`
+www.googleapis.com
 bigquery.googleapis.com
 storage.googleapis.com
 compute.googleapis.com

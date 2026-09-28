@@ -8,7 +8,16 @@
  * anyone except the Doc's owner and the account that refreshes it. Anything
  * else means somebody has engaged with the Doc, and a person should carry
  * what they said back to the repository before it is replaced.
+ *
+ * Carrying it back is what scripts/provenance-gdoc-pull.mjs does, and it
+ * records the time of the Doc's latest revision it took in (`PULL_STATE`).
+ * Revisions up to then are in the repository, so they no longer hold the
+ * refresh; anything later still does. Comments always do, since an export
+ * does not carry them.
  */
+
+/** Where the pull records how far the Doc's edits have been carried back. */
+export const PULL_STATE = "docs/membership-card-provenance.gdoc.json";
 
 export interface DocComment {
   deleted?: boolean;
@@ -27,6 +36,8 @@ export interface DocState {
   owners: string[];
   comments: DocComment[];
   revisions: DocRevision[];
+  /** The latest revision time whose edits are in the repository (`PULL_STATE`), if any. */
+  pulledThrough?: string | null;
 }
 
 /**
@@ -51,6 +62,8 @@ export function reasonsNotToReplace(state: DocState, refresher: string): string[
     const author = revision.lastModifyingUser;
     const address = author?.emailAddress?.toLowerCase();
     if (address && allowed.has(address)) continue;
+    // RFC 3339 times from Drive, which compare correctly as strings.
+    if (state.pulledThrough && revision.modifiedTime && revision.modifiedTime <= state.pulledThrough) continue;
     const who = author?.emailAddress ?? author?.displayName ?? "an author Drive does not name";
     reasons.push(`revision ${revision.id}${revision.modifiedTime ? ` (${revision.modifiedTime})` : ""} is by ${who}`);
   }

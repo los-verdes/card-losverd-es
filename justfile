@@ -365,3 +365,15 @@ verify-pkcs7-openssl:
 provenance-gdoc out=".provenance-gdoc.md":
     node scripts/provenance-gdoc.mjs {{out}}
 
+# Bring edits made in the provenance doc's Google Doc back into
+# docs/membership-card-provenance.md, as unstaged changes to review with
+# `git diff` and stage with `git add -p`. Only what somebody changed in the
+# Doc moves; the rest stays exactly as the repository has it. Fetches the Doc
+# with a Google token from `gcloud auth login --enable-gdrive-access` (once),
+# lists its open comments, and records how far it has been pulled so the
+# refresh can replace it again. `--file doc.md` reads a copy downloaded with
+# File > Download > Markdown instead. The "Pull the provenance Google Doc"
+# workflow does the same and opens a pull request.
+provenance-gdoc-pull *args:
+    node scripts/provenance-gdoc-pull.mjs {{args}}
+

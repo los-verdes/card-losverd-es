@@ -18,12 +18,12 @@
  * checks whether the Doc could be replaced and changes nothing.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diagramImageUrls } from "./lib/diagramImages.ts";
 import { fitImageRequests } from "./lib/fitDocImages.ts";
-import { reasonsNotToReplace } from "./lib/provenanceGdocGuard.ts";
+import { PULL_STATE, reasonsNotToReplace } from "./lib/provenanceGdocGuard.ts";
 
 // Overridable only so the script can be run against a stand-in for Drive.
 const API_ROOT = process.env.GOOGLE_API_ROOT ?? "https://www.googleapis.com";
@@ -82,6 +82,8 @@ const state = {
   owners: (file.owners ?? []).map((owner) => owner.emailAddress).filter(Boolean),
   comments: await listAll("comments", "comments", "deleted,resolved,author(displayName)"),
   revisions: await listAll("revisions", "revisions", "id,modifiedTime,lastModifyingUser(emailAddress,displayName)"),
+  // How far the Doc's edits have been carried back (scripts/provenance-gdoc-pull.mjs).
+  pulledThrough: existsSync(PULL_STATE) ? JSON.parse(readFileSync(PULL_STATE, "utf8")).pulledThrough : null,
 };
 const reasons = reasonsNotToReplace(state, refresher);
 if (reasons.length > 0) {

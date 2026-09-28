@@ -60,6 +60,24 @@ describe("reasonsNotToReplace", () => {
     ]);
   });
 
+  it("lets through edits by others once they have been pulled into the repository, and no later ones", () => {
+    const edited = (at: string) => ({ id: at, modifiedTime: at, lastModifyingUser: { emailAddress: "reader@example.com" } });
+    const doc = state({
+      revisions: [edited("2026-09-28T17:00:00.000Z"), edited("2026-09-28T18:02:11.000Z"), edited("2026-09-29T09:00:00.000Z")],
+      pulledThrough: "2026-09-28T18:02:11.000Z",
+    });
+
+    expect(reasonsNotToReplace(doc, BOT)).toEqual([
+      "revision 2026-09-29T09:00:00.000Z (2026-09-29T09:00:00.000Z) is by reader@example.com",
+    ]);
+  });
+
+  it("still holds for comments, which a pull does not carry", () => {
+    const doc = state({ comments: [{ resolved: false }], pulledThrough: "2026-09-28T18:02:11.000Z" });
+
+    expect(reasonsNotToReplace(doc, BOT)).toHaveLength(1);
+  });
+
   it("gives every reason at once", () => {
     const doc = state({
       comments: [{}],
