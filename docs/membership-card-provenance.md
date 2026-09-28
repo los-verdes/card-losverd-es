@@ -174,74 +174,6 @@ membership record (`members`) through one shared lookup (`MEMBER_SELECT` in
 `src/member/artifacts.ts`), which layers the corrections described below on
 top of it. So the formats cannot disagree with each other.
 
-### Holder's name
-
-Whatever the member has asked to be shown, and otherwise the billing name on
-their **most recent counted order** (`deriveMembershipState()` in
-`src/bigcommerce/sync.ts`, taking `first_name` and `last_name` from the latest
-order by date). It is shown as first and last
-name joined with a space — the large field on the front of the pass
-(`buildPassJson()` in `src/passkit/generator.ts`) and the card image
-(`src/cardimage/template.ts`).
-
-If that order carries no name — which happens for some imported historical
-rows — the name already on file is kept, and for a
-brand-new record the name from the order currently being processed is used
-instead.
-
-Two consequences worth noting. The name follows the store: a member who
-updates their billing name at checkout sees the card follow on their next
-purchase, and a member who never buys again keeps the name from their last
-purchase indefinitely. And because an attributed gift order still carries the
-*purchaser's* billing name, a gifted card can end up showing the giver's name
-(see [section 8](#8-gift-purchases-and-re-attributed-orders)).
-
-**A member can set the name on their own card**, signed in, and what they put
-there is shown instead of the name their orders give
-(`member_display_names`). It is one free-text field rather than a first and
-last name, which suits a mononym or a name that does not split in two.
-Clearing it puts the card back to the derived name, which stays intact
-underneath, so nothing is lost by trying something.
-
-**An admin can set one too**, from the member page in the admin area. It
-matters most for a gifted membership: attribution moves the membership to the
-person it was bought for, but the card keeps the buyer's billing name until
-the recipient orders something of their own.
-
-A name can therefore arrive three ways — the member, an admin, or the one-time
-import carrying across one chosen on the previous site — and the admin page
-says which, alongside the name the orders give. Where a person did it, it
-also says **who**, by the address they signed in with. That is the answer to
-"why does my card say this", and to "who decided that" if the first answer is
-not enough.
-
-Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
-on a card), nothing checks what goes in that field. A membership card is a fun vanity
-item rather than an identity document and gets very little scrutiny in
-practice, so a card showing a nickname, or a name that is nobody's real one,
-is working as intended. If the group would rather that were not so, this is
-a good thing to say so about -- see
-[question 6](#9-decisions-worth-confirming).
-
-### There is no membership type, and the card shows none
-
-Los Verdes sells one membership and draws no distinction between kinds of
-member, so a card carries a name, a "member since", a "good through" and a
-card number, and nothing that sorts its holder into a category. The previous
-site's cards were the same three things plus the card number on the back.
-
-If the store ever does sell a second membership product, a type can be worked
-out from the orders: `membership_orders.sku` records what each person bought.
-Which SKUs count as a membership at all is a separate list, `MEMBERSHIP_SKUS`
-([section 3](#3-what-an-order-is-and-where-it-comes-from)).
-
-Card themes are a separate matter and deliberately not built on this. A type
-derived from an order is recomputed on every sync, so a theme stored that way
-would be overwritten each time its holder renewed. A theme is a choice
-somebody makes, so it belongs in its own table keyed on their address, the way
-a chosen display name already works
-([section 4](#4-each-field-on-the-card)).
-
 ### Member since
 
 The earliest date the group has on record for this person, shown as month and
@@ -258,25 +190,57 @@ than shown blank.
 The furthest expiry among all of the person's counted orders, shown as a full
 date (for example "Feb 17, 2024", via `formatShortDate()`).
 
-Each order carries its own expiry, fixed when the order is recorded: exactly
-365 days after the order was placed (`membershipExpiry()` in
+Each order implies its own expiry: exactly 365 days after the order was placed (`membershipExpiry()` in
 `src/bigcommerce/orders.ts`, `MEMBERSHIP_DURATION_DAYS = 365`, stored as
-`membership_orders.expires_on`), which is carried over deliberately from the
-behaviour of the previous membership site
-([`digital-membership`](https://github.com/los-verdes/digital-membership)).
-"The old system" below always means that application and the Postgres database
-behind it.
+`membership_orders.expires_on`)
 
-The card's date is then the latest of those per-order expiries. Nothing is
-added up and nothing is stitched together: a second order does not extend the
-first one's year, it simply contributes its own expiry to the comparison. This
-is the mechanism behind renewals, and also the reason an early renewal can
-lose a few days — see [section 7](#7-several-orders-one-membership-one-card).
+The card's date is then the latest of those per-order expiries. Membership terms
+do not current get added together. That is, a second order does not extend the
+first one's year, it simply contributes its own expiry to the comparison. Which
+is also the reason an early renewal can lose a few days — see [section 7](#7-several-orders-one-membership-one-card).
 
 If no order counts — every one refunded, say — the expiry is emptied and the
 membership is no longer current.
 
+### Holder's name
+
+Whatever the member has asked to be shown, and otherwise the billing name on
+their **most recent counted order** (`deriveMembershipState()` in
+`src/bigcommerce/sync.ts`, taking `first_name` and `last_name` from the latest
+order by date). It is shown as first and last
+name joined with a space — the large field on the front of the pass
+(`buildPassJson()` in `src/passkit/generator.ts`) and the card image
+(`src/cardimage/template.ts`).
+
+If that order carries no name — which happens for some imported historical
+rows — the name already on file is kept, and for a
+brand-new record the name from the order currently being processed is used
+instead.
+
+Also a member who updates their billing name at checkout sees the card follow on
+their next membership purchase. And because an attributed gift order still carries the
+_purchaser's_ billing name, a gifted card can end up showing the giver's name
+(see [section 8](#8-gift-purchases-and-re-attributed-orders)).
+
+**A member can set the name on their own card**, signed in, and what they put
+there is shown instead of the name their orders give
+(`member_display_names`). It is one free-text field rather than a first and
+last name.
+Clearing it puts the card back to the derived name, which stays intact
+underneath, so nothing is lost by trying out a different display name.
+
+**An admin can set one too**, from the member page in the admin area.
+
+Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
+on a card), nothing checks what goes in the name field. A membership card is a fun
+item rather than a serious identity document so a card showing a nickname
+is working as intended. However this is open to feedback!: see
+[question 6](#9-decisions-worth-confirming).
+
 ### Card number and QR code
+
+**Note: this "card number" field isn't really used for anything and was speculatively
+implemented in case we ever had cause to verify membership cards.**
 
 The card number (`Card #` on the back of the Apple pass, and the small line
 under the QR code on the card image) is the membership record's own identifier
@@ -287,26 +251,13 @@ afterwards — not on renewal, not on a name change, not on a resync. It is also
 the serial number baked into every Wallet pass issued for that person, which
 is why it has to stay stable.
 
-Deliberately, it is **not** derived from the store's customer number. Two
-reasons, both from real data: every guest checkout shares customer number `0`,
-and a gifted order carries the *buyer's* customer number, not the recipient's.
+This is **not** derived from the store's customer number on purpose because:
+
+1. every guest checkout shares customer number `0`
+2. a gifted order carries the _buyer's_ customer number, not the recipient's
+
 Neither identifies a member. Records are always found by email address, so the
 card number never needs to be reproducible from anything else.
-
-The QR code encodes a signed verification link for that card number. Scanning
-it shows the holder's name and whether their membership is current *right
-now* — computed live, not read off the card. No sign-in is needed: the
-signature is what stops anyone opening a card they do not hold. Anyone
-scanning is told only "valid" or "not a current membership"; whether a
-membership lapsed or was revoked is shown only to a signed-in admin, since a
-revocation is the Membership Committee's decision
-(`src/member/verify-pass.tsx`, `lookupPassHolder()` in
-`src/member/passHolder.ts`). Cards issued by the old system and still in
-circulation resolve the same way: the old card's serial is looked up
-(`legacy_membership_cards`) to find the holder, and then the holder's current
-membership is shown, not the dates printed on that old card. If that holder
-has no current membership record at all, the old card's own dates are shown as
-a last resort.
 
 ### What differs between card formats
 
@@ -446,7 +397,7 @@ current rule does not rank them by reliability, only by origin:
 
 * The order-derived date is the most auditable — it points at a specific
   order that counts today.
-* The imported date was computed over *every* historical membership row for
+* The imported date was computed over _every_ historical membership row for
   that person, without excluding cancelled or test orders. It can therefore be
   slightly earlier than the order history would justify.
 * A manual date is as good as the judgement behind it, and is the right tool
@@ -457,7 +408,7 @@ date the group has been told somebody joined is the sort of thing a person is
 asked about later, and a note nobody can attribute answers half the question.
 
 Because the rule is "prefer the override", an override wins even when it is
-*later* than the earliest counted order, which is not what "member since"
+_later_ than the earliest counted order, which is not what "member since"
 usually implies. See the questions in [section 9](#9-decisions-worth-confirming).
 
 Changing an override immediately marks that member's card as stale, so the
@@ -496,7 +447,7 @@ order's identifiers.
 orders, the card's expiry is the later of the two per-order expiries. A member
 who renews after their previous year has ended gets a fresh year from the
 purchase date. A member who renews a month early gets 365 days from the
-purchase date, which is *not* the old expiry plus a year — the unused month is
+purchase date, which is _not_ the old expiry plus a year — the unused month is
 not carried over. Buying two memberships at once does not produce two years
 either; both orders expire on the same day, so the card shows one year.
 
@@ -554,7 +505,7 @@ buyer. And the one-time legacy import skipped any order that already had an
 attribution recorded against it, so an admin's decision outranked the
 historical export.
 
-What attribution does *not* change is the name on the order. The billing name
+What attribution does _not_ change is the name on the order. The billing name
 stays the purchaser's, and since the card's holder name comes from the latest
 counted order, a gift can leave the purchaser's name on the recipient's card.
 This is listed as a question below.
@@ -751,6 +702,23 @@ generate. Scanning one still works: the serial is looked up
 then computed live by exactly the rules above. The old card is a pointer to a
 person, not a record of their membership, which is why it stays correct as
 their membership changes.
+
+## Appendix: QR codes & verification
+
+A membership card's QR code encodes a signed verification link for that card number. Scanning
+it shows the holder's name and whether their membership is current _right
+now_ — computed live, not read off the card. No sign-in is needed: the
+signature is what stops anyone opening a card they do not hold. Anyone
+scanning is told only "valid" or "not a current membership"; whether a
+membership lapsed or was revoked is shown only to a signed-in admin, since a
+revocation is the Membership Committee's decision
+(`src/member/verify-pass.tsx`, `lookupPassHolder()` in
+`src/member/passHolder.ts`). Cards issued by the old system and still in
+circulation resolve the same way: the old card's serial is looked up
+(`legacy_membership_cards`) to find the holder, and then the holder's current
+membership is shown, not the dates printed on that old card. If that holder
+has no current membership record at all, the old card's own dates are shown as
+a last resort.
 
 ## Appendix: additional footnotes
 
