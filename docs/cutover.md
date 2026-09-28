@@ -257,6 +257,18 @@ Through the legacy repository's own `terraform/` configuration -- targeted
 `terraform destroy -target=...` or state removal, not console or `gcloud`
 deletion, so Terraform state stays consistent with reality.
 
+**That repository is archived (2026-09-28)**, and its README says so. Its
+Terraform still runs: state lives in the `lv-digital-membership-tfstate` GCS
+bucket, so a fresh clone can `terraform init`, `plan` and `apply` as before,
+from `terraform/` or `terraform/bootstrap/`. What an archived repository
+cannot take is a commit. A targeted destroy or a `terraform state rm` needs
+no change to the code, and after one the code simply still names a resource
+that no longer exists. Anything that does need the code changed means
+unarchiving it briefly (Settings, as an admin), merging, and archiving it
+again. Moving what is kept somewhere it can be changed, and destroying the
+rest, is
+[#370](https://github.com/los-verdes/card-losverd-es/issues/370).
+
 > **Targeted destroys only -- never the whole configuration, never the
 > project.** The GCP project (`lv-digital-membership`) still serves this
 > site: it holds the Google OAuth client behind `AUTH_GOOGLE_ID`, which every
@@ -310,4 +322,6 @@ uses -- the OAuth client, and the Wallet service account if it lives there --
 has an organisation-owned home, whether by moving the project into a Los
 Verdes organisation or by recreating those pieces elsewhere
 ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Only then
-can what remains of it be deleted.
+can what remains of it be deleted. The Terraform for what stays is to move out
+of the archived repository in the meantime
+([#370](https://github.com/los-verdes/card-losverd-es/issues/370)).
