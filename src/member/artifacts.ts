@@ -19,6 +19,7 @@ import {
   googleWalletTheme,
   signSaveToWalletPayload,
 } from "../google/jwt";
+import { tracing } from "cloudflare:workers";
 import type { Env } from "../index";
 import { buildVerifyPassUrl } from "../lib/passSignature";
 import {
@@ -280,30 +281,36 @@ export async function getApplePassBundle(
       assets[name] = await readTemplateAsset(env, `${thumbnailPrefix}${name}`);
     }
   }
-  const bundle = await assemblePassBundle(
-    {
-      memberId: member.member_id,
-      ...cardName(member),
-      status: effectiveStatus(member),
-      expirationDate: member.expiration_date,
-      memberSince: member.member_since,
-      authToken: member.auth_token,
-      verifyUrl: await verifyUrl(env, member),
-      colors: theme.colors,
-    },
-    {
-      passTypeIdentifier,
-      teamIdentifier: env.PASSKIT_TEAM_IDENTIFIER,
-      organizationName: env.PASSKIT_ORGANIZATION_NAME,
-      webServiceURL: env.PASSKIT_WEB_SERVICE_URL,
-      environment: env.ENVIRONMENT,
-    },
-    assets,
-    {
-      signingCertPem: env.APPLE_PASS_CERT_PEM,
-      signingKeyPem: env.APPLE_PASS_KEY_PEM,
-      wwdrCertPem: env.APPLE_WWDR_CERT_PEM,
-    },
+  const passVerifyUrl = await verifyUrl(env, member);
+  // Hashing, signing and zipping are CPU work, which the automatic spans
+  // (subrequests only) leave as an unexplained gap. Around the call rather
+  // than inside src/passkit, which a Node script also bundles.
+  const bundle = await tracing.enterSpan("pass_build", () =>
+    assemblePassBundle(
+      {
+        memberId: member.member_id,
+        ...cardName(member),
+        status: effectiveStatus(member),
+        expirationDate: member.expiration_date,
+        memberSince: member.member_since,
+        authToken: member.auth_token,
+        verifyUrl: passVerifyUrl,
+        colors: theme.colors,
+      },
+      {
+        passTypeIdentifier,
+        teamIdentifier: env.PASSKIT_TEAM_IDENTIFIER,
+        organizationName: env.PASSKIT_ORGANIZATION_NAME,
+        webServiceURL: env.PASSKIT_WEB_SERVICE_URL,
+        environment: env.ENVIRONMENT,
+      },
+      assets,
+      {
+        signingCertPem: env.APPLE_PASS_CERT_PEM,
+        signingKeyPem: env.APPLE_PASS_KEY_PEM,
+        wwdrCertPem: env.APPLE_WWDR_CERT_PEM,
+      },
+    ),
   );
   await putCachedPass(
     env.ASSETS,

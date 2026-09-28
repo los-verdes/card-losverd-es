@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipExpiry, toIsoSeconds } from "../../src/bigcommerce/orders";
 import { fakeEmailBinding, type FakeEmailBinding } from "../fixtures/emailBinding";
+import { named, recordSpans } from "../fixtures/spans";
 import {
   BigCommerceAuthError,
   BigCommerceClient,
@@ -602,6 +603,18 @@ describe("syncBigCommerceOrder", () => {
     expect(member?.member_since).toBe("2026-01-15");
   });
 
+  it("reads the order inside a span that names it", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts());
+    const spans = recordSpans();
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(named(spans, "bigcommerce_order")).toEqual([
+      { name: "bigcommerce_order", attributes: { "bigcommerce.order_id": String(order.id) } },
+    ]);
+  });
+
   it("running the same order sync twice is idempotent (no duplicate rows)", async () => {
     const order = makeOrder();
     const products = makeProducts();
@@ -765,6 +778,22 @@ describe("syncSubscriptionsEtl", () => {
     const watermark = await readWatermark();
     expect(watermark).toBeGreaterThanOrEqual(before);
     expect(watermark).toBeLessThanOrEqual(after);
+  });
+
+  it("gives every order it reads a span of its own, merchandise included", async () => {
+    const products = { 1: makeProducts(), 2: merchandise() } as Record<number, BigCommerceOrderProduct[]>;
+    mockOrdersApi(
+      () => [makeOrder({ id: 1 }), makeOrder({ id: 2 })],
+      (orderId) => products[orderId],
+    );
+    const spans = recordSpans();
+
+    await syncSubscriptionsEtl(env, { loadAll: true });
+
+    expect(named(spans, "bigcommerce_order").map((span) => span.attributes["bigcommerce.order_id"])).toEqual([
+      "1",
+      "2",
+    ]);
   });
 
   it("running the full resync twice is idempotent (no duplicate members)", async () => {

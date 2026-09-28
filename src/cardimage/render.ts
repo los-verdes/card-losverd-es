@@ -15,6 +15,7 @@
 // stays bundled at build time, same as the spike: it's a fixed design
 // asset, not something that needs R2's runtime-swappable flexibility the
 // way branding images do.
+import { tracing } from 'cloudflare:workers';
 import satori, { init as initYoga } from 'satori/standalone';
 import YOGA_WASM from 'satori/yoga.wasm';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
@@ -59,6 +60,20 @@ export async function renderMembershipCardPng(
   colors: CardThemeColors = CLASSIC_THEME.colors,
   backgroundPngBytes?: Uint8Array,
 ): Promise<Uint8Array> {
+  // Spans of our own, because this is CPU work: the automatic spans cover
+  // only subrequests, so without these a render shows as an unexplained gap
+  // in its request's trace.
+  return tracing.enterSpan('card_render', () =>
+    renderCard(member, logoPngBytes, colors, backgroundPngBytes),
+  );
+}
+
+async function renderCard(
+  member: MembershipCardMember,
+  logoPngBytes: Uint8Array,
+  colors: CardThemeColors,
+  backgroundPngBytes: Uint8Array | undefined,
+): Promise<Uint8Array> {
   await Promise.all([ensureResvgInitialized(), ensureYogaInitialized()]);
 
   // Embedded as a data URL, not handed to Satori as a URL to fetch. Satori's
@@ -86,17 +101,21 @@ export async function renderMembershipCardPng(
     colors,
   );
 
-  const svg = await satori(tree as never, {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    fonts: [{ name: 'Bungee', data: bungeeFontData, weight: 400, style: 'normal' }],
-  });
+  const svg = await tracing.enterSpan('card_render_svg', () =>
+    satori(tree as never, {
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      fonts: [{ name: 'Bungee', data: bungeeFontData, weight: 400, style: 'normal' }],
+    }),
+  );
 
   // Satori has already converted all text to vector paths in the returned
   // SVG string, so resvg needs no font configuration of its own here.
-  const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: CARD_WIDTH } });
-  const rendered = resvg.render();
-  const png = rendered.asPng();
-  rendered.free();
-  return png;
+  return tracing.enterSpan('card_render_png', () => {
+    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: CARD_WIDTH } });
+    const rendered = resvg.render();
+    const png = rendered.asPng();
+    rendered.free();
+    return png;
+  });
 }

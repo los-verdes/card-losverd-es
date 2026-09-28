@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { recordSpans } from "../fixtures/spans";
 import sampleLogoPng from "../fixtures/sample-logo.png";
 import sampleBackgroundPng from "../fixtures/sample-card-background.png";
 import { renderMembershipCardPng } from "../../src/cardimage/render";
@@ -23,6 +24,22 @@ function makeMember(overrides: Partial<MembershipCardMember> = {}): MembershipCa
 }
 
 describe("renderMembershipCardPng", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("names its CPU work in spans, since no automatic span covers it", async () => {
+    const spans = recordSpans();
+
+    await renderMembershipCardPng(makeMember(), LOGO_BYTES);
+
+    expect(spans.map((span) => span.name)).toEqual([
+      "card_render",
+      "card_render_svg",
+      "card_render_png",
+    ]);
+  });
+
   it("renders a non-trivial PNG for a member with an expiration date", async () => {
     const png = await renderMembershipCardPng(makeMember(), LOGO_BYTES);
 
