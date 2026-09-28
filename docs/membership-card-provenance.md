@@ -625,7 +625,10 @@ was done: every revocation and expulsion and the lifting of either, every card
 name set or cleared, every "member since" correction, every re-attributed
 order, and every card email sent. Each line says when, what, who it was about,
 who did it, and one sentence of detail -- including the value that was
-replaced, where there was one. An admin reads one person's whole history on
+replaced, where there was one. Where no person did it, "who" says what did:
+"site automation" for every card email, "command line" for admin access
+granted from a terminal, and "previous site import" for card names carried
+across from the old site. An admin reads one person's whole history on
 that person's member page, below their orders -- even once they have no card
 or orders left -- or everyone's as a recent-activity list (`/admin/audit`), a
 page at a time and back as far as it goes, and can download all of it, or one

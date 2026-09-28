@@ -193,6 +193,27 @@ describe("reading it back", () => {
     expect(page).not.toContain("No membership is held under that address, and no orders either.");
   });
 
+  it("says what acted when no person did, muted so it reads as no account", async () => {
+    const unnamed = [
+      ["card.emailed", "Their new order completed", "site automation"],
+      ["card.suppressed", "Suppressed", "site automation"],
+      ["admin.granted", "From the command line", "command line"],
+      ["display_name.set", "Imported", "previous site import"],
+    ] as const;
+    for (const [action, detail] of unnamed) {
+      await recordAuditEvent(env, { action, subjectEmail: EMAIL, actorEmail: null, detail });
+    }
+    await recordAuditEvent(env, { action: "membership.revoked", subjectEmail: EMAIL, actorEmail: null, detail: "Unattributed" });
+
+    const body = await (await get("/admin/audit")).text();
+
+    for (const [, detail, actor] of unnamed) {
+      expect(body).toMatch(new RegExp(`>${detail}</td><td[^>]*><span class="muted">${actor}</span></td>`));
+    }
+    // Nothing is claimed for an entry whose cause nobody recorded.
+    expect(body).toMatch(/>Unattributed<\/td><td[^>]*><span class="muted"><\/span><\/td>/);
+  });
+
   it("says so plainly when there is nothing to show", async () => {
     expect(await (await get("/admin/audit")).text()).toContain("Nothing recorded yet");
     const member = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
@@ -308,7 +329,7 @@ describe("downloading it", () => {
     const lines = text.trimEnd().split("\r\n");
     expect(lines[0]).toBe("id,when_utc,action,what,who_it_was_about,detail,who_did_it");
     expect(lines).toHaveLength(AUDIT_PAGE_SIZE + 2);
-    expect(lines[1]).toMatch(/^\d+,\d{4}-\d{2}-\d{2}T[\d:.]+Z,card\.emailed,Card emailed,jane@example\.com,entry 100,$/);
+    expect(lines[1]).toMatch(/^\d+,\d{4}-\d{2}-\d{2}T[\d:.]+Z,card\.emailed,Card emailed,jane@example\.com,entry 100,site automation$/);
   });
 
   it("records each download, by whom and how much", async () => {
@@ -343,6 +364,14 @@ describe("downloading it", () => {
     const { text } = await csv("/admin/audit?format=csv");
 
     expect(text).toContain(",retired.verb,retired.verb,,old,");
+  });
+
+  it("exports what acted when no person did, as the page shows it", async () => {
+    await recordAuditEvent(env, { action: "card.emailed", subjectEmail: EMAIL, actorEmail: null, detail: "Their new order completed" });
+
+    const { text } = await csv("/admin/audit?format=csv");
+
+    expect(text).toContain(",Their new order completed,site automation");
   });
 
   it("counts entries in the plural", async () => {
