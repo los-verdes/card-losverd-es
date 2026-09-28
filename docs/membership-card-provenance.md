@@ -40,6 +40,16 @@ BigCommerce for membership orders, are described in [the appendix](#appendix-ord
 
 ## 2. How it fits together
 
+The membership card app learns of orders through incoming notifications from the
+store (specifically incoming webhooks from BigCommerce whenever an order is updated).
+It also runs regular resyncs to catch any order update notifications that are
+lost along the way.
+
+As orders come in, we check to see if they count for membership (covered in
+[the next section]((#3-what-an-order-is-and-where-it-comes-from))). For the
+orders that do count, we group them by member and use that aggregate information
+to decide facts about their membership:
+
 ```mermaid
 %% Keep every label to a few words a line. Mermaid no longer grows a box to
 %% fit its text (mermaid-js/mermaid#7354), so a long label is silently clipped
@@ -60,18 +70,11 @@ flowchart TD
     CARD --> F4["Card number<br/>assigned once"]
 ```
 
-One bit of code derives membership from order history
-(`refreshMemberFromOrders()` in `src/bigcommerce/sync.ts`). It runs whenever
-an order arrives or changes, when the scheduled resync revisits an order, and
-when an order is re-attributed by hand. Each run recomputes the whole
-membership from the whole history rather than nudging the previous answer,
-which is why a refund or a correction takes effect on its own, and why the
-result does not depend on the order in which orders happen to arrive.
-
-The diagram keeps its labels short so they render legibly; the exact statuses
-behind "does this order count" are in
-[section 5](#5-how-the-app-decides-who-is-a-current-member), and what an
-order is in the first place is the next section.
+There is one specific bit of code that does the membership-from-order-history
+calculations (`refreshMemberFromOrders()` in `src/bigcommerce/sync.ts`). This code
+runs whenever an order arrives or changes, when the scheduled resync revisits an
+order, and when an order is re-attributed by hand. Each run recomputes the whole
+membership from the whole history.
 
 ## 3. What an order is, and where it comes from
 
