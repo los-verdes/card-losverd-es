@@ -18,7 +18,7 @@ reference _and also_ to invite feedback and proposals to change that
 implementation / rules for deciding membership.
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
-gathers the places where the software had to pick a rule and where a different
+gathers the places where the app had to pick a rule and where a different
 policy would be equally easy to implement. That is the most useful section to
 take to the Membership Committee, though feedback on any part of this is
 welcome.
@@ -73,7 +73,7 @@ result does not depend on the order in which orders happen to arrive.
 
 The diagram keeps its labels short so they render legibly; the exact statuses
 behind "does this order count" are in
-[section 5](#5-how-the-software-decides-who-is-a-current-member), and what an
+[section 5](#5-how-the-app-decides-who-is-a-current-member), and what an
 order is in the first place is the next section.
 
 ## 3. What an order is, and where it comes from
@@ -84,7 +84,7 @@ as one, and how far our list of them can be trusted to match the storefront's.
 ### What makes an order a membership order
 
 An order becomes a membership order when one of the products on it is a
-membership. The SKU is what decides: the software holds an explicit list of
+membership. The SKU is what decides: the app holds an explicit list of
 membership SKUs (`MEMBERSHIP_SKUS` in `src/bigcommerce/sync.ts`, currently the
 single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
 its line items matches. Everything else the
@@ -94,10 +94,10 @@ membership it contains.
 
 ### One order, one membership
 
-This software depends on an arrangement it does not control and does not
+This app depends on an arrangement it does not control and does not
 enforce: **a single order never carries more than one membership.** That is
 maintained in the storefront's own configuration, which is the Merch Team's
-side of the boundary rather than this software's.
+side of the boundary rather than this app's.
 
 The dependency is not a detail of one function. Order history is keyed on the
 order's own id (`membership_orders.order_id` is the primary key), so an order
@@ -146,7 +146,7 @@ because the export has no line-item detail to count; that is recorded as
 unknown rather than as one.
 
 One consequence is worth stating plainly: **a membership sold under a SKU that
-is not on that list is invisible to this software.** It produces no card and
+is not on that list is invisible to this app.** It produces no card and
 appears in no report. Adding a new membership product to the storefront
 therefore means adding its SKU here too, which is a code change rather than a
 store setting, and is the first thing to check if a new product's buyers say
@@ -154,7 +154,7 @@ they never received a card.
 
 ### BigCommerce is the record; this is a copy
 
-**The storefront is authoritative.** Nothing in this software creates an
+**The storefront is authoritative.** Nothing in this app creates an
 order, and no screen in it can add one by hand. Every BigCommerce order here
 was read from the store, is keyed by the store's own order id
 (`membership_orders.order_id`) -- the same number the Merch Team sees in the
@@ -405,7 +405,7 @@ a last resort.
 
 All three carry the same fields.
 
-## 5. How the software decides who is a current member
+## 5. How the app decides who is a current member
 
 Two separate questions are involved, and they are answered in different
 places.
@@ -646,7 +646,7 @@ This is listed as a question below.
 
 ## 9. Decisions worth confirming
 
-Each of these is a point where the software had to choose a rule and where a
+Each of these is a point where the app had to choose a rule and where a
 different policy would be straightforward to implement. The current
 behaviour is stated alongside each question, so the answer is a confirmation
 or a change, not an open-ended design exercise.
@@ -705,12 +705,12 @@ or a change, not an open-ended design exercise.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
-   people to the software until their old orders are re-attributed, and a
+   people to the app until their old orders are re-attributed, and a
    recorded "member since" override follows the old address rather than the
    person.
 
 8. **Are revocation and expulsion shaped the way the group wants them?**
-   Both are described [in section 5](#5-how-the-software-decides-who-is-a-current-member) and are expected to be
+   Both are described [in section 5](#5-how-the-app-decides-who-is-a-current-member) and are expected to be
    rare. A few choices are open. A revocation follows the card, so a fresh
    membership bought under a different address is not covered; an expulsion
    follows the address, for the same reason ([question 7](#9-decisions-worth-confirming)).
@@ -753,7 +753,7 @@ this record exists for -- "why does their card say that", "who decided this"
 -- are asked about things that are no longer true at least as often as things
 that are, and most often precisely when a decision is being appealed.
 
-Two things it deliberately does not do. It does not record what the software
+Two things it deliberately does not do. It does not record what the app
 did on its own: an order syncing, an import running, a pass being rebuilt are
 all routine, and a log that included them would bury the handful of entries
 that represent a decision somebody made. And it does not record a card email
@@ -830,7 +830,7 @@ did, so these rows keep the meaning they have always had.
 
 ### Cards from that era still resolve
 
-A card issued by the old system carries a serial this software does not
+A card issued by the old system carries a serial this app does not
 generate. Scanning one still works: the serial is looked up
 (`legacy_membership_cards`) to find the holder, and the holder's membership is
 then computed live by exactly the rules above. The old card is a pointer to a
