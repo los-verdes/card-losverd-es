@@ -24,21 +24,19 @@ feedback from any interested folks.
 
 ## 1. The short version
 
-* Los Verdes storefront orders are used to determine membership. Every
-  card is rebuilt from a person's order history; the card itself stores no
-  independent state.
-* Only orders containing a membership product are recorded at all. Merch
-  never reaches this system, and BigCommerce remains the authoritative record
-  of what was bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
-* Not every order counts. A BigCommerce order counts only once it is paid.
-* Orders from before February 2023, when Los Verdes moved to BigCommerce, are
-  described in [the appendix](#appendix-orders-from-before-bigcommerce).
-* All of one person's counted orders collapse into a single membership and a
-  single card. The card's "good through" date is the furthest expiry among
-  them; "member since" is the earliest order, unless a recorded override says
-  otherwise.
-* A person is identified by email address. An order can be pointed at somebody
-  other than the person who paid, which is how gift purchases work.
+* Membership is derived from membership orders made on the [Los Verdes store](https://store.losverdesatx.org/membership/).
+  * All of a person's counted membership orders collapse into a single "membership".
+  * Members are identified by email address (by default the order's email but they can be attributed to another email)
+  * A membership is active for `<most recent order date>` + `365 days`
+* In this app:
+  * membership card content is based on this exact same order history
+  * on cards, the "member since" field is the earliest order's date (unless a recorded override says
+  otherwise)
+  * only orders containing a membership product are considered at all. For instance,
+    an order for a shirt isn't recorded here. (ref: [section 3](#3-what-an-order-is-and-where-it-comes-from)).
+
+Note: orders from before February 2023, when Los Verdes moved from Squarespace to
+BigCommerce for membership orders, are described in [the appendix](#appendix-orders-from-before-bigcommerce).
 
 ## 2. How it fits together
 
