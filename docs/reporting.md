@@ -76,7 +76,11 @@ by the public.
 The CSV is the way to do anything more involved with a report. The pages
 themselves send every matching row, not a page of them, and any table sorts
 by a click on a column heading (`src/admin/tableSort.ts`, a small inline
-script; without JavaScript the table stays in the server's order). The
+script; without JavaScript the table stays in the server's order). A box
+above each table narrows it to the rows mentioning every word typed, in any
+column (`src/admin/tableFilter.ts`). It filters what is on screen only, in
+the browser, so the CSV link still downloads the whole report and nothing
+typed there leaves the page. The
 orders-by-month page also draws its two years as a bar chart above the
 table, rendered on the server as SVG (`src/admin/monthChart.tsx`).
 

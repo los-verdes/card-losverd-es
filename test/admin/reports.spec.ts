@@ -3,6 +3,7 @@ import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
+import { TABLE_FILTER_SCRIPT } from "../../src/admin/tableFilter";
 import worker from "../../src/index";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
@@ -155,6 +156,29 @@ describe("GET /admin/reports/active", () => {
     expect(csvLink).toBeGreaterThan(-1);
     expect(csvLink).toBeLessThan(body.indexOf("<table"));
     expect(body).not.toContain("Page 1 of");
+  });
+
+  it("offers a box that narrows the table by any column, shown only once its script runs", async () => {
+    await insertOrder({ id: "filter-1", email: "filter@example.com", created: "2026-02-01T00:00:00Z" });
+
+    const body = await (await get("/admin/reports/active")).text();
+
+    const scope = body.search(/<div data-table-filter[ =>]/);
+    const box = body.search(/<p class="table-filter" data-filter-control[^>]* hidden[ =>]/);
+    expect(scope).toBeGreaterThan(-1);
+    // Below the CSV link, above the table, inside the same scope.
+    expect(box).toBeGreaterThan(body.indexOf("as CSV</a>"));
+    expect(box).toBeLessThan(body.indexOf("<table data-sortable"));
+    expect(body.slice(box)).toMatch(/^[^]*?<input type="search"[^>]*\/>[^]*?<span data-filter-count[^>]* aria-live="polite">/);
+    // Nothing typed there is sent anywhere: the box belongs to no form.
+    expect(body.slice(box, body.indexOf("</p>", box))).not.toContain("name=");
+    expect(body).toContain(TABLE_FILTER_SCRIPT);
+  });
+
+  it("offers no filter box where there is no table", async () => {
+    const body = await (await get("/admin/reports/missing")).text();
+
+    expect(body).not.toMatch(/<div data-table-filter[ =>]/);
   });
 
   it("downloads every matching row as CSV", async () => {

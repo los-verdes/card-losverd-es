@@ -164,6 +164,17 @@ table[data-sortable] th[aria-sort="descending"] button.sort::after {
   font-size: 0.7em;
 }
 
+/* The box above a report table that narrows it (src/admin/tableFilter.ts).
+   Wide enough for a name and a year; the count sits beside it, muted. */
+.table-filter input[type="search"] {
+  width: 22rem;
+  max-width: 100%;
+}
+
+.table-filter [data-filter-count] {
+  color: var(--muted);
+}
+
 /* The orders-by-month chart (src/admin/monthChart.tsx). The year before is
    the muted colour, half strength, so the chosen year is what reads first. */
 .month-chart {

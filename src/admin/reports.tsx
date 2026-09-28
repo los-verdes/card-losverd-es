@@ -188,8 +188,9 @@ const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> =
 /**
  * Every report table: its CSV download first, where someone looking for it
  * finds it before scrolling past a few hundred rows, then the table itself,
- * sortable by any heading (src/admin/tableSort.ts). Every row is sent;
- * sorting in the browser is only honest over the whole report.
+ * sortable by any heading (src/admin/tableSort.ts) and narrowed by a box
+ * that matches any column (src/admin/tableFilter.ts). Every row is sent;
+ * sorting and filtering in the browser are only honest over the whole report.
  *
  * `children` is the table's `<tbody>` (and `<tfoot>`, if it has totals).
  */
@@ -218,9 +219,15 @@ const ReportTable: FC<
   rowCount === 0 && empty ? (
     <p>{empty}</p>
   ) : (
-    <>
+    <div data-table-filter>
       <p>
         <a href={csvHref}>{csvLabel}</a>
+      </p>
+      <p class="table-filter" data-filter-control hidden>
+        <label>
+          Filter rows <input type="search" placeholder="Any column; every word must match" />
+        </label>{" "}
+        <span data-filter-count aria-live="polite"></span>
       </p>
       <div style={`overflow: auto; max-height: ${TABLE_MAX_HEIGHT}`}>
         <table data-sortable style="border-collapse: collapse; font-size: 0.9rem">
@@ -234,7 +241,7 @@ const ReportTable: FC<
           {children}
         </table>
       </div>
-    </>
+    </div>
   );
 
 const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: number }> = ({ rows, csvHref, total }) => (
