@@ -22,12 +22,14 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diagramImageUrls } from "./lib/diagramImages.ts";
+import { fitImageRequests } from "./lib/fitDocImages.ts";
 import { reasonsNotToReplace } from "./lib/provenanceGdocGuard.ts";
 
 // Overridable only so the script can be run against a stand-in for Drive.
 const API_ROOT = process.env.GOOGLE_API_ROOT ?? "https://www.googleapis.com";
 const DRIVE = `${API_ROOT}/drive/v3`;
 const UPLOAD = `${API_ROOT}/upload/drive/v3`;
+const DOCS = `${process.env.GOOGLE_DOCS_API_ROOT ?? "https://docs.googleapis.com"}/v1/documents`;
 
 const token = process.env.GOOGLE_ACCESS_TOKEN;
 const docId = process.env.PROVENANCE_GDOC_ID;
@@ -130,7 +132,8 @@ if (failures.length > 0) {
   warn(`${failures.length} of ${images.length} diagram(s) did not render (${failures.join("; ")}), so the Doc links to them instead.`);
   markdown = prepare(true);
 }
-const withImages = diagramImageUrls(markdown).length;
+const imageUrls = diagramImageUrls(markdown);
+const withImages = imageUrls.length;
 
 // 3. Replace the content. The Doc stays the same file: same link, same
 // sharing, and the previous content kept in its version history.
@@ -148,12 +151,39 @@ if (!text.includes(`Taken from commit ${commit}`) || text.includes("**This is a 
 // 5. And that the diagrams arrived as pictures. Drive fetches an image named
 // by URL while converting; if it did not, the Doc has a gap where each one
 // was, so it is replaced once more with the version that links instead.
+let imagesInDoc = false;
 if (withImages > 0) {
   const html = await (await drive(`${DRIVE}/files/${docId}/export?mimeType=text/html`)).text();
   const imported = (html.match(/<img\b/g) ?? []).length;
   if (imported < withImages) {
     warn(`Only ${imported} of ${withImages} diagram image(s) arrived in the Doc, so it links to them instead.`);
     await replaceContent(prepare(true));
+  } else {
+    imagesInDoc = true;
+  }
+}
+
+// 6. Fit the diagrams to the page. Drive imports each at its natural width,
+// which can run past the right margin (scripts/lib/fitDocImages.ts). Only a
+// nicety: if the Docs API cannot do it, the Doc is still right, just wide.
+async function docsApi(path, init = {}) {
+  const res = await fetch(`${DOCS}/${docId}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
+  });
+  return { res, body: await res.text() };
+}
+if (imagesInDoc) {
+  const got = await docsApi("?fields=documentStyle,body.content.paragraph.elements(startIndex,inlineObjectElement),inlineObjects");
+  const plan = got.res.ok ? fitImageRequests(JSON.parse(got.body), imageUrls) : null;
+  if (!plan) {
+    warn(`The diagrams were left at their natural width: the Docs API answered ${got.res.status}: ${got.body.slice(0, 300)}`);
+  } else if ("mismatch" in plan) {
+    warn(`The diagrams were left at their natural width: ${plan.mismatch}.`);
+  } else if (plan.resized > 0) {
+    const update = await docsApi(":batchUpdate", { method: "POST", body: JSON.stringify({ requests: plan.requests }) });
+    if (update.res.ok) console.log(`Fitted ${plan.resized} diagram(s) to the page.`);
+    else warn(`The diagrams were left at their natural width: the Docs API answered ${update.res.status}: ${update.body.slice(0, 300)}`);
   }
 }
 console.log(`Refreshed "${file.name}" from commit ${commit}.`);

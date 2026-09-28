@@ -8,7 +8,9 @@ name: Provenance Google Doc
 # The document's diagrams arrive as images rendered by kroki.io from their
 # own source (scripts/lib/diagramImages.ts). If any will not render, or Drive
 # does not bring them in, the Doc links to the repository's copy instead and
-# the run carries a warning.
+# the run carries a warning. Any wider than the page are then shrunk to fit
+# through the Google Docs API (scripts/lib/fitDocImages.ts), which the same
+# credentials reach; if it cannot, they stay wide and the run says why.
 #
 # Google sign-in is keyless: GitHub's OIDC token is exchanged, through
 # Workload Identity Federation, for a service account that can edit that one
@@ -22,6 +24,7 @@ on:
       - 'scripts/provenance-gdoc-push.mjs'
       - 'scripts/lib/provenanceGdocGuard.ts'
       - 'scripts/lib/diagramImages.ts'
+      - 'scripts/lib/fitDocImages.ts'
       - '.github/workflows/provenance-gdoc.yml'
   workflow_dispatch:
     inputs:
