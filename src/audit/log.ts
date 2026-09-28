@@ -115,6 +115,35 @@ export async function recordAuditEventBestEffort(
   }
 }
 
+/**
+ * Who did it, for an entry that names no person. Nobody signed in made these,
+ * but something did, and a blank cell reads as though the log lost track:
+ *
+ * - The site itself sends every card email, whatever prompted it (a new
+ *   order, a re-attribution, someone asking at /email-card).
+ * - `just admin-grant` / `just admin-revoke` run from a terminal, where a
+ *   name would be a guess (scripts/admin.mjs).
+ * - A card name with no actor came across in the one-time import of names
+ *   members had set on the previous site (src/member/displayName.ts).
+ *
+ * Anything else with no actor stays blank rather than claiming a cause
+ * nobody recorded. Shown and exported as written here; the stored column
+ * stays empty, so it never looks like an account.
+ */
+const UNNAMED_ACTORS: Partial<Record<AuditAction, string>> = {
+  "card.emailed": "site automation",
+  "card.suppressed": "site automation",
+  "admin.granted": "command line",
+  "admin.revoked": "command line",
+  "display_name.set": "previous site import",
+};
+
+/** Who did it: the admin's or member's address, or what acted when no person did. */
+export function auditActor(entry: Pick<AuditEntry, "action" | "actor_email">): { text: string; person: boolean } {
+  if (entry.actor_email) return { text: entry.actor_email, person: true };
+  return { text: UNNAMED_ACTORS[entry.action] ?? "", person: false };
+}
+
 export interface AuditEntry {
   id: number;
   action: AuditAction;

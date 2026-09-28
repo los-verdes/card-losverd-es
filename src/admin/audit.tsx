@@ -26,6 +26,7 @@ import type { Env } from "../index";
 import {
   AUDIT_ACTION_LABELS,
   actorEmail,
+  auditActor,
   readAuditLog,
   readWholeAuditLog,
   recordAuditEvent,
@@ -70,12 +71,20 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
       </td>
     )}
     <td style={cellStyle}>{entry.detail}</td>
-    {/* Blank rather than "system": an empty cell reads as "nobody", which is
-        what it means, where a word invites the reader to look for an account
-        by that name. */}
-    <td style={cellStyle}>{entry.actor_email ?? ""}</td>
+    <td style={cellStyle}>
+      <Actor entry={entry} />
+    </td>
   </tr>
 );
+
+/**
+ * An address as written; what acted when no person did (`auditActor`)
+ * muted, so it reads as a description rather than an account to look up.
+ */
+const Actor: FC<{ entry: AuditEntry }> = ({ entry }) => {
+  const actor = auditActor(entry);
+  return actor.person ? <>{actor.text}</> : <span class="muted">{actor.text}</span>;
+};
 
 const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
 
@@ -148,7 +157,7 @@ audit.get("/", async (c) => {
       what: AUDIT_ACTION_LABELS[entry.action] ?? entry.action,
       who_it_was_about: entry.subject_email,
       detail: entry.detail,
-      who_did_it: entry.actor_email,
+      who_did_it: auditActor(entry).text || null,
     }));
     const stamp = new Date().toISOString().slice(0, 10);
     return new Response(toCsv(CSV_COLUMNS, rows), {
