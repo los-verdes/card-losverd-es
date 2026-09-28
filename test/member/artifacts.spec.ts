@@ -20,6 +20,7 @@ import { getTestCertChain } from "../fixtures/certChain";
 import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
 import { GOOGLE_WALLET_API, resetGoogleWalletTokenCache } from "../../src/google/api";
 import { fakeGoogleWallet } from "../google/fake";
+import { named, recordSpans } from "../fixtures/spans";
 
 const PASS_KEY = "test-pass-signature-key".repeat(5);
 
@@ -185,6 +186,20 @@ describe("a theme's artwork (#333)", () => {
     const files = unzipSync(await getApplePassBundle(env, (await getMemberById(env, "BC-1"))!));
 
     expect(Object.keys(files)).not.toContain("thumbnail.png");
+  });
+
+  it("builds and signs a pass inside a span, and a cached pass without one", async () => {
+    await insertMember();
+    for (const name of APPLE_FILES) {
+      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
+    }
+    const member = (await getMemberById(env, "BC-1"))!;
+    const spans = recordSpans();
+
+    await getApplePassBundle(env, member);
+    await getApplePassBundle(env, member);
+
+    expect(named(spans, "pass_build")).toHaveLength(1);
   });
 });
 

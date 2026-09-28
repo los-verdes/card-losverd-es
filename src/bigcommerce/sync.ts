@@ -1,3 +1,4 @@
+import { tracing } from "cloudflare:workers";
 import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyWalletsUpdated } from "../member/walletUpdates";
@@ -522,6 +523,18 @@ interface AppliedOrder {
   cardChanged: boolean;
 }
 
+/**
+ * One order's reading and applying, as a span of its own. A resync handles
+ * dozens of orders in one invocation, and without this their subrequests sit
+ * side by side in one flat list with nothing to say which order each served.
+ */
+function inOrderSpan<T>(orderId: number | string, fn: () => Promise<T>): Promise<T> {
+  return tracing.enterSpan("bigcommerce_order", (span) => {
+    span.setAttribute("bigcommerce.order_id", String(orderId));
+    return fn();
+  });
+}
+
 async function applyMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
@@ -621,6 +634,14 @@ export type OrderReadOutcome =
  * An admin's re-read (#294) calls this directly for that reason.
  */
 export async function readOrderFromStore(
+  env: Env,
+  storeHash: string,
+  orderId: number | string,
+): Promise<OrderReadOutcome> {
+  return inOrderSpan(orderId, () => readOrder(env, storeHash, orderId));
+}
+
+async function readOrder(
   env: Env,
   storeHash: string,
   orderId: number | string,
@@ -819,15 +840,14 @@ export async function syncSubscriptionsEtl(
       sliceFull = true;
       break;
     }
-    const products = await client.getOrderProducts(order.id);
-    const membership = resolveMembership(products);
-    if (membership) {
-      const applied = await applyMembershipOrder(
-        env,
-        order,
-        membership,
-        countMembershipUnits(products),
-      );
+    const applied = await inOrderSpan(order.id, async () => {
+      const products = await client.getOrderProducts(order.id);
+      const membership = resolveMembership(products);
+      return membership
+        ? applyMembershipOrder(env, order, membership, countMembershipUnits(products))
+        : null;
+    });
+    if (applied) {
       ordersProcessed++;
       if (applied.cardChanged) {
         cardsChanged++;
