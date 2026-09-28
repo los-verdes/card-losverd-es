@@ -2,11 +2,13 @@ import type { Env } from "../index";
 import { postSlackAlert } from "../slack/alert";
 import {
   BigCommerceAuthError,
+  recheckUnlistedOrders,
   syncBigCommerceOrder,
   syncCustomersEtl,
   syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
   type SubscriptionsEtlCursor,
+  type UnlistedRecheckCursor,
 } from "../bigcommerce/sync";
 import { runReadinessCheck } from "../admin/readinessAlert";
 import { refreshLapsedPasses, runPassExpirySweep } from "../member/passExpirySweep";
@@ -27,6 +29,11 @@ export type EtlSyncMessage =
       /** Set only on a resync chain's follow-up messages; without it, a new chain starts. */
       cursor?: SubscriptionsEtlCursor;
     }
+  /**
+   * After a full resync: re-reads the orders held here that the store's list
+   * did not return (`recheckUnlistedOrders`). Never emails anyone.
+   */
+  | { type: "recheck_unlisted_orders"; cursor: UnlistedRecheckCursor }
   | { type: "sync_customers_etl" }
   | { type: "sync_minibc_subscriptions_etl" }
   | { type: "run_slack_members_etl" }
@@ -62,7 +69,7 @@ async function dispatchEtlSyncMessage(
       await syncBigCommerceOrder(env, message.storeHash, message.orderId);
       return;
     case "sync_subscriptions_etl": {
-      const { next } = await syncSubscriptionsEtl(env, {
+      const { next, recheckUnlisted } = await syncSubscriptionsEtl(env, {
         loadAll: message.loadAll,
         cursor: message.cursor,
       });
@@ -75,6 +82,15 @@ async function dispatchEtlSyncMessage(
           cursor: next,
         });
       }
+      if (recheckUnlisted) {
+        await enqueueEtlSync(env, { type: "recheck_unlisted_orders", cursor: recheckUnlisted });
+      }
+      return;
+    }
+    case "recheck_unlisted_orders": {
+      const { next } = await recheckUnlistedOrders(env, message.cursor);
+      // Only once the batch has succeeded, as with the resync chain.
+      if (next) await enqueueEtlSync(env, { type: "recheck_unlisted_orders", cursor: next });
       return;
     }
     case "sync_customers_etl":
