@@ -175,48 +175,54 @@ table[data-sortable] th[aria-sort="descending"] button.sort::after {
   color: var(--muted);
 }
 
-/* The orders-by-month chart (src/admin/monthChart.tsx). The year before is
-   the muted colour, half strength, so the chosen year is what reads first. */
-.month-chart {
+/* The membership-over-time charts (src/admin/lineChart.tsx). The most recent
+   line is verde and heavier, so it reads first; earlier ones take distinct
+   mid-tone hues that hold up on either background. */
+.line-chart {
   margin: 1rem 0;
   max-width: 48rem;
 }
 
-.month-chart svg {
+.line-chart svg {
   width: 100%;
   height: auto;
 }
 
-.month-chart .this-year {
-  fill: var(--verde-ink);
-  background: var(--verde-ink);
+.line-chart .line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
 }
 
-.month-chart .previous-year {
-  fill: color-mix(in srgb, var(--muted) 50%, transparent);
-  background: color-mix(in srgb, var(--muted) 50%, transparent);
-}
-
-.month-chart .gridline line {
+.line-chart .gridline line {
   stroke: var(--rule);
 }
 
-.month-chart text {
+.line-chart text {
   fill: var(--muted);
   font-size: 12px;
 }
 
-.month-chart figcaption {
+.line-chart figcaption {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
-.month-chart .swatch {
+.line-chart .swatch {
   display: inline-block;
   width: 0.8em;
   height: 0.8em;
   margin-left: 0.5em;
 }
+
+.line-chart .latest { stroke: var(--verde-ink); background: var(--verde-ink); }
+.line-chart path.latest { stroke-width: 2.5; }
+.line-chart .series-0 { stroke: #3b82f6; background: #3b82f6; }
+.line-chart .series-1 { stroke: #f59e0b; background: #f59e0b; }
+.line-chart .series-2 { stroke: #a855f7; background: #a855f7; }
+.line-chart .series-3 { stroke: #ef4444; background: #ef4444; }
+.line-chart .series-4 { stroke: #14b8a6; background: #14b8a6; }
+.line-chart .series-5 { stroke: #8b8b8b; background: #8b8b8b; }
 
 /* No image, whatever its intrinsic size, may be wider than what holds it.
    The card carries its own sizing inline as well; this is the net for

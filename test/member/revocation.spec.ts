@@ -10,7 +10,7 @@ import {
 import { lookupPassHolder } from "../../src/member/passHolder";
 import { isRevoked, restoreCard, revokeCard, revokedCards } from "../../src/member/revocation";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
-import { activeMemberships, ordersByMonth } from "../../src/admin/reportQueries";
+import { activeMemberships, ordersByDay } from "../../src/admin/reportQueries";
 
 const CARD = "LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6";
 const EMAIL = "jane@example.com";
@@ -176,9 +176,9 @@ describe("what the reports say", () => {
     // A withdrawal is a decision about a person. The order was still placed
     // and the money is still the group's; the books must not change because
     // somebody was asked to leave.
-    const before = await ordersByMonth(env.DB, 2026);
+    const before = await ordersByDay(env.DB);
     await revokeCard(env, CARD, null, 1);
-    const after = await ordersByMonth(env.DB, 2026);
+    const after = await ordersByDay(env.DB);
 
     expect(after).toEqual(before);
   });

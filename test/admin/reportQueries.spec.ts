@@ -6,7 +6,7 @@ import {
   consolidations,
   expiredMemberships,
   listChannels,
-  ordersByMonth,
+  ordersByDay,
   slackCrossReference,
   type MembershipOrderRow,
 } from "../../src/admin/reportQueries";
@@ -109,17 +109,19 @@ describe("expiredMemberships", () => {
   });
 });
 
-describe("ordersByMonth", () => {
-  it("counts real membership orders per month for the year and the year before, with empty months as zero", async () => {
-    const months = await ordersByMonth(env.DB, 2026);
+describe("ordersByDay", () => {
+  it("counts real membership orders per day, oldest first, leaving out void ones", async () => {
+    const days = await ordersByDay(env.DB);
+    const inMonth = (month: string) =>
+      days.filter((point) => point.day.startsWith(month)).reduce((sum, point) => sum + point.orders, 0);
 
-    expect(months).toHaveLength(12);
-    expect(months[0]).toEqual({ month: "01", orders: 1, previous_year_orders: 0 });
-    expect(months[1]).toEqual({ month: "02", orders: 0, previous_year_orders: 0 }); // all three February orders are void
-    expect(months[4]).toEqual({ month: "05", orders: 1, previous_year_orders: 0 });
-    expect(months[6]).toEqual({ month: "07", orders: 0, previous_year_orders: 1 });
-    expect(months[7]).toEqual({ month: "08", orders: 1, previous_year_orders: 0 });
-    expect(months[8]).toEqual({ month: "09", orders: 0, previous_year_orders: 1 });
+    expect(days.map((point) => point.day)).toEqual([...days.map((point) => point.day)].sort());
+    expect(inMonth("2026-01")).toBe(1);
+    expect(inMonth("2026-02")).toBe(0); // all three February orders are void
+    expect(inMonth("2026-05")).toBe(1);
+    expect(inMonth("2025-07")).toBe(1);
+    expect(inMonth("2026-08")).toBe(1);
+    expect(inMonth("2025-09")).toBe(1);
   });
 });
 

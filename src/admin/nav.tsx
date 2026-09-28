@@ -43,7 +43,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/reports", label: "All" },
       { href: "/admin/reports/active", label: "Active" },
       { href: "/admin/reports/expired", label: "Expired" },
-      { href: "/admin/reports/orders", label: "By month" },
+      { href: "/admin/reports/over-time", label: "Over time" },
       { href: "/admin/reports/slack", label: "Slack" },
       { href: "/admin/reports/consolidations", label: "Consolidations" },
     ],

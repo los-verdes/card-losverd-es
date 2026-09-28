@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { tickStep, ticks } from "../../src/admin/monthChart";
+import { tickStep, ticks } from "../../src/admin/lineChart";
 
 // Properties rather than exact steps: which "round" numbers the axis uses is
 // a matter of taste, but every one of these has to hold whatever it is.
-describe("the orders-by-month chart's axis", () => {
+describe("the line charts' axis", () => {
   it.each([0, 1, 2, 3, 7, 9, 10, 11, 23, 48, 99, 100, 101, 137, 480, 1234])(
     "labels a tallest bar of %i sensibly",
     (max) => {
@@ -21,6 +21,17 @@ describe("the orders-by-month chart's axis", () => {
       expect(lines.length).toBeLessThanOrEqual(11);
     },
   );
+
+  it.each([
+    [62, 20],
+    [100, 20],
+    [480, 100],
+    [2100, 500],
+    [1234, 500],
+    [9, 2],
+  ])("steps a tallest value of %i by a round %i", (max, step) => {
+    expect(tickStep(max)).toBe(step);
+  });
 
   it("draws a chart for a year with no orders at all, rather than dividing by zero", () => {
     expect(ticks(0)).toEqual([0, 1]);
