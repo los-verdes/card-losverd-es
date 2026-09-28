@@ -134,35 +134,21 @@ export async function expiredMemberships(
   };
 }
 
-export interface MonthlyOrders {
-  [key: string]: string | number;
-  /** `01`..`12`. */
-  month: string;
-  orders: number;
-  previous_year_orders: number;
-}
-
-/** Membership orders per calendar month (UTC) for `year` and the year before. */
-export async function ordersByMonth(
-  db: D1Database,
-  year: number,
-): Promise<MonthlyOrders[]> {
+/**
+ * Membership orders placed on each day that had any, oldest first: every
+ * order that counts, as the old "Membership Orders" report counted them,
+ * whoever holds the membership now. What was sold stays sold, so a later
+ * revocation or expulsion changes nothing here.
+ */
+export async function ordersByDay(db: D1Database): Promise<{ day: string; orders: number }[]> {
   const { results } = await db
     .prepare(
-      `SELECT substr(created_on, 6, 2) AS month,
-              SUM(substr(created_on, 1, 4) = ?1) AS orders,
-              SUM(substr(created_on, 1, 4) = ?2) AS previous_year_orders
-       FROM membership_orders
-       WHERE substr(created_on, 1, 4) IN (?1, ?2) AND ${COUNTS_AS_MEMBERSHIP}
-       GROUP BY month`,
+      `SELECT substr(created_on, 1, 10) AS day, COUNT(*) AS orders
+       FROM membership_orders WHERE ${COUNTS_AS_MEMBERSHIP}
+       GROUP BY day ORDER BY day`,
     )
-    .bind(String(year), String(year - 1))
-    .all<MonthlyOrders>();
-  const byMonth = new Map(results.map((row) => [row.month, row]));
-  return Array.from({ length: 12 }, (_, i) => {
-    const month = String(i + 1).padStart(2, "0");
-    return byMonth.get(month) ?? { month, orders: 0, previous_year_orders: 0 };
-  });
+    .all<{ day: string; orders: number }>();
+  return results;
 }
 
 export interface SlackCrossReferenceRow {

@@ -17,7 +17,6 @@ import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
-import { MonthlyOrdersChart } from "./monthChart";
 import { OrderLink } from "./orders";
 import {
   activeMemberships,
@@ -29,7 +28,7 @@ import {
   missingOrders,
   extraMembershipOrdersSetAside,
   ordersWithExtraMemberships,
-  ordersByMonth,
+  ordersByDay,
   slackCrossReference,
   type AttentionCounts,
   type Consolidations,
@@ -374,11 +373,8 @@ reports.get("/", async (c) => {
           lapsed.
         </li>
         <li>
-          <a href="/admin/reports/orders">Orders by month</a>: this year against last year.
-        </li>
-        <li>
-          <a href="/admin/reports/members">Active members over time</a>: how many members there were on each
-          day, any years side by side.
+          <a href="/admin/reports/over-time">Membership over time</a>: active members and membership orders,
+          any years side by side.
         </li>
         <li>
           <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
@@ -455,71 +451,14 @@ reports.get("/expired", async (c) => {
   );
 });
 
-reports.get("/orders", async (c) => {
-  const thisYear = new Date().getUTCFullYear();
-  const raw = c.req.query("year");
-  const year = raw === undefined || raw === "" ? thisYear : Number(raw);
-  if (!Number.isInteger(year) || year < 2000 || year > thisYear + 1) {
-    throw new BadRequest("year must be a four-digit year");
-  }
-  const months = await ordersByMonth(c.env.DB, year);
-  if (c.req.query("format") === "csv") {
-    return new Response(toCsv(["month", "orders", "previous_year_orders"], months), {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="membership-orders-${year}.csv"`,
-      },
-    });
-  }
-  const total = months.reduce((sum, m) => sum + m.orders, 0);
-  const previousTotal = months.reduce((sum, m) => sum + m.previous_year_orders, 0);
-  return c.html(
-    <AdminPage title={`Membership orders, ${year}`}>
-      <p>
-        <a href={`/admin/reports/orders?year=${year - 1}`}>← {year - 1}</a>
-        {year < thisYear && (
-          <>
-            {" · "}
-            <a href={`/admin/reports/orders?year=${year + 1}`}>{year + 1} →</a>
-          </>
-        )}
-      </p>
-      <MonthlyOrdersChart months={months} year={year} />
-      <ReportTable
-        headings={["Month (UTC)", String(year - 1), String(year)]}
-        csvHref={`/admin/reports/orders?year=${year}&format=csv`}
-        csvLabel="Download as CSV"
-        rowCount={months.length}
-      >
-        <tbody>
-          {months.map((m, i) => (
-            <tr>
-              <td style={cellStyle} data-sort={m.month}>
-                {MONTH_NAMES[i]}
-              </td>
-              <td style={cellStyle}>{m.previous_year_orders}</td>
-              <td style={cellStyle}>{m.orders}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th style={cellStyle}>Total</th>
-            <th style={cellStyle}>{previousTotal}</th>
-            <th style={cellStyle}>{total}</th>
-          </tr>
-        </tfoot>
-      </ReportTable>
-    </AdminPage>,
-  );
-});
+const OVER_TIME_PATH = "/admin/reports/over-time";
 
-const MEMBERS_OVER_TIME_PATH = "/admin/reports/members";
-
-/** How many years the year-by-year view shows unless asked for others. */
+/** How many years the page compares unless asked for others. */
 const DEFAULT_YEARS_SHOWN = 3;
 
-/** Parses the repeated `year` parameter; empty means the default. */
+const YEAR_MS = 365 * 86_400_000;
+
+/** Parses the repeated `year` parameter; none means the latest few. */
 function chosenYears(raw: string[], available: number[]): number[] {
   const years = raw.filter((value) => value !== "").map(Number);
   for (const year of years) {
@@ -531,72 +470,113 @@ function chosenYears(raw: string[], available: number[]): number[] {
   return chosen.length > 0 ? chosen : available.slice(-DEFAULT_YEARS_SHOWN);
 }
 
-/**
- * How many people held an active membership over time
- * (src/admin/membersOverTime.ts), as one line per year over the same
- * January-to-December axis -- so a season in one year sits over the same
- * season in another -- or as one line across every year. Beneath it, the
- * count on the first of each month; the download has every day.
- */
-reports.get("/members", async (c) => {
-  const today = toIsoSeconds(new Date()).slice(0, 10);
-  const orders = await countedMembershipOrders(c.env.DB);
-  const firstDay = orders.reduce((min, order) => (order.created_on < min ? order.created_on : min), today).slice(0, 10);
-  const series = activeMembersByDay(orders, firstDay, today);
-  const onDay = new Map(series.map((point) => [point.day, point.members]));
+/** "2026-03" for March 2026 (`month` from 0). */
+function yearMonth(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
 
+/**
+ * Membership over time: how many people held an active membership each day
+ * (src/admin/membersOverTime.ts), and how many membership orders came in
+ * each month -- the two questions a planning conversation asks about a year,
+ * answered for the same years side by side. Each is one line per year over
+ * the same January-to-December axis, so a season sits over the same season
+ * in another year, or one line across every year. The tables beneath carry
+ * the figures: members on the first of each month, orders in each month.
+ *
+ * Replaces the "orders by month" report (this year against last), which
+ * `/admin/reports/orders` now redirects here with the same two years.
+ */
+reports.get("/over-time", async (c) => {
+  const today = toIsoSeconds(new Date()).slice(0, 10);
+  const [orders, perDay] = await Promise.all([countedMembershipOrders(c.env.DB), ordersByDay(c.env.DB)]);
+  const firstDay = [orders.reduce((min, order) => (order.created_on < min ? order.created_on : min), today), perDay[0]?.day ?? today]
+    .sort()[0]
+    .slice(0, 10);
+  const members = activeMembersByDay(orders, firstDay, today);
+  const membersOn = new Map(members.map((point) => [point.day, point.members]));
+  const ordersIn = new Map<string, number>();
+  for (const { day, orders: count } of perDay) ordersIn.set(day.slice(0, 7), (ordersIn.get(day.slice(0, 7)) ?? 0) + count);
+
+  const table = c.req.query("table");
   if (c.req.query("format") === "csv") {
-    return new Response(toCsv(["date", "active_members"], series.map((point) => ({ date: point.day, active_members: point.members }))), {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="active-members-by-day-${today}.csv"`,
-      },
-    });
+    const stamp = `${today}.csv"`;
+    if (table === "members") {
+      return new Response(toCsv(["date", "active_members"], members.map((point) => ({ date: point.day, active_members: point.members }))), {
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="active-members-by-day-${stamp}` },
+      });
+    }
+    if (table === "orders") {
+      const rows = [...ordersIn].map(([month, count]) => ({ month, orders: count }));
+      return new Response(toCsv(["month", "orders"], rows), {
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="membership-orders-by-month-${stamp}` },
+      });
+    }
+    throw new BadRequest("table must be one of members, orders");
   }
 
   const thisYear = Number(today.slice(0, 4));
-  const available = Array.from({ length: thisYear - Number(firstDay.slice(0, 4)) + 1 }, (_, i) => Number(firstDay.slice(0, 4)) + i);
+  const firstYear = Number(firstDay.slice(0, 4));
+  const available = Array.from({ length: thisYear - firstYear + 1 }, (_, i) => firstYear + i);
   const timeline = c.req.query("view") === "timeline";
   const years = timeline ? available : chosenYears(c.req.queries("year") ?? [], available);
+  const currentMonth = Number(today.slice(5, 7)) - 1;
+  const monthsOf = (year: number) => (year === thisYear ? currentMonth + 1 : 12);
 
-  // Year by year: each year's days placed by day of the year. All years:
-  // every day since the first order, placed by how far along it is.
+  // Year by year, each point placed by how far through its year it falls;
+  // every year as one line, by how far through the whole history.
   const yearStart = (year: number) => Date.UTC(year, 0, 1);
-  const chartSeries: LineSeries[] = timeline
+  const span = Date.parse(today) - Date.parse(firstDay);
+  const throughHistory = (ms: number) => (span > 0 ? (ms - Date.parse(firstDay)) / span : 0);
+  const allYears = `${firstYear}–${thisYear}`;
+  const memberLines: LineSeries[] = timeline
+    ? [{ label: allYears, points: members.map((point) => ({ x: throughHistory(Date.parse(point.day)), value: point.members })) }]
+    : years.map((year) => ({
+        label: String(year),
+        points: members
+          .filter((point) => point.day.startsWith(`${year}-`))
+          .map((point) => ({ x: Math.min((Date.parse(point.day) - yearStart(year)) / YEAR_MS, 1), value: point.members })),
+      }));
+  // Orders are counted per month, so each is placed mid-month.
+  const midMonth = (year: number, month: number) => Date.UTC(year, month, 15);
+  const orderLines: LineSeries[] = timeline
     ? [{
-        label: `${available[0]}–${thisYear}`,
-        points: series.map((point, i) => ({ x: series.length > 1 ? i / (series.length - 1) : 0, value: point.members })),
+        label: allYears,
+        points: available.flatMap((year) =>
+          Array.from({ length: monthsOf(year) }, (_, month) => ({
+            x: Math.min(Math.max(throughHistory(midMonth(year, month)), 0), 1),
+            value: ordersIn.get(yearMonth(year, month)) ?? 0,
+          })),
+        ),
       }]
     : years.map((year) => ({
         label: String(year),
-        points: series
-          .filter((point) => point.day.startsWith(`${year}-`))
-          .map((point) => ({ x: Math.min((Date.parse(point.day) - yearStart(year)) / (365 * 86_400_000), 1), value: point.members })),
+        points: Array.from({ length: monthsOf(year) }, (_, month) => ({
+          x: (midMonth(2025, month) - yearStart(2025)) / YEAR_MS,
+          value: ordersIn.get(yearMonth(year, month)) ?? 0,
+        })),
       }));
-  const span = Date.parse(today) - Date.parse(firstDay);
   const xLabels = timeline
-    ? available
-        .map((year) => ({ x: span > 0 ? (yearStart(year) - Date.parse(firstDay)) / span : 0, text: String(year) }))
-        .filter((label) => label.x >= 0)
-    : MONTH_NAMES.map((name, i) => ({ x: (Date.UTC(2025, i, 15) - Date.UTC(2025, 0, 1)) / (365 * 86_400_000), text: name.slice(0, 3) }));
+    ? available.map((year) => ({ x: throughHistory(yearStart(year)), text: String(year) })).filter((label) => label.x >= 0)
+    : MONTH_NAMES.map((name, month) => ({ x: (midMonth(2025, month) - yearStart(2025)) / YEAR_MS, text: name.slice(0, 3) }));
 
   const lastYearToday = `${thisYear - 1}${today.slice(4)}`;
-  const monthStart = (year: number, month: number) => `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const viewHref = (params: Record<string, string>) => `${MEMBERS_OVER_TIME_PATH}?${new URLSearchParams(params)}`;
+  const ordersBetween = (from: string, to: string) =>
+    perDay.filter((point) => point.day >= from && point.day <= to).reduce((sum, point) => sum + point.orders, 0);
+  const ordersThisYear = ordersBetween(`${thisYear}-01-01`, today);
+  const ordersByNowLastYear = ordersBetween(`${thisYear - 1}-01-01`, lastYearToday);
+  const count = (value: number) => value.toLocaleString("en-US");
+  const which = timeline ? `from ${firstDay} to ${today}` : `in ${years.join(", ")}, one line per year`;
 
   return c.html(
-    <AdminPage title="Active members over time">
+    <AdminPage title="Membership over time">
       <p>
-        <strong>{(onDay.get(today) ?? 0).toLocaleString("en-US")}</strong> active members today
-        {onDay.has(lastYearToday) && (
-          <>
-            , against <strong>{(onDay.get(lastYearToday) ?? 0).toLocaleString("en-US")}</strong> on this day
-            last year
-          </>
-        )}
-        . Counted as the <a href="/admin/reports/active">Active memberships</a> report counts them, for each day.
+        <strong>{count(membersOn.get(today) ?? 0)}</strong> active members today, against{" "}
+        <strong>{count(membersOn.get(lastYearToday) ?? 0)}</strong> on this day last year.{" "}
+        <strong>{count(ordersThisYear)}</strong> membership orders so far this year, against{" "}
+        <strong>{count(ordersByNowLastYear)}</strong> by this day last year.
       </p>
-      <form method="get" action={MEMBERS_OVER_TIME_PATH} style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin: 1rem 0">
+      <form method="get" action={OVER_TIME_PATH} style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin: 1rem 0">
         <fieldset style="border: 0; padding: 0; margin: 0">
           <legend>Years to compare</legend>
           {available.map((year) => (
@@ -606,27 +586,27 @@ reports.get("/members", async (c) => {
           ))}
         </fieldset>
         <button type="submit">Compare</button>
-        <span>
-          or <a href={viewHref({ view: "timeline" })}>see every year as one line</a>
-        </span>
+        {timeline ? (
+          <a href={OVER_TIME_PATH}>Compare years instead</a>
+        ) : (
+          <span>
+            or <a href={`${OVER_TIME_PATH}?view=timeline`}>see every year as one line</a>
+          </span>
+        )}
       </form>
-      {timeline && (
-        <p>
-          <a href={MEMBERS_OVER_TIME_PATH}>Compare years instead</a>
-        </p>
-      )}
+
+      <h2>Active members</h2>
+      <p class="muted">
+        Each day counted as the <a href="/admin/reports/active">Active memberships</a> report counts that day.
+      </p>
       <LineChart
-        series={chartSeries}
+        series={memberLines}
         xLabels={xLabels}
-        description={
-          timeline
-            ? `Active members each day from ${firstDay} to ${today}; the table below has the count on the first of each month.`
-            : `Active members each day of ${years.join(", ")}, one line per year; the table below has the count on the first of each month.`
-        }
+        description={`Active members each day ${which}; the table below has the count on the first of each month.`}
       />
       <ReportTable
         headings={["On the 1st of", ...years.map(String)]}
-        csvHref={`${MEMBERS_OVER_TIME_PATH}?format=csv`}
+        csvHref={`${OVER_TIME_PATH}?table=members&format=csv`}
         csvLabel="Download every day as CSV"
         rowCount={12}
       >
@@ -636,15 +616,68 @@ reports.get("/members", async (c) => {
               <td style={cellStyle} data-sort={String(month + 1).padStart(2, "0")}>
                 {name}
               </td>
-              {years.map((year) => (
-                <td style={cellStyle}>{onDay.get(monthStart(year, month))?.toLocaleString("en-US") ?? ""}</td>
-              ))}
+              {years.map((year) => {
+                const value = membersOn.get(`${yearMonth(year, month)}-01`);
+                return <td style={cellStyle}>{value === undefined ? "" : count(value)}</td>;
+              })}
             </tr>
           ))}
         </tbody>
       </ReportTable>
+
+      <h2>Membership orders</h2>
+      <p class="muted">Orders that count towards a membership, in the month they were placed (UTC).</p>
+      <LineChart
+        series={orderLines}
+        xLabels={xLabels}
+        description={`Membership orders per month ${which}; the table below has each month's figure.`}
+      />
+      <ReportTable
+        headings={["Month (UTC)", ...years.map(String)]}
+        csvHref={`${OVER_TIME_PATH}?table=orders&format=csv`}
+        csvLabel="Download every month as CSV"
+        rowCount={12}
+      >
+        <tbody>
+          {MONTH_NAMES.map((name, month) => (
+            <tr>
+              <td style={cellStyle} data-sort={String(month + 1).padStart(2, "0")}>
+                {name}
+              </td>
+              {years.map((year) => (
+                <td style={cellStyle}>{month < monthsOf(year) ? count(ordersIn.get(yearMonth(year, month)) ?? 0) : ""}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th style={cellStyle}>Total</th>
+            {years.map((year) => (
+              <th style={cellStyle}>
+                {count(Array.from({ length: 12 }, (_, month) => ordersIn.get(yearMonth(year, month)) ?? 0).reduce((a, b) => a + b, 0))}
+              </th>
+            ))}
+          </tr>
+        </tfoot>
+      </ReportTable>
     </AdminPage>,
   );
+});
+
+/**
+ * Where "orders by month" used to be: the same year against the year before,
+ * on the page that replaced it. A bad year is refused as it was, rather than
+ * quietly showing something else.
+ */
+reports.get("/orders", (c) => {
+  const thisYear = new Date().getUTCFullYear();
+  const raw = c.req.query("year");
+  const year = raw === undefined || raw === "" ? thisYear : Number(raw);
+  if (!Number.isInteger(year) || year < 2000 || year > thisYear + 1) {
+    throw new BadRequest("year must be a four-digit year");
+  }
+  return c.redirect(`${OVER_TIME_PATH}?year=${year - 1}&year=${year}`, 301);
 });
 
 /**

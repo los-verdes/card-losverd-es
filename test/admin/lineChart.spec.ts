@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { tickStep, ticks } from "../../src/admin/monthChart";
+import { tickStep, ticks } from "../../src/admin/lineChart";
 
 // Properties rather than exact steps: which "round" numbers the axis uses is
 // a matter of taste, but every one of these has to hold whatever it is.
-describe("the orders-by-month chart's axis", () => {
+describe("the line charts' axis", () => {
   it.each([0, 1, 2, 3, 7, 9, 10, 11, 23, 48, 99, 100, 101, 137, 480, 1234])(
     "labels a tallest bar of %i sensibly",
     (max) => {

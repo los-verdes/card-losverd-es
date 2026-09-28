@@ -70,7 +70,7 @@ const list = (values: string[]) => values.map((value) => `'${value}'`).join(", "
  * listed as current, or the reports and the access checks would tell
  * different stories about the same person and whoever answered their next
  * question would be reading the wrong one. Reports about what was sold --
- * orders by month, consolidations, the order-level flags -- must not have it,
+ * orders over time, consolidations, the order-level flags -- must not have it,
  * or the group's own sales history would quietly change when somebody was
  * asked to leave.
  *

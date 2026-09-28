@@ -175,50 +175,7 @@ table[data-sortable] th[aria-sort="descending"] button.sort::after {
   color: var(--muted);
 }
 
-/* The orders-by-month chart (src/admin/monthChart.tsx). The year before is
-   the muted colour, half strength, so the chosen year is what reads first. */
-.month-chart {
-  margin: 1rem 0;
-  max-width: 48rem;
-}
-
-.month-chart svg {
-  width: 100%;
-  height: auto;
-}
-
-.month-chart .this-year {
-  fill: var(--verde-ink);
-  background: var(--verde-ink);
-}
-
-.month-chart .previous-year {
-  fill: color-mix(in srgb, var(--muted) 50%, transparent);
-  background: color-mix(in srgb, var(--muted) 50%, transparent);
-}
-
-.month-chart .gridline line {
-  stroke: var(--rule);
-}
-
-.month-chart text {
-  fill: var(--muted);
-  font-size: 12px;
-}
-
-.month-chart figcaption {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.month-chart .swatch {
-  display: inline-block;
-  width: 0.8em;
-  height: 0.8em;
-  margin-left: 0.5em;
-}
-
-/* The members-over-time chart (src/admin/lineChart.tsx). The most recent
+/* The membership-over-time charts (src/admin/lineChart.tsx). The most recent
    line is verde and heavier, so it reads first; earlier ones take distinct
    mid-tone hues that hold up on either background. */
 .line-chart {

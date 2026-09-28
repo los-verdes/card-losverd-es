@@ -1,18 +1,17 @@
 /**
- * A line chart for the members-over-time report (src/admin/reports.tsx): one
- * line per year laid over the same January-to-December axis, or one line
+ * The line charts on the membership-over-time report (src/admin/reports.tsx):
+ * one line per year laid over the same January-to-December axis, or one line
  * across every year.
  *
- * Drawn on the server as inline SVG, like the orders-by-month bars
- * (src/admin/monthChart.tsx), and for the same reasons: no charting library
- * or client bundle for the admin pages, and the page's own colours, dark mode
+ * Drawn on the server as inline SVG, with no charting library and no script:
+ * a library would mean a client bundle the admin pages do not otherwise have.
+ * Inline rather than an image, so it takes the page's colours, dark mode
  * included (`.line-chart` in src/styles.ts). The table beneath it is the
  * precise version and what a screen reader is pointed at; each line carries
  * its label in a `<title>` for anyone hovering over it.
  */
 
 import type { FC } from "hono/jsx";
-import { ticks } from "./monthChart";
 
 const WIDTH = 720;
 const HEIGHT = 280;
@@ -24,6 +23,28 @@ export interface LineSeries {
   label: string;
   /** `x` from 0 (left edge) to 1 (right edge). */
   points: { x: number; value: number }[];
+}
+
+/**
+ * The gap between the y axis's gridlines, for a chart whose tallest value is
+ * `max`: a round number (1, 2 or 5 times a power of ten) giving about five
+ * gridlines, so a tallest value of 62 gets lines at 20, 40, 60 and a member
+ * count of 2,100 at 500, 1,000 and so on. Always a whole number, at least 1.
+ */
+export function tickStep(max: number): number {
+  const rough = max / 5;
+  if (rough <= 1) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const normalised = rough / magnitude;
+  const round = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
+  return round * magnitude;
+}
+
+/** Gridline values from zero to the first one at or above `max`. */
+export function ticks(max: number): number[] {
+  const step = tickStep(max);
+  const top = Math.max(step, Math.ceil(max / step) * step);
+  return Array.from({ length: top / step + 1 }, (_, i) => i * step);
 }
 
 /** Colours for the lines, oldest first; the last series is always verde. */
