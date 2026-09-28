@@ -1,13 +1,13 @@
 # Where Membership Card Information Comes From
 
 This document is written for Los Verdes and its members. In particular, these
-standing committees within Los Verdes are the primary audience:
+groups within Los Verdes are the primary audience:
 
 * the Merch Team: they administer the storefront (which is the primary data
 source for membership cards) and answer membership questions and the like that
 arrive at `merchteam@losverdesatx.org`.
 * the Membership Committee (`mc@losverdesatx.org`): they have "Membership" in
-their name plus some process membership are their purview explicitly (e.g. for
+their name, and some membership processes are explicitly their purview (for
 instance, anything that settles a person's standing in the group, such as
 disciplinary action.)
 
@@ -27,7 +27,7 @@ feedback from any interested folks.
 * Membership is derived from membership orders made on the [Los Verdes store](https://store.losverdesatx.org/membership/).
   * All of a person's counted membership orders collapse into a single "membership".
   * Members are identified by email address (by default the order's email but they can be attributed to another email)
-  * A membership is active for `<most recent order date>` + `365 days`
+  * A membership is active until `<most recent counted order date>` + `365 days` (unless it has been revoked; see [section 5](#5-how-the-app-decides-who-is-a-current-member))
 * In this app:
   * membership card content is based on this exact same order history
   * on cards, the "member since" field is the earliest order's date (unless a recorded override says
@@ -46,7 +46,7 @@ It also runs regular resyncs to catch any order update notifications that are
 lost along the way.
 
 As orders come in, we check to see if they count for membership (covered in
-[the next section]((#3-what-an-order-is-and-where-it-comes-from))). For the
+[the next section](#3-what-an-order-is-and-where-it-comes-from)). For the
 orders that do count, we group them by member and use that aggregate information
 to decide facts about their membership:
 
@@ -84,15 +84,15 @@ as one, and that this app's accounting of orders matches the store's.
 ### What makes an order a membership order
 
 An order becomes a membership order when one of the products on it is a
-membership. The product SKU is what decides this: the app holds an list of
-membership SKUs (`MEMBERSHIP_SKUS` in `src/bigcommerce/sync.ts`, currently the
+membership. The product SKU is what decides this: the app holds a list of
+membership SKUs (currently the
 single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
 its line items matches. No other orders are considered for the app.
 
 ### One order per membership
 
 This app's logic expects that **a single order always has a single membership in
-it.**. This is a constraint of how orders are stored rather than a strict
+it.** This is a constraint of how orders are stored rather than a strict
 requirement ([#198](https://github.com/los-verdes/card-losverd-es/issues/198) describes
 some potential alternatives).
 
@@ -108,8 +108,11 @@ it still counts and has not expired.
 
 ### BigCommerce is the record; the app is a copy
 
-**The storefront is authoritative.** Nothing in this app creates / modifies an
-order. Every order recorded here was read from the store.
+**The storefront is authoritative.** Nothing in this app creates or changes an
+order in the store. Every BigCommerce order recorded here was read from the
+store. The exception is the orders from before February 2023, which were
+imported once from the old system and have no storefront left to be re-read
+from ([the appendix](#appendix-orders-from-before-bigcommerce)).
 
 A copy arrives by two routes, which run the same code:
 
@@ -121,9 +124,13 @@ A copy arrives by two routes, which run the same code:
   not a webhook for it ever arrived, and once a week, early on Sunday, it
   re-reads every order in the store (`sync_subscriptions_etl`).
 
-One thing on an order record are this app's rather than the store's: who the
-membership is attributed to (`membership_orders.member_email`; see
-[section 8](#8-gift-purchases-and-re-attributed-orders)).
+Two things on an order record are this app's rather than the store's:
+
+* who the membership is attributed to (`membership_orders.member_email`; see
+  [section 8](#8-gift-purchases-and-re-attributed-orders)), which a re-read
+  never overwrites;
+* when the store stopped returning the order, if it has
+  (`membership_orders.missing_since`), which a re-read sets or clears.
 
 The card can still say something the orders don't. A chosen card name, a
 corrected "member since" date, etc. are kept as records of their own. [Section 4](#4-each-field-on-the-card) covers each card field and where it comes from.
@@ -149,9 +156,16 @@ Here is how the strategy around keeping orders in sync with the LV store:
 
 ### What this does not catch
 
-* **Archived orders.** The app doesn't considered "archived" orders. Whether it
-  should is worth confirming with the Merch Team.
-* **Memberships sold under an unlisted SKU**, as above.
+* **Archived orders.** Archiving (deleting) an order in BigCommerce doesn't
+  remove it here: an archived order keeps counting towards its member's
+  membership, and nothing flags it. Whether it should is worth confirming with
+  the Merch Team ([question 9](#9-decisions-worth-confirming)).
+* **Memberships sold under an unlisted SKU.** An order for a membership product
+  whose SKU is not in `MEMBERSHIP_SKUS` produces no card and appears in no
+  report. Adding a new membership product to the store therefore means adding
+  its SKU here too, which is a code change rather than a store setting, and is
+  the first thing to check if a new product's buyers say they never received a
+  card.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
   not built, so a MiniBC renewal reaches this system only if it also produces
@@ -231,6 +245,14 @@ underneath, so nothing is lost by trying out a different display name.
 
 **An admin can set one too**, from the member page in the admin area.
 
+**Some names came from the previous site.** When the old system was retired, a
+one-time import carried across the name it held for each member who had bought
+something, wherever that name differed from the one their latest order gives
+(`member_display_names.source = 'legacy_postgres'`). Some of those are names
+members chose on the old site's own name page; others came from a Google or
+Apple profile when they signed in. The import could not tell which. The admin
+pages say where each name came from, alongside the name the orders give.
+
 Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
 on a card), nothing checks what goes in the name field. A membership card is a fun
 item rather than a serious identity document so a card showing a nickname
@@ -239,8 +261,10 @@ is working as intended. However this is open to feedback!: see
 
 ### Card number and QR code
 
-**Note: this "card number" field isn't really used for anything and was speculatively
-implemented in case we ever had cause to verify membership cards.**
+**Note: members rarely need this number.** It identifies their membership
+record, and it is the serial number of their Wallet pass, what the QR code's
+link carries ([the appendix](#appendix-qr-codes--verification)), and something
+an admin can look them up by.
 
 The card number (`Card #` on the back of the Apple pass, and the small line
 under the QR code on the card image) is the membership record's own identifier
@@ -639,7 +663,8 @@ Those older orders were recovered once, directly from the Postgres database
 behind the previous site
 ([`digital-membership`](https://github.com/los-verdes/digital-membership)),
 and imported into the same `membership_orders` table the current store's
-orders land in.
+orders land in. "The old system", throughout this document, means that
+application and the Postgres database behind it.
 
 **They cannot make anyone a current member.** Every one of them expired years
 ago, so nothing in this appendix affects who holds a valid card today. They
@@ -722,9 +747,10 @@ a last resort.
 
 ## Appendix: additional footnotes
 
-Given that this document is intended to be the specification for Los Verdes membership,
-is also the specification for the associated repository. Where this document and
-the code disagree, the code should be updated to match this document.
+Because this document is intended to be the specification for Los Verdes
+membership, it is also the specification for the associated repository. Where
+this document and the code disagree, whichever is wrong is corrected: usually
+the code, sometimes this document.
 
 On style: code and database names here appear in `backticks` after each
 plain-English statement, for anyone who wants to check a claim against the source.
