@@ -79,78 +79,32 @@ membership from the whole history.
 ## 3. What an order is, and where it comes from
 
 Everything on a card is derived from orders, so it matters exactly what counts
-as one, and how far our list of them can be trusted to match the storefront's.
+as one, and that this app's accounting of orders matches the store's.
 
 ### What makes an order a membership order
 
 An order becomes a membership order when one of the products on it is a
-membership. The SKU is what decides: the app holds an explicit list of
+membership. The product SKU is what decides this: the app holds an list of
 membership SKUs (`MEMBERSHIP_SKUS` in `src/bigcommerce/sync.ts`, currently the
 single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
-its line items matches. Everything else the
-storefront sells passes by untouched: an order for a scarf creates no record,
-and an order containing both a scarf and a membership is recorded as the
-membership it contains.
+its line items matches. No other orders are considered for the app.
 
-### One order, one membership
+### One order per membership
 
-This app depends on an arrangement it does not control and does not
-enforce: **a single order never carries more than one membership.** That is
-maintained in the storefront's own configuration, which is the Merch Team's
-side of the boundary rather than this app's.
+This app's logic expects that **a single order always has a single membership in
+it.**. This is a constraint of how orders are stored rather than a strict
+requirement ([#198](https://github.com/los-verdes/card-losverd-es/issues/198) describes
+some potential alternatives).
 
-The dependency is not a detail of one function. Order history is keyed on the
-order's own id (`membership_orders.order_id` is the primary key), so an order
-has exactly one row and one membership to give. Attribution works at the same
-grain: re-pointing a gift moves the whole order to the recipient
-([section 8](#8-gift-purchases-and-re-attributed-orders)), because an order is
-the smallest thing that can be pointed at anybody.
+Given the current arrangements, an order with two memberships would see one of them
+uncounted. Given this, we restrict one membership product per order
+with the LV store (we do now but it was not always so historically).
 
-There are two ways an order can carry a second membership: two membership
-line items, or one line item with a quantity above one. Either way exactly one
-membership is recorded, attributed to whoever paid, and the second produces no
-card. Somebody has paid for a membership that does not exist, which is the
-case the report below exists for.
-
-**So two memberships mean two orders.** A member buying one for someone else
-as well as renewing their own should place separate orders, and the gift order
-is then re-attributed to the recipient.
-
-That is a constraint of how orders are stored rather than a law of nature.
-Giving every membership line item its own row would lift it, and was
-considered and set aside as not worth the added complexity
-([#198](https://github.com/los-verdes/card-losverd-es/issues/198)); the
-reasoning is there if the question comes back.
-
-**This is checked.** Each time an order is read from the store, the
-memberships on it are counted across every line item, quantities included, and
-the number is recorded against the order
+**This is checked.** Since the one membership per order rule depends on the store,
+this app counts the number of memberships on an order
 (`membership_orders.membership_units`). An order carrying more than one is
 listed on the admin reports under "More than one membership" for as long as
-it still counts and has not expired -- after that nobody is owed a card for
-it, so the report says only how many such orders it leaves off -- and the
-first time one is seen it is announced in Slack.
-
-What the check deliberately does not do is change who is a member. The order
-still confers the one membership it is recorded as, exactly as it did before —
-the same choice made for orders the store stops returning. Revoking
-somebody's membership is a decision a person makes, and a line item is not a
-good enough reason to make it automatically. What the report says is the
-opposite: somebody has paid and is owed something, which is a thing to put
-right rather than a thing to take away.
-
-The count is taken fresh on every sync, so an order corrected in BigCommerce —
-the extra refunded, or the quantity put back to one — drops off the report by
-itself. Orders loaded by the one-time legacy import carry no count at all,
-because the export has no line-item detail to count; that is recorded as
-unknown rather than as one.
-
-One consequence is worth stating plainly: **a membership sold under a SKU that
-is not on that list is invisible to this app.** It produces no card and
-appears in no report. Adding a new membership product to the storefront
-therefore means adding its SKU here too, which is a code change rather than a
-store setting, and is the first thing to check if a new product's buyers say
-they never received a card.
+it still counts and has not expired.
 
 ### BigCommerce is the record; this is a copy
 
