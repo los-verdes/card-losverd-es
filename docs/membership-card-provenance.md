@@ -722,8 +722,8 @@ a last resort.
 
 ## Appendix: additional footnotes
 
-Given that this document is intended to be specification for Los Verdes membership
-is also the specification for the associated codebase / repository. Where it and
+Given that this document is intended to be the specification for Los Verdes membership,
+is also the specification for the associated repository. Where this document and
 the code disagree, the code should be updated to match this document.
 
 On style: code and database names here appear in `backticks` after each
