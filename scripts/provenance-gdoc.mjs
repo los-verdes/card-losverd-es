@@ -9,7 +9,7 @@
  * repository document read badly once it is out of the repository.
  *
  * Usage (via `just provenance-gdoc`):
- *   node provenance-gdoc.mjs [out.md]
+ *   node provenance-gdoc.mjs [out.md] [--diagram-links]
  *
  * The repository's copy stays the source of truth. Re-run this and re-import
  * whenever the document changes; the banner carries the commit it was taken
@@ -18,10 +18,15 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { KROKI_ROOT, mermaidPngUrl, replaceDiagrams } from "./lib/diagramImages.ts";
 
 const SOURCE = "docs/membership-card-provenance.md";
 const BLOB = "https://github.com/los-verdes/card-losverd-es/blob/main";
-const outPath = process.argv[2] ?? ".provenance-gdoc.md";
+const args = process.argv.slice(2);
+const outPath = args.find((arg) => !arg.startsWith("--")) ?? ".provenance-gdoc.md";
+const diagramLinks = args.includes("--diagram-links");
+// Overridable only so the push can be tried against a stand-in.
+const kroki = process.env.KROKI_ROOT ?? KROKI_ROOT;
 
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -37,19 +42,20 @@ let md = readFileSync(SOURCE, "utf8").split("\r\n").join("\n");
 /*
  * 1. Diagrams. Google Docs cannot render Mermaid, and pasting its source into
  *    a document for volunteers is worse than leaving it out -- it looks like
- *    something has gone wrong. Rather than invent a second, hand-maintained
- *    text version that would drift out of step, point at the place the
- *    diagram already renders. The prose either side of both diagrams carries
- *    their content; that was true before this script existed.
+ *    something has gone wrong. Each becomes an image instead, rendered from
+ *    its own source (scripts/lib/diagramImages.ts), with the repository's
+ *    copy a link away. `--diagram-links` leaves just that link, as this did
+ *    before the images: the push falls back to it if the images cannot be
+ *    had, since a Doc with holes where the pictures were is worse than one
+ *    that says where to find them.
  */
-let diagrams = 0;
-md = md.replace(/```mermaid\n[\s\S]*?\n```/g, () => {
-  diagrams++;
-  return (
-    `> **Diagram ${diagrams}** — this renders on the repository's copy: ` +
-    `[view it here](${BLOB}/${SOURCE}).`
-  );
-});
+const repositoryCopy = `[the repository's copy](${BLOB}/${SOURCE})`;
+const { markdown: withDiagrams, diagrams } = replaceDiagrams(md, ({ number, source }) =>
+  diagramLinks
+    ? `> **Diagram ${number}** — this renders on ${repositoryCopy}.`
+    : `![Diagram ${number}](${mermaidPngUrl(source, kroki)})\n\n_Diagram ${number}, as on ${repositoryCopy}._`,
+);
+md = withDiagrams;
 
 /*
  * 2. Internal cross-references. `#9-decisions-worth-confirming` means nothing
@@ -85,7 +91,7 @@ const banner = `> **This is a copy, for reading and commenting.** The version th
 writeFileSync(outPath, banner + md);
 console.log(
   `Wrote ${outPath} from ${SOURCE} at ${commit} (${commitDate}).\n` +
-    `  ${diagrams} diagram(s) replaced with a link, ${anchors} internal link(s) flattened.\n\n` +
+    `  ${diagrams.length} diagram(s) ${diagramLinks ? "replaced with a link" : "rendered as images"}, ${anchors} internal link(s) flattened.\n\n` +
     `To share it: upload to Google Drive, then right-click the file and choose\n` +
     `"Open with" -> "Google Docs". Drive converts the Markdown into a real\n` +
     `document with headings, tables and an outline.\n\n` +

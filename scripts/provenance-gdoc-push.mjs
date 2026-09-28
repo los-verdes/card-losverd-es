@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { diagramImageUrls } from "./lib/diagramImages.ts";
 import { reasonsNotToReplace } from "./lib/provenanceGdocGuard.ts";
 
 // Overridable only so the script can be run against a stand-in for Drive.
@@ -36,6 +37,11 @@ const dryRun = process.argv.includes("--dry-run");
 if (!token || !docId || !refresher) {
   console.error("GOOGLE_ACCESS_TOKEN, PROVENANCE_GDOC_ID and GDOC_REFRESHER are all required.");
   process.exit(2);
+}
+
+/** A GitHub Actions warning annotation: the refresh went ahead, with less than hoped. */
+function warn(message) {
+  console.log(`::warning title=Provenance Google Doc::${message.replaceAll("\n", "%0A")}`);
 }
 
 /** A GitHub Actions error annotation, which also reads fine in a terminal. */
@@ -89,19 +95,46 @@ if (dryRun) {
   process.exit(0);
 }
 
-// 2. The copy, made exactly as `just provenance-gdoc` makes it.
-const out = join(mkdtempSync(join(tmpdir(), "provenance-gdoc-")), "provenance.md");
-execFileSync("node", ["scripts/provenance-gdoc.mjs", out], { stdio: "inherit" });
-const markdown = readFileSync(out, "utf8");
+// 2. The copy, made exactly as `just provenance-gdoc` makes it: diagrams as
+// images, or (`links`) as a pointer to the repository's copy.
+function prepare(links) {
+  const out = join(mkdtempSync(join(tmpdir(), "provenance-gdoc-")), "provenance.md");
+  execFileSync("node", ["scripts/provenance-gdoc.mjs", out, ...(links ? ["--diagram-links"] : [])], { stdio: "inherit" });
+  return readFileSync(out, "utf8");
+}
+
+/** Whether every diagram image renders, asked before the Doc is touched. */
+async function unrenderable(urls) {
+  const failures = [];
+  for (const url of urls) {
+    const res = await fetch(url).catch((error) => ({ ok: false, status: String(error), headers: new Headers() }));
+    const type = res.headers.get("content-type") ?? "";
+    if (!res.ok || !type.startsWith("image/png")) failures.push(`${res.status} ${type}`.trim());
+  }
+  return failures;
+}
+
+async function replaceContent(markdown) {
+  await drive(`${UPLOAD}/files/${docId}?uploadType=media&fields=id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "text/markdown; charset=UTF-8" },
+    body: markdown,
+  });
+}
+
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+let markdown = prepare(false);
+const images = diagramImageUrls(markdown);
+const failures = await unrenderable(images);
+if (failures.length > 0) {
+  warn(`${failures.length} of ${images.length} diagram(s) did not render (${failures.join("; ")}), so the Doc links to them instead.`);
+  markdown = prepare(true);
+}
+const withImages = diagramImageUrls(markdown).length;
 
 // 3. Replace the content. The Doc stays the same file: same link, same
 // sharing, and the previous content kept in its version history.
-await drive(`${UPLOAD}/files/${docId}?uploadType=media&fields=id`, {
-  method: "PATCH",
-  headers: { "Content-Type": "text/markdown; charset=UTF-8" },
-  body: markdown,
-});
+await replaceContent(markdown);
 
 // 4. Check it arrived as a document, not as Markdown source shown as text.
 const text = await (await drive(`${DRIVE}/files/${docId}/export?mimeType=text/plain`)).text();
@@ -110,5 +143,17 @@ if (!text.includes(`Taken from commit ${commit}`) || text.includes("**This is a 
     `"${file.name}" was replaced, but does not read as a converted document (commit ${commit}). ` +
       "Restore the previous version from File > Version history in the Doc.",
   );
+}
+
+// 5. And that the diagrams arrived as pictures. Drive fetches an image named
+// by URL while converting; if it did not, the Doc has a gap where each one
+// was, so it is replaced once more with the version that links instead.
+if (withImages > 0) {
+  const html = await (await drive(`${DRIVE}/files/${docId}/export?mimeType=text/html`)).text();
+  const imported = (html.match(/<img\b/g) ?? []).length;
+  if (imported < withImages) {
+    warn(`Only ${imported} of ${withImages} diagram image(s) arrived in the Doc, so it links to them instead.`);
+    await replaceContent(prepare(true));
+  }
 }
 console.log(`Refreshed "${file.name}" from commit ${commit}.`);
