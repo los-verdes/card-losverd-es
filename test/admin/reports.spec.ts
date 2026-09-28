@@ -3,6 +3,7 @@ import { STYLESHEET_PATH } from "../../src/styles";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
+import { TABLE_FILTER_SCRIPT } from "../../src/admin/tableFilter";
 import worker from "../../src/index";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
@@ -96,11 +97,12 @@ describe("GET /admin/reports/active", () => {
     expect(body).toContain("old.address@example.com");
   });
 
-  it("applies the search filter and escapes it when echoing it back", async () => {
+  it("ignores a name search from an old bookmark: the table's own filter box does that now", async () => {
     const body = await (await get(`/admin/reports/active?q=${encodeURIComponent('"><script>x</script>')}`)).text();
 
     expect(body).not.toContain("<script>x</script>");
-    expect(body).toContain("<strong>0</strong> members");
+    expect(body).not.toContain('name="q"');
+    expect(body).toContain("<strong>1</strong> members");
   });
 
   it("escapes member-provided text in the table", async () => {
@@ -119,7 +121,7 @@ describe("GET /admin/reports/active", () => {
                '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres', 1)`,
     ).run();
 
-    const body = await (await get("/admin/reports/active?q=sparse")).text();
+    const body = await (await get("/admin/reports/active")).text();
 
     // Shortened, so it does not widen the column; the whole id is in the
     // tooltip and behind the link.
@@ -140,21 +142,45 @@ describe("GET /admin/reports/active", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends every matching row in one sortable table, with the filtered CSV link above it", async () => {
+  it("sends every row in one sortable table, with the CSV link above it", async () => {
     for (let i = 0; i < MANY; i++) {
       await insertOrder({ id: `bulk-${i}`, email: `bulk${i}@example.com`, created: "2026-02-01T00:00:00Z" });
     }
 
     // A page number from an old bookmark is ignored rather than refused.
-    const body = await (await get("/admin/reports/active?q=bulk&page=2")).text();
+    const body = await (await get("/admin/reports/active?page=2")).text();
 
     // Each address links to its member.
     expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
-    const csvLink = body.indexOf(`href="/admin/reports/active?q=bulk&amp;format=csv">Download all ${MANY} as CSV`);
+    // The bulk orders and the one current order from beforeEach.
+    const csvLink = body.indexOf(`href="/admin/reports/active?format=csv">Download all ${MANY + 1} as CSV`);
     expect(csvLink).toBeGreaterThan(-1);
     expect(csvLink).toBeLessThan(body.indexOf("<table"));
     expect(body).not.toContain("Page 1 of");
+  });
+
+  it("offers a box that narrows the table by any column, shown only once its script runs", async () => {
+    await insertOrder({ id: "filter-1", email: "filter@example.com", created: "2026-02-01T00:00:00Z" });
+
+    const body = await (await get("/admin/reports/active")).text();
+
+    const scope = body.search(/<div data-table-filter[ =>]/);
+    const box = body.search(/<p class="table-filter" data-filter-control[^>]* hidden[ =>]/);
+    expect(scope).toBeGreaterThan(-1);
+    // Below the CSV link, above the table, inside the same scope.
+    expect(box).toBeGreaterThan(body.indexOf("as CSV</a>"));
+    expect(box).toBeLessThan(body.indexOf("<table data-sortable"));
+    expect(body.slice(box)).toMatch(/^[^]*?<input type="search"[^>]*\/>[^]*?<span data-filter-count[^>]* aria-live="polite">/);
+    // Nothing typed there is sent anywhere: the box belongs to no form.
+    expect(body.slice(box, body.indexOf("</p>", box))).not.toContain("name=");
+    expect(body).toContain(TABLE_FILTER_SCRIPT);
+  });
+
+  it("offers no filter box where there is no table", async () => {
+    const body = await (await get("/admin/reports/missing")).text();
+
+    expect(body).not.toMatch(/<div data-table-filter[ =>]/);
   });
 
   it("downloads every matching row as CSV", async () => {
@@ -162,14 +188,14 @@ describe("GET /admin/reports/active", () => {
       await insertOrder({ id: `bulk-${i}`, email: `bulk${i}@example.com`, created: "2026-02-01T00:00:00Z" });
     }
 
-    const res = await get("/admin/reports/active?q=bulk&format=csv");
+    const res = await get("/admin/reports/active?format=csv");
 
     expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="active-memberships-2026-06-01.csv"');
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const lines = (await res.text()).trimEnd().split("\r\n");
     expect(lines[0]).toBe("order_id,first_name,last_name,order_email,member_email,created_on,expires_on,channel_name,source,status");
-    expect(lines).toHaveLength(MANY + 1);
+    expect(lines).toHaveLength(MANY + 2); // the header, the bulk orders and the current one
   });
 
   it.each([

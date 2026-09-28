@@ -10,9 +10,12 @@
 
 import { COUNTS_AS_MEMBERSHIP, MEMBER_IN_GOOD_STANDING } from "../lib/membershipOrders";
 
+/**
+ * Narrowing by name or address happens in the browser, over the table
+ * (src/admin/tableFilter.ts), and in a spreadsheet, over the CSV; only the
+ * channel narrows the query itself.
+ */
 export interface ReportFilters {
-  /** Matches anywhere in either email or the billing name; case-insensitive. */
-  search?: string;
   /** Exact `channel_name`, e.g. `bigcommerce_www`. */
   channel?: string;
 }
@@ -34,11 +37,6 @@ export interface MembershipOrderRow {
 const ORDER_COLUMNS =
   "order_id, first_name, last_name, order_email, member_email, created_on, expires_on, channel_name, source, status";
 
-/** Escapes LIKE wildcards so a search for `a_b` doesn't match `axb`. */
-function likePattern(search: string): string {
-  return `%${search.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
-}
-
 /** Extra WHERE clauses for the shared filters, numbered from `firstParam`. */
 function filterClauses(
   filters: ReportFilters,
@@ -46,15 +44,6 @@ function filterClauses(
 ): { sql: string; params: string[] } {
   const clauses: string[] = [];
   const params: string[] = [];
-  const search = filters.search?.trim();
-  if (search) {
-    params.push(likePattern(search));
-    const p = `?${firstParam + params.length - 1}`;
-    clauses.push(
-      `(order_email LIKE ${p} ESCAPE '\\' OR member_email LIKE ${p} ESCAPE '\\' ` +
-        `OR (COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ${p} ESCAPE '\\')`,
-    );
-  }
   if (filters.channel) {
     params.push(filters.channel);
     clauses.push(`channel_name = ?${firstParam + params.length - 1}`);

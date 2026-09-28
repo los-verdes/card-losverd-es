@@ -6,6 +6,7 @@ import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
 import { AdminNav } from "./nav";
+import { TABLE_FILTER_SCRIPT } from "./tableFilter";
 import { TABLE_SORT_SCRIPT } from "./tableSort";
 
 export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap";
@@ -38,6 +39,7 @@ export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, chi
       <SiteFooter />
       <script dangerouslySetInnerHTML={{ __html: FORM_BUSY_SCRIPT }} />
       <script dangerouslySetInnerHTML={{ __html: TABLE_SORT_SCRIPT }} />
+      <script dangerouslySetInnerHTML={{ __html: TABLE_FILTER_SCRIPT }} />
     </body>
   </html>
 );
