@@ -19,9 +19,8 @@ implementation / rules for deciding membership.
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
 gathers the places where the app had to pick a rule and where a different
-policy would be equally easy to implement. That is the most useful section to
-take to the Membership Committee, though feedback on any part of this is
-welcome.
+policy would be equally easy to implement. This section in particular is seeking
+feedback from any interested folks.
 
 ## 1. The short version
 
