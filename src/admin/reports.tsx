@@ -129,7 +129,7 @@ function parseReportRequest(query: Record<string, string>, now: Date): ReportReq
   return {
     asOfDate,
     asOf: asOfDate ? `${asOfDate}T23:59:59Z` : toIsoSeconds(now),
-    filters: { search: query.q, channel: query.channel || undefined },
+    filters: { channel: query.channel || undefined },
     csv: query.format === "csv",
   };
 }
@@ -143,7 +143,6 @@ function withParams(
   const params = new URLSearchParams();
   const current: Record<string, string> = {
     as_of: req.asOfDate,
-    q: req.filters.search?.trim() ?? "",
     channel: req.filters.channel ?? "",
     ...changes,
   };
@@ -163,11 +162,6 @@ const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> =
       As of date (UTC; blank = now)
       <br />
       <input type="date" name="as_of" value={req.asOfDate} />
-    </label>
-    <label>
-      Name or email contains
-      <br />
-      <input type="search" name="q" value={req.filters.search ?? ""} />
     </label>
     <label>
       Channel

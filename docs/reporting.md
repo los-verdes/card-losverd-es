@@ -68,13 +68,13 @@ each card from the member's counted orders (see
 ## The pages (`/admin/reports`)
 
 All require an admin (see the README for granting that), are served
-`Cache-Control: no-store`, and offer a CSV download of every matching row,
+`Cache-Control: no-store`, and offer a CSV download of every row,
 linked above each table. CSV cells that a spreadsheet would evaluate as
 formulas are neutralized (`src/lib/csv.ts`), since names and emails are typed
 by the public.
 
 The CSV is the way to do anything more involved with a report. The pages
-themselves send every matching row, not a page of them, and any table sorts
+themselves send every row, not a page of them, and any table sorts
 by a click on a column heading (`src/admin/tableSort.ts`, a small inline
 script; without JavaScript the table stays in the server's order). A box
 above each table narrows it to the rows mentioning every word typed, in any
@@ -94,8 +94,9 @@ table, rendered on the server as SVG (`src/admin/monthChart.tsx`).
 | `/admin/reports/missing` | Orders BigCommerce no longer returns, oldest sighting first. They still count towards membership; this is the list to decide about. | None -- the legacy app never noticed |
 | `/admin/reports/extra-memberships` | Orders carrying more than one membership, most first, while they still count and have not expired. Only one was recorded, so somebody paid for a card that does not exist. | None -- the legacy app never noticed |
 
-Common filters on the active and expired pages: `q` (matches either email
-or the billing name) and `channel`. SQL lives in
+The active and expired pages also take a `channel`, which narrows the query
+and so the CSV too. Narrowing by name or address is the table's filter box,
+or a spreadsheet's over the CSV. SQL lives in
 `src/admin/reportQueries.ts`, shared by the HTML and CSV forms of each report
 so they cannot disagree.
 

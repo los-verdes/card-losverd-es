@@ -8,6 +8,7 @@ import {
   listChannels,
   ordersByMonth,
   slackCrossReference,
+  type MembershipOrderRow,
 } from "../../src/admin/reportQueries";
 import { insertOrder, insertSlackUser } from "./fixtures";
 
@@ -54,28 +55,16 @@ describe("activeMemberships", () => {
   });
 
   it("treats the expiry instant itself as no longer active", async () => {
-    const atExpiry = await activeMemberships(env.DB, "2025-03-01T00:00:00Z", { search: "lapsed" });
-    const justBefore = await activeMemberships(env.DB, "2025-02-28T23:59:59Z", { search: "lapsed" });
+    const lapsed = (rows: MembershipOrderRow[]) => rows.filter((r) => r.member_email === "lapsed@example.com");
+    const atExpiry = await activeMemberships(env.DB, "2025-03-01T00:00:00Z");
+    const justBefore = await activeMemberships(env.DB, "2025-02-28T23:59:59Z");
 
-    expect(atExpiry.rows).toEqual([]);
-    expect(justBefore.rows.map((r) => r.order_id)).toEqual(["4"]);
+    expect(lapsed(atExpiry.rows)).toEqual([]);
+    expect(lapsed(justBefore.rows).map((r) => r.order_id)).toEqual(["4"]);
   });
 
-  it("filters by search across both emails and the billing name, case-insensitively", async () => {
-    expect((await activeMemberships(env.DB, AS_OF, { search: "RENEWER@" })).totalOrders).toBe(2);
-    expect((await activeMemberships(env.DB, AS_OF, { search: "rene wer" })).totalOrders).toBe(2);
-    expect((await activeMemberships(env.DB, "2024-06-01T00:00:00Z", { search: "moved@" })).rows.map((r) => r.order_id)).toEqual(["5"]);
-    expect((await activeMemberships(env.DB, AS_OF, { search: "   " })).totalOrders).toBe(4);
-  });
-
-  it("treats LIKE wildcards in a search literally", async () => {
-    expect((await activeMemberships(env.DB, AS_OF, { search: "%" })).totalOrders).toBe(0);
-    expect((await activeMemberships(env.DB, AS_OF, { search: "renewer_example" })).totalOrders).toBe(0);
-  });
-
-  it("filters by channel, alone and combined with search", async () => {
+  it("filters by channel", async () => {
     expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone" })).rows.map((r) => r.order_id)).toEqual(["2"]);
-    expect((await activeMemberships(env.DB, AS_OF, { channel: "bigcommerce_iphone", search: "steady" })).totalOrders).toBe(0);
   });
 
   it("lists newest first, every row counted", async () => {
@@ -110,7 +99,6 @@ describe("expiredMemberships", () => {
   it("filters, and counts every lapsed member", async () => {
     const asOf = "2025-06-01T00:00:00Z";
 
-    expect((await expiredMemberships(env.DB, asOf, { search: "lap sed" })).total).toBe(1);
     expect((await expiredMemberships(env.DB, asOf, { channel: "bigcommerce_iphone" })).total).toBe(0);
     const all = await expiredMemberships(env.DB, asOf);
     expect(all.rows).toHaveLength(2);
