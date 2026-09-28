@@ -89,7 +89,7 @@ table, rendered on the server as SVG (`src/admin/monthChart.tsx`).
 | `/admin/reports/active` | Active membership orders now, or at the end of any past date (`?as_of=YYYY-MM-DD`, UTC). Counts distinct members and orders. | Active Memberships |
 | `/admin/reports/expired` | Each lapsed member's most recent order, as of now or a past date. | Expired Memberships |
 | `/admin/reports/orders` | Orders per month for a year against the year before. | Membership Orders |
-| `/admin/reports/consolidations` | Two tables: orders whose membership is attributed to another address (with who changed it, when, and why), and billing names appearing under several addresses. Each order links to its admin page. | Membership Consolidations |
+| `/admin/reports/consolidations` | Three tables of choices that make a card differ from its orders: orders whose membership is attributed to another address (with who changed it, when, and why), card names set by hand, and corrected "member since" dates. Each order links to its admin page, each address to its member. | Membership Consolidations |
 | `/admin/reports/slack` | Four tables: current members in Slack, current members not in Slack, lapsed members in Slack, and Slack users with no membership orders. Current snapshot only; each table downloads separately (`?table=...&format=csv`). | Slack User Stuff |
 | `/admin/reports/missing` | Orders BigCommerce no longer returns, oldest sighting first. They still count towards membership; this is the list to decide about. | None -- the legacy app never noticed |
 | `/admin/reports/extra-memberships` | Orders carrying more than one membership, most first, while they still count and have not expired. Only one was recorded, so somebody paid for a card that does not exist. | None -- the legacy app never noticed |
@@ -104,10 +104,20 @@ so they cannot disagree.
 
 The first table is every order whose `member_email` differs from its
 `order_email`, newest change first; an order the legacy import re-pointed
-shows "legacy import" rather than an admin and a date. The second groups
-counted orders by lower-cased, trimmed billing name, listing every name that
-appears under more than one `member_email` -- usually one person with two
-addresses, to be consolidated by attributing their orders to one of them.
+shows "legacy import" rather than an admin and a date.
+
+The other two list every override on a card, newest first: names set by hand
+(`member_display_names`) and corrected "member since" dates
+(`member_since_overrides`). Each sits beside what the orders alone would
+give -- the name from the latest counted order, the date of the earliest --
+with that order linked, and says who set it: the member, an admin, or the
+previous site, whose overrides the legacy import carried across. A
+"Compared" column reads "same" where an override has come to match its
+orders and so changes nothing (a candidate to clear), "differs" otherwise,
+and "no card" for an address with no card here.
+
+The legacy report also grouped billing names found under more than one
+address. Nothing was ever done with that list, so it is no longer shown.
 
 ### Missing from BigCommerce
 

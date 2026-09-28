@@ -29,8 +29,10 @@ import {
   ordersByMonth,
   slackCrossReference,
   type AttentionCounts,
+  type Consolidations,
   type AttributedOrderRow,
-  type DuplicateNameRow,
+  type CardNameOverrideRow,
+  type MemberSinceOverrideRow,
   type MembershipOrderRow,
   type ExtraMembershipOrderRow,
   type MissingOrderRow,
@@ -89,21 +91,45 @@ const SLACK_TABLES: {
   { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS], members: false },
 ];
 
-/** The consolidations page's two tables; `key` names each one's CSV download. */
-const CONSOLIDATION_TABLES = [
+type ConsolidationRow = AttributedOrderRow | CardNameOverrideRow | MemberSinceOverrideRow;
+
+/**
+ * The consolidations page's three tables. `key` names each one's CSV
+ * download; `columns` are the page's, and `csvColumns` the download's where
+ * they differ (the page folds who set an override into one "Set by" cell).
+ */
+const CONSOLIDATION_TABLES: {
+  key: string;
+  field: keyof Consolidations;
+  title: string;
+  columns: readonly string[];
+  headings: readonly string[];
+  csvColumns?: readonly string[];
+}[] = [
   {
     key: "attributed-orders",
+    field: "attributed",
     title: "Orders attributed to another address",
     columns: ["order_id", "first_name", "last_name", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
     headings: ["Order", "First name", "Last name", "Order email", "Attributed to", "Started", "Changed (UTC)", "Changed by", "Note"],
   },
   {
-    key: "duplicate-names",
-    title: "Billing names under more than one address",
-    columns: ["name", "member_email", "orders", "latest_expires"],
-    headings: ["Name", "Attributed to", "Orders", "Latest expiry"],
+    key: "card-names",
+    field: "cardNames",
+    title: "Card names set by hand",
+    columns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_at", "note", "order_id"],
+    headings: ["Member", "Card shows", "Name from orders", "Compared", "Set by", "Set (UTC)", "Note", "Latest order"],
+    csvColumns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
   },
-] as const;
+  {
+    key: "member-since",
+    field: "memberSince",
+    title: "\u201cMember since\u201d corrections",
+    columns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_at", "note", "order_id"],
+    headings: ["Member", "Card shows", "Date from orders", "Compared", "Set by", "Set (UTC)", "Note", "Earliest order"],
+    csvColumns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
+  },
+];
 
 class BadRequest extends Error {}
 
@@ -276,20 +302,39 @@ function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[
   });
 }
 
+/** Epoch ms as `YYYY-MM-DD HH:MM` (UTC). */
+function minuteText(ms: unknown): string {
+  return new Date(Number(ms)).toISOString().slice(0, 16).replace("T", " ");
+}
+
+/**
+ * Who set an override, in one cell: the member themselves, the admin who did
+ * (or "an admin" once their account is gone), or the previous site, whose
+ * rows the legacy import carried across.
+ */
+function overrideSetBy(row: CardNameOverrideRow | MemberSinceOverrideRow): string {
+  if (row.source === "member") return "the member";
+  if (row.source === "legacy_postgres") return "previous site";
+  return row.set_by ?? "an admin";
+}
+
 /**
  * One consolidations cell: order ids link to their admin page, addresses to
  * their member, timestamps read as dates. `attributed_by` is an admin, not a
- * member, so it stays text.
+ * member, so it stays text. An override's comparison with its orders reads
+ * as a word, so the table's filter box can find "same" -- an override that
+ * has come to match its orders changes nothing and could be cleared.
  */
-function consolidationCell(row: AttributedOrderRow | DuplicateNameRow, column: string) {
+function consolidationCell(row: ConsolidationRow, column: string) {
   const value = row[column];
-  if (column === "order_id") return <OrderLink orderId={String(value)} />;
+  if (column === "order_id") return value === null ? "" : <OrderLink orderId={String(value)} />;
   if ((column === "order_email" || column === "member_email") && typeof value === "string") {
     return <MemberLink email={value} />;
   }
-  if (column === "attributed_at") {
-    return value === null ? "legacy import" : new Date(Number(value)).toISOString().slice(0, 16).replace("T", " ");
-  }
+  if (column === "attributed_at") return value === null ? "legacy import" : minuteText(value);
+  if (column === "set_at") return minuteText(value);
+  if (column === "source") return overrideSetBy(row as CardNameOverrideRow | MemberSinceOverrideRow);
+  if (column === "same_as_orders") return value === null ? "no card" : value ? "same" : "differs";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
   return value === null ? "" : String(value);
 }
@@ -534,11 +579,13 @@ reports.get("/slack", async (c) => {
 });
 
 /**
- * The legacy "Membership Consolidations" page: orders whose membership is
- * attributed to another address (by an admin, #70, or by the legacy import,
- * which knows each legacy user's current address), and billing names that
- * appear under several addresses -- one person with two accounts, probably.
- * Each order links to its admin page, where the attribution can be changed.
+ * The legacy "Membership Consolidations" page, grown to cover every choice
+ * that makes a card differ from its orders: attributions (by an admin, #70,
+ * or by the legacy import, which knows each legacy user's current address),
+ * card names set by hand, and corrected "member since" dates. It once also
+ * listed billing names found under several addresses; nothing followed from
+ * that list, so it went. Each order links to its admin page, each address to
+ * its member.
  */
 reports.get("/consolidations", async (c) => {
   const format = c.req.query("format");
@@ -547,10 +594,9 @@ reports.get("/consolidations", async (c) => {
     throw new BadRequest(`table must be one of ${CONSOLIDATION_TABLES.map((table) => table.key).join(", ")}`);
   }
   const result = await consolidations(c.env.DB);
-  const rowsFor = (key: string): (AttributedOrderRow | DuplicateNameRow)[] =>
-    key === "attributed-orders" ? result.attributed : result.duplicateNames;
+  const rowsFor = (table: (typeof CONSOLIDATION_TABLES)[number]): ConsolidationRow[] => result[table.field];
   if (csvTable) {
-    return new Response(toCsv(csvTable.columns, rowsFor(csvTable.key)), {
+    return new Response(toCsv([...(csvTable.csvColumns ?? csvTable.columns)], rowsFor(csvTable)), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="consolidations-${csvTable.key}-${toIsoSeconds(new Date()).slice(0, 10)}.csv"`,
@@ -560,12 +606,13 @@ reports.get("/consolidations", async (c) => {
   return c.html(
     <AdminPage title="Consolidations">
       <p>
-        Where a membership belongs to someone other than the address on its order, and where one billing name spans
-        several addresses. Cancelled, refunded, and test orders are left out of the name comparison. Follow an order
-        to change who it is attributed to.
+        Where a card says something other than its orders would, because somebody chose that: a membership attributed
+        to another address, a name set by hand, or a corrected &ldquo;member since&rdquo;. The last two sit beside
+        what the orders alone would give; one marked &ldquo;same&rdquo; has come to match them and changes nothing.
+        Follow an order to change who it is attributed to, or a member to change their card.
       </p>
       {CONSOLIDATION_TABLES.map((table) => {
-        const rows = rowsFor(table.key);
+        const rows = rowsFor(table);
         return (
           <section>
             <h2>

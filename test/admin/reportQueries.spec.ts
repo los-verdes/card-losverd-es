@@ -10,7 +10,7 @@ import {
   slackCrossReference,
   type MembershipOrderRow,
 } from "../../src/admin/reportQueries";
-import { insertOrder, insertSlackUser } from "./fixtures";
+import { insertCardName, insertMember, insertMemberSince, insertOrder, insertSlackUser } from "./fixtures";
 
 const AS_OF = "2026-06-01T12:00:00Z";
 
@@ -36,6 +36,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM member_display_names");
+  await env.DB.exec("DELETE FROM member_since_overrides");
+  await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
 });
 
@@ -236,20 +239,52 @@ describe("consolidations", () => {
     expect(attributed[0].note).toBe("change 2");
   });
 
-  it("groups billing names that appear under more than one address, ignoring void and unnamed orders", async () => {
-    await insertOrder({ id: "1", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "2", email: "pat@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
-    await insertOrder({ id: "3", email: "p.lee@example.com", first: "pat", last: " Lee ", created: "2024-01-15T00:00:00Z" });
-    await insertOrder({ id: "4", email: "solo@example.com", first: "Solo", last: "Member", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "5", email: "void@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z", status: "Refunded" });
-    await insertOrder({ id: "6", email: "nameless@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "7", email: "nameless2@example.com", first: "", last: "", created: "2026-01-15T00:00:00Z" });
+  it("lists card names set by hand beside the name the orders give, and links the order it comes from", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, 'boss@example.com', 1)").run();
+    await insertOrder({ id: "1", email: "pat@example.com", first: "Patricia", last: "Lee", created: "2024-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "3", email: "pat@example.com", first: "Wrong", last: "Name", created: "2026-02-15T00:00:00Z", status: "Refunded" });
+    await insertMember({ id: "LV-1", email: "pat@example.com", first: "Pat", last: "Lee", memberSince: "2024-01-15" });
+    await insertMember({ id: "LV-2", email: "sam@example.com", first: "Sam", last: "Ray", memberSince: "2025-05-01" });
+    await insertCardName({ email: "pat@example.com", name: "P. Lee", source: "admin", setBy: 9, note: "asked by email", at: 3000 });
+    await insertCardName({ email: "sam@example.com", name: " sam ray ", source: "member", at: 2000 });
+    await insertCardName({ email: "gone@example.com", name: "Old Name", source: "legacy_postgres", at: 1000 });
 
-    const { duplicateNames } = await consolidations(env.DB);
+    const { cardNames } = await consolidations(env.DB);
 
-    expect(duplicateNames).toEqual([
-      { name: "pat lee", member_email: "p.lee@example.com", orders: 1, latest_expires: "2025-01-15T00:00:00Z" },
-      { name: "pat lee", member_email: "pat@example.com", orders: 2, latest_expires: "2027-01-15T00:00:00Z" },
+    expect(cardNames).toEqual([
+      {
+        member_email: "pat@example.com", display_name: "P. Lee", order_name: "Pat Lee", same_as_orders: 0,
+        source: "admin", set_by: "boss@example.com", set_at: 3000, note: "asked by email",
+        // The latest counted order; the refunded one after it names nobody.
+        order_id: "2",
+      },
+      expect.objectContaining({ member_email: "sam@example.com", same_as_orders: 1, source: "member", set_by: null, order_id: null }),
+      // Carried over from the previous site for an address with no card here.
+      expect.objectContaining({ member_email: "gone@example.com", order_name: null, same_as_orders: null, order_id: null }),
+    ]);
+  });
+
+  it("lists corrected member-since dates beside the date the orders give, and links the earliest order", async () => {
+    await insertOrder({ id: "1", email: "pat@example.com", created: "2024-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "pat@example.com", created: "2026-01-15T00:00:00Z" });
+    await insertOrder({ id: "sq-void", source: "squarespace", email: "pat@example.com", created: "2019-01-15T00:00:00Z", status: "CANCELED", counted: 0 });
+    await insertMember({ id: "LV-1", email: "pat@example.com", first: "Pat", last: "Lee", memberSince: "2024-01-15" });
+    await insertMember({ id: "LV-2", email: "sam@example.com", first: "Sam", last: "Ray", memberSince: "2025-05-01" });
+    await insertMemberSince({ email: "pat@example.com", date: "2018-06-01", source: "manual", note: "founding member", at: 2000 });
+    await insertMemberSince({ email: "sam@example.com", date: "2025-05-01", source: "legacy_postgres", at: 1000 });
+
+    const { memberSince } = await consolidations(env.DB);
+
+    expect(memberSince).toEqual([
+      {
+        member_email: "pat@example.com", member_since: "2018-06-01", order_member_since: "2024-01-15", same_as_orders: 0,
+        // An admin since removed: the correction stands, unattributed.
+        source: "manual", set_by: null, set_at: 2000, note: "founding member",
+        // The earliest counted order; the cancelled one before it never counted.
+        order_id: "1",
+      },
+      expect.objectContaining({ member_email: "sam@example.com", same_as_orders: 1, source: "legacy_postgres" }),
     ]);
   });
 });

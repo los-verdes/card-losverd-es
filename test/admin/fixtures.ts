@@ -72,3 +72,31 @@ export async function insertSlackUser(u: SlackUserFixture) {
     )
     .run();
 }
+
+/** A synthetic `members` row carrying the name and date the orders gave it. */
+export async function insertMember(m: { id: string; email: string; first: string; last: string; memberSince: string | null }) {
+  await env.DB.prepare(
+    `INSERT INTO members (member_id, first_name, last_name, email, member_since, auth_token, last_updated_at)
+     VALUES (?, ?, ?, ?, ?, 'token', 1)`,
+  )
+    .bind(m.id, m.first, m.last, m.email, m.memberSince)
+    .run();
+}
+
+/** A card name set by hand, as the member page or the legacy import writes it. */
+export async function insertCardName(o: { email: string; name: string; source: "member" | "admin" | "legacy_postgres"; setBy?: number; note?: string; at: number }) {
+  await env.DB.prepare(
+    "INSERT INTO member_display_names (email, display_name, source, note, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+  )
+    .bind(o.email, o.name, o.source, o.note ?? null, o.setBy ?? null, o.at)
+    .run();
+}
+
+/** A corrected "member since", as the admin page or the legacy import writes it. */
+export async function insertMemberSince(o: { email: string; date: string; source: "manual" | "legacy_postgres"; setBy?: number; note?: string; at: number }) {
+  await env.DB.prepare(
+    "INSERT INTO member_since_overrides (email, member_since, source, note, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+  )
+    .bind(o.email, o.date, o.source, o.note ?? null, o.setBy ?? null, o.at)
+    .run();
+}
