@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 describe("access control", () => {
-  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack", "/admin/reports/consolidations", "/admin/reports/missing"];
+  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/orders", "/admin/reports/slack", "/admin/reports/consolidations", "/admin/reports/missing", "/admin/reports/members"];
 
   it.each(PATHS)("%s sends an anonymous visitor to log in", async (path) => {
     const res = await get(path, null);
@@ -638,5 +638,74 @@ describe("the reports index, for the reports of things wanting action", () => {
 
     expect(body).toContain('<a href="/admin/reports/missing">Missing from BigCommerce</a>');
     expect(body).toContain('<a href="/admin/reports/extra-memberships">More than one membership</a>');
+  });
+});
+
+describe("GET /admin/reports/members", () => {
+  beforeEach(async () => {
+    vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
+    // Two members since 2024, one of whom lapsed; one who joined this year.
+    await insertOrder({ id: "1", email: "long@example.com", created: "2024-03-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "long@example.com", created: "2025-03-10T00:00:00Z" });
+    await insertOrder({ id: "3", email: "long@example.com", created: "2026-03-01T00:00:00Z" });
+    await insertOrder({ id: "4", email: "lapsed@example.com", created: "2024-07-01T00:00:00Z" });
+    await insertOrder({ id: "5", email: "new@example.com", created: "2026-02-01T00:00:00Z" });
+  });
+
+  it("compares the last three years by default, with today's count against a year ago", async () => {
+    const body = await (await get("/admin/reports/members")).text();
+
+    expect(body).toContain("<strong>2</strong> active members today");
+    // 1 Jun 2025: long, and lapsed before it lapsed a month later.
+    expect(body).toContain("against <strong>2</strong> on this day last year");
+    expect(body).toContain('<figure class="line-chart">');
+    // One line per year, the latest in verde, and a column per year.
+    expect(body.match(/<path class="line /g)).toHaveLength(3);
+    expect(body).toContain('<path class="line latest"');
+    expect(body).toMatch(/<th[^>]*>On the 1st of<\/th><th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
+    expect(body).toMatch(/<input type="checkbox" name="year" value="2024" checked/);
+  });
+
+  it("gives the count on the first of each month, blank for months still to come", async () => {
+    const body = await (await get("/admin/reports/members?year=2025&year=2026")).text();
+
+    // 1 Jan 2025: long (bought 2024-03-15) and lapsed (2024-07-01).
+    expect(body).toMatch(/>January<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td>/);
+    // 1 Jul 2025: lapsed has lapsed; 1 Jul 2026 has not happened yet.
+    expect(body).toMatch(/>July<\/td><td[^>]*>1<\/td><td[^>]*><\/td>/);
+    expect(body.match(/<path class="line /g)).toHaveLength(2);
+  });
+
+  it("shows every year as one line", async () => {
+    const body = await (await get("/admin/reports/members?view=timeline")).text();
+
+    expect(body.match(/<path class="line /g)).toHaveLength(1);
+    expect(body).toContain("2024–2026");
+    expect(body).toMatch(/<th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
+    expect(body).toContain('<a href="/admin/reports/members">Compare years instead</a>');
+  });
+
+  it("refuses a year it has no orders for", async () => {
+    const res = await get("/admin/reports/members?year=1999");
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("year must be one of 2024-2026");
+  });
+
+  it("downloads every day since the first order", async () => {
+    const res = await get("/admin/reports/members?format=csv");
+    const lines = (await res.text()).trimEnd().split("\r\n");
+
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="active-members-by-day-2026-06-01.csv"');
+    expect(lines[0]).toBe("date,active_members");
+    expect(lines[1]).toBe("2024-03-15,1");
+    expect(lines[lines.length - 1]).toBe("2026-06-01,2");
+  });
+
+  it("is listed on the reports index and in the nav", async () => {
+    const body = await (await get("/admin/reports")).text();
+
+    expect(body).toContain('<a href="/admin/reports/members">Active members over time</a>');
+    expect(body).toContain('href="/admin/reports/members"');
   });
 });

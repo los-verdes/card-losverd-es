@@ -24,13 +24,19 @@ const PLOT_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
- * The gap between the y axis's gridlines, for a chart whose tallest bar is
- * `max` orders. Always a whole number of orders, at least 1.
+ * The gap between the y axis's gridlines, for a chart whose tallest value is
+ * `max`: a round number (1, 2 or 5 times a power of ten) giving about five
+ * gridlines, so a tallest bar of 62 gets lines at 20, 40, 60 and a member
+ * count of 2,100 at 500, 1,000 and so on. Always a whole number, at least 1.
+ * Shared with the members-over-time chart (src/admin/lineChart.tsx).
  */
 export function tickStep(max: number): number {
-  // TODO(human): pick a "round" step. This placeholder divides by five and
-  // rounds up, so a tallest bar of 62 gets gridlines at 13, 26, 39...
-  return Math.max(1, Math.ceil(max / 5));
+  const rough = max / 5;
+  if (rough <= 1) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const normalised = rough / magnitude;
+  const round = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
+  return round * magnitude;
 }
 
 /** Gridline values from zero to the first one at or above `max`. */

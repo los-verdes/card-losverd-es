@@ -15,12 +15,15 @@ import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
+import { LineChart, type LineSeries } from "./lineChart";
+import { activeMembersByDay } from "./membersOverTime";
 import { MonthlyOrdersChart } from "./monthChart";
 import { OrderLink } from "./orders";
 import {
   activeMemberships,
   attentionCounts,
   consolidations,
+  countedMembershipOrders,
   expiredMemberships,
   listChannels,
   missingOrders,
@@ -374,8 +377,12 @@ reports.get("/", async (c) => {
           <a href="/admin/reports/orders">Orders by month</a>: this year against last year.
         </li>
         <li>
+          <a href="/admin/reports/members">Active members over time</a>: how many members there were on each
+          day, any years side by side.
+        </li>
+        <li>
           <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
-          names under several addresses.
+          card names and "member since" dates set by hand.
         </li>
         <li>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
@@ -502,6 +509,139 @@ reports.get("/orders", async (c) => {
             <th style={cellStyle}>{total}</th>
           </tr>
         </tfoot>
+      </ReportTable>
+    </AdminPage>,
+  );
+});
+
+const MEMBERS_OVER_TIME_PATH = "/admin/reports/members";
+
+/** How many years the year-by-year view shows unless asked for others. */
+const DEFAULT_YEARS_SHOWN = 3;
+
+/** Parses the repeated `year` parameter; empty means the default. */
+function chosenYears(raw: string[], available: number[]): number[] {
+  const years = raw.filter((value) => value !== "").map(Number);
+  for (const year of years) {
+    if (!available.includes(year)) {
+      throw new BadRequest(`year must be one of ${available[0]}-${available[available.length - 1]}`);
+    }
+  }
+  const chosen = [...new Set(years)].sort((a, b) => a - b);
+  return chosen.length > 0 ? chosen : available.slice(-DEFAULT_YEARS_SHOWN);
+}
+
+/**
+ * How many people held an active membership over time
+ * (src/admin/membersOverTime.ts), as one line per year over the same
+ * January-to-December axis -- so a season in one year sits over the same
+ * season in another -- or as one line across every year. Beneath it, the
+ * count on the first of each month; the download has every day.
+ */
+reports.get("/members", async (c) => {
+  const today = toIsoSeconds(new Date()).slice(0, 10);
+  const orders = await countedMembershipOrders(c.env.DB);
+  const firstDay = orders.reduce((min, order) => (order.created_on < min ? order.created_on : min), today).slice(0, 10);
+  const series = activeMembersByDay(orders, firstDay, today);
+  const onDay = new Map(series.map((point) => [point.day, point.members]));
+
+  if (c.req.query("format") === "csv") {
+    return new Response(toCsv(["date", "active_members"], series.map((point) => ({ date: point.day, active_members: point.members }))), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="active-members-by-day-${today}.csv"`,
+      },
+    });
+  }
+
+  const thisYear = Number(today.slice(0, 4));
+  const available = Array.from({ length: thisYear - Number(firstDay.slice(0, 4)) + 1 }, (_, i) => Number(firstDay.slice(0, 4)) + i);
+  const timeline = c.req.query("view") === "timeline";
+  const years = timeline ? available : chosenYears(c.req.queries("year") ?? [], available);
+
+  // Year by year: each year's days placed by day of the year. All years:
+  // every day since the first order, placed by how far along it is.
+  const yearStart = (year: number) => Date.UTC(year, 0, 1);
+  const chartSeries: LineSeries[] = timeline
+    ? [{
+        label: `${available[0]}–${thisYear}`,
+        points: series.map((point, i) => ({ x: series.length > 1 ? i / (series.length - 1) : 0, value: point.members })),
+      }]
+    : years.map((year) => ({
+        label: String(year),
+        points: series
+          .filter((point) => point.day.startsWith(`${year}-`))
+          .map((point) => ({ x: Math.min((Date.parse(point.day) - yearStart(year)) / (365 * 86_400_000), 1), value: point.members })),
+      }));
+  const span = Date.parse(today) - Date.parse(firstDay);
+  const xLabels = timeline
+    ? available
+        .map((year) => ({ x: span > 0 ? (yearStart(year) - Date.parse(firstDay)) / span : 0, text: String(year) }))
+        .filter((label) => label.x >= 0)
+    : MONTH_NAMES.map((name, i) => ({ x: (Date.UTC(2025, i, 15) - Date.UTC(2025, 0, 1)) / (365 * 86_400_000), text: name.slice(0, 3) }));
+
+  const lastYearToday = `${thisYear - 1}${today.slice(4)}`;
+  const monthStart = (year: number, month: number) => `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const viewHref = (params: Record<string, string>) => `${MEMBERS_OVER_TIME_PATH}?${new URLSearchParams(params)}`;
+
+  return c.html(
+    <AdminPage title="Active members over time">
+      <p>
+        <strong>{(onDay.get(today) ?? 0).toLocaleString("en-US")}</strong> active members today
+        {onDay.has(lastYearToday) && (
+          <>
+            , against <strong>{(onDay.get(lastYearToday) ?? 0).toLocaleString("en-US")}</strong> on this day
+            last year
+          </>
+        )}
+        . Counted as the <a href="/admin/reports/active">Active memberships</a> report counts them, for each day.
+      </p>
+      <form method="get" action={MEMBERS_OVER_TIME_PATH} style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin: 1rem 0">
+        <fieldset style="border: 0; padding: 0; margin: 0">
+          <legend>Years to compare</legend>
+          {available.map((year) => (
+            <label style="margin-right: 0.6rem">
+              <input type="checkbox" name="year" value={String(year)} checked={!timeline && years.includes(year)} /> {year}
+            </label>
+          ))}
+        </fieldset>
+        <button type="submit">Compare</button>
+        <span>
+          or <a href={viewHref({ view: "timeline" })}>see every year as one line</a>
+        </span>
+      </form>
+      {timeline && (
+        <p>
+          <a href={MEMBERS_OVER_TIME_PATH}>Compare years instead</a>
+        </p>
+      )}
+      <LineChart
+        series={chartSeries}
+        xLabels={xLabels}
+        description={
+          timeline
+            ? `Active members each day from ${firstDay} to ${today}; the table below has the count on the first of each month.`
+            : `Active members each day of ${years.join(", ")}, one line per year; the table below has the count on the first of each month.`
+        }
+      />
+      <ReportTable
+        headings={["On the 1st of", ...years.map(String)]}
+        csvHref={`${MEMBERS_OVER_TIME_PATH}?format=csv`}
+        csvLabel="Download every day as CSV"
+        rowCount={12}
+      >
+        <tbody>
+          {MONTH_NAMES.map((name, month) => (
+            <tr>
+              <td style={cellStyle} data-sort={String(month + 1).padStart(2, "0")}>
+                {name}
+              </td>
+              {years.map((year) => (
+                <td style={cellStyle}>{onDay.get(monthStart(year, month))?.toLocaleString("en-US") ?? ""}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
       </ReportTable>
     </AdminPage>,
   );

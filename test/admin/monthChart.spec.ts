@@ -22,6 +22,17 @@ describe("the orders-by-month chart's axis", () => {
     },
   );
 
+  it.each([
+    [62, 20],
+    [100, 20],
+    [480, 100],
+    [2100, 500],
+    [1234, 500],
+    [9, 2],
+  ])("steps a tallest value of %i by a round %i", (max, step) => {
+    expect(tickStep(max)).toBe(step);
+  });
+
   it("draws a chart for a year with no orders at all, rather than dividing by zero", () => {
     expect(ticks(0)).toEqual([0, 1]);
   });

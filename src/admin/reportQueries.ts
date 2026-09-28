@@ -9,6 +9,7 @@
  */
 
 import { COUNTS_AS_MEMBERSHIP, MEMBER_IN_GOOD_STANDING } from "../lib/membershipOrders";
+import type { CountedOrder } from "./membersOverTime";
 
 /**
  * Narrowing by name or address happens in the browser, over the table
@@ -254,6 +255,21 @@ export async function slackCrossReference(
     slackWithoutOrders: rows(slackOnly),
     slackSyncedAt: (synced.results[0] as { synced_at: number | null }).synced_at,
   };
+}
+
+/**
+ * Every order counting towards a membership, by the Active report's rule
+ * with its date left open, for the members-over-time report
+ * (src/admin/membersOverTime.ts), which works out each day from them.
+ */
+export async function countedMembershipOrders(db: D1Database): Promise<CountedOrder[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT member_email, created_on, expires_on FROM membership_orders
+       WHERE ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}`,
+    )
+    .all<CountedOrder>();
+  return results;
 }
 
 /** Distinct channels, for the filter dropdown. */
