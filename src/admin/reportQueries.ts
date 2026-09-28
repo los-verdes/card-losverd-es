@@ -280,32 +280,66 @@ export interface AttributedOrderRow {
   note: string | null;
 }
 
-export interface DuplicateNameRow {
+/** A card name somebody chose, beside the one the orders would give (`member_display_names`). */
+export interface CardNameOverrideRow {
   [key: string]: string | number | null;
-  name: string;
   member_email: string;
-  orders: number;
-  latest_expires: string;
+  /** What the card shows. */
+  display_name: string;
+  /** What it would show without the override; null with no card (no `members` row). */
+  order_name: string | null;
+  /** 1 when the two match ignoring case and outer spaces, 0 when not, null with no card. */
+  same_as_orders: number | null;
+  /** `member`, `admin`, or `legacy_postgres` (carried over from the previous site). */
+  source: string;
+  /** The admin who set it, when one did and still exists. */
+  set_by: string | null;
+  /** Epoch ms. */
+  set_at: number;
+  note: string | null;
+  /** The latest counted order: the one the order name comes from. */
+  order_id: string | null;
+}
+
+/** A corrected "member since", beside the date the orders give (`member_since_overrides`). */
+export interface MemberSinceOverrideRow {
+  [key: string]: string | number | null;
+  member_email: string;
+  /** What the card shows (`YYYY-MM-DD`). */
+  member_since: string;
+  /** The earliest counted order's date; null with no card. */
+  order_member_since: string | null;
+  same_as_orders: number | null;
+  /** `manual` (an admin) or `legacy_postgres` (carried over from the previous site). */
+  source: string;
+  set_by: string | null;
+  set_at: number;
+  note: string | null;
+  /** The earliest counted order: the one the order date comes from. */
+  order_id: string | null;
 }
 
 export interface Consolidations {
   /** Orders whose membership is attributed to an address other than the one on the order. */
   attributed: AttributedOrderRow[];
-  /** One row per (billing name, member email) where a name spans several addresses. */
-  duplicateNames: DuplicateNameRow[];
+  /** Every card name set by hand. */
+  cardNames: CardNameOverrideRow[];
+  /** Every corrected "member since". */
+  memberSince: MemberSinceOverrideRow[];
 }
 
 /**
- * The two halves of the legacy "Membership Consolidations" report: orders
- * attributed elsewhere (by an admin, #70, or by the legacy import, which
- * carries each legacy user's current address), and billing names that appear
- * under more than one member email -- the same person, probably, with two
- * addresses.
+ * Where a card says something other than its orders would, because somebody
+ * chose that: orders attributed elsewhere (by an admin, #70, or by the
+ * legacy import, which carries each legacy user's current address), card
+ * names set by hand, and corrected "member since" dates. The last two sit
+ * beside what the orders alone would give, so an override that has come to
+ * match its orders -- and could be cleared -- stands out, as does one that
+ * looks nothing like them. Newest change first throughout.
  */
 export async function consolidations(db: D1Database): Promise<Consolidations> {
-  // Each part trimmed as well as the whole, so "Pat" + " Lee " matches "Pat" + "Lee".
-  const fullName = "trim(COALESCE(trim(first_name), '') || ' ' || COALESCE(trim(last_name), ''))";
-  const [attributed, duplicateNames] = await db.batch<Record<string, unknown>>([
+  const orderName = "trim(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, ''))";
+  const [attributed, cardNames, memberSince] = await db.batch<Record<string, unknown>>([
     db.prepare(
       `SELECT o.order_id, o.first_name, o.last_name, o.order_email, o.member_email, o.created_on,
               a.created_at AS attributed_at, u.email AS attributed_by, a.note
@@ -317,20 +351,35 @@ export async function consolidations(db: D1Database): Promise<Consolidations> {
        ORDER BY COALESCE(a.created_at, 0) DESC, o.order_id`,
     ),
     db.prepare(
-      `WITH named AS (
-         SELECT lower(${fullName}) AS name, member_email, COUNT(*) AS orders, MAX(expires_on) AS latest_expires
-         FROM membership_orders
-         WHERE ${COUNTS_AS_MEMBERSHIP} AND ${fullName} <> ''
-         GROUP BY lower(${fullName}), member_email
-       )
-       SELECT name, member_email, orders, latest_expires FROM named
-       WHERE name IN (SELECT name FROM named GROUP BY name HAVING COUNT(*) > 1)
-       ORDER BY name, member_email`,
+      `SELECT d.email AS member_email, d.display_name,
+              CASE WHEN m.email IS NULL THEN NULL ELSE ${orderName} END AS order_name,
+              CASE WHEN m.email IS NULL THEN NULL ELSE lower(trim(d.display_name)) = lower(${orderName}) END AS same_as_orders,
+              d.source, u.email AS set_by, d.updated_at AS set_at, d.note,
+              (SELECT order_id FROM membership_orders
+                WHERE member_email = d.email AND ${COUNTS_AS_MEMBERSHIP}
+                ORDER BY created_on DESC LIMIT 1) AS order_id
+       FROM member_display_names d
+       LEFT JOIN members m ON m.email = d.email
+       LEFT JOIN users u ON u.id = d.set_by
+       ORDER BY d.updated_at DESC, d.email`,
+    ),
+    db.prepare(
+      `SELECT s.email AS member_email, s.member_since, m.member_since AS order_member_since,
+              CASE WHEN m.email IS NULL THEN NULL ELSE s.member_since = COALESCE(m.member_since, '') END AS same_as_orders,
+              s.source, u.email AS set_by, s.updated_at AS set_at, s.note,
+              (SELECT order_id FROM membership_orders
+                WHERE member_email = s.email AND ${COUNTS_AS_MEMBERSHIP}
+                ORDER BY created_on ASC LIMIT 1) AS order_id
+       FROM member_since_overrides s
+       LEFT JOIN members m ON m.email = s.email
+       LEFT JOIN users u ON u.id = s.set_by
+       ORDER BY s.updated_at DESC, s.email`,
     ),
   ]);
   return {
     attributed: attributed.results as unknown as AttributedOrderRow[],
-    duplicateNames: duplicateNames.results as unknown as DuplicateNameRow[],
+    cardNames: cardNames.results as unknown as CardNameOverrideRow[],
+    memberSince: memberSince.results as unknown as MemberSinceOverrideRow[],
   };
 }
 

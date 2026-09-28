@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { TABLE_FILTER_SCRIPT } from "../../src/admin/tableFilter";
 import worker from "../../src/index";
-import { insertOrder, insertSlackUser } from "./fixtures";
+import { insertCardName, insertMember, insertMemberSince, insertOrder, insertSlackUser } from "./fixtures";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -36,6 +36,9 @@ afterEach(async () => {
   vi.useRealTimers();
   await env.DB.exec("DELETE FROM membership_order_attributions");
   await env.DB.exec("DELETE FROM membership_orders");
+  await env.DB.exec("DELETE FROM member_display_names");
+  await env.DB.exec("DELETE FROM member_since_overrides");
+  await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
 });
 
@@ -380,7 +383,10 @@ describe("GET /admin/reports/consolidations", () => {
   beforeEach(async () => {
     await insertOrder({ id: "10", email: "buyer@example.com", memberEmail: "recipient@example.com", first: "Buy", last: "Er", created: "2026-01-15T00:00:00Z" });
     await insertOrder({ id: "11", email: "pat@example.com", first: "Pat", last: "Lee", created: "2026-01-15T00:00:00Z" });
-    await insertOrder({ id: "12", email: "p.lee@example.com", first: "Pat", last: "Lee", created: "2025-01-15T00:00:00Z" });
+    await insertMember({ id: "LV-1", email: "pat@example.com", first: "Pat", last: "Lee", memberSince: "2026-01-15" });
+    await insertCardName({ email: "pat@example.com", name: "P. Lee", source: "admin", setBy: ADMIN_ID, note: "asked", at: 1700000000000 });
+    await insertCardName({ email: "sam@example.com", name: "Sam", source: "member", at: 1600000000000 });
+    await insertMemberSince({ email: "pat@example.com", date: "2018-06-01", source: "legacy_postgres", at: 1500000000000 });
     await env.DB.prepare(
       `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note, created_at)
        VALUES ('10', 'buyer@example.com', 'recipient@example.com', ?, 'gift', 1700000000000)`,
@@ -389,19 +395,36 @@ describe("GET /admin/reports/consolidations", () => {
       .run();
   });
 
-  it("shows both tables, links each order to its admin page, and dates the change", async () => {
+  it("shows all three tables, links each order to its admin page, and dates the change", async () => {
     const body = await (await get("/admin/reports/consolidations")).text();
 
     expect(body).toContain("Orders attributed to another address (1)");
     expect(body).toContain('<a href="/admin/orders/10">10</a>');
     expect(body).toContain('<a href="/admin/members?q=buyer%40example.com">buyer@example.com</a>');
     expect(body).toContain('<a href="/admin/members?q=recipient%40example.com">recipient@example.com</a>');
-    expect(body).toContain('<a href="/admin/members?q=p.lee%40example.com">p.lee@example.com</a>');
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
     // Who made the change is an admin, not a member.
     expect(body).toMatch(/<td[^>]*>admin@example\.com<\/td>/);
-    expect(body).toContain("Billing names under more than one address (2)");
-    expect(body).toContain("pat lee");
+    expect(body).not.toContain("Billing names");
+  });
+
+  it("shows card names set by hand beside the name from the orders, and says who set each", async () => {
+    const body = await (await get("/admin/reports/consolidations")).text();
+
+    expect(body).toContain("Card names set by hand (2)");
+    const pat = body.slice(body.indexOf("Card names set by hand"));
+    expect(pat).toMatch(
+      /<a href="\/admin\/members\?q=pat%40example\.com">pat@example\.com<\/a><\/td><td[^>]*>P\. Lee<\/td><td[^>]*>Pat Lee<\/td><td[^>]*>differs<\/td><td[^>]*>admin@example\.com<\/td><td[^>]*>2023-11-14 22:13<\/td><td[^>]*>asked<\/td><td[^>]*><a href="\/admin\/orders\/11">11<\/a><\/td>/,
+    );
+    // A member who set their own name, with no card here: nothing to compare.
+    expect(pat).toMatch(/>Sam<\/td><td[^>]*><\/td><td[^>]*>no card<\/td><td[^>]*>the member<\/td>/);
+  });
+
+  it("shows corrected member-since dates beside the date from the orders", async () => {
+    const body = await (await get("/admin/reports/consolidations")).text();
+
+    expect(body).toContain("\u201cMember since\u201d corrections (1)");
+    expect(body).toMatch(/>2018-06-01<\/td><td[^>]*>2026-01-15<\/td><td[^>]*>differs<\/td><td[^>]*>previous site<\/td>/);
   });
 
   it("marks an attribution the legacy import made, rather than an admin", async () => {
@@ -419,12 +442,18 @@ describe("GET /admin/reports/consolidations", () => {
     expect(csv).toContain("order_id,first_name,last_name,order_email,member_email,created_on,attributed_at,attributed_by,note");
     expect(csv).toContain("10,Buy,Er,buyer@example.com,recipient@example.com");
 
-    const names = await get("/admin/reports/consolidations?table=duplicate-names&format=csv");
-    expect(await names.text()).toContain("pat lee,p.lee@example.com,1,");
+    // The download keeps who set an override apart from how, and the raw values.
+    const names = (await (await get("/admin/reports/consolidations?table=card-names&format=csv")).text()).split("\r\n");
+    expect(names[0]).toBe("member_email,display_name,order_name,same_as_orders,source,set_by,set_at,note,order_id");
+    expect(names).toContain("pat@example.com,P. Lee,Pat Lee,0,admin,admin@example.com,1700000000000,asked,11");
 
-    const bad = await get("/admin/reports/consolidations?table=nope&format=csv");
+    const since = (await (await get("/admin/reports/consolidations?table=member-since&format=csv")).text()).split("\r\n");
+    expect(since[0]).toBe("member_email,member_since,order_member_since,same_as_orders,source,set_by,set_at,note,order_id");
+    expect(since[1]).toBe("pat@example.com,2018-06-01,2026-01-15,0,legacy_postgres,,1500000000000,,11");
+
+    const bad = await get("/admin/reports/consolidations?table=duplicate-names&format=csv");
     expect(bad.status).toBe(400);
-    expect(await bad.text()).toContain("table must be one of attributed-orders, duplicate-names");
+    expect(await bad.text()).toContain("table must be one of attributed-orders, card-names, member-since");
   });
 
   it("shows every row of a long table, with the full count in the CSV link above it", async () => {
