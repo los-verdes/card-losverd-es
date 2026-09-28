@@ -49,6 +49,7 @@ Not built yet: MiniBC renewal data (see the provenance document), and a look at 
 | `/admin/preflight` | Whether this environment is ready: credentials, storage, integrations, and the steps still needing a person (`src/admin/preflight.tsx`) | Admin |
 | `/assets/:name` | Public images, allow-listed; Google Wallet fetches the pass logo from here (`src/assets.ts`) | Public |
 | `/healthz` | Liveness check | Public |
+| `/robots.txt` | Production opens the sign-in page, the privacy policy and `/assets/` to crawlers and closes the rest; every other environment closes everything (`src/robots.ts`) | Public |
 
 Behind the routes:
 

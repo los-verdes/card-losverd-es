@@ -20,6 +20,7 @@ import emailCard from "./member/email-card";
 import portal from "./member/portal";
 import verifyPass from "./member/verify-pass";
 import privacy, { PRIVACY_PATH } from "./member/privacy";
+import robots from "./robots";
 import passkit from "./passkit/routes";
 import { handleQueueBatch } from "./queues";
 import type { EtlSyncMessage } from "./queues/etlSync";
@@ -164,6 +165,8 @@ app.get("/healthz", (c) => c.json({ status: "ok" }));
 // and anything that doesn't parse the HTML still do, and answering them with
 // a 404 on every visit is noise in a log kept for seven days.
 app.get("/favicon.ico", (c) => c.redirect("/assets/favicon.svg", 301));
+// Likewise asked for by every crawler; what it says differs by environment.
+app.route("/robots.txt", robots);
 app.route("/bigcommerce", bigcommerce);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
