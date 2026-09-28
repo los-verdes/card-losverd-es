@@ -1,54 +1,54 @@
 # Where Membership Card Information Comes From
 
-This document is written for the Merch Team, who administer the storefront and
-answer the questions that arrive at `merchteam@losverdesatx.org`. It explains
-where the information printed on a Los Verdes membership card comes from, and
-how the software decides whether someone counts as a current member today.
-When a member writes in to say their card has incorrect details, this is the
-document that helps surface which rules produced what they are looking at.
+This document is written for Los Verdes and its members. In particular, these
+standing committees within Los Verdes are the primary audience:
 
-The Membership Committee (`mc@losverdesatx.org`) is consulted on all of it.
-These rules describe how membership works, so a change to any of them is
-worth their input. Beyond that, a subset of processes around membership are
-theirs outright: for instance, anything that settles a person's standing in
-the group, such as disciplinary action.
+* the Merch Team: they administer the storefront (which is the primary data
+source for membership cards) and answer membership questions and the like that
+arrive at `merchteam@losverdesatx.org`.
+* the Membership Committee (`mc@losverdesatx.org`): they have "Membership" in
+their name plus some process membership are their purview explicitly (e.g. for
+instance, anything that settles a person's standing in the group, such as
+disciplinary action.)
 
-This is a description of what the code does right now. It documents the
-current implementation explicitly, for reference, _and also_ to invite
-feedback and proposals to change that implementation. Code and database names
-appear in `backticks` after each plain-English statement, for anyone who wants
-to check a claim against the source.
-
-Because it is how the group's stakeholders see the way membership works, this
-document is the specification the rest of the repository follows. Where it and
-the code disagree, the code should be updated to match this document (or the
-document amended).
+It turns out that deciding what is on someone's "membership card" is effectively
+the same as deciding who is an active Los Verdes member. So we have documented
+the membership card site's ("app's") current implementation here both for
+reference _and also_ to invite feedback and proposals to change that
+implementation / rules for deciding membership.
 
 The last section, [Decisions worth confirming](#9-decisions-worth-confirming),
-gathers the places where the software had to pick a rule and where a different
-policy would be equally easy to implement. That is the most useful section to
-take to the Membership Committee, though feedback on any part of this is
-welcome.
+gathers the places where the app had to pick a rule and where a different
+policy would be equally easy to implement. This section in particular is seeking
+feedback from any interested folks.
 
 ## 1. The short version
 
-* Los Verdes storefront orders are used to determine membership. Every
-  card is rebuilt from a person's order history; the card itself stores no
-  independent state.
-* Only orders containing a membership product are recorded at all. Merch
-  never reaches this system, and BigCommerce remains the authoritative record
-  of what was bought ([section 3](#3-what-an-order-is-and-where-it-comes-from)).
-* Not every order counts. A BigCommerce order counts only once it is paid.
-* Orders from before February 2023, when Los Verdes moved to BigCommerce, are
-  described in [the appendix](#appendix-orders-from-before-bigcommerce).
-* All of one person's counted orders collapse into a single membership and a
-  single card. The card's "good through" date is the furthest expiry among
-  them; "member since" is the earliest order, unless a recorded override says
-  otherwise.
-* A person is identified by email address. An order can be pointed at somebody
-  other than the person who paid, which is how gift purchases work.
+* Membership is derived from membership orders made on the [Los Verdes store](https://store.losverdesatx.org/membership/).
+  * All of a person's counted membership orders collapse into a single "membership".
+  * Members are identified by email address (by default the order's email but they can be attributed to another email)
+  * A membership is active for `<most recent order date>` + `365 days`
+* In this app:
+  * membership card content is based on this exact same order history
+  * on cards, the "member since" field is the earliest order's date (unless a recorded override says
+  otherwise)
+  * only orders containing a membership product are considered at all. For instance,
+    an order for a shirt isn't recorded here. (ref: [section 3](#3-what-an-order-is-and-where-it-comes-from)).
+
+Note: orders from before February 2023, when Los Verdes moved from Squarespace to
+BigCommerce for membership orders, are described in [the appendix](#appendix-orders-from-before-bigcommerce).
 
 ## 2. How it fits together
+
+The membership card app learns of orders through incoming notifications from the
+store (specifically incoming webhooks from BigCommerce whenever an order is updated).
+It also runs regular resyncs to catch any order update notifications that are
+lost along the way.
+
+As orders come in, we check to see if they count for membership (covered in
+[the next section]((#3-what-an-order-is-and-where-it-comes-from))). For the
+orders that do count, we group them by member and use that aggregate information
+to decide facts about their membership:
 
 ```mermaid
 %% Keep every label to a few words a line. Mermaid no longer grows a box to
@@ -70,117 +70,46 @@ flowchart TD
     CARD --> F4["Card number<br/>assigned once"]
 ```
 
-One bit of code derives membership from order history
-(`refreshMemberFromOrders()` in `src/bigcommerce/sync.ts`). It runs whenever
-an order arrives or changes, when the scheduled resync revisits an order, and
-when an order is re-attributed by hand. Each run recomputes the whole
-membership from the whole history rather than nudging the previous answer,
-which is why a refund or a correction takes effect on its own, and why the
-result does not depend on the order in which orders happen to arrive.
-
-The diagram keeps its labels short so they render legibly; the exact statuses
-behind "does this order count" are in
-[section 5](#5-how-the-software-decides-who-is-a-current-member), and what an
-order is in the first place is the next section.
+There is one specific bit of code that does the membership-from-order-history
+calculations (`refreshMemberFromOrders()` in `src/bigcommerce/sync.ts`). This code
+runs whenever an order arrives or changes, when the scheduled resync revisits an
+order, and when an order is re-attributed by hand. Each run recomputes the whole
+membership from the whole history.
 
 ## 3. What an order is, and where it comes from
 
 Everything on a card is derived from orders, so it matters exactly what counts
-as one, and how far our list of them can be trusted to match the storefront's.
+as one, and that this app's accounting of orders matches the store's.
 
 ### What makes an order a membership order
 
 An order becomes a membership order when one of the products on it is a
-membership. The SKU is what decides: the software holds an explicit list of
+membership. The product SKU is what decides this: the app holds an list of
 membership SKUs (`MEMBERSHIP_SKUS` in `src/bigcommerce/sync.ts`, currently the
 single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
-its line items matches. Everything else the
-storefront sells passes by untouched: an order for a scarf creates no record,
-and an order containing both a scarf and a membership is recorded as the
-membership it contains.
+its line items matches. No other orders are considered for the app.
 
-### One order, one membership
+### One order per membership
 
-This software depends on an arrangement it does not control and does not
-enforce: **a single order never carries more than one membership.** That is
-maintained in the storefront's own configuration, which is the Merch Team's
-side of the boundary rather than this software's.
+This app's logic expects that **a single order always has a single membership in
+it.**. This is a constraint of how orders are stored rather than a strict
+requirement ([#198](https://github.com/los-verdes/card-losverd-es/issues/198) describes
+some potential alternatives).
 
-The dependency is not a detail of one function. Order history is keyed on the
-order's own id (`membership_orders.order_id` is the primary key), so an order
-has exactly one row and one membership to give. Attribution works at the same
-grain: re-pointing a gift moves the whole order to the recipient
-([section 8](#8-gift-purchases-and-re-attributed-orders)), because an order is
-the smallest thing that can be pointed at anybody.
+Given the current arrangements, an order with two memberships would see one of them
+uncounted. Given this, we restrict one membership product per order
+with the LV store (we do now but it was not always so historically).
 
-There are two ways an order can carry a second membership: two membership
-line items, or one line item with a quantity above one. Either way exactly one
-membership is recorded, attributed to whoever paid, and the second produces no
-card. Somebody has paid for a membership that does not exist, which is the
-case the report below exists for.
-
-**So two memberships mean two orders.** A member buying one for someone else
-as well as renewing their own should place separate orders, and the gift order
-is then re-attributed to the recipient.
-
-That is a constraint of how orders are stored rather than a law of nature.
-Giving every membership line item its own row would lift it, and was
-considered and set aside as not worth the added complexity
-([#198](https://github.com/los-verdes/card-losverd-es/issues/198)); the
-reasoning is there if the question comes back.
-
-**This is checked.** Each time an order is read from the store, the
-memberships on it are counted across every line item, quantities included, and
-the number is recorded against the order
+**This is checked.** Since the one membership per order rule depends on the store,
+this app counts the number of memberships on an order
 (`membership_orders.membership_units`). An order carrying more than one is
 listed on the admin reports under "More than one membership" for as long as
-it still counts and has not expired -- after that nobody is owed a card for
-it, so the report says only how many such orders it leaves off -- and the
-first time one is seen it is announced in Slack.
+it still counts and has not expired.
 
-What the check deliberately does not do is change who is a member. The order
-still confers the one membership it is recorded as, exactly as it did before —
-the same choice made for orders the store stops returning. Revoking
-somebody's membership is a decision a person makes, and a line item is not a
-good enough reason to make it automatically. What the report says is the
-opposite: somebody has paid and is owed something, which is a thing to put
-right rather than a thing to take away.
+### BigCommerce is the record; the app is a copy
 
-The count is taken fresh on every sync, so an order corrected in BigCommerce —
-the extra refunded, or the quantity put back to one — drops off the report by
-itself. Orders loaded by the one-time legacy import carry no count at all,
-because the export has no line-item detail to count; that is recorded as
-unknown rather than as one.
-
-One consequence is worth stating plainly: **a membership sold under a SKU that
-is not on that list is invisible to this software.** It produces no card and
-appears in no report. Adding a new membership product to the storefront
-therefore means adding its SKU here too, which is a code change rather than a
-store setting, and is the first thing to check if a new product's buyers say
-they never received a card.
-
-### BigCommerce is the record; this is a copy
-
-**The storefront is authoritative.** Nothing in this software creates an
-order, and no screen in it can add one by hand. Every BigCommerce order here
-was read from the store, is keyed by the store's own order id
-(`membership_orders.order_id`) -- the same number the Merch Team sees in the
-store's admin and a member sees on their receipt -- and is refreshed from the
-store whenever it is read again.
-
-The exception is the orders from before February 2023, which were loaded once
-from the old system's database and have no storefront left to be re-read from.
-Everything in this section applies to BigCommerce orders; the imported ones
-cannot be repaired by reading them again, which is one reason they are
-described separately in
-[the appendix](#appendix-orders-from-before-bigcommerce).
-
-There is exactly one piece of order information this system holds that the
-storefront does not: who the membership is attributed to
-(`membership_orders.member_email`), which is what makes gifts and corrected
-addresses possible — see
-[section 8](#8-gift-purchases-and-re-attributed-orders). That field is
-deliberately never overwritten by a re-read. Every other field is the store's.
+**The storefront is authoritative.** Nothing in this app creates / modifies an
+order. Every order recorded here was read from the store.
 
 A copy arrives by two routes, which run the same code:
 
@@ -192,62 +121,41 @@ A copy arrives by two routes, which run the same code:
   not a webhook for it ever arrived, and once a week, early on Sunday, it
   re-reads every order in the store (`sync_subscriptions_etl`).
 
-### Why the copy can be trusted
+One thing on an order record are this app's rather than the store's: who the
+membership is attributed to (`membership_orders.member_email`; see
+[section 8](#8-gift-purchases-and-re-attributed-orders)).
 
-These are properties of how the copy is kept, not a promise that nothing goes
-wrong. What they buy is that mistakes are correctable and do not accumulate:
+The card can still say something the orders don't. A chosen card name, a
+corrected "member since" date, etc. are kept as records of their own. [Section 4](#4-each-field-on-the-card) covers each card field and where it comes from.
+
+### Keeping orders in sync
+
+Here is how the strategy around keeping orders in sync with the LV store:
 
 * **Re-reading an order is always safe.** Recording an order overwrites any
   existing row for that order id rather than adding a second one, so the same
-  order can be processed any number of times with an identical result. That is
-  what makes repair cheap: the fix for anything that looks wrong is to read it
-  again.
-* **Every field is replaced from the store, never merged.** A correction made
+  order can be processed any number of times.
+* **Every order field is replaced from the store, never merged.** A correction made
   in BigCommerce — an amended name, a fixed email, a changed status —
-  overwrites what we hold the next time that order is read. The copy cannot
-  drift by accumulating edits, because it never edits; it overwrites.
-* **The resync overlaps on purpose.** It re-reads a trailing window rather
-  than resuming exactly where it left off, so an order modified right at the
-  edge of the previous run's window is read twice rather than missed once.
-* **It walks by order id, not by page number.** Page numbers shift underneath
-  a long run as orders change; an id cursor does not, so a run cannot skip
-  orders because the store re-sorted them mid-walk.
+  overwrites what we hold the next time that order is read.
 * **Re-reading the whole store is a normal operation**, not an emergency
   measure: it is the intended answer to "are we certain this is right?", and
   it happens every week. Since everything it reads has already been applied,
-  the expected result is that no card changes. A card it does change had
-  drifted from its orders -- a counting rule changed since its member last
-  bought, say, or a webhook lost for longer than the six-hourly resync looks
-  back -- and each weekly run says in Slack how many it changed.
+  the expected result is that no card changes.
 * **An order that disappears is flagged, not dropped.** If BigCommerce stops
   returning an order we hold, it is marked and listed on the "Missing from
   BigCommerce" report rather than deleted, and the member's card is left
-  alone. If the order reappears, the flag clears itself. The weekly re-read
-  also asks the store, one at a time, about every order held here that counts
-  towards a membership and that its order list did not return, so an order
-  deleted without a webhook is caught within a week. Orders that count for
-  nothing are not asked about: the list leaves out abandoned checkouts
-  ("Incomplete"), and the store stops answering for old ones altogether, so
-  asking would flag every old abandoned checkout as missing.
-  Revoking memberships on the strength of one unanswered request would
-  turn a storefront incident into members losing their cards en masse.
+  alone.
 
 ### What this does not catch
 
-* **Archived orders.** Deleting an order in BigCommerce archives it: the
-  order is still there, marked as deleted, and this system keeps syncing it
-  as if it were not. An archived order therefore keeps counting towards its
-  member's membership, and nothing flags it. Whether it should -- or
-  whether archiving should work like a refund -- is worth confirming with
-  the Merch Team, who are the ones who would archive an order.
+* **Archived orders.** The app doesn't considered "archived" orders. Whether it
+  should is worth confirming with the Merch Team.
 * **Memberships sold under an unlisted SKU**, as above.
 * **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
   and those do not flow through order webhooks at all. Reconciling them is
   not built, so a MiniBC renewal reaches this system only if it also produces
-  a BigCommerce order.
-
-None of these can invent a membership that was never bought; each of them can
-leave this system holding a stale answer.
+  a BigCommerce order. (Though we can technically reference MiniBC if given the need.)
 
 Otherwise, a change made in BigCommerce is expected to show up here almost
 immediately: the order webhook delivers it within seconds, and the scheduled
@@ -266,74 +174,6 @@ membership record (`members`) through one shared lookup (`MEMBER_SELECT` in
 `src/member/artifacts.ts`), which layers the corrections described below on
 top of it. So the formats cannot disagree with each other.
 
-### Holder's name
-
-Whatever the member has asked to be shown, and otherwise the billing name on
-their **most recent counted order** (`deriveMembershipState()` in
-`src/bigcommerce/sync.ts`, taking `first_name` and `last_name` from the latest
-order by date). It is shown as first and last
-name joined with a space — the large field on the front of the pass
-(`buildPassJson()` in `src/passkit/generator.ts`) and the card image
-(`src/cardimage/template.ts`).
-
-If that order carries no name — which happens for some imported historical
-rows — the name already on file is kept, and for a
-brand-new record the name from the order currently being processed is used
-instead.
-
-Two consequences worth noting. The name follows the store: a member who
-updates their billing name at checkout sees the card follow on their next
-purchase, and a member who never buys again keeps the name from their last
-purchase indefinitely. And because an attributed gift order still carries the
-*purchaser's* billing name, a gifted card can end up showing the giver's name
-(see [section 8](#8-gift-purchases-and-re-attributed-orders)).
-
-**A member can set the name on their own card**, signed in, and what they put
-there is shown instead of the name their orders give
-(`member_display_names`). It is one free-text field rather than a first and
-last name, which suits a mononym or a name that does not split in two.
-Clearing it puts the card back to the derived name, which stays intact
-underneath, so nothing is lost by trying something.
-
-**An admin can set one too**, from the member page in the admin area. It
-matters most for a gifted membership: attribution moves the membership to the
-person it was bought for, but the card keeps the buyer's billing name until
-the recipient orders something of their own.
-
-A name can therefore arrive three ways — the member, an admin, or the one-time
-import carrying across one chosen on the previous site — and the admin page
-says which, alongside the name the orders give. Where a person did it, it
-also says **who**, by the address they signed in with. That is the answer to
-"why does my card say this", and to "who decided that" if the first answer is
-not enough.
-
-Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
-on a card), nothing checks what goes in that field. A membership card is a fun vanity
-item rather than an identity document and gets very little scrutiny in
-practice, so a card showing a nickname, or a name that is nobody's real one,
-is working as intended. If the group would rather that were not so, this is
-a good thing to say so about -- see
-[question 6](#9-decisions-worth-confirming).
-
-### There is no membership type, and the card shows none
-
-Los Verdes sells one membership and draws no distinction between kinds of
-member, so a card carries a name, a "member since", a "good through" and a
-card number, and nothing that sorts its holder into a category. The previous
-site's cards were the same three things plus the card number on the back.
-
-If the store ever does sell a second membership product, a type can be worked
-out from the orders: `membership_orders.sku` records what each person bought.
-Which SKUs count as a membership at all is a separate list, `MEMBERSHIP_SKUS`
-([section 3](#3-what-an-order-is-and-where-it-comes-from)).
-
-Card themes are a separate matter and deliberately not built on this. A type
-derived from an order is recomputed on every sync, so a theme stored that way
-would be overwritten each time its holder renewed. A theme is a choice
-somebody makes, so it belongs in its own table keyed on their address, the way
-a chosen display name already works
-([section 4](#4-each-field-on-the-card)).
-
 ### Member since
 
 The earliest date the group has on record for this person, shown as month and
@@ -350,25 +190,57 @@ than shown blank.
 The furthest expiry among all of the person's counted orders, shown as a full
 date (for example "Feb 17, 2024", via `formatShortDate()`).
 
-Each order carries its own expiry, fixed when the order is recorded: exactly
-365 days after the order was placed (`membershipExpiry()` in
+Each order implies its own expiry: exactly 365 days after the order was placed (`membershipExpiry()` in
 `src/bigcommerce/orders.ts`, `MEMBERSHIP_DURATION_DAYS = 365`, stored as
-`membership_orders.expires_on`), which is carried over deliberately from the
-behaviour of the previous membership site
-([`digital-membership`](https://github.com/los-verdes/digital-membership)).
-"The old system" below always means that application and the Postgres database
-behind it.
+`membership_orders.expires_on`)
 
-The card's date is then the latest of those per-order expiries. Nothing is
-added up and nothing is stitched together: a second order does not extend the
-first one's year, it simply contributes its own expiry to the comparison. This
-is the mechanism behind renewals, and also the reason an early renewal can
-lose a few days — see [section 7](#7-several-orders-one-membership-one-card).
+The card's date is then the latest of those per-order expiries. Membership terms
+do not current get added together. That is, a second order does not extend the
+first one's year, it simply contributes its own expiry to the comparison. Which
+is also the reason an early renewal can lose a few days — see [section 7](#7-several-orders-one-membership-one-card).
 
 If no order counts — every one refunded, say — the expiry is emptied and the
 membership is no longer current.
 
+### Holder's name
+
+Whatever the member has asked to be shown, and otherwise the billing name on
+their **most recent counted order** (`deriveMembershipState()` in
+`src/bigcommerce/sync.ts`, taking `first_name` and `last_name` from the latest
+order by date). It is shown as first and last
+name joined with a space — the large field on the front of the pass
+(`buildPassJson()` in `src/passkit/generator.ts`) and the card image
+(`src/cardimage/template.ts`).
+
+If that order carries no name — which happens for some imported historical
+rows — the name already on file is kept, and for a
+brand-new record the name from the order currently being processed is used
+instead.
+
+Also a member who updates their billing name at checkout sees the card follow on
+their next membership purchase. And because an attributed gift order still carries the
+_purchaser's_ billing name, a gifted card can end up showing the giver's name
+(see [section 8](#8-gift-purchases-and-re-attributed-orders)).
+
+**A member can set the name on their own card**, signed in, and what they put
+there is shown instead of the name their orders give
+(`member_display_names`). It is one free-text field rather than a first and
+last name.
+Clearing it puts the card back to the derived name, which stays intact
+underneath, so nothing is lost by trying out a different display name.
+
+**An admin can set one too**, from the member page in the admin area.
+
+Beyond a length limit (`MAX_DISPLAY_NAME_LENGTH`, 64 characters, so it fits
+on a card), nothing checks what goes in the name field. A membership card is a fun
+item rather than a serious identity document so a card showing a nickname
+is working as intended. However this is open to feedback!: see
+[question 6](#9-decisions-worth-confirming).
+
 ### Card number and QR code
+
+**Note: this "card number" field isn't really used for anything and was speculatively
+implemented in case we ever had cause to verify membership cards.**
 
 The card number (`Card #` on the back of the Apple pass, and the small line
 under the QR code on the card image) is the membership record's own identifier
@@ -379,26 +251,13 @@ afterwards — not on renewal, not on a name change, not on a resync. It is also
 the serial number baked into every Wallet pass issued for that person, which
 is why it has to stay stable.
 
-Deliberately, it is **not** derived from the store's customer number. Two
-reasons, both from real data: every guest checkout shares customer number `0`,
-and a gifted order carries the *buyer's* customer number, not the recipient's.
+This is **not** derived from the store's customer number on purpose because:
+
+1. every guest checkout shares customer number `0`
+2. a gifted order carries the _buyer's_ customer number, not the recipient's
+
 Neither identifies a member. Records are always found by email address, so the
 card number never needs to be reproducible from anything else.
-
-The QR code encodes a signed verification link for that card number. Scanning
-it shows the holder's name and whether their membership is current *right
-now* — computed live, not read off the card. No sign-in is needed: the
-signature is what stops anyone opening a card they do not hold. Anyone
-scanning is told only "valid" or "not a current membership"; whether a
-membership lapsed or was revoked is shown only to a signed-in admin, since a
-revocation is the Membership Committee's decision
-(`src/member/verify-pass.tsx`, `lookupPassHolder()` in
-`src/member/passHolder.ts`). Cards issued by the old system and still in
-circulation resolve the same way: the old card's serial is looked up
-(`legacy_membership_cards`) to find the holder, and then the holder's current
-membership is shown, not the dates printed on that old card. If that holder
-has no current membership record at all, the old card's own dates are shown as
-a last resort.
 
 ### What differs between card formats
 
@@ -412,7 +271,7 @@ a last resort.
 
 All three carry the same fields.
 
-## 5. How the software decides who is a current member
+## 5. How the app decides who is a current member
 
 Two separate questions are involved, and they are answered in different
 places.
@@ -538,7 +397,7 @@ current rule does not rank them by reliability, only by origin:
 
 * The order-derived date is the most auditable — it points at a specific
   order that counts today.
-* The imported date was computed over *every* historical membership row for
+* The imported date was computed over _every_ historical membership row for
   that person, without excluding cancelled or test orders. It can therefore be
   slightly earlier than the order history would justify.
 * A manual date is as good as the judgement behind it, and is the right tool
@@ -549,7 +408,7 @@ date the group has been told somebody joined is the sort of thing a person is
 asked about later, and a note nobody can attribute answers half the question.
 
 Because the rule is "prefer the override", an override wins even when it is
-*later* than the earliest counted order, which is not what "member since"
+_later_ than the earliest counted order, which is not what "member since"
 usually implies. See the questions in [section 9](#9-decisions-worth-confirming).
 
 Changing an override immediately marks that member's card as stale, so the
@@ -588,7 +447,7 @@ order's identifiers.
 orders, the card's expiry is the later of the two per-order expiries. A member
 who renews after their previous year has ended gets a fresh year from the
 purchase date. A member who renews a month early gets 365 days from the
-purchase date, which is *not* the old expiry plus a year — the unused month is
+purchase date, which is _not_ the old expiry plus a year — the unused month is
 not carried over. Buying two memberships at once does not produce two years
 either; both orders expire on the same day, so the card shows one year.
 
@@ -646,14 +505,14 @@ buyer. And the one-time legacy import skipped any order that already had an
 attribution recorded against it, so an admin's decision outranked the
 historical export.
 
-What attribution does *not* change is the name on the order. The billing name
+What attribution does _not_ change is the name on the order. The billing name
 stays the purchaser's, and since the card's holder name comes from the latest
 counted order, a gift can leave the purchaser's name on the recipient's card.
 This is listed as a question below.
 
 ## 9. Decisions worth confirming
 
-Each of these is a point where the software had to choose a rule and where a
+Each of these is a point where the app had to choose a rule and where a
 different policy would be straightforward to implement. The current
 behaviour is stated alongside each question, so the answer is a confirmation
 or a change, not an open-ended design exercise.
@@ -712,12 +571,12 @@ or a change, not an open-ended design exercise.
 
 7. **Is an email address the right definition of a person?** Currently it is:
    one address, one membership, one card. A member who changes address is two
-   people to the software until their old orders are re-attributed, and a
+   people to the app until their old orders are re-attributed, and a
    recorded "member since" override follows the old address rather than the
    person.
 
 8. **Are revocation and expulsion shaped the way the group wants them?**
-   Both are described [in section 5](#5-how-the-software-decides-who-is-a-current-member) and are expected to be
+   Both are described [in section 5](#5-how-the-app-decides-who-is-a-current-member) and are expected to be
    rare. A few choices are open. A revocation follows the card, so a fresh
    membership bought under a different address is not covered; an expulsion
    follows the address, for the same reason ([question 7](#9-decisions-worth-confirming)).
@@ -760,7 +619,7 @@ this record exists for -- "why does their card say that", "who decided this"
 -- are asked about things that are no longer true at least as often as things
 that are, and most often precisely when a decision is being appealed.
 
-Two things it deliberately does not do. It does not record what the software
+Two things it deliberately does not do. It does not record what the app
 did on its own: an order syncing, an import running, a pass being rebuilt are
 all routine, and a log that included them would bury the handful of entries
 that represent a decision somebody made. And it does not record a card email
@@ -837,9 +696,35 @@ did, so these rows keep the meaning they have always had.
 
 ### Cards from that era still resolve
 
-A card issued by the old system carries a serial this software does not
+A card issued by the old system carries a serial this app does not
 generate. Scanning one still works: the serial is looked up
 (`legacy_membership_cards`) to find the holder, and the holder's membership is
 then computed live by exactly the rules above. The old card is a pointer to a
 person, not a record of their membership, which is why it stays correct as
 their membership changes.
+
+## Appendix: QR codes & verification
+
+A membership card's QR code encodes a signed verification link for that card number. Scanning
+it shows the holder's name and whether their membership is current _right
+now_ — computed live, not read off the card. No sign-in is needed: the
+signature is what stops anyone opening a card they do not hold. Anyone
+scanning is told only "valid" or "not a current membership"; whether a
+membership lapsed or was revoked is shown only to a signed-in admin, since a
+revocation is the Membership Committee's decision
+(`src/member/verify-pass.tsx`, `lookupPassHolder()` in
+`src/member/passHolder.ts`). Cards issued by the old system and still in
+circulation resolve the same way: the old card's serial is looked up
+(`legacy_membership_cards`) to find the holder, and then the holder's current
+membership is shown, not the dates printed on that old card. If that holder
+has no current membership record at all, the old card's own dates are shown as
+a last resort.
+
+## Appendix: additional footnotes
+
+Given that this document is intended to be the specification for Los Verdes membership,
+is also the specification for the associated repository. Where this document and
+the code disagree, the code should be updated to match this document.
+
+On style: code and database names here appear in `backticks` after each
+plain-English statement, for anyone who wants to check a claim against the source.
