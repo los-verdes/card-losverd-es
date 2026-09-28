@@ -134,12 +134,18 @@ describe("what the log records", () => {
 });
 
 describe("reading it back", () => {
-  it("shows one person's history, newest first", async () => {
+  it("shows one person's whole history on their member page, newest first", async () => {
     await revokeCard(env, CARD, "conduct", ADMIN_ID);
     await restoreCard(env, CARD, ADMIN_ID);
 
-    const body = await (await get(`/admin/audit?email=${encodeURIComponent(EMAIL)}`)).text();
+    const page = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+    const body = page.slice(page.indexOf('<section id="history">'));
 
+    expect(page).toContain('<section id="history">');
+    // Below their orders, and with their own download.
+    expect(page.indexOf("<h3>Their orders</h3>")).toBeLessThan(page.indexOf('<section id="history">'));
+    expect(body).toContain(`<a href="/admin/audit?email=${encodeURIComponent(EMAIL)}&amp;format=csv">Download it as CSV</a>`);
+    expect(body).not.toContain("Who it was about");
     expect(body).toContain("Membership restored");
     expect(body).toContain("Membership revoked");
     expect(body).toContain("admin@example.com");
@@ -152,19 +158,55 @@ describe("reading it back", () => {
     const body = await (await get("/admin/audit")).text();
 
     expect(body).toContain("Who it was about");
-    expect(body).toContain(`/admin/audit?email=${encodeURIComponent(EMAIL)}`);
+    expect(body).toContain(`<a href="/admin/members?q=${encodeURIComponent(EMAIL)}#history">${EMAIL}</a>`);
+  });
+
+  it("sends an old one-person link to that person's history on their member page", async () => {
+    for (const query of [`email=${encodeURIComponent(EMAIL)}`, `email=${encodeURIComponent(" Jane@Example.com ")}&before=5`]) {
+      const res = await get(`/admin/audit?${query}`);
+
+      expect(res.status).toBe(303);
+      expect(res.headers.get("Location")).toBe(`/admin/members?q=${encodeURIComponent(EMAIL)}#history`);
+    }
+  });
+
+  it("shows all of one person's history, however long, where the log itself pages", async () => {
+    for (let i = 0; i <= AUDIT_PAGE_SIZE; i++) {
+      await recordAuditEvent(env, { action: "card.emailed", subjectEmail: EMAIL, actorEmail: null, detail: `entry ${i}` });
+    }
+
+    const page = await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+
+    expect(page.split("Card emailed").length - 1).toBe(AUDIT_PAGE_SIZE + 1);
+    expect(page).not.toContain("Older entries");
+  });
+
+  it("still has a page for somebody the log remembers who has no card or orders", async () => {
+    await expelPerson(env, "gone@example.com", "conduct", ADMIN_ID);
+
+    const page = await (await get(`/admin/members?q=${encodeURIComponent("gone@example.com")}`)).text();
+
+    expect(page).toContain("Address: gone@example.com");
+    expect(page).toContain("the audit log remembers it");
+    expect(page).toContain('<section id="history">');
+    expect(page).toContain("conduct");
+    expect(page).not.toContain("No membership is held under that address, and no orders either.");
   });
 
   it("says so plainly when there is nothing to show", async () => {
     expect(await (await get("/admin/audit")).text()).toContain("Nothing recorded yet");
-    const filtered = await (await get("/admin/audit?email=nobody@example.com")).text();
-    expect(filtered).toContain("Nothing has been recorded against this address");
+    const member = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+    expect(member).toContain("Nothing has been recorded about this address.");
+    // An address nobody knows gets no history section, just the "not found".
+    const unknown = await (await get("/admin/members?q=nobody@example.com")).text();
+    expect(unknown).not.toContain('<section id="history">');
+    expect(unknown).toContain("No membership is held under that address, and no orders either.");
   });
 
-  it("is linked from the member's own page", async () => {
+  it("is pointed to from the top of the member's own page", async () => {
     const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
 
-    expect(body).toContain(`/admin/audit?email=${encodeURIComponent(EMAIL)}`);
+    expect(body).toContain('<a href="#history">Everything that has been done to this membership</a>');
   });
 
   it("is admin-only, and never cached", async () => {
@@ -218,18 +260,6 @@ describe("paging back through it", () => {
     expect(body).toContain(">entry 0<");
     expect(body).toContain('<a href="/admin/audit">Newest entries</a>');
     expect(body).not.toContain(">Older entries<");
-  });
-
-  it("keeps to one person while paging through their history", async () => {
-    await record(3, "someone.else@example.com");
-    const ids = await record(AUDIT_PAGE_SIZE + 1);
-
-    const first = await (await get(`/admin/audit?email=${encodeURIComponent(EMAIL)}`)).text();
-    expect(first).toContain(`<a href="/admin/audit?email=jane%40example.com&amp;before=${ids[AUDIT_PAGE_SIZE - 1]}">Older entries</a>`);
-
-    const second = await (await get(`/admin/audit?email=${encodeURIComponent(EMAIL)}&before=${ids[AUDIT_PAGE_SIZE - 1]}`)).text();
-    expect(second.split("Card emailed").length - 1).toBe(1);
-    expect(second).toContain('<a href="/admin/audit?email=jane%40example.com">Newest entries</a>');
   });
 
   it("offers both ways from a page in the middle", async () => {
@@ -324,10 +354,10 @@ describe("downloading it", () => {
     expect((await readAuditLog(env))[0].detail).toBe("Downloaded 2 entries");
   });
 
-  it("offers the download on the page, filtered the same way", async () => {
+  it("offers the whole log's download on its page, and one person's on their member page", async () => {
     expect(await (await get("/admin/audit")).text()).toContain('<a href="/admin/audit?format=csv">Download the whole log as CSV</a>');
-    expect(await (await get(`/admin/audit?email=${encodeURIComponent(EMAIL)}`)).text()).toContain(
-      '<a href="/admin/audit?email=jane%40example.com&amp;format=csv">Download their whole history as CSV</a>',
+    expect(await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text()).toContain(
+      '<a href="/admin/audit?email=jane%40example.com&amp;format=csv">Download it as CSV</a>',
     );
   });
 

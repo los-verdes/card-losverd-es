@@ -742,9 +742,11 @@ was done: every revocation and expulsion and the lifting of either, every card
 name set or cleared, every "member since" correction, every re-attributed
 order, and every card email sent. Each line says when, what, who it was about,
 who did it, and one sentence of detail -- including the value that was
-replaced, where there was one. An admin can read it for one person or as a
-recent-activity list (`/admin/audit`), a page at a time and back as far as it
-goes, and can download all of it, or one person's, as a spreadsheet. **Each
+replaced, where there was one. An admin reads one person's whole history on
+that person's member page, below their orders -- even once they have no card
+or orders left -- or everyone's as a recent-activity list (`/admin/audit`), a
+page at a time and back as far as it goes, and can download all of it, or one
+person's, as a spreadsheet. **Each
 download is itself recorded**, by whom and how many entries it held: the file
 carries names, addresses and the reasons given for decisions out of the admin
 pages, and a copy leaving is worth being able to see afterwards.

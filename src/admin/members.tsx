@@ -47,7 +47,9 @@ import {
   revokeCard,
 } from "../member/revocation";
 import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } from "../member/expulsion";
+import { readWholeAuditLog, type AuditEntry } from "../audit/log";
 import { emailFootprint, type EmailFootprint } from "./attribution";
+import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
@@ -312,9 +314,7 @@ const Summary: FC<{
       </form>
     )}
     <p class="muted">
-      <a href={`/admin/audit?email=${encodeURIComponent(member.email)}`}>
-        Everything that has been done to this membership
-      </a>
+      <a href="#history">Everything that has been done to this membership</a>, below their orders.
     </p>
     <h3>Their orders</h3>
     {orders.length === 0 ? (
@@ -453,6 +453,12 @@ members.get("/", async (c) => {
     if (!member) notFound = "No membership carries that card number.";
   }
 
+  // Whatever the audit log holds about the address, whether or not it still
+  // has a card or orders: an expulsion can outlive both, and every address
+  // the audit log shows links here (#359).
+  const historyEmail =
+    member?.email ?? (lookup.kind === "email" && isWellFormedEmail(lookup.value) ? lookup.value : null);
+
   const [footprint, orders, override, expelled] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
@@ -477,7 +483,13 @@ members.get("/", async (c) => {
         orphan = { email: lookup.value, footprint: orphanFootprint, orders: orphanOrders, moved };
       }
     }
-    if (!orphan) notFound = "No membership is held under that address, and no orders either.";
+  }
+  const history: AuditEntry[] | null = historyEmail ? await readWholeAuditLog(c.env, { email: historyEmail }) : null;
+  // Nothing but history: somebody the log remembers, with no card or orders
+  // left to show -- still a page, so no link from the audit log dead-ends.
+  const historyOnly = lookup.kind === "email" && !member && !orphan && history !== null && history.length > 0;
+  if (lookup.kind === "email" && !member && !orphan && !historyOnly) {
+    notFound = "No membership is held under that address, and no orders either.";
   }
 
   // One more than is shown, so the page can say there were more.
@@ -510,11 +522,14 @@ members.get("/", async (c) => {
     ? `Member: ${cardNameText(member) || member.email}`
     : orphan
       ? `Address: ${orphan.email}`
-      : "Find a member";
+      : historyOnly
+        ? `Address: ${historyEmail}`
+        : "Find a member";
+  const found = member !== null || orphan !== null || historyOnly;
 
   return c.html(
     <AdminPage title={title}>
-      {!member && !orphan && (
+      {!found && (
         <>
           <p>
             The card number is on the back of every pass, so it is the one thing a member can
@@ -564,7 +579,14 @@ members.get("/", async (c) => {
           expelled={expelled}
         />
       )}
-      {(member || orphan) && (
+      {historyOnly && (
+        <p>
+          <strong>No membership or orders are held under this address</strong>, but the audit
+          log remembers it.
+        </p>
+      )}
+      {found && history && historyEmail && <AuditHistory email={historyEmail} entries={history} />}
+      {found && (
         <>
           <h2>Find someone else</h2>
           {searchForms}

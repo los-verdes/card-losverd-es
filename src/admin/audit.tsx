@@ -7,10 +7,13 @@
  * expulsion since lifted, a name since changed back. Those leave no trace on
  * any other screen, because undoing them deletes the row.
  *
- * Filtered to one person by `?email=`, which is how the member page links
- * here. Unfiltered it is the recent-activity view: a page at a time,
- * deliberately, since a page nobody can read at a glance is a page nobody
- * reads, with "Older entries" to go further back (#319).
+ * One person's history lives on their member page (#359), where it sits with
+ * their card and orders: someone looking at what was done to a member
+ * usually wants the whole story. Every address here links there, and an
+ * old `?email=` link is sent there too. This page is the recent-activity
+ * view: a page at a time, deliberately, since a page nobody can read at a
+ * glance is a page nobody reads, with "Older entries" to go further back
+ * (#319).
  *
  * All of it, or one person's, downloads as CSV. Each download is itself
  * recorded, because the file carries names, addresses and the reasons for
@@ -51,19 +54,19 @@ function formatWhen(epochMs: number): string {
   return new Date(epochMs).toISOString().replace("T", " ").slice(0, 16) + "Z";
 }
 
+/** Where one person's history is: the section of that name on their member page. */
+export function memberHistoryHref(email: string): string {
+  // Spelled out rather than imported: the members page imports this one.
+  return `/admin/members?q=${encodeURIComponent(email)}#history`;
+}
+
 const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubject }) => (
   <tr>
     <td style={cellStyle}>{formatWhen(entry.created_at)}</td>
     <td style={cellStyle}>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
     {showSubject && (
       <td style={cellStyle}>
-        {entry.subject_email ? (
-          <a href={`${AUDIT_PATH}?email=${encodeURIComponent(entry.subject_email)}`}>
-            {entry.subject_email}
-          </a>
-        ) : (
-          ""
-        )}
+        {entry.subject_email ? <a href={memberHistoryHref(entry.subject_email)}>{entry.subject_email}</a> : ""}
       </td>
     )}
     <td style={cellStyle}>{entry.detail}</td>
@@ -72,6 +75,44 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
         by that name. */}
     <td style={cellStyle}>{entry.actor_email ?? ""}</td>
   </tr>
+);
+
+const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
+
+/**
+ * One person's whole history, newest first, for their member page: every
+ * entry, since one person's fits on a page where everyone's would not. It
+ * includes what has since been undone, which no other part of that page
+ * shows. Their CSV stays a link away.
+ */
+export const AuditHistory: FC<{ email: string; entries: AuditEntry[] }> = ({ email, entries }) => (
+  <section id="history">
+    <h3>History</h3>
+    <p class="muted">
+      Everything recorded about this address, including decisions since undone.{" "}
+      <a href={auditHref(email, { format: "csv" })}>Download it as CSV</a> (the download is itself recorded).
+    </p>
+    {entries.length === 0 ? (
+      <p>Nothing has been recorded about this address.</p>
+    ) : (
+      <div style="overflow-x: auto">
+        <table style="border-collapse: collapse; font-size: 0.9rem">
+          <thead>
+            <tr>
+              {HISTORY_HEADINGS.map((h) => (
+                <th style={cellStyle}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <Row entry={entry} showSubject={false} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </section>
 );
 
 /** The page's own address, keeping the filter and adding whatever else is asked. */
@@ -118,19 +159,19 @@ audit.get("/", async (c) => {
     });
   }
 
+  // One person's history is on their member page now; an old link lands there.
+  if (email) return c.redirect(memberHistoryHref(email), 303);
+
   const before = parseBefore(c.req.query("before"));
   // One more than a page, to know whether there is an older one.
-  const fetched = await readAuditLog(c.env, { email, before, limit: AUDIT_PAGE_SIZE + 1 });
+  const fetched = await readAuditLog(c.env, { before, limit: AUDIT_PAGE_SIZE + 1 });
   const entries = fetched.slice(0, AUDIT_PAGE_SIZE);
   const olderHref =
-    fetched.length > AUDIT_PAGE_SIZE ? auditHref(email, { before: String(entries[entries.length - 1].id) }) : null;
-  const showSubject = email === null;
-  const headings = showSubject
-    ? ["When (UTC)", "What", "Who it was about", "Detail", "Who did it"]
-    : ["When (UTC)", "What", "Detail", "Who did it"];
+    fetched.length > AUDIT_PAGE_SIZE ? auditHref(null, { before: String(entries[entries.length - 1].id) }) : null;
+  const headings = ["When (UTC)", "What", "Who it was about", "Detail", "Who did it"];
 
   return c.html(
-    <AdminPage title={email ? `Audit log: ${email}` : "Audit log"}>
+    <AdminPage title="Audit log">
       <p>
         Decisions people have made about memberships: revocations and
         expulsions and the lifting of them, card names, "member since"
@@ -138,30 +179,17 @@ audit.get("/", async (c) => {
         is ever removed from this list, which is the point of it -- undoing a
         decision removes it from every other screen.
       </p>
-      {email ? (
-        <p>
-          <a href={AUDIT_PATH}>Everything, not just this person</a> ·{" "}
-          <a href={`/admin/members?q=${encodeURIComponent(email)}`}>Their member page</a>
-        </p>
-      ) : (
-        <p class="muted">
-          {before === null ? "The most recent entries, a page at a time." : "Older entries."} Follow an
-          address to see one person's history on its own.
-        </p>
-      )}
+      <p class="muted">
+        {before === null ? "The most recent entries, a page at a time." : "Older entries."} Follow an
+        address to see that person's whole history on their member page.
+      </p>
       <p>
-        <a href={auditHref(email, { format: "csv" })}>
-          {email ? "Download their whole history as CSV" : "Download the whole log as CSV"}
-        </a>{" "}
+        <a href={auditHref(null, { format: "csv" })}>Download the whole log as CSV</a>{" "}
         <span class="muted">(the download is itself recorded here)</span>
       </p>
       {entries.length === 0 ? (
         <p>
-          {before !== null
-            ? "Nothing older than that."
-            : email
-              ? "Nothing has been recorded against this address."
-              : "Nothing recorded yet."}
+          {before !== null ? "Nothing older than that." : "Nothing recorded yet."}
         </p>
       ) : (
         <div style="overflow-x: auto">
@@ -175,7 +203,7 @@ audit.get("/", async (c) => {
             </thead>
             <tbody>
               {entries.map((entry) => (
-                <Row entry={entry} showSubject={showSubject} />
+                <Row entry={entry} showSubject />
               ))}
             </tbody>
           </table>
@@ -183,7 +211,7 @@ audit.get("/", async (c) => {
       )}
       {(olderHref || before !== null) && (
         <p>
-          {before !== null && <a href={auditHref(email)}>Newest entries</a>}
+          {before !== null && <a href={AUDIT_PATH}>Newest entries</a>}
           {before !== null && olderHref && " · "}
           {olderHref && <a href={olderHref}>Older entries</a>}
         </p>
