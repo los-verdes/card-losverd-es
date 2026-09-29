@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 import { getMemberByEmail, renderCardImage } from "../../src/member/artifacts";
-import { THEME_PATH } from "../../src/member/portal";
+import { THEME_PATH, currentFirst } from "../../src/member/portal";
 import { YEAR_THEMES } from "../../src/themes/cardTheme";
 import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
 import BACKGROUND from "../fixtures/sample-card-background.png";
@@ -94,6 +94,16 @@ describe("the theme page", () => {
     expect(body).not.toContain("Go back to the default");
   });
 
+  it("lists the theme the card is in now first, the rest in their usual order", async () => {
+    const before = await (await request(THEME_PATH)).text();
+    expect(before.indexOf("theme=classic")).toBeLessThan(before.indexOf("theme=2021"));
+
+    await setCardTheme(env, (await getMemberByEmail(env, EMAIL))!, "2021", "member", USER_ID);
+
+    const after = await (await request(THEME_PATH)).text();
+    expect(after.indexOf("theme=2021")).toBeLessThan(after.indexOf("theme=classic"));
+  });
+
   it("says when the theme is one they chose, and offers the default back", async () => {
     await setCardTheme(env, (await getMemberByEmail(env, EMAIL))!, "2021", "member", USER_ID);
 
@@ -160,5 +170,14 @@ describe("a preview of the card in another theme", () => {
     expect((await request("/card.png?theme=classic")).status).toBe(404);
     // Their own card, as it is, is unaffected.
     expect((await request("/card.png")).status).toBe(200);
+  });
+});
+
+describe("currentFirst", () => {
+  it("moves the current theme to the front and keeps the others' order", () => {
+    const [a, b, c] = YEAR_THEMES;
+
+    expect(currentFirst([a, b, c], c)).toEqual([c, a, b]);
+    expect(currentFirst([a, b, c], a)).toEqual([a, b, c]);
   });
 });
