@@ -22,6 +22,7 @@ import {
 import { tracing } from "cloudflare:workers";
 import type { Env } from "../index";
 import { resolveCardTheme } from "../themes/choice";
+import { applePosterMode, posterAssets } from "../passkit/poster";
 import { buildVerifyPassUrl } from "../lib/passSignature";
 import {
   assemblePassBundle,
@@ -268,12 +269,17 @@ export async function getApplePassBundle(
 ): Promise<Uint8Array> {
   const theme = requestedTheme ?? (await resolveCardTheme(env, member));
   const passTypeIdentifier = env.PASSKIT_PASS_TYPE_IDENTIFIER;
+  // Whether the pass gets Apple's poster layout depends on the setting as well
+  // as the theme, so the cache tag carries it: switching the setting must not
+  // serve passes built before the switch.
+  const posterMode = applePosterMode(env);
+  const cacheTag = posterMode === "off" ? themeCacheTag(theme) : `${themeCacheTag(theme)}+poster-${posterMode}`;
   const cached = await getCachedPass(
     env.ASSETS,
     passTypeIdentifier,
     member.member_id,
     member.last_updated_at,
-    themeCacheTag(theme),
+    cacheTag,
   );
   if (cached) {
     return cached;
@@ -289,6 +295,8 @@ export async function getApplePassBundle(
       assets[name] = await readTemplateAsset(env, `${thumbnailPrefix}${name}`);
     }
   }
+  const poster = await posterAssets(posterMode, theme, (key) => readTemplateAsset(env, key));
+  Object.assign(assets, poster);
   const passVerifyUrl = await verifyUrl(env, member);
   // Hashing, signing and zipping are CPU work, which the automatic spans
   // (subrequests only) leave as an unexplained gap. Around the call rather
@@ -304,6 +312,7 @@ export async function getApplePassBundle(
         authToken: member.auth_token,
         verifyUrl: passVerifyUrl,
         colors: theme.colors,
+        poster: poster !== null,
       },
       {
         passTypeIdentifier,
@@ -326,7 +335,7 @@ export async function getApplePassBundle(
     member.member_id,
     member.last_updated_at,
     bundle,
-    themeCacheTag(theme),
+    cacheTag,
   );
   return bundle;
 }

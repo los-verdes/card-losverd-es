@@ -177,6 +177,37 @@ describe("a theme's artwork (#333)", () => {
     expect(Object.keys(manifest)).toEqual(expect.arrayContaining(THUMBNAILS));
   });
 
+  it("gives the pass Apple's poster layout only when APPLE_POSTER_PASSES asks, and caches the two apart", async () => {
+    await insertMember();
+    const member = (await getMemberById(env, "BC-1"))!;
+    const POSTER_THEME: CardTheme = { ...THEME, artwork: { ...THEME.artwork, applePosterPrefix: "templates/themes/test/apple-poster/" } };
+    const posterKeys = [
+      ...["primaryLogo.png", "primaryLogo@2x.png", "poster.png", "poster@2x.png", "poster@3x.png"].map((name) => `templates/themes/test/apple-poster/${name}`),
+    ];
+    for (const name of APPLE_FILES) {
+      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
+    }
+    for (const name of THUMBNAILS) {
+      await env.ASSETS.put(`${THUMBNAIL_PREFIX}${name}`, new TextEncoder().encode(name));
+    }
+    for (const key of posterKeys) await env.ASSETS.put(key, new TextEncoder().encode(key));
+    try {
+      env.APPLE_POSTER_PASSES = "off";
+      const plain = unzipSync(await getApplePassBundle(env, member, POSTER_THEME));
+      env.APPLE_POSTER_PASSES = "on";
+      const poster = unzipSync(await getApplePassBundle(env, member, POSTER_THEME));
+
+      expect(Object.keys(plain)).not.toContain("artwork.png");
+      expect(JSON.parse(new TextDecoder().decode(plain["pass.json"]))).not.toHaveProperty("posterGeneric");
+      expect(new TextDecoder().decode(poster["artwork@3x.png"])).toBe("templates/themes/test/apple-poster/poster@3x.png");
+      expect(Object.keys(poster)).toEqual(expect.arrayContaining(["primaryLogo.png", "thumbnail.png"]));
+      expect(JSON.parse(new TextDecoder().decode(poster["pass.json"]))).toHaveProperty("posterGeneric");
+    } finally {
+      env.APPLE_POSTER_PASSES = undefined;
+      await env.ASSETS.delete(posterKeys);
+    }
+  });
+
   it("leaves the thumbnail out of a classic pass", async () => {
     await insertMember();
     for (const name of APPLE_FILES) {

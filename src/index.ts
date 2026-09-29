@@ -131,6 +131,9 @@ export interface Env {
   // cards first), "everyone", or anything else for nobody
   // (src/themes/choice.ts).
   CARD_THEME_CHOICE?: string;
+  // Not secret -- Apple's iOS 27 poster pass layout (#384): "on" for themes
+  // with poster art, anything else for none (src/passkit/poster.ts).
+  APPLE_POSTER_PASSES?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the sender, in wrangler.toml `[vars]`.

@@ -57,6 +57,12 @@ export interface CardThemeArtwork {
   appleThumbnailPrefix?: string;
   /** R2 key of the Google pass's hero image, served publicly at `googleHeroPath()`. */
   googleHero?: string;
+  /**
+   * R2 prefix holding the Apple poster pass's full-bleed art (`APPLE_POSTER_FILES`),
+   * drawn behind the whole pass on iOS 27 and later, and the `primaryLogo.png`
+   * and `primaryLogo@2x.png` that sit on it (src/passkit/poster.ts).
+   */
+  applePosterPrefix?: string;
 }
 
 /**
@@ -66,16 +72,26 @@ export interface CardThemeArtwork {
  *   stretched to fit. Its rounded corners and border cover the edges.
  * - Apple draws the thumbnail at 90 x 90 points, and accepts an aspect ratio
  *   between 2:3 and 3:2; each file is that size at 1x, 2x and 3x.
- * - Google wants a hero image 1032 pixels wide, at 3:1 or wider.
+ * - Apple's poster layout (iOS 27) draws `artwork.png` at 358 x 448 points
+ *   behind the whole pass, at 1x, 2x and 3x. It trims about 5% off each side,
+ *   covers the middle with the QR code and the bottom quarter with a darkened
+ *   strip, so the part that shows clearly is the top half (checked on an
+ *   iPhone, 2026-09-29, #384).
+ * - Google draws the hero image full width under the pass details, and since
+ *   its 2026 redesign recommends 1032 x 812 (about 5:4).
  */
 export const ARTWORK_SIZES = {
   cardBackground: { width: 1050, height: 660 },
   appleThumbnail: { width: 90, height: 90, scales: [1, 2, 3] },
-  googleHero: { width: 1032, height: 336 },
+  applePoster: { width: 358, height: 448, scales: [1, 2, 3] },
+  googleHero: { width: 1032, height: 812 },
 } as const;
 
 /** The Apple thumbnail's file names, one per scale in `ARTWORK_SIZES.appleThumbnail`. */
 export const APPLE_THUMBNAIL_FILES = ["thumbnail.png", "thumbnail@2x.png", "thumbnail@3x.png"] as const;
+
+/** The Apple poster art's file names under `applePosterPrefix`, one per scale (`ARTWORK_SIZES.applePoster`). */
+export const APPLE_POSTER_FILES = ["poster.png", "poster@2x.png", "poster@3x.png"] as const;
 
 export interface CardTheme {
   /** Stable identifier, stored against a member's choice. */
@@ -129,12 +145,14 @@ function yearTheme(year: number, label: string, colors: CardThemeColors): CardTh
     id: String(year),
     label,
     year,
-    version: 1,
+    // 2: poster art for Apple, and Google's hero at its 2026 size (#384).
+    version: 2,
     colors,
     assets: CLASSIC_THEME.assets,
     artwork: {
       cardBackground: `${prefix}card-background.png`,
       appleThumbnailPrefix: `${prefix}apple/`,
+      applePosterPrefix: `${prefix}apple-poster/`,
       googleHero: `${prefix}google-hero.png`,
     },
   };
@@ -160,16 +178,17 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     qrLabel: "#046a29",
     passText: "#ffffff",
   }),
-  // "Verde hasta la muerte": the doodle pattern, darkened.
+  // "Verde hasta la muerte": the doodle pattern, from its print file, darkened.
   yearTheme(2022, "2022: Verde hasta la muerte", {
-    background: "#2b2f2c",
-    border: "#59be77",
+    background: "#040a07",
+    border: "#198e3c",
     text: "#ffffff",
     secondaryText: "#d8f5e4",
     qrLabel: "#046a29",
     passText: "#ffffff",
   }),
-  // "i love you verde": mint with aloe, the one light theme, so its text is dark.
+  // The scarf's papel picado flags, spelling out Los Verdes, on the mint of its
+  // "i love you verde" side. The one light theme, so its text is dark.
   yearTheme(2023, "2023: I love you verde", {
     background: "#8fddb3",
     border: "#00b140",
