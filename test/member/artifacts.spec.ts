@@ -177,6 +177,33 @@ describe("a theme's artwork (#333)", () => {
     expect(Object.keys(manifest)).toEqual(expect.arrayContaining(THUMBNAILS));
   });
 
+  it("gives the pass Apple's poster layout only when APPLE_POSTER_PASSES asks, and caches the two apart", async () => {
+    await insertMember();
+    const member = (await getMemberById(env, "BC-1"))!;
+    for (const name of APPLE_FILES) {
+      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
+    }
+    const probeKeys = ["background", "artwork"].flatMap((name) =>
+      ["", "@2x", "@3x"].map((suffix) => `templates/apple/poster-probe/${name}${suffix}.png`),
+    );
+    for (const key of probeKeys) await env.ASSETS.put(key, new TextEncoder().encode(key));
+    try {
+      env.APPLE_POSTER_PASSES = "off";
+      const plain = unzipSync(await getApplePassBundle(env, member));
+      env.APPLE_POSTER_PASSES = "probe";
+      const probed = unzipSync(await getApplePassBundle(env, member));
+
+      expect(Object.keys(plain)).not.toContain("background.png");
+      expect(JSON.parse(new TextDecoder().decode(plain["pass.json"]))).not.toHaveProperty("posterGeneric");
+      expect(new TextDecoder().decode(probed["background@3x.png"])).toBe("templates/apple/poster-probe/background@3x.png");
+      expect(Object.keys(probed)).toEqual(expect.arrayContaining(["artwork.png", "primaryLogo.png"]));
+      expect(JSON.parse(new TextDecoder().decode(probed["pass.json"]))).toHaveProperty("posterGeneric");
+    } finally {
+      env.APPLE_POSTER_PASSES = undefined;
+      await env.ASSETS.delete(probeKeys);
+    }
+  });
+
   it("leaves the thumbnail out of a classic pass", async () => {
     await insertMember();
     for (const name of APPLE_FILES) {

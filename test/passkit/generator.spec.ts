@@ -380,6 +380,27 @@ describe("pass cache (R2)", () => {
   });
 });
 
+describe("Apple's poster layout (#384)", () => {
+  const parse = (member: MemberPassInput) => JSON.parse(new TextDecoder().decode(buildPassJson(member, CONFIG)));
+
+  it("is left out unless asked for", () => {
+    const json = parse(makeMember());
+
+    expect(json).not.toHaveProperty("posterGeneric");
+    expect(json).not.toHaveProperty("barcodes");
+  });
+
+  it("carries the same content as the generic layout, in the poster's slots, keeping the generic one for older iOS", () => {
+    const json = parse(makeMember({ poster: true, memberSince: "2021-07-04", expirationDate: "2027-01-15" }));
+
+    expect(json.generic.primaryFields).toEqual(json.posterGeneric.primaryFields);
+    expect(json.posterGeneric.headerFields.map((field: { key: string }) => field.key)).toEqual(["membership_expiry"]);
+    expect(json.posterGeneric.footerFields.map((field: { key: string }) => field.key)).toEqual(["member_since"]);
+    expect(json.posterGeneric.backFields).toEqual(json.generic.backFields);
+    expect(json.barcodes).toEqual([json.barcode]);
+  });
+});
+
 describe("the card theme on a pass (#333)", () => {
   afterEach(async () => {
     await invalidateCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023");

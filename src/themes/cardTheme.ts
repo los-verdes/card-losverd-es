@@ -57,6 +57,11 @@ export interface CardThemeArtwork {
   appleThumbnailPrefix?: string;
   /** R2 key of the Google pass's hero image, served publicly at `googleHeroPath()`. */
   googleHero?: string;
+  /**
+   * R2 prefix holding the Apple poster pass's full-bleed art (`APPLE_POSTER_FILES`),
+   * drawn behind the whole pass on iOS 27 and later (src/passkit/poster.ts).
+   */
+  applePosterPrefix?: string;
 }
 
 /**
@@ -76,6 +81,9 @@ export const ARTWORK_SIZES = {
 
 /** The Apple thumbnail's file names, one per scale in `ARTWORK_SIZES.appleThumbnail`. */
 export const APPLE_THUMBNAIL_FILES = ["thumbnail.png", "thumbnail@2x.png", "thumbnail@3x.png"] as const;
+
+/** The Apple poster art's file names under `applePosterPrefix`, one per scale. */
+export const APPLE_POSTER_FILES = ["poster.png", "poster@2x.png", "poster@3x.png"] as const;
 
 export interface CardTheme {
   /** Stable identifier, stored against a member's choice. */

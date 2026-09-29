@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  APPLE_POSTER_FILES,
   APPLE_THUMBNAIL_FILES,
   ARTWORK_SIZES,
   CARD_THEMES,
@@ -116,6 +117,9 @@ describe("the theme registry", () => {
           ? APPLE_THUMBNAIL_FILES.map((name) => `${theme.artwork.appleThumbnailPrefix}${name}`)
           : []),
         theme.artwork.googleHero,
+        ...(theme.artwork.applePosterPrefix
+          ? APPLE_POSTER_FILES.map((name) => `${theme.artwork.applePosterPrefix}${name}`)
+          : []),
       ].filter((key): key is string => Boolean(key));
       for (const key of keys) {
         expect(COMMITTED_ASSETS, `${theme.id}: ${key}`).toContain(key);

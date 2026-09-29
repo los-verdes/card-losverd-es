@@ -17,6 +17,11 @@ export interface MemberPassInput {
   verifyUrl: string;
   /** The card theme's colours (#333); "classic" when omitted. */
   colors?: CardThemeColors;
+  /**
+   * Whether to add Apple's poster layout (iOS 27, src/passkit/poster.ts). The
+   * caller supplies its images with the other assets.
+   */
+  poster?: boolean;
 }
 
 /** Static, non-secret PassKit identifiers -- one set per deployment environment. */
@@ -48,6 +53,13 @@ interface PassField {
   textAlignment: PassTextAlignment;
 }
 
+interface Barcode {
+  format: "PKBarcodeFormatQR";
+  message: string;
+  messageEncoding: "iso-8859-1";
+  altText: string;
+}
+
 interface PassJson {
   formatVersion: 1;
   passTypeIdentifier: string;
@@ -67,12 +79,19 @@ interface PassJson {
     auxiliaryFields?: PassField[];
     backFields: PassField[];
   };
-  barcode: {
-    format: "PKBarcodeFormatQR";
-    message: string;
-    messageEncoding: "iso-8859-1";
-    altText: string;
+  /**
+   * The poster layout's fields (iOS 27). It draws header, primary and footer
+   * fields over the art (only the first footer field), and the back as usual.
+   */
+  posterGeneric?: {
+    headerFields: PassField[];
+    primaryFields: PassField[];
+    footerFields: PassField[];
+    backFields: PassField[];
   };
+  barcode: Barcode;
+  /** The current form of `barcode`, which the poster layout is documented against. */
+  barcodes?: Barcode[];
   backgroundColor: string;
   foregroundColor: string;
   logoText: string;
@@ -263,6 +282,19 @@ export function buildPassJson(
     },
   );
 
+  const barcode: Barcode = {
+    format: "PKBarcodeFormatQR",
+    message: member.verifyUrl,
+    messageEncoding: "iso-8859-1",
+    altText: "",
+  };
+  const nameField: PassField = {
+    key: "name",
+    label: "Member Name",
+    value: `${member.firstName} ${member.lastName}`,
+    textAlignment: "PKTextAlignmentLeft",
+  };
+
   const pass: PassJson = {
     formatVersion: 1,
     passTypeIdentifier: config.passTypeIdentifier,
@@ -272,23 +304,24 @@ export function buildPassJson(
     description: "Los Verdes Membership Card",
     suppressStripShine: false,
     generic: {
-      primaryFields: [
-        {
-          key: "name",
-          label: "Member Name",
-          value: `${member.firstName} ${member.lastName}`,
-          textAlignment: "PKTextAlignmentLeft",
-        },
-      ],
+      primaryFields: [nameField],
       secondaryFields,
       backFields,
     },
-    barcode: {
-      format: "PKBarcodeFormatQR",
-      message: member.verifyUrl,
-      messageEncoding: "iso-8859-1",
-      altText: "",
-    },
+    // The same content in the poster's slots: the name over the art, when the
+    // card is good through at the top, and when they joined at the foot.
+    ...(member.poster
+      ? {
+          posterGeneric: {
+            headerFields: secondaryFields.filter((field) => field.key === "membership_expiry"),
+            primaryFields: [nameField],
+            footerFields: secondaryFields.filter((field) => field.key === "member_since"),
+            backFields,
+          },
+          barcodes: [barcode],
+        }
+      : {}),
+    barcode,
     backgroundColor: appleRgb((member.colors ?? CLASSIC_THEME.colors).background),
     foregroundColor: appleRgb((member.colors ?? CLASSIC_THEME.colors).passText),
     logoText: "Los Verdes",
