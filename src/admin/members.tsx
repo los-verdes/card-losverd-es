@@ -30,9 +30,11 @@ import {
   findMembersByName,
   getMemberById,
   getMemberByEmail,
+  renderCardImage,
   type MemberRecord,
   type NameMatch,
 } from "../member/artifacts";
+import { CARD_HEIGHT, CARD_WIDTH } from "../cardimage/template";
 import { getMemberOrderHistory, type MemberOrder } from "../member/orderHistory";
 import {
   MAX_DISPLAY_NAME_LENGTH,
@@ -183,6 +185,34 @@ const NAME_SET_BY: Record<string, string> = {
   legacy_postgres: "That name came across from the previous site",
 };
 
+/** Where the admin pages get a member's card image, by card number. */
+export const CARD_PREVIEW_PATH = `${MEMBERS_PATH}/card.png`;
+
+/**
+ * The member's card as they see it now, for whoever is answering their
+ * question: one look settles "what does my card say". Drawn by the same
+ * code as their own card page (`renderCardImage()`), so it cannot differ
+ * from it. Sized on the element for the same reason as there
+ * (src/member/portal.tsx): a stale stylesheet cannot let it overflow.
+ */
+const CardPreview: FC<{ member: MemberRecord }> = ({ member }) => (
+  <figure style="margin: 0; max-width: 26rem; flex: 1 1 18rem">
+    <img
+      src={`${CARD_PREVIEW_PATH}?id=${encodeURIComponent(member.member_id)}`}
+      alt={`${cardNameText(member) || member.email}'s membership card`}
+      width={CARD_WIDTH}
+      height={CARD_HEIGHT}
+      loading="lazy"
+      style="width: 100%; height: auto; border-radius: 0.5rem"
+    />
+    <figcaption class="muted" style="font-size: 0.85rem">
+      {member.revoked
+        ? "Their card as drawn now. Their membership is revoked, so they cannot open it themselves."
+        : "Their card as it looks to them now."}
+    </figcaption>
+  </figure>
+);
+
 const Summary: FC<{
   member: MemberRecord;
   footprint: EmailFootprint;
@@ -199,6 +229,7 @@ const Summary: FC<{
         {`${member.first_name} ${member.last_name}`.trim() || "nothing"}.
       </p>
     )}
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: flex-start">
     <table style="border-collapse: collapse; font-size: 0.9rem">
       <tbody>
         <tr>
@@ -237,6 +268,8 @@ const Summary: FC<{
         </tr>
       </tbody>
     </table>
+    <CardPreview member={member} />
+    </div>
     <p>
       <a href={`/admin/member-since?email=${encodeURIComponent(member.email)}`}>
         Correct their &quot;member since&quot; date
@@ -432,6 +465,21 @@ const OrdersWithoutMember: FC<{
     </p>
   </>
 );
+
+/**
+ * A member's card image, for the preview on their page. Found by card number
+ * rather than address, so no address goes into a URL. Drawn on demand like
+ * the member's own, and never counted as them viewing it.
+ */
+members.get("/card.png", async (c) => {
+  const member = await getMemberById(c.env, c.req.query("id") ?? "");
+  if (!member) return c.text("No membership carries that card number.", 404);
+  const png = await renderCardImage(c.env, member);
+  // See sha1Hex in src/passkit/generator.ts for why this narrowing is needed.
+  return new Response(png as Uint8Array<ArrayBuffer>, {
+    headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+  });
+});
 
 members.get("/", async (c) => {
   const lookup = classify(c.req.query("q") ?? "");

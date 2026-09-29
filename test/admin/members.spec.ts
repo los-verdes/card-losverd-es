@@ -7,7 +7,9 @@ import { NAME_SEARCH_LIMIT, classify, parseNameSearch } from "../../src/admin/me
 import { getDisplayName, setDisplayName } from "../../src/member/displayName";
 import { isExpelled, expelPerson } from "../../src/member/expulsion";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
-import { cardNameText, getMemberByEmail } from "../../src/member/artifacts";
+import { cardNameText, getMemberByEmail, renderCardImage } from "../../src/member/artifacts";
+import LOGO from "../fixtures/sample-logo.png";
+import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
@@ -640,5 +642,59 @@ describe("their Slack account on the member page", () => {
     await slack("jdoe", "janie");
 
     expect(await (await get(`/admin/members?q=${EMAIL}`)).text()).toContain("Slack: @janie.");
+  });
+});
+
+describe("their card, on their page", () => {
+  beforeEach(async () => {
+    env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
+  });
+
+  afterEach(async () => {
+    await env.ASSETS.delete("templates/card/crest.png");
+  });
+
+  it("shows the card beside their details, fetched by card number rather than address", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+
+    expect(body).toContain(`<img src="/admin/members/card.png?id=${encodeURIComponent(CARD)}"`);
+    expect(body).toContain('alt="Jane Doe&#39;s membership card"');
+    expect(body).toContain("Their card as it looks to them now.");
+    expect(body).not.toMatch(/card\.png\?[^"]*%40/);
+  });
+
+  it("says so when their membership is revoked and they cannot open the card themselves", async () => {
+    await revokeCard(env, CARD, "conduct", ADMIN_ID);
+
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body).toContain("Their membership is revoked, so they cannot open it themselves.");
+  });
+
+  it("draws the same card their own card page draws, uncached, without counting as them viewing it", async () => {
+    const outcomes = spyOnOutcomes();
+
+    const res = await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}`);
+    const png = new Uint8Array(await res.arrayBuffer());
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(Array.from(png.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(png).toEqual(await renderCardImage(env, (await getMemberByEmail(env, EMAIL))!));
+    expect(outcomesFrom(outcomes)).toEqual([]);
+  });
+
+  it("answers an unknown card number with a 404", async () => {
+    expect((await get("/admin/members/card.png?id=LV-00000000-0000-4000-8000-000000000000")).status).toBe(404);
+    expect((await get("/admin/members/card.png")).status).toBe(404);
+  });
+
+  it("is for admins only", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, 'member@example.com', 0)").run();
+
+    expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}`, 9)).status).toBe(403);
+    expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}`, null)).status).toBe(302);
   });
 });
