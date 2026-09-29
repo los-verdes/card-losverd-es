@@ -19,7 +19,7 @@ const CONFIG: GoogleWalletConfig = {
   origins: ["https://card.losverd.es"],
   cardTitle: "Los Verdes",
   hexBackgroundColor: "#00B140",
-  logoUri: "https://card.losverd.es/assets/crest.png",
+  logoUri: "https://card.losverd.es/assets/google-logo.png",
 };
 
 function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInput {
@@ -83,7 +83,7 @@ describe("googleWalletConfig", () => {
       origins: ["https://staging.example.test"],
       cardTitle: "Los Verdes",
       hexBackgroundColor: "#00B140",
-      logoUri: "https://staging.example.test/assets/crest.png",
+      logoUri: "https://staging.example.test/assets/google-logo.png",
     });
   });
 
@@ -97,7 +97,7 @@ describe("googleWalletConfig", () => {
     });
 
     expect(() => new URL(logoUri)).not.toThrow();
-    expect(logoUri).toBe("https://card.losverd.es/assets/crest.png");
+    expect(logoUri).toBe("https://card.losverd.es/assets/google-logo.png");
   });
 });
 
@@ -118,7 +118,7 @@ describe("buildGenericObject", () => {
     const object = buildGenericObject(makeMember(), CONFIG);
 
     expect(object.logo).toEqual({
-      sourceUri: { uri: "https://card.losverd.es/assets/crest.png" },
+      sourceUri: { uri: "https://card.losverd.es/assets/google-logo.png" },
       contentDescription: { defaultValue: { language: "en-US", value: "Los Verdes" } },
     });
   });

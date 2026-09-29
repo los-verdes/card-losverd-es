@@ -5,6 +5,7 @@ import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
 import { CLASSIC_THEME, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
+import GOOGLE_LOGO from "../assets/templates/google/logo.png";
 
 const CREST_KEY = "templates/card/crest.png";
 // A one-pixel PNG is enough: the route streams bytes through untouched.
@@ -71,9 +72,10 @@ describe("GET /assets/:name", () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining(CREST_KEY));
   });
 
-  it("lists the crest, which the Wallet logo points at, and each year theme's hero image", () => {
+  it("lists the Google logo, the crest older passes name, and each year theme's hero image", () => {
     expect(PUBLIC_ASSETS).toEqual({
       "crest.png": CREST_KEY,
+      "google-logo.png": "templates/google/logo.png",
       ...Object.fromEntries(YEAR_THEMES.map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero])),
     });
   });
@@ -102,10 +104,15 @@ describe("GET /assets/:name", () => {
     });
 
     expect(logoUri).not.toBe("");
-    const res = await get(new URL(logoUri).pathname);
+    await env.ASSETS.put("templates/google/logo.png", CREST_BYTES);
+    try {
+      const res = await get(new URL(logoUri).pathname);
 
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("image/png");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("image/png");
+    } finally {
+      await env.ASSETS.delete("templates/google/logo.png");
+    }
   });
 });
 
@@ -219,9 +226,28 @@ describe("the bundled stylesheet and font", () => {
   });
 });
 
+describe("the Google pass logo", () => {
+  it("is square and at least the 660 x 660 Google asks for", () => {
+    // A PNG's width and height are the two big-endian words after the IHDR tag.
+    const header = new DataView(GOOGLE_LOGO as ArrayBuffer);
+    const [width, height] = [header.getUint32(16), header.getUint32(20)];
+
+    expect(width).toBe(height);
+    expect(width).toBeGreaterThanOrEqual(660);
+  });
+
+  it("is what passes name, while the crest older passes name stays served", () => {
+    expect(CLASSIC_THEME.assets.googleLogoPath).toBe("/assets/google-logo.png");
+    expect(PUBLIC_ASSETS["crest.png"]).toBe("templates/card/crest.png");
+  });
+});
+
 describe("publicAssets", () => {
-  it("publishes only the crest when no theme has a hero image", () => {
-    expect(publicAssets([CLASSIC_THEME])).toEqual({ "crest.png": "templates/card/crest.png" });
+  it("publishes only the logos when no theme has a hero image", () => {
+    expect(publicAssets([CLASSIC_THEME])).toEqual({
+      "crest.png": "templates/card/crest.png",
+      "google-logo.png": "templates/google/logo.png",
+    });
   });
 
   it("publishes each theme's Google hero image under its versioned name", () => {
@@ -234,6 +260,7 @@ describe("publicAssets", () => {
 
     expect(publicAssets([CLASSIC_THEME, theme])).toEqual({
       "crest.png": "templates/card/crest.png",
+      "google-logo.png": "templates/google/logo.png",
       "hero-2026-2.png": "templates/themes/2026/google-hero.png",
     });
   });
