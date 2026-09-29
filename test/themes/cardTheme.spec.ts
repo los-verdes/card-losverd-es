@@ -7,7 +7,6 @@ import {
   appleRgb,
   googleHeroFileName,
   googleHeroPath,
-  resolveCardTheme,
   themeCacheTag,
   type CardTheme,
 } from "../../src/themes/cardTheme";
@@ -62,10 +61,6 @@ describe("the classic theme", () => {
     for (const colour of Object.values(CLASSIC_THEME.colors)) {
       expect(colour).toMatch(/^#[0-9a-f]{6}$/i);
     }
-  });
-
-  it("is what every card is drawn in, until members can choose", () => {
-    expect(resolveCardTheme()).toBe(CLASSIC_THEME);
   });
 
   it("tags a cached pass with its id and version", () => {

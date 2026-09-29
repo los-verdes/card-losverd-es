@@ -55,6 +55,8 @@ export const AUDIT_ACTIONS = [
   "admin.granted",
   "admin.revoked",
   "audit_log.exported",
+  "card_theme.set",
+  "card_theme.cleared",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -76,6 +78,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "admin.granted": "Admin access granted",
   "admin.revoked": "Admin access revoked",
   "audit_log.exported": "Audit log downloaded",
+  "card_theme.set": "Card theme chosen",
+  "card_theme.cleared": "Card theme cleared",
 };
 
 /**
