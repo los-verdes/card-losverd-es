@@ -7,7 +7,7 @@ import { insertCardName, insertMember, insertOrder } from "../admin/fixtures";
 // these run its statements again over rows that exercise each case. Names are
 // invented; "�" is the replacement character the previous site left.
 const MIGRATION = Object.values(
-  import.meta.glob("../../src/db/migrations/0008_*.sql", { query: "?raw", import: "default", eager: true }),
+  import.meta.glob("../../src/db/migrations/0007_*.sql", { query: "?raw", import: "default", eager: true }),
 )[0] as string;
 
 const STATEMENTS = MIGRATION.split("\n")

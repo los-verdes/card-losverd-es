@@ -720,7 +720,7 @@ did, so these rows keep the meaning they have always had.
   accented letters with "�" before the export, in 31 imported orders and 8
   imported card names. Where the same person has a clean copy of the name on
   another order, the lost letter was restored from it
-  (`src/db/migrations/0008_repair_garbled_legacy_names.sql`), each repaired
+  (`src/db/migrations/0007_repair_garbled_legacy_names.sql`), each repaired
   card name recorded in the audit log. The rest stay as imported, since the
   letter cannot be worked out, and an admin who knows the name can set it on
   the member page.

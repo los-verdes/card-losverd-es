@@ -128,7 +128,7 @@ export async function recordAuditEventBestEffort(
  * - A card name with no actor came across in the one-time import of names
  *   members had set on the previous site (src/member/displayName.ts).
  * - A card name is only ever "repaired" by a database migration restoring a
- *   letter the previous site lost (src/db/migrations/0008_*.sql).
+ *   letter the previous site lost (src/db/migrations/0007_*.sql).
  *
  * Anything else with no actor stays blank rather than claiming a cause
  * nobody recorded. Shown and exported as written here; the stored column
