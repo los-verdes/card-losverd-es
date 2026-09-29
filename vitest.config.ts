@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { configDefaults, defineConfig } from "vitest/config";
@@ -33,6 +34,13 @@ export default defineConfig(async () => {
 			// that cost is paid at least once per file and can exceed 5s on a
 			// loaded CI runner -- seen failing intermittently in test/passkit/signer.spec.ts.
 			testTimeout: 20000,
+			// Vitest's default is one worker per CPU but one, and each worker is
+			// a workerd runtime of roughly 400-500 MB. On a 16-CPU dev container
+			// a coverage run took the whole container down; capped at 8 it
+			// peaked at about 3.2 GB and finished as fast (62s against 60s,
+			// measured 2026-09-29). Machines with fewer CPUs, such as CI's,
+			// keep the default.
+			maxWorkers: Math.min(8, Math.max(1, os.availableParallelism() - 1)),
 			// Builds the pass-signing certificate chain once per run and
 			// provides it to every file -- see test/setup/global.ts.
 			globalSetup: ["./test/setup/global.ts"],
