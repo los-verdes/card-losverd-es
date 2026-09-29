@@ -31,6 +31,45 @@ export const CREST_SIZE = 240;
 // contrast, and it is not the theme's to change.
 const QR_BOX = '#ffffff';
 
+/** Characters of card number that fit on one line under the QR code. */
+const CARD_NUMBER_LINE_LENGTH = 21;
+
+/** Space kept between the name and the QR code's box, in px. */
+const NAME_QR_GAP = 24;
+
+/**
+ * The name's font size, in px: full size for most names, smaller for long
+ * ones, so that even the longest a card allows (`MAX_DISPLAY_NAME_LENGTH`,
+ * 64 characters) stays within three lines beside the QR code and clear of
+ * the crest above. The name shares the bottom row with the QR code's box,
+ * which keeps its own width; the name takes the rest, about 680px, and wraps
+ * within it. Bungee is wide -- about 0.69em a character, more for M and W --
+ * so at 46px that is roughly 21 characters a line, at 38px 26, at 32px 31.
+ */
+export function nameFontSize(name: string): number {
+  const length = [...name].length;
+  if (length <= 40) return 46;
+  if (length <= 52) return 38;
+  return 32;
+}
+
+/**
+ * The card number, as the lines it is printed on under the QR code: split at
+ * the hyphen nearest its middle, so the box is no wider than the code. On one
+ * line, an `LV-` number is nearly twice the code's width, which took that
+ * space from the name. A number short enough to fit the box's width on one
+ * line, or with no hyphen to split at, stays on one line.
+ */
+export function cardNumberLines(memberId: string): string[] {
+  if (memberId.length <= CARD_NUMBER_LINE_LENGTH) return [memberId];
+  const middle = memberId.length / 2;
+  let best = -1;
+  for (let i = memberId.indexOf("-"); i !== -1; i = memberId.indexOf("-", i + 1)) {
+    if (best === -1 || Math.abs(i - middle) < Math.abs(best - middle)) best = i;
+  }
+  return best <= 0 ? [memberId] : [memberId.slice(0, best + 1), memberId.slice(best + 1)];
+}
+
 export interface MembershipCardMember {
   firstName: string;
   lastName: string;
@@ -125,8 +164,11 @@ export function buildCardTree(
     },
   };
 
+  const name = `${member.firstName} ${member.lastName}`.trim();
   const memberInfoChildren: (SatoriElement | string)[] = [
-    textNode(`${member.firstName} ${member.lastName}`.trim(), { fontSize: 46, color: colors.text }),
+    // `break-word` breaks a single word only when it would not otherwise fit
+    // a line, rather than letting it run off the edge.
+    textNode(name, { fontSize: nameFontSize(name), lineHeight: 1.15, color: colors.text, wordBreak: 'break-word' }),
   ];
   for (const label of [labels.memberSince, labels.expiration]) {
     if (label) {
@@ -139,7 +181,10 @@ export function buildCardTree(
   const memberInfoBlock: SatoriElement = {
     type: 'div',
     props: {
-      style: { display: 'flex', flexDirection: 'column', maxWidth: 680 },
+      // Whatever the QR code's box leaves: growing to fill it, and shrinking
+      // below its content's width (`minWidth: 0`) so a long name wraps
+      // instead of pushing the box off the card.
+      style: { display: 'flex', flexDirection: 'column', flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
       children: memberInfoChildren,
     },
   };
@@ -154,10 +199,13 @@ export function buildCardTree(
         backgroundColor: QR_BOX,
         padding: 16,
         borderRadius: 20,
+        flexShrink: 0,
       },
       children: [
         { type: 'img', props: { src: images.qrDataUrl, width: images.qrSize, height: images.qrSize } },
-        textNode(member.memberId, { fontSize: 14, color: colors.qrLabel, marginTop: 8 }),
+        ...cardNumberLines(member.memberId).map((line, i) =>
+          textNode(line, { fontSize: 14, lineHeight: 1.3, color: colors.qrLabel, marginTop: i === 0 ? 8 : 0 }),
+        ),
       ],
     },
   };
@@ -170,6 +218,7 @@ export function buildCardTree(
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
+        gap: NAME_QR_GAP,
         width: '100%',
       },
       children: [memberInfoBlock, qrBlock],
