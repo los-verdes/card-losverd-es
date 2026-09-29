@@ -295,6 +295,12 @@ so the choice can be tried on real cards before members are offered it, and
 then to everyone. It decides who may make a choice, not whether a choice
 already made is drawn.
 
+**Where it is chosen:** on the member's card page ("Change how my card
+looks"), which previews their own card in each theme they may use; the link
+appears only for somebody allowed to choose. An admin can also set or clear a
+member's theme on that member's admin page, which says which theme the card is
+drawn in and whether the member or an admin chose it.
+
 ### Card number and QR code
 
 **Note: members rarely need this number.** It identifies their membership

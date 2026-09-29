@@ -25,6 +25,7 @@ export const OUTCOMES = [
   "membership.none",
   "pass.downloaded",
   "display_name.saved",
+  "card_theme.saved",
   "email_card.requested",
   "email_card.delivery",
   "card.suppressed",

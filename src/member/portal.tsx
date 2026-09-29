@@ -48,6 +48,15 @@ import {
   normalizeDisplayName,
   setDisplayName,
 } from "./displayName";
+import type { CardTheme } from "../themes/cardTheme";
+import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
+import {
+  ThemeNotAllowed,
+  clearCardTheme,
+  effectiveTheme,
+  mayChooseTheme,
+  setCardTheme,
+} from "../themes/choice";
 
 // The membership store the legacy no-membership page links to.
 export const MEMBERSHIP_STORE_URL =
@@ -193,7 +202,9 @@ export const MemberCard: FC<{
   member: CurrentMember;
   orders: MemberOrder[];
   isAdmin: boolean;
-}> = ({ member, orders, isAdmin }) => (
+  /** Whether they may choose a theme yet (`mayChooseTheme`): admins first, then everyone. */
+  canChooseTheme?: boolean;
+}> = ({ member, orders, isAdmin, canChooseTheme = false }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
@@ -237,6 +248,11 @@ export const MemberCard: FC<{
     <a href={NAME_PATH} class="action">
       Change the name on my card
     </a>
+    {canChooseTheme && (
+      <a href={THEME_PATH} class="action">
+        Change how my card looks
+      </a>
+    )}
     <MembershipHistory orders={orders} email={member.email} />
     <LogoutButton />
   </Page>
@@ -353,7 +369,14 @@ portal.get("/", requireCurrentMember, async (c) => {
     isCurrentAdmin(c.env, c.get("session").userId),
   ]);
   recordOutcome("card.viewed", { admin: isAdmin });
-  return c.html(<MemberCard member={member} orders={orders} isAdmin={isAdmin} />);
+  return c.html(
+    <MemberCard
+      member={member}
+      orders={orders}
+      isAdmin={isAdmin}
+      canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
+    />,
+  );
 });
 
 
@@ -450,8 +473,135 @@ portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
   return c.redirect(`${NAME_PATH}?saved=1`, 303);
 });
 
+export const THEME_PATH = "/theme";
+
+/**
+ * Choosing how the card looks (#333): every theme the member may use, each
+ * previewed as their own card, and a button to use it. The card page links
+ * here only for somebody `mayChooseTheme()` allows -- admins first, while the
+ * themes are tried out -- and anybody else is shown a 404.
+ */
+const ThemeForm: FC<{
+  options: ThemeOptions;
+  current: CardTheme;
+  chosen: boolean;
+  error?: string;
+  saved?: boolean;
+}> = ({ options, current, chosen, error, saved }) => (
+  <Page title="How your card looks">
+    <h1>How your card looks</h1>
+    {saved && (
+      <p style="color: var(--success)">Saved. Any passes you have installed will catch up shortly.</p>
+    )}
+    {error && <p style="color: var(--danger)">{error}</p>}
+    <p>
+      Your card is drawn in <strong>{current.label}</strong>
+      {chosen ? ", which you chose." : ", the default."} You can use the theme of
+      any year you bought a membership, as well as the classic look.
+    </p>
+    {options.themes.map((theme) => (
+      <form method="post" action={THEME_PATH} class="order">
+        <input type="hidden" name="theme" value={theme.id} />
+        <img
+          class="card-image"
+          src={`/card.png?theme=${encodeURIComponent(theme.id)}`}
+          width={CARD_WIDTH}
+          height={CARD_HEIGHT}
+          // See MemberCard for why the size is on the element.
+          style="width: 100%; height: auto"
+          loading="lazy"
+          alt={`Your card in the ${theme.label} theme`}
+        />
+        <p style="margin: 0.5rem 0">
+          <strong>{theme.label}</strong>
+          {theme === options.defaultTheme ? " (the default)" : ""}
+        </p>
+        {theme.id === current.id ? (
+          <p class="muted">Your card looks like this now.</p>
+        ) : (
+          <button type="submit">Use this theme</button>
+        )}
+      </form>
+    ))}
+    {chosen && (
+      <form method="post" action={THEME_PATH}>
+        <input type="hidden" name="clear" value="1" />
+        <button type="submit">Go back to the default ({options.defaultTheme.label})</button>
+      </form>
+    )}
+    <p>
+      <a href="/">Back to your card</a>
+    </p>
+  </Page>
+);
+
+/** Whether this visitor may choose a theme now; see `mayChooseTheme`. */
+async function mayChoose(c: { env: Env; get(key: "session"): Session }): Promise<boolean> {
+  return mayChooseTheme(c.env, await isCurrentAdmin(c.env, c.get("session").userId));
+}
+
+async function themePage(
+  env: Env,
+  member: CurrentMember,
+  extra: { error?: string; saved?: boolean } = {},
+) {
+  const options = await getThemeOptions(env, member);
+  return (
+    <ThemeForm
+      options={options}
+      current={effectiveTheme(options, member.card_theme)}
+      chosen={options.themes.some((theme) => theme.id === member.card_theme)}
+      {...extra}
+    />
+  );
+}
+
+portal.get(THEME_PATH, requireCurrentMember, async (c) => {
+  if (!(await mayChoose(c))) return c.notFound();
+  return c.html(await themePage(c.env, c.get("member"), { saved: c.req.query("saved") === "1" }));
+});
+
+portal.post(THEME_PATH, requireCurrentMember, csrf(), async (c) => {
+  if (!(await mayChoose(c))) return c.notFound();
+  const member = c.get("member");
+  const userId = c.get("session").userId;
+  const form = await c.req.formData();
+
+  if (form.get("clear")) {
+    await clearCardTheme(c.env, member.email, userId);
+    recordOutcome("card_theme.saved", { result: "cleared" });
+    return c.redirect(`${THEME_PATH}?saved=1`, 303);
+  }
+
+  try {
+    await setCardTheme(c.env, member, String(form.get("theme") ?? ""), "member", userId);
+  } catch (err) {
+    if (!(err instanceof ThemeNotAllowed)) throw err;
+    recordOutcome("card_theme.saved", { result: "rejected" });
+    return c.html(await themePage(c.env, member, { error: "That theme isn't one your card can use." }), 400);
+  }
+  recordOutcome("card_theme.saved", { result: "set" });
+  return c.redirect(`${THEME_PATH}?saved=1`, 303);
+});
+
+/**
+ * The member's card, or with `?theme=` a preview of it in another theme they
+ * may use, for the theme page. A preview is only for somebody who may choose
+ * a theme now, and only of a theme they may use; anything else is a 404, so
+ * the address cannot be used to see a theme that is not theirs.
+ */
 portal.get("/card.png", requireCurrentMember, async (c) => {
-  const png = await renderCardImage(c.env, c.get("member"));
+  const member = c.get("member");
+  const themeId = c.req.query("theme");
+  let theme: CardTheme | undefined;
+  if (themeId !== undefined) {
+    const allowed = await mayChooseTheme(c.env, await isCurrentAdmin(c.env, c.get("session").userId));
+    theme = allowed
+      ? (await getThemeOptions(c.env, member)).themes.find((option) => option.id === themeId)
+      : undefined;
+    if (!theme) return c.text("No such theme for this card.", 404);
+  }
+  const png = await renderCardImage(c.env, member, theme);
   // See sha1Hex in src/passkit/generator.ts for why this narrowing is needed.
   return new Response(png as Uint8Array<ArrayBuffer>, {
     headers: {
