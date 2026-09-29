@@ -2,11 +2,12 @@
  * Which card themes a member may use, and which one their card is drawn in
  * until they choose (#333, piece 3).
  *
- * - A year theme is theirs for every calendar year in which they held an
- *   active membership: any year an order that counts as a membership
- *   (`COUNTS_AS_MEMBERSHIP`) was in force, from the day it was placed through
- *   the day it expired, the same "good through" the card shows. A membership
- *   bought in the middle of one year therefore covers the next as well.
+ * - A year theme is theirs for each calendar year in which they bought a
+ *   membership: the year an order that counts as a membership
+ *   (`COUNTS_AS_MEMBERSHIP`) was placed, and only that year, even though the
+ *   membership runs on into the next. That matches the membership pack and
+ *   scarf, which change every year and come from the year the membership
+ *   was bought.
  * - Their "member since" year is always theirs, even when an admin's
  *   correction puts it before their first order.
  * - Classic is always theirs. It is how every card looked before themes, and
@@ -49,15 +50,9 @@ function yearOf(date: string): number {
   return Number(date.slice(0, 4));
 }
 
-/** Every calendar year in which one of these orders was in force. */
-export function membershipYears(orders: ThemeHistory["orders"]): Set<number> {
-  const years = new Set<number>();
-  for (const order of orders) {
-    for (let year = yearOf(order.created_on); year <= yearOf(order.expires_on); year++) {
-      years.add(year);
-    }
-  }
-  return years;
+/** Every calendar year in which one of these orders was placed. */
+export function purchaseYears(orders: ThemeHistory["orders"]): Set<number> {
+  return new Set(orders.map((order) => yearOf(order.created_on)));
 }
 
 /**
@@ -69,7 +64,7 @@ export function themeOptions(
   yearDefaults: boolean,
   themes: readonly CardTheme[] = CARD_THEMES,
 ): ThemeOptions {
-  const years = membershipYears(history.orders);
+  const years = purchaseYears(history.orders);
   const sinceYear = history.memberSince ? yearOf(history.memberSince) : null;
   if (sinceYear !== null) {
     years.add(sinceYear);

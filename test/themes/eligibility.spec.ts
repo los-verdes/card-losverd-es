@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
 import {
   getThemeOptions,
-  membershipYears,
+  purchaseYears,
   themeOptions,
   themeYearDefaultsEnabled,
 } from "../../src/themes/eligibility";
@@ -26,23 +26,19 @@ function order(created_on: string, expires_on: string) {
 
 const ids = (themes: CardTheme[]) => themes.map((theme) => theme.id);
 
-describe("membershipYears", () => {
-  it("covers every calendar year from the day an order was placed to the day it expired", () => {
-    expect(membershipYears([order("2021-07-04", "2022-07-04")])).toEqual(new Set([2021, 2022]));
-  });
-
-  it("covers one year for an order that starts and ends in it", () => {
-    expect(membershipYears([order("2024-01-01", "2024-12-31")])).toEqual(new Set([2024]));
+describe("purchaseYears", () => {
+  it("is the year an order was placed, not the year it runs on into", () => {
+    expect(purchaseYears([order("2024-07-04", "2025-07-04")])).toEqual(new Set([2024]));
   });
 
   it("combines several orders, counting a shared year once", () => {
     expect(
-      membershipYears([order("2021-03-01", "2022-03-01"), order("2022-03-01", "2023-03-01")]),
-    ).toEqual(new Set([2021, 2022, 2023]));
+      purchaseYears([order("2021-03-01", "2022-03-01"), order("2021-11-01", "2022-11-01"), order("2023-02-01", "2024-02-01")]),
+    ).toEqual(new Set([2021, 2023]));
   });
 
   it("is empty without orders", () => {
-    expect(membershipYears([])).toEqual(new Set());
+    expect(purchaseYears([])).toEqual(new Set());
   });
 });
 
@@ -52,14 +48,15 @@ describe("themeOptions", () => {
     memberSince: "2021-07-04",
   };
 
-  it("offers classic, then each published year theme from a year the member was active, in year order", () => {
-    // 2025 was an active year too, but has no theme.
-    expect(ids(themeOptions(history, false, THEMES).themes)).toEqual(["classic", "2021", "2022", "2024"]);
+  it("offers classic, then each published year theme from a year the member bought a membership, in year order", () => {
+    // The 2021 membership ran on into 2022, but 2022's pack went to whoever
+    // bought that year, so its theme is not theirs.
+    expect(ids(themeOptions(history, false, THEMES).themes)).toEqual(["classic", "2021", "2024"]);
   });
 
   it("offers the member-since year even when it is before the first order", () => {
     const options = themeOptions({ ...history, memberSince: "2019-02-01" }, false, THEMES);
-    expect(ids(options.themes)).toEqual(["classic", "2019", "2021", "2022", "2024"]);
+    expect(ids(options.themes)).toEqual(["classic", "2019", "2021", "2024"]);
   });
 
   it("offers only classic to somebody with no orders and no member-since date", () => {
@@ -86,7 +83,8 @@ describe("themeOptions", () => {
       true,
       THEMES,
     );
-    expect(ids(options.themes)).toEqual(["classic", "2024"]);
+    // Bought in 2023, which has no theme; running on into 2024 does not make 2024's theirs.
+    expect(ids(options.themes)).toEqual(["classic"]);
     expect(options.defaultTheme).toBe(CLASSIC_THEME);
   });
 
@@ -138,7 +136,7 @@ describe("getThemeOptions", () => {
     await insertOrder("1002", "Refunded", "2024-05-01", "2025-05-01");
     await insertOrder("1003", "Completed", "2019-03-01", "2020-03-01", "someone.else@example.com");
 
-    expect(ids((await getThemeOptions(env, member, THEMES)).themes)).toEqual(["classic", "2021", "2022"]);
+    expect(ids((await getThemeOptions(env, member, THEMES)).themes)).toEqual(["classic", "2021"]);
   });
 
   it("uses the member-since date it is given, which carries any correction", async () => {
