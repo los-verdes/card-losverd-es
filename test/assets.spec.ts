@@ -2,7 +2,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
-import { CLASSIC_THEME } from "../src/themes/cardTheme";
+import { CLASSIC_THEME, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 
@@ -71,8 +71,24 @@ describe("GET /assets/:name", () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining(CREST_KEY));
   });
 
-  it("lists only the crest, which is what the Wallet logo points at", () => {
-    expect(PUBLIC_ASSETS).toEqual({ "crest.png": CREST_KEY });
+  it("lists the crest, which the Wallet logo points at, and each year theme's hero image", () => {
+    expect(PUBLIC_ASSETS).toEqual({
+      "crest.png": CREST_KEY,
+      ...Object.fromEntries(YEAR_THEMES.map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero])),
+    });
+  });
+
+  it("serves a year theme's hero image, which Google fetches for the pass", async () => {
+    const key = YEAR_THEMES[0].artwork.googleHero!;
+    await env.ASSETS.put(key, CREST_BYTES);
+    try {
+      const res = await get(googleHeroPath(YEAR_THEMES[0])!);
+
+      expect(res.status).toBe(200);
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(CREST_BYTES);
+    } finally {
+      await env.ASSETS.delete(key);
+    }
   });
 
   it("actually serves the URL the Google Wallet object tells Google to fetch", async () => {
@@ -204,8 +220,8 @@ describe("the bundled stylesheet and font", () => {
 });
 
 describe("publicAssets", () => {
-  it("publishes the crest, and nothing else while no theme has a hero image", () => {
-    expect(PUBLIC_ASSETS).toEqual({ "crest.png": "templates/card/crest.png" });
+  it("publishes only the crest when no theme has a hero image", () => {
+    expect(publicAssets([CLASSIC_THEME])).toEqual({ "crest.png": "templates/card/crest.png" });
   });
 
   it("publishes each theme's Google hero image under its versioned name", () => {

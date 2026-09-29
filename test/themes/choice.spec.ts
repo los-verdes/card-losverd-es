@@ -162,7 +162,10 @@ describe("the theme a card is drawn in", () => {
     expect(await getCardThemeChoice(env, EMAIL)).not.toBeNull();
   });
 
-  it("draws in classic from the real registry, which has no year themes yet", async () => {
+  it("draws in classic from the real registry until year defaults are on, though 2021's theme is hers", async () => {
     expect(await resolveCardTheme(env, await member())).toBe(CLASSIC_THEME);
+
+    env.CARD_THEME_YEAR_DEFAULTS = "true";
+    expect((await resolveCardTheme(env, await member())).id).toBe("2021");
   });
 });

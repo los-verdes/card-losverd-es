@@ -263,8 +263,11 @@ is working as intended. However this is open to feedback!: see
 
 How the card looks: its colours and, for a year's theme, artwork from that
 year's membership scarf. Themes are defined in the code (`CARD_THEMES` in
-`src/themes/cardTheme.ts`); "classic" is today's look, and **no year themes
-are published yet, so every card is classic for now.**
+`src/themes/cardTheme.ts`); "classic" is how every card looked before themes.
+Year themes exist for **2020, 2021, 2022 and 2023**, each from that year's
+scarf; later years follow as their designs arrive, and a year with no theme
+uses classic. **Every card is still classic for now**: nobody has chosen a
+theme yet, and year defaults are off.
 
 Which themes a member may use (`src/themes/eligibility.ts`):
 

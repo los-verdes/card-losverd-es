@@ -1,30 +1,10 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 import { APP_CSS, VERDE, VERDE_INK } from "../src/styles";
+import { contrast, luminance } from "./fixtures/contrast";
 
-/**
- * WCAG 2.1 relative luminance and contrast. Worth the dozen lines: dark mode
- * is entirely a legibility feature, and a colour that disappears against its
- * background is exactly the defect nobody notices in review because the
- * reviewer's own device is in the other mode.
- */
-function luminance(hex: string): number {
-  const channel = (value: number) => {
-    const c = value / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  // `#555` is as valid as `#555555` and CSS authors write both, so expand the
-  // short form rather than quietly reading it as NaN.
-  const digits = hex.slice(1);
-  const full = digits.length === 3 ? [...digits].map((d) => d + d).join("") : digits;
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-function contrast(a: string, b: string): number {
-  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (lighter + 0.05) / (darker + 0.05);
-}
+// Dark mode is entirely a legibility feature, and the reviewer's own device
+// is usually in the other mode, so these colours are checked for contrast.
 
 /** The custom properties declared in one `:root { ... }` block. */
 function tokensIn(css: string): Record<string, string> {
