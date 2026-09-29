@@ -46,6 +46,7 @@ export const AUDIT_ACTIONS = [
   "person.readmitted",
   "display_name.set",
   "display_name.cleared",
+  "display_name.repaired",
   "member_since.set",
   "member_since.cleared",
   "order.reattributed",
@@ -66,6 +67,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "person.readmitted": "Expulsion lifted",
   "display_name.set": "Card name set",
   "display_name.cleared": "Card name cleared",
+  "display_name.repaired": "Card name repaired",
   "member_since.set": "Member since corrected",
   "member_since.cleared": "Member since correction removed",
   "order.reattributed": "Order re-attributed",
@@ -125,6 +127,8 @@ export async function recordAuditEventBestEffort(
  *   name would be a guess (scripts/admin.mjs).
  * - A card name with no actor came across in the one-time import of names
  *   members had set on the previous site (src/member/displayName.ts).
+ * - A card name is only ever "repaired" by a database migration restoring a
+ *   letter the previous site lost (src/db/migrations/0007_*.sql).
  *
  * Anything else with no actor stays blank rather than claiming a cause
  * nobody recorded. Shown and exported as written here; the stored column
@@ -136,6 +140,7 @@ const UNNAMED_ACTORS: Partial<Record<AuditAction, string>> = {
   "admin.granted": "command line",
   "admin.revoked": "command line",
   "display_name.set": "previous site import",
+  "display_name.repaired": "database migration",
 };
 
 /** Who did it: the admin's or member's address, or what acted when no person did. */
