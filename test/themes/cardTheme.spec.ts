@@ -4,6 +4,7 @@ import {
   ARTWORK_SIZES,
   CARD_THEMES,
   CLASSIC_THEME,
+  YEAR_THEMES,
   appleRgb,
   googleHeroFileName,
   googleHeroPath,
@@ -11,6 +12,7 @@ import {
   type CardTheme,
 } from "../../src/themes/cardTheme";
 import { CARD_HEIGHT, CARD_WIDTH } from "../../src/cardimage/template";
+import { contrast } from "../fixtures/contrast";
 
 // Every image committed for upload to R2 (`just r2-upload-templates`), keyed
 // by its R2 key. Only the paths are needed, so nothing is loaded.
@@ -19,6 +21,19 @@ const COMMITTED_ASSETS = new Set(
     path.replace("../../assets/", ""),
   ),
 );
+
+// The committed images' bytes, keyed the same way.
+const ASSET_BYTES = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<ArrayBuffer>("../../assets/templates/themes/**/*.png", { eager: true, import: "default" }),
+  ).map(([path, bytes]) => [path.replace("../../assets/", ""), bytes]),
+);
+
+/** A PNG's width and height: the two big-endian words after the IHDR tag. */
+function pngSize(bytes: ArrayBuffer) {
+  const view = new DataView(bytes);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
 
 /** A theme with every artwork slot filled, as a year theme would be. */
 const ARTWORK_THEME: CardTheme = {
@@ -122,5 +137,38 @@ describe("artwork", () => {
     expect(googleHeroFileName(ARTWORK_THEME)).toBe("hero-2026-2.png");
     expect(googleHeroPath(ARTWORK_THEME)).toBe("/assets/hero-2026-2.png");
     expect(googleHeroPath({ ...ARTWORK_THEME, version: 3 })).toBe("/assets/hero-2026-3.png");
+  });
+});
+
+describe("the year themes", () => {
+  it("are one per year, each id its year, in year order after classic", () => {
+    expect(CARD_THEMES.slice(1)).toEqual(YEAR_THEMES);
+    expect(YEAR_THEMES.map((theme) => theme.id)).toEqual(YEAR_THEMES.map((theme) => String(theme.year)));
+    const years = YEAR_THEMES.map((theme) => theme.year!);
+    expect(years).toEqual([...years].sort());
+  });
+
+  it.each(YEAR_THEMES.map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
+    const { cardBackground, appleThumbnailPrefix, googleHero } = theme.artwork;
+
+    expect(pngSize(ASSET_BYTES[cardBackground!])).toEqual(ARTWORK_SIZES.cardBackground);
+    expect(pngSize(ASSET_BYTES[googleHero!])).toEqual(ARTWORK_SIZES.googleHero);
+    ARTWORK_SIZES.appleThumbnail.scales.forEach((scale, i) => {
+      const side = ARTWORK_SIZES.appleThumbnail.width * scale;
+      expect(pngSize(ASSET_BYTES[`${appleThumbnailPrefix}${APPLE_THUMBNAIL_FILES[i]}`])).toEqual({ width: side, height: side });
+    });
+  });
+
+  // Against the theme's background colour, which the passes use as it is and
+  // the card's art is toned to match: darkened under white text, or kept light
+  // under dark text. The card's title and name are large text (3:1); the rest
+  // is small (4.5:1). Classic predates the check, and its white on verde falls
+  // short of 3:1, so it is left as every card has always been.
+  it.each(YEAR_THEMES.map((theme) => [theme.id, theme.colors] as const))("%s keeps its text legible", (_, colors) => {
+    expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(3);
+    expect(contrast(colors.secondaryText, colors.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colors.passText, colors.background)).toBeGreaterThanOrEqual(4.5);
+    // The card number sits on the QR code's white box.
+    expect(contrast(colors.qrLabel, "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
 });

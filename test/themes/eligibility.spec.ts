@@ -88,8 +88,12 @@ describe("themeOptions", () => {
     expect(options.defaultTheme).toBe(CLASSIC_THEME);
   });
 
-  it("offers only classic from the real registry, which has no year themes yet", () => {
-    expect(themeOptions(history, true)).toEqual({ themes: [CLASSIC_THEME], defaultTheme: CLASSIC_THEME });
+  it("offers the real registry's theme for a year bought in, and nothing for a year with no design yet", () => {
+    // 2021 has a scarf design; 2024's is still to come.
+    const options = themeOptions(history, true);
+
+    expect(ids(options.themes)).toEqual(["classic", "2021"]);
+    expect(options.defaultTheme.id).toBe("2021");
   });
 });
 
@@ -153,6 +157,7 @@ describe("getThemeOptions", () => {
   });
 
   it("offers the real registry by default", async () => {
-    expect(await getThemeOptions(env, member)).toEqual({ themes: [CLASSIC_THEME], defaultTheme: CLASSIC_THEME });
+    // Member since 2021, which has a published theme.
+    expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021"]);
   });
 });

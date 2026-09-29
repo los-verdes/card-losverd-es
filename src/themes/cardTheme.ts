@@ -6,9 +6,9 @@
  * their own, so that a member's card can be drawn in a year's theme or a
  * subgroup's, and so the four cannot drift apart.
  *
- * "Classic" is today's look, and the only theme so far. It is also the
- * fallback wherever a theme is missing: a year with no scarf design, or a
- * chosen theme that is no longer allowed.
+ * "Classic" is how every card looked before themes. It is also the fallback
+ * wherever a theme is missing: a year with no scarf design, or a chosen theme
+ * that is no longer allowed. The year themes follow it in `CARD_THEMES`.
  */
 
 /** Colours, as `#rrggbb`. One background serves every surface, so a card looks the same in every wallet. */
@@ -115,8 +115,70 @@ export const CLASSIC_THEME: CardTheme = {
   artwork: {},
 };
 
+/**
+ * A year's theme, from that year's membership scarf. It keeps classic's crest
+ * and pass images, and has artwork on every surface under
+ * `templates/themes/<year>/` (how each was made: assets/templates/themes/README.md).
+ */
+function yearTheme(year: number, label: string, colors: CardThemeColors): CardTheme {
+  const prefix = `templates/themes/${year}/`;
+  return {
+    id: String(year),
+    label,
+    year,
+    version: 1,
+    colors,
+    assets: CLASSIC_THEME.assets,
+    artwork: {
+      cardBackground: `${prefix}card-background.png`,
+      appleThumbnailPrefix: `${prefix}apple/`,
+      googleHero: `${prefix}google-hero.png`,
+    },
+  };
+}
+
+/** The year themes, one per scarf design so far. Designs for 2024 onwards are still to come (#333). */
+export const YEAR_THEMES: readonly CardTheme[] = [
+  // Serape stripes, darkened so the card's white text reads over them.
+  yearTheme(2020, "2020: MMXX", {
+    background: "#111111",
+    border: "#000000",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
+  }),
+  // The inaugural season: the skull and rings from the scarf's back.
+  yearTheme(2021, "2021: Inaugural season", {
+    background: "#020202",
+    border: "#09ad4e",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
+  }),
+  // "Verde hasta la muerte": the doodle pattern, darkened.
+  yearTheme(2022, "2022: Verde hasta la muerte", {
+    background: "#2b2f2c",
+    border: "#59be77",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
+  }),
+  // "i love you verde": mint with aloe, the one light theme, so its text is dark.
+  yearTheme(2023, "2023: I love you verde", {
+    background: "#8fddb3",
+    border: "#00b140",
+    text: "#000000",
+    secondaryText: "#0b3d20",
+    qrLabel: "#046a29",
+    passText: "#000000",
+  }),
+];
+
 /** Every theme there is. Classic stays first: it is the fallback. */
-export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME];
+export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES];
 
 /**
  * The public file name of a theme's Google hero image, served by
