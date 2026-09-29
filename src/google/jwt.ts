@@ -64,6 +64,8 @@ export interface GoogleWalletTheme {
   logoUri: string;
   /** The theme's hero image and what it shows, for a theme that has one. */
   heroImage?: { uri: string; description: string };
+  /** The theme's name, shown among the pass's details so the holder can see which they have. */
+  label?: string;
 }
 
 /** A card theme as Google needs it, its images resolved against the environment's public origin. */
@@ -72,6 +74,7 @@ export function googleWalletTheme(theme: CardTheme, baseUrl: string): GoogleWall
   return {
     hexBackgroundColor: theme.colors.background.toUpperCase(),
     logoUri: new URL(theme.assets.googleLogoPath, baseUrl).toString(),
+    label: theme.label,
     ...(heroPath
       ? { heroImage: { uri: new URL(heroPath, baseUrl).toString(), description: theme.label } }
       : {}),
@@ -246,6 +249,10 @@ export function buildGenericObject(
       header: "Good through",
       body: formatShortDate(member.expirationDate),
     });
+  }
+
+  if (theme.label) {
+    textModulesData.push({ id: "card_theme", header: "Card theme", body: theme.label });
   }
 
   // Last, for the same reason it is the last back field on the Apple pass:

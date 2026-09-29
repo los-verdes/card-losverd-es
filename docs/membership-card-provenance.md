@@ -340,8 +340,10 @@ card number never needs to be reproducible from anything else.
 | Good through | yes | yes | yes |
 | Card number | on the back | as QR alt text | under the QR code |
 | Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
+| Card theme's name | on the back | among the details | not shown (the card is drawn in it) |
 
-All three carry the same fields.
+All three carry the same fields, and all three are drawn in the member's
+theme.
 
 ## 5. How the app decides who is a current member
 
