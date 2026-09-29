@@ -21,6 +21,7 @@ import {
 } from "../google/jwt";
 import { tracing } from "cloudflare:workers";
 import type { Env } from "../index";
+import { resolveCardTheme } from "../themes/choice";
 import { buildVerifyPassUrl } from "../lib/passSignature";
 import {
   assemblePassBundle,
@@ -29,7 +30,6 @@ import {
 } from "../passkit/generator";
 import {
   APPLE_THUMBNAIL_FILES,
-  resolveCardTheme,
   themeCacheTag,
   type CardTheme,
 } from "../themes/cardTheme";
@@ -57,6 +57,11 @@ export interface MemberRecord {
    * clearing this puts the card back to them.
    */
   display_name: string | null;
+  /**
+   * The card theme they chose (`member_card_themes`), or null; drawn only
+   * while they may still use it (`resolveCardTheme()` in src/themes/choice.ts).
+   */
+  card_theme: string | null;
   auth_token: string;
   last_updated_at: number;
 }
@@ -85,10 +90,12 @@ const MEMBER_SELECT = `SELECT m.member_id, m.email, m.first_name, m.last_name,
          CASE WHEN r.member_id IS NOT NULL OR b.email IS NOT NULL THEN NULL ELSE m.expiration_date END AS expiration_date,
          COALESCE(o.member_since, m.member_since) AS member_since,
          d.display_name,
+         t.theme_id AS card_theme,
          m.auth_token, m.last_updated_at
   FROM members m
        LEFT JOIN member_since_overrides o ON o.email = m.email
        LEFT JOIN member_display_names d ON d.email = m.email
+       LEFT JOIN member_card_themes t ON t.email = m.email
        LEFT JOIN revoked_cards r ON r.member_id = m.member_id
        LEFT JOIN expelled_people b ON b.email = m.email`;
 
@@ -257,8 +264,9 @@ const PASS_TEMPLATE_ASSETS = [
 export async function getApplePassBundle(
   env: Env,
   member: MemberRecord,
-  theme: CardTheme = resolveCardTheme(),
+  requestedTheme?: CardTheme,
 ): Promise<Uint8Array> {
+  const theme = requestedTheme ?? (await resolveCardTheme(env, member));
   const passTypeIdentifier = env.PASSKIT_PASS_TYPE_IDENTIFIER;
   const cached = await getCachedPass(
     env.ASSETS,
@@ -331,8 +339,9 @@ export async function getApplePassBundle(
 export async function renderCardImage(
   env: Env,
   member: MemberRecord,
-  theme: CardTheme = resolveCardTheme(),
+  requestedTheme?: CardTheme,
 ): Promise<Uint8Array> {
+  const theme = requestedTheme ?? (await resolveCardTheme(env, member));
   // Imported here rather than at the top of the file. This module is imported
   // by nearly everything that touches a member, and the renderer brings satori
   // and resvg with it -- several megabytes of JavaScript that most requests
@@ -404,7 +413,7 @@ async function googleWalletObjectFor(
       verifyUrl: await verifyUrl(env, member),
     },
     config,
-    googleWalletTheme(resolveCardTheme(), env.PUBLIC_BASE_URL),
+    googleWalletTheme(await resolveCardTheme(env, member), env.PUBLIC_BASE_URL),
   );
   return { config, credentials, object };
 }

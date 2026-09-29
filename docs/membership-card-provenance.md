@@ -259,6 +259,39 @@ item rather than a serious identity document so a card showing a nickname
 is working as intended. However this is open to feedback!: see
 [question 6](#9-decisions-worth-confirming).
 
+### Theme
+
+How the card looks: its colours and, for a year's theme, artwork from that
+year's membership scarf. Themes are defined in the code (`CARD_THEMES` in
+`src/themes/cardTheme.ts`); "classic" is today's look, and **no year themes
+are published yet, so every card is classic for now.**
+
+Which themes a member may use (`src/themes/eligibility.ts`):
+
+* the theme of each year in which they bought a membership -- the year the
+  order was placed, as with the year's membership pack and scarf, not the
+  following year the membership runs on into;
+* the theme of their "member since" year;
+* classic, always.
+
+**Until they choose, a card is drawn in their default:** classic, or -- once
+`CARD_THEME_YEAR_DEFAULTS` is switched on -- their "member since" year's theme
+(classic if that year has none). Switching it on changes cards already on
+people's phones, so it goes out alongside a refresh of every pass.
+
+**A chosen theme** is kept apart from the membership record
+(`member_card_themes`), like a chosen card name, and for the same reason: the
+record is rebuilt from the orders on every sync. It is drawn only while it is
+one the member may still use; otherwise the card goes back to their default,
+and the choice returns if the theme does (`resolveCardTheme()` in
+`src/themes/choice.ts`). Choosing or clearing a theme is recorded in the audit
+log and reaches installed passes the way a new card name does.
+
+**Who may choose** is a setting (`CARD_THEME_CHOICE`): open to admins first,
+so the choice can be tried on real cards before members are offered it, and
+then to everyone. It decides who may make a choice, not whether a choice
+already made is drawn.
+
 ### Card number and QR code
 
 **Note: members rarely need this number.** It identifies their membership

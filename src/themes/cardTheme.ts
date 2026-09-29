@@ -132,15 +132,6 @@ export function googleHeroPath(theme: CardTheme): string | null {
   return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme)}` : null;
 }
 
-/**
- * The theme a member's card is drawn in. Every card is "classic" until
- * members can choose (#333, pieces 3 and 4); callers go through this so that
- * change lands in one place.
- */
-export function resolveCardTheme(): CardTheme {
-  return CLASSIC_THEME;
-}
-
 /** Tags a cached pass with the theme it was built in; see `CardTheme.version`. */
 export function themeCacheTag(theme: CardTheme): string {
   return `${theme.id}@${theme.version}`;

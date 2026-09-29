@@ -127,6 +127,10 @@ export interface Env {
    * (src/themes/eligibility.ts).
    */
   CARD_THEME_YEAR_DEFAULTS?: string;
+  // Not secret -- who may choose a card theme: "admins" (to try it on real
+  // cards first), "everyone", or anything else for nobody
+  // (src/themes/choice.ts).
+  CARD_THEME_CHOICE?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the sender, in wrangler.toml `[vars]`.
