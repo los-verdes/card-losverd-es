@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCardTree, CREST_SIZE, type MembershipCardMember, type SatoriElement } from "../../src/cardimage/template";
+import { buildCardTree, cardNumberLines, CREST_SIZE, nameFontSize, type MembershipCardMember, type SatoriElement } from "../../src/cardimage/template";
 import CREST_PNG from "../../assets/templates/card/crest.png";
 import { CLASSIC_THEME } from "../../src/themes/cardTheme";
 
@@ -160,5 +160,61 @@ describe("buildCardTree with background art", () => {
     const tree = buildCardTree(makeMember(), LABELS, IMAGES);
 
     expect(tree.props.style).not.toHaveProperty("backgroundImage");
+  });
+});
+
+/** Every element in the tree, depth first. */
+function elements(el: SatoriElement | string): SatoriElement[] {
+  if (typeof el === "string") return [];
+  const children = el.props.children;
+  const list = children === undefined ? [] : Array.isArray(children) ? children : [children];
+  return [el, ...list.flatMap(elements)];
+}
+
+describe("a long name", () => {
+  const LONGEST = "Maximiliano Alejandro Fernández de la Torre y Villanueva Ruiz Paz"; // 64, the most a card allows
+
+  it("is drawn smaller the longer it is, so the longest stays within three lines", () => {
+    expect(nameFontSize("Ana Ruiz")).toBe(46);
+    expect(nameFontSize("x".repeat(40))).toBe(46);
+    expect(nameFontSize("x".repeat(41))).toBe(38);
+    expect(nameFontSize("x".repeat(52))).toBe(38);
+    expect(nameFontSize(LONGEST)).toBe(32);
+    // Counted in characters, not UTF-16 units.
+    expect(nameFontSize("é".repeat(40))).toBe(46);
+  });
+
+  it("wraps in whatever space the QR code's box leaves, breaking a word only when it must", () => {
+    const tree = buildCardTree(makeMember({ firstName: LONGEST, lastName: "" }), { memberSince: null, expiration: null }, IMAGES);
+    const all = elements(tree);
+    const name = all.find((el) => el.props.children === LONGEST)!;
+    const column = all.find((el) => Array.isArray(el.props.children) && el.props.children.includes(name))!;
+    const qrBox = all.find((el) => el.props.style?.backgroundColor === "#ffffff")!;
+
+    expect(name.props.style).toMatchObject({ fontSize: 32, wordBreak: "break-word" });
+    // The column takes the rest of the row and may shrink below its text's
+    // width, so the text wraps rather than pushing the box off the card.
+    expect(column.props.style).toMatchObject({ flexGrow: 1, flexShrink: 1, minWidth: 0 });
+    expect(column.props.style).not.toHaveProperty("maxWidth");
+    expect(qrBox.props.style).toMatchObject({ flexShrink: 0 });
+  });
+});
+
+describe("the card number under the QR code", () => {
+  it("splits a full-length number at the hyphen nearest its middle, so the box is no wider than the code", () => {
+    expect(cardNumberLines("LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6")).toEqual(["LV-6f1c8e40-0000-4000-", "8000-a1b2c3d4e5f6"]);
+  });
+
+  it("keeps a short number, or one with nowhere to split, on one line", () => {
+    expect(cardNumberLines("LV-10023")).toEqual(["LV-10023"]);
+    expect(cardNumberLines("x".repeat(30))).toEqual(["x".repeat(30)]);
+  });
+
+  it("prints every line of it in the QR code's box", () => {
+    const tree = buildCardTree(makeMember({ memberId: "LV-6f1c8e40-0000-4000-8000-a1b2c3d4e5f6" }), { memberSince: null, expiration: null }, IMAGES);
+    const text = flattenText(tree);
+
+    expect(text).toContain("LV-6f1c8e40-0000-4000-");
+    expect(text).toContain("8000-a1b2c3d4e5f6");
   });
 });
