@@ -380,6 +380,31 @@ describe("pass cache (R2)", () => {
   });
 });
 
+describe("the card theme's name on the back", () => {
+  const backKeys = (member: MemberPassInput) =>
+    JSON.parse(new TextDecoder().decode(buildPassJson(member, CONFIG))).generic.backFields.map((f: { key: string }) => f.key);
+
+  it("follows the card number, so the holder can see which theme they have", () => {
+    const json = JSON.parse(new TextDecoder().decode(buildPassJson(makeMember({ themeLabel: "2023: I love you verde" }), CONFIG)));
+    const keys = json.generic.backFields.map((f: { key: string }) => f.key);
+
+    expect(json.generic.backFields).toContainEqual(
+      expect.objectContaining({ key: "card_theme", label: "Card theme", value: "2023: I love you verde" }),
+    );
+    expect(keys.indexOf("card_theme")).toBe(keys.indexOf("member_id") + 1);
+  });
+
+  it("is on the poster layout's back too", () => {
+    const json = JSON.parse(new TextDecoder().decode(buildPassJson(makeMember({ themeLabel: "Classic", poster: true }), CONFIG)));
+
+    expect(json.posterGeneric.backFields.map((f: { key: string }) => f.key)).toContain("card_theme");
+  });
+
+  it("is left out when no theme is given", () => {
+    expect(backKeys(makeMember())).not.toContain("card_theme");
+  });
+});
+
 describe("Apple's poster layout (#384)", () => {
   const parse = (member: MemberPassInput) => JSON.parse(new TextDecoder().decode(buildPassJson(member, CONFIG)));
 

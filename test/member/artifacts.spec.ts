@@ -173,6 +173,8 @@ describe("a theme's artwork (#333)", () => {
     for (const name of THUMBNAILS) {
       expect(new TextDecoder().decode(files[name])).toBe(name);
     }
+    const pass = JSON.parse(new TextDecoder().decode(files["pass.json"]));
+    expect(pass.generic.backFields).toContainEqual(expect.objectContaining({ key: "card_theme", value: THEME.label }));
     const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"]));
     expect(Object.keys(manifest)).toEqual(expect.arrayContaining(THUMBNAILS));
   });

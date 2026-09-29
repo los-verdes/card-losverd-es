@@ -312,6 +312,7 @@ export async function getApplePassBundle(
         authToken: member.auth_token,
         verifyUrl: passVerifyUrl,
         colors: theme.colors,
+        themeLabel: theme.label,
         poster: poster !== null,
       },
       {

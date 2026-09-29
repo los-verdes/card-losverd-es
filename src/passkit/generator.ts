@@ -17,6 +17,8 @@ export interface MemberPassInput {
   verifyUrl: string;
   /** The card theme's colours (#333); "classic" when omitted. */
   colors?: CardThemeColors;
+  /** The card theme's name, shown on the back so the holder can see which they have. */
+  themeLabel?: string;
   /**
    * Whether to add Apple's poster layout (iOS 27, src/passkit/poster.ts). The
    * caller supplies its images with the other assets.
@@ -175,7 +177,7 @@ export async function buildManifest(
  * pass, the last detail of a Google one -- so that a member can be asked what
  * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
-export const PASS_CONTENT_VERSION = "2026-09-22.1";
+export const PASS_CONTENT_VERSION = "2026-09-29.1";
 
 /**
  * The moment a membership ends, for the wallets' own expiry fields (#295):
@@ -243,6 +245,14 @@ export function buildPassJson(
       textAlignment: "PKTextAlignmentLeft",
     },
   ];
+  if (member.themeLabel) {
+    backFields.push({
+      key: "card_theme",
+      label: "Card theme",
+      value: member.themeLabel,
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
   if (member.status !== "active") {
     backFields.push({
       key: "status",
