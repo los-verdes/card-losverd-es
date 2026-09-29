@@ -9,6 +9,9 @@ import { isExpelled, expelPerson } from "../../src/member/expulsion";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
 import { cardNameText, getMemberByEmail, renderCardImage } from "../../src/member/artifacts";
 import LOGO from "../fixtures/sample-logo.png";
+import BACKGROUND from "../fixtures/sample-card-background.png";
+import { YEAR_THEMES } from "../../src/themes/cardTheme";
+import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -37,6 +40,7 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM revoked_cards");
   await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM member_display_names");
+  await env.DB.exec("DELETE FROM member_card_themes");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM slack_users");
@@ -696,5 +700,100 @@ describe("their card, on their page", () => {
 
     expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}`, 9)).status).toBe(403);
     expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}`, null)).status).toBe(302);
+  });
+});
+
+describe("their card's theme, on their page", () => {
+  // Jane has been a member since 2021, so 2021's theme is hers; 2022's is not.
+  const Y2021 = YEAR_THEMES.find((theme) => theme.year === 2021)!;
+  const page = async () => (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+  const errorOf = (res: Response) => new URL(res.headers.get("Location")!, "https://card.losverd.es").searchParams.get("error");
+
+  beforeEach(async () => {
+    env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
+    await env.ASSETS.put(Y2021.artwork.cardBackground!, new Uint8Array(BACKGROUND));
+  });
+
+  afterEach(async () => {
+    env.CARD_THEME_CHOICE = "admins";
+    await env.ASSETS.delete("templates/card/crest.png");
+    await env.ASSETS.delete(Y2021.artwork.cardBackground!);
+  });
+
+  it("says what their card is drawn in and why, and offers only the themes they may use", async () => {
+    const body = await page();
+
+    expect(body).toContain("Drawn in <strong>Classic</strong>, the default, as nobody has chosen one.");
+    expect(body).toContain("They may use Classic, 2021: Inaugural season.");
+    expect(body).toContain('<option value="2021">2021: Inaugural season</option>');
+    expect(body).not.toContain('value="2022"');
+  });
+
+  it("sets a theme for them, saying an admin chose it and which", async () => {
+    const res = await post({ email: EMAIL, action: "theme", theme: "2021" });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toContain("saved=theme");
+    expect(await getCardThemeChoice(env, EMAIL)).toMatchObject({ theme_id: "2021", source: "admin", set_by_email: "admin@example.com" });
+    const body = await page();
+    expect(body).toContain("Drawn in <strong>2021: Inaugural season</strong>, which an admin chose for them (admin@example.com).");
+    expect(body).toContain('<option value="2021" selected="">');
+  });
+
+  it("says when they chose it themselves", async () => {
+    await setCardTheme(env, (await getMemberByEmail(env, EMAIL))!, "2021", "member", null);
+
+    expect(await page()).toContain("which they chose themselves.");
+  });
+
+  it("says when the theme they chose is no longer one they can use, and that the default is drawn instead", async () => {
+    // As after a refund of the only order in that year.
+    await env.DB.prepare("INSERT INTO member_card_themes (email, theme_id, source) VALUES (?, '2022', 'member')").bind(EMAIL).run();
+
+    expect(await page()).toContain(
+      "Drawn in <strong>Classic</strong>, the default: &quot;2022: Verde hasta la muerte&quot; was chosen, but it is not one they can use any more.",
+    );
+  });
+
+  it("refuses a theme they may not use, and stores nothing", async () => {
+    const res = await post({ email: EMAIL, action: "theme", theme: "2022" });
+
+    expect(errorOf(res)).toBe("That is not a theme their card can use.");
+    expect(await getCardThemeChoice(env, EMAIL)).toBeNull();
+  });
+
+  it("clears a choice, putting their card back to its default", async () => {
+    await post({ email: EMAIL, action: "theme", theme: "2021" });
+
+    const res = await post({ email: EMAIL, action: "theme-clear" });
+
+    expect(res.headers.get("Location")).toContain("saved=theme-cleared");
+    expect(await getCardThemeChoice(env, EMAIL)).toBeNull();
+  });
+
+  it("offers nothing to change, and changes nothing, while choosing is switched off", async () => {
+    env.CARD_THEME_CHOICE = "off";
+
+    expect(await page()).toContain("Choosing a theme is switched off");
+    const res = await post({ email: EMAIL, action: "theme", theme: "2021" });
+    expect(errorOf(res)).toBe("Choosing a theme is switched off.");
+    expect(await getCardThemeChoice(env, EMAIL)).toBeNull();
+  });
+
+  it("answers for an address with no membership", async () => {
+    const res = await post({ email: "nobody@example.com", action: "theme", theme: "classic" });
+
+    expect(errorOf(res)).toBe("No membership is held under that address.");
+  });
+
+  it("previews their card in a theme they may use, and in no other", async () => {
+    const member = (await getMemberByEmail(env, EMAIL))!;
+
+    const res = await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}&theme=2021`);
+
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(await renderCardImage(env, member, Y2021));
+    expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}&theme=2022`)).status).toBe(404);
   });
 });

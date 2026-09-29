@@ -50,6 +50,17 @@ import {
 } from "../member/revocation";
 import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } from "../member/expulsion";
 import { readWholeAuditLog, type AuditEntry } from "../audit/log";
+import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
+import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
+import {
+  ThemeNotAllowed,
+  clearCardTheme,
+  effectiveTheme,
+  getCardThemeChoice,
+  mayChooseTheme,
+  setCardTheme,
+  type ThemeChoice,
+} from "../themes/choice";
 import { emailFootprint, type EmailFootprint } from "./attribution";
 import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
@@ -213,6 +224,81 @@ const CardPreview: FC<{ member: MemberRecord }> = ({ member }) => (
   </figure>
 );
 
+/** What the admin page shows about a member's card theme. */
+interface ThemeSummary {
+  options: ThemeOptions;
+  /** The theme their card is drawn in. */
+  current: CardTheme;
+  choice: ThemeChoice | null;
+  /** Whether themes may be chosen at all yet (`CARD_THEME_CHOICE`). */
+  open: boolean;
+}
+
+async function themeSummary(env: Env, member: MemberRecord): Promise<ThemeSummary> {
+  const [options, choice, open] = await Promise.all([
+    getThemeOptions(env, member),
+    getCardThemeChoice(env, member.email),
+    mayChooseTheme(env, true),
+  ]);
+  return { options, current: effectiveTheme(options, choice?.theme_id), choice, open };
+}
+
+/** Any theme's label, including one this member can no longer use. */
+function themeLabel(id: string): string {
+  return CARD_THEMES.find((theme) => theme.id === id)?.label ?? id;
+}
+
+/**
+ * Their card's theme (#333): what it is drawn in and why, and setting or
+ * clearing it for them. Only themes they may use are offered, the same as on
+ * their own page, and only while `CARD_THEME_CHOICE` lets anybody choose.
+ */
+const ThemeSection: FC<{ member: MemberRecord; theme: ThemeSummary }> = ({ member, theme }) => {
+  const { options, current, choice, open } = theme;
+  const why = !choice
+    ? "the default, as nobody has chosen one"
+    : choice.theme_id !== current.id
+      ? `the default: "${themeLabel(choice.theme_id)}" was chosen, but it is not one they can use any more`
+      : choice.source === "member"
+        ? "which they chose themselves"
+        : `which an admin chose for them${choice.set_by_email ? ` (${choice.set_by_email})` : ""}`;
+  return (
+    <>
+      <h3>Their card's theme</h3>
+      <p>
+        Drawn in <strong>{current.label}</strong>, {why}. They may use{" "}
+        {options.themes.map((option) => option.label).join(", ")}.
+      </p>
+      {open ? (
+        <>
+          <form method="post" action={MEMBERS_PATH}>
+            <input type="hidden" name="email" value={member.email} />
+            <input type="hidden" name="action" value="theme" />
+            <label for="theme">Theme</label>
+            <select id="theme" name="theme">
+              {options.themes.map((option) => (
+                <option value={option.id} selected={option.id === current.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button type="submit">Use this theme</button>
+          </form>
+          {choice && (
+            <form method="post" action={MEMBERS_PATH}>
+              <input type="hidden" name="email" value={member.email} />
+              <input type="hidden" name="action" value="theme-clear" />
+              <button type="submit">Go back to the default ({options.defaultTheme.label})</button>
+            </form>
+          )}
+        </>
+      ) : (
+        <p class="muted">Choosing a theme is switched off (CARD_THEME_CHOICE).</p>
+      )}
+    </>
+  );
+};
+
 const Summary: FC<{
   member: MemberRecord;
   footprint: EmailFootprint;
@@ -220,7 +306,8 @@ const Summary: FC<{
   nameSetBy: string | null;
   nameSetByEmail: string | null;
   expelled: boolean;
-}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled }) => (
+  theme: ThemeSummary;
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme }) => (
   <>
     {member.display_name && (
       <p class="muted">
@@ -305,6 +392,7 @@ const Summary: FC<{
         <button type="submit">Use the name from their orders instead</button>
       </form>
     )}
+    <ThemeSection member={member} theme={theme} />
     <h3>Membership standing</h3>
     <p class="muted">
       Rarely needed, and the Membership Committee's decision. Revoking stops this card; expelling also
@@ -474,7 +562,14 @@ const OrdersWithoutMember: FC<{
 members.get("/card.png", async (c) => {
   const member = await getMemberById(c.env, c.req.query("id") ?? "");
   if (!member) return c.text("No membership carries that card number.", 404);
-  const png = await renderCardImage(c.env, member);
+  // `&theme=` previews one of the themes they may use.
+  const themeId = c.req.query("theme");
+  const theme =
+    themeId === undefined
+      ? undefined
+      : (await getThemeOptions(c.env, member)).themes.find((option) => option.id === themeId);
+  if (themeId !== undefined && !theme) return c.text("That is not a theme this card can use.", 404);
+  const png = await renderCardImage(c.env, member, theme);
   // See sha1Hex in src/passkit/generator.ts for why this narrowing is needed.
   return new Response(png as Uint8Array<ArrayBuffer>, {
     headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
@@ -507,14 +602,15 @@ members.get("/", async (c) => {
   const historyEmail =
     member?.email ?? (lookup.kind === "email" && isWellFormedEmail(lookup.value) ? lookup.value : null);
 
-  const [footprint, orders, override, expelled] = member
+  const [footprint, orders, override, expelled, theme] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
         getDisplayName(c.env, member.email),
         isExpelled(c.env, member.email),
+        themeSummary(c.env, member),
       ])
-    : [null, [], null, false];
+    : [null, [], null, false, null];
 
   // An address can hold orders and no membership, and that is a real answer
   // rather than a dead end (#241). Only when there is nothing at all does the
@@ -590,6 +686,12 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}
+      {c.req.query("saved") === "theme" && (
+        <p style="color: var(--success)">Theme saved. Their passes will catch up shortly.</p>
+      )}
+      {c.req.query("saved") === "theme-cleared" && (
+        <p style="color: var(--success)">Theme cleared. Their card is back to its default.</p>
+      )}
       {c.req.query("saved") === "revoked" && (
         <p style="color: var(--success)">Membership revoked.</p>
       )}
@@ -617,7 +719,7 @@ members.get("/", async (c) => {
       {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
       {notFound && <p style="color: var(--danger)">{notFound}</p>}
       {orphan && <OrdersWithoutMember {...orphan} />}
-      {member && footprint && (
+      {member && footprint && theme && (
         <Summary
           member={member}
           footprint={footprint}
@@ -625,6 +727,7 @@ members.get("/", async (c) => {
           nameSetBy={override?.source ?? null}
           nameSetByEmail={override?.set_by_email ?? null}
           expelled={expelled}
+          theme={theme}
         />
       )}
       {historyOnly && (
@@ -689,6 +792,23 @@ members.post("/", csrf(), async (c) => {
     return (await revokeCard(c.env, member.member_id, note, c.get("session").userId))
       ? back({ saved: "revoked" })
       : back({ error: "That membership has already been revoked." });
+  }
+
+  if (form.action === "theme" || form.action === "theme-clear") {
+    if (!(await mayChooseTheme(c.env, true))) return back({ error: "Choosing a theme is switched off." });
+    const member = await getMemberByEmail(c.env, email);
+    if (!member) return back({ error: "No membership is held under that address." });
+    if (form.action === "theme-clear") {
+      await clearCardTheme(c.env, email, c.get("session").userId);
+      return back({ saved: "theme-cleared" });
+    }
+    try {
+      await setCardTheme(c.env, member, typeof form.theme === "string" ? form.theme : "", "admin", c.get("session").userId);
+    } catch (err) {
+      if (!(err instanceof ThemeNotAllowed)) throw err;
+      return back({ error: "That is not a theme their card can use." });
+    }
+    return back({ saved: "theme" });
   }
 
   if (form.action === "clear") {

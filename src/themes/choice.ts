@@ -20,7 +20,7 @@ import type { Env } from "../index";
 import { getMemberByEmail, type MemberRecord } from "../member/artifacts";
 import { notifyWalletsUpdated } from "../member/walletUpdates";
 import { CARD_THEMES, type CardTheme } from "./cardTheme";
-import { getThemeOptions } from "./eligibility";
+import { getThemeOptions, type ThemeOptions } from "./eligibility";
 
 export type ThemeChoiceSource = "member" | "admin";
 
@@ -139,8 +139,12 @@ export async function resolveCardTheme(
   member: Pick<MemberRecord, "email" | "member_since" | "card_theme">,
   themes: readonly CardTheme[] = CARD_THEMES,
 ): Promise<CardTheme> {
-  const options = await getThemeOptions(env, member, themes);
-  return options.themes.find((theme) => theme.id === member.card_theme) ?? options.defaultTheme;
+  return effectiveTheme(await getThemeOptions(env, member, themes), member.card_theme);
+}
+
+/** The theme drawn, from options already worked out: the choice while it is one of them, else the default. */
+export function effectiveTheme(options: ThemeOptions, choice: string | null | undefined): CardTheme {
+  return options.themes.find((theme) => theme.id === choice) ?? options.defaultTheme;
 }
 
 /**
