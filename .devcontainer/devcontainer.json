@@ -16,9 +16,20 @@
       "ZSH_IN_DOCKER_VERSION": "1.2.0"
     }
   },
+  // Memory and process limits, so a runaway task inside the container cannot
+  // take the host down with it. Without them the container may use all of the
+  // WSL VM's memory, and a full test run with coverage once did, crashing WSL
+  // (2026-09-29). With them the kernel kills the largest process in the
+  // container instead -- almost always the runaway -- and everything else
+  // carries on. A full coverage run peaks at about 3 GB. Override per machine
+  // by setting DEVCONTAINER_MEMORY / DEVCONTAINER_MEMORY_SWAP on the host
+  // (memory plus swap, so the default allows 2 GB of swap) before a rebuild.
   "runArgs": [
     "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW"
+    "--cap-add=NET_RAW",
+    "--memory=${localEnv:DEVCONTAINER_MEMORY:10g}",
+    "--memory-swap=${localEnv:DEVCONTAINER_MEMORY_SWAP:12g}",
+    "--pids-limit=4096"
   ],
   "forwardPorts": [
     8787, // wrangler dev

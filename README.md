@@ -101,6 +101,7 @@ just lint
   - `npx wrangler login --device` for deploys and remote D1 by hand.
   - A read-only Cloudflare API token, if you have one, goes in `~/.config/.wrangler/cloudflare-api-token` (`chmod 600`), and is used as `CLOUDFLARE_API_TOKEN="$(cat ~/.config/.wrangler/cloudflare-api-token)"`.
 - **1Password's CLI is not installed**, so recipes that use `op run` (secrets, the D1 export) run on the host.
+- **The container is limited to 10 GB of memory** (plus 2 GB of swap) and 4,096 processes, so a runaway task gets killed instead of exhausting the host. To change the limits, set `DEVCONTAINER_MEMORY` (for example `16g`) and `DEVCONTAINER_MEMORY_SWAP` (memory plus swap) on the host, then rebuild. On Windows, WSL's own limit is separate: `memory=` in `%UserProfile%\.wslconfig` keeps the WSL VM from exhausting Windows, and should be larger than the container's.
 
 Infrastructure changes (Terraform) are a separate concern from app development above — see `terraform/README.md` if you need to touch `terraform/`.
 
