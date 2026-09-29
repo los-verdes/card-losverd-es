@@ -63,7 +63,7 @@ describe("the classic theme", () => {
     expect(CLASSIC_THEME.assets).toEqual({
       cardCrest: "templates/card/crest.png",
       applePrefix: "templates/apple/",
-      googleLogoPath: "/assets/crest.png",
+      googleLogoPath: "/assets/google-logo.png",
     });
   });
 

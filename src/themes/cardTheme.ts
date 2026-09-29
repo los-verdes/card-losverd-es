@@ -33,7 +33,10 @@ export interface CardThemeAssets {
   cardCrest: string;
   /** R2 prefix holding the Apple pass's `icon.png`, `icon@2x.png`, `logo.png` and `logo@2x.png`. */
   applePrefix: string;
-  /** Public path of the logo Google fetches for the pass (served by `src/assets.ts`). */
+  /**
+   * Public path of the logo Google fetches for the pass (served by
+   * `src/assets.ts`): square, at least 660 x 660, which Google masks to a circle.
+   */
   googleLogoPath: string;
 }
 
@@ -110,7 +113,7 @@ export const CLASSIC_THEME: CardTheme = {
   assets: {
     cardCrest: "templates/card/crest.png",
     applePrefix: "templates/apple/",
-    googleLogoPath: "/assets/crest.png",
+    googleLogoPath: "/assets/google-logo.png",
   },
   artwork: {},
 };

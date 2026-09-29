@@ -224,6 +224,7 @@ async function storageChecks(env: Env): Promise<CheckGroup> {
     "templates/apple/logo.png",
     "templates/apple/logo@2x.png",
     "templates/card/crest.png",
+    "templates/google/logo.png",
   ];
   results.push(
     await attempt("R2 template assets", async () => {

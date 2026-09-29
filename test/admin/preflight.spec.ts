@@ -30,6 +30,7 @@ const TEMPLATE_KEYS = [
   "templates/apple/logo.png",
   "templates/apple/logo@2x.png",
   "templates/card/crest.png",
+  "templates/google/logo.png",
 ];
 
 /**
