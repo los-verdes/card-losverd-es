@@ -481,6 +481,15 @@ export const THEME_PATH = "/theme";
  * here only for somebody `mayChooseTheme()` allows -- admins first, while the
  * themes are tried out -- and anybody else is shown a 404.
  */
+/**
+ * The themes with the one the card is in now first, so the page opens on
+ * what the member has rather than making them scroll to find it; the rest
+ * keep their order (classic, then years).
+ */
+export function currentFirst(themes: readonly CardTheme[], current: CardTheme): CardTheme[] {
+  return [...themes.filter((theme) => theme.id === current.id), ...themes.filter((theme) => theme.id !== current.id)];
+}
+
 const ThemeForm: FC<{
   options: ThemeOptions;
   current: CardTheme;
@@ -499,7 +508,7 @@ const ThemeForm: FC<{
       {chosen ? ", which you chose." : ", the default."} You can use the theme of
       any year you bought a membership, as well as the classic look.
     </p>
-    {options.themes.map((theme) => (
+    {currentFirst(options.themes, current).map((theme) => (
       <form method="post" action={THEME_PATH} class="order">
         <input type="hidden" name="theme" value={theme.id} />
         <img
