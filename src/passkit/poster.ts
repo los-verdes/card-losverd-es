@@ -1,14 +1,12 @@
 /**
  * Apple's poster layout for generic passes (iOS 27, #384): a `posterGeneric`
- * block beside the pass's `generic` one, and an image drawn behind the whole
- * pass. Older iOS versions read only `generic`, so the pass they show is
+ * block beside the pass's `generic` one, and the theme's art drawn behind the
+ * whole pass. Older iOS versions read only `generic`, so the pass they show is
  * unchanged.
  *
- * Which image name the layout draws is not settled: Apple's own pass tooling
- * lists both a portrait `background` (345 x 505 points) and a portrait
- * `artwork` (358 x 448). Until a pass on an iOS 27 device settles it, the art
- * goes in under both names, and staging's "probe" mode puts a different
- * labelled image under each, so one look at the pass says which is drawn.
+ * Checked on an iPhone running iOS 27 (2026-09-29): Wallet draws the art from
+ * `artwork.png` (not `background.png`, which Apple's own sample code uses), and
+ * a pass already installed switches to the poster layout on its next update.
  *
  * Pure, like the rest of src/passkit: the caller reads R2 and passes a reader
  * in.
@@ -17,31 +15,26 @@
 import type { Env } from "../index";
 import { APPLE_POSTER_FILES, type CardTheme } from "../themes/cardTheme";
 
-export type ApplePosterMode = "off" | "probe" | "on";
+export type ApplePosterMode = "off" | "on";
 
-/** `APPLE_POSTER_PASSES`, read in one place. Anything unrecognised is "off". */
+/** `APPLE_POSTER_PASSES`, read in one place. Anything but "on" is "off". */
 export function applePosterMode(env: Pick<Env, "APPLE_POSTER_PASSES">): ApplePosterMode {
-  const value = env.APPLE_POSTER_PASSES?.trim().toLowerCase();
-  return value === "probe" || value === "on" ? value : "off";
+  return env.APPLE_POSTER_PASSES?.trim().toLowerCase() === "on" ? "on" : "off";
 }
 
-/** The image names a poster pass's art may be read under; see the note at the top. */
-export const POSTER_IMAGE_NAMES = ["background", "artwork"] as const;
+/** The pass's name for each file in `APPLE_POSTER_FILES`, one per scale. */
+const ARTWORK_FILES = ["artwork.png", "artwork@2x.png", "artwork@3x.png"] as const;
 
-/** R2 prefix of the probe's labelled images, one set per name in `POSTER_IMAGE_NAMES`. */
-export const POSTER_PROBE_PREFIX = "templates/apple/poster-probe/";
-
-/** The small logo the poster layout draws at its top, in place of `logo`. Ours already fits its 126 x 30. */
-const PRIMARY_LOGO_SOURCES: Record<string, string> = {
-  "primaryLogo.png": "logo.png",
-  "primaryLogo@2x.png": "logo@2x.png",
-};
-
-const SCALE_SUFFIXES = ["", "@2x", "@3x"] as const;
+/**
+ * The small logo the poster layout draws at its top in place of `logo`, kept
+ * with each theme's poster art: the same mark, light over dark art and dark
+ * over light, since it sits straight on the art.
+ */
+const PRIMARY_LOGO_FILES = ["primaryLogo.png", "primaryLogo@2x.png"] as const;
 
 /**
  * The files a pass needs for the poster layout, or `null` when it does not
- * get one: the mode is off, or it is on and the theme has no poster art.
+ * get one: the mode is off, or the theme has no poster art.
  */
 export async function posterAssets(
   mode: ApplePosterMode,
@@ -49,20 +42,14 @@ export async function posterAssets(
   read: (key: string) => Promise<Uint8Array>,
 ): Promise<Record<string, Uint8Array> | null> {
   const posterPrefix = theme.artwork.applePosterPrefix;
-  if (mode === "off" || (mode === "on" && !posterPrefix)) return null;
+  if (mode === "off" || !posterPrefix) return null;
 
   const files: Record<string, Uint8Array> = {};
-  for (const [name, source] of Object.entries(PRIMARY_LOGO_SOURCES)) {
-    files[name] = await read(`${theme.assets.applePrefix}${source}`);
+  for (const name of PRIMARY_LOGO_FILES) {
+    files[name] = await read(`${posterPrefix}${name}`);
   }
-  for (const imageName of POSTER_IMAGE_NAMES) {
-    for (const [i, suffix] of SCALE_SUFFIXES.entries()) {
-      files[`${imageName}${suffix}.png`] = await read(
-        mode === "probe"
-          ? `${POSTER_PROBE_PREFIX}${imageName}${suffix}.png`
-          : `${posterPrefix}${APPLE_POSTER_FILES[i]}`,
-      );
-    }
+  for (const [i, name] of ARTWORK_FILES.entries()) {
+    files[name] = await read(`${posterPrefix}${APPLE_POSTER_FILES[i]}`);
   }
   return files;
 }

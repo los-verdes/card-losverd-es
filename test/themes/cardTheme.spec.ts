@@ -154,9 +154,16 @@ describe("the year themes", () => {
 
   it.each(YEAR_THEMES.map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
     const { cardBackground, appleThumbnailPrefix, googleHero } = theme.artwork;
+    expect(theme.artwork.applePosterPrefix).toBeDefined();
 
     expect(pngSize(ASSET_BYTES[cardBackground!])).toEqual(ARTWORK_SIZES.cardBackground);
     expect(pngSize(ASSET_BYTES[googleHero!])).toEqual(ARTWORK_SIZES.googleHero);
+    ARTWORK_SIZES.applePoster.scales.forEach((scale, i) => {
+      expect(pngSize(ASSET_BYTES[`${theme.artwork.applePosterPrefix}${APPLE_POSTER_FILES[i]}`])).toEqual({
+        width: ARTWORK_SIZES.applePoster.width * scale,
+        height: ARTWORK_SIZES.applePoster.height * scale,
+      });
+    });
     ARTWORK_SIZES.appleThumbnail.scales.forEach((scale, i) => {
       const side = ARTWORK_SIZES.appleThumbnail.width * scale;
       expect(pngSize(ASSET_BYTES[`${appleThumbnailPrefix}${APPLE_THUMBNAIL_FILES[i]}`])).toEqual({ width: side, height: side });

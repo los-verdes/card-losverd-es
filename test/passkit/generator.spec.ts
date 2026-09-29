@@ -383,6 +383,10 @@ describe("pass cache (R2)", () => {
 describe("Apple's poster layout (#384)", () => {
   const parse = (member: MemberPassInput) => JSON.parse(new TextDecoder().decode(buildPassJson(member, CONFIG)));
 
+  it("leaves out the footer when there is no member-since date", () => {
+    expect(parse(makeMember({ poster: true, memberSince: null })).posterGeneric.footerFields).toEqual([]);
+  });
+
   it("is left out unless asked for", () => {
     const json = parse(makeMember());
 
@@ -395,7 +399,10 @@ describe("Apple's poster layout (#384)", () => {
 
     expect(json.generic.primaryFields).toEqual(json.posterGeneric.primaryFields);
     expect(json.posterGeneric.headerFields.map((field: { key: string }) => field.key)).toEqual(["membership_expiry"]);
-    expect(json.posterGeneric.footerFields.map((field: { key: string }) => field.key)).toEqual(["member_since"]);
+    // Wallet draws the footer without its label, so the value carries it.
+    expect(json.posterGeneric.footerFields).toEqual([
+      { key: "member_since", label: "", value: "Member since Jul 2021", textAlignment: "PKTextAlignmentLeft" },
+    ]);
     expect(json.posterGeneric.backFields).toEqual(json.generic.backFields);
     expect(json.barcodes).toEqual([json.barcode]);
   });

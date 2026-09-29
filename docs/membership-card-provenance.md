@@ -269,6 +269,12 @@ scarf; later years follow as their designs arrive, and a year with no theme
 uses classic. **Every card is still classic for now**: nobody has chosen a
 theme yet, and year defaults are off.
 
+A year theme's scarf art appears on every format: under the card image, behind
+the whole Apple pass on iPhones running iOS 27 or later (Apple's poster layout,
+switched on by `APPLE_POSTER_PASSES`; older iPhones show a thumbnail beside the
+name instead), and as the large image on the Google pass. Both wallets show the
+same design. The fields are the same whichever layout a pass has.
+
 Which themes a member may use (`src/themes/eligibility.ts`):
 
 * the theme of each year in which they bought a membership -- the year the

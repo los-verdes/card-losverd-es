@@ -80,8 +80,9 @@ interface PassJson {
     backFields: PassField[];
   };
   /**
-   * The poster layout's fields (iOS 27). It draws header, primary and footer
-   * fields over the art (only the first footer field), and the back as usual.
+   * The poster layout's fields (iOS 27): the header over the top of the art,
+   * the primary field and the first footer field (without its label) in a
+   * darkened strip at the foot, and the back as usual.
    */
   posterGeneric?: {
     headerFields: PassField[];
@@ -308,14 +309,24 @@ export function buildPassJson(
       secondaryFields,
       backFields,
     },
-    // The same content in the poster's slots: the name over the art, when the
-    // card is good through at the top, and when they joined at the foot.
+    // The same content in the poster's slots: when the card is good through at
+    // the top, and the name and when they joined in the strip at the foot.
     ...(member.poster
       ? {
           posterGeneric: {
             headerFields: secondaryFields.filter((field) => field.key === "membership_expiry"),
             primaryFields: [nameField],
-            footerFields: secondaryFields.filter((field) => field.key === "member_since"),
+            // Wallet draws the footer without its label, so the value says what it is.
+            footerFields: member.memberSince
+              ? [
+                  {
+                    key: "member_since",
+                    label: "",
+                    value: `Member since ${formatMonthYear(member.memberSince)}`,
+                    textAlignment: "PKTextAlignmentLeft",
+                  },
+                ]
+              : [],
             backFields,
           },
           barcodes: [barcode],
