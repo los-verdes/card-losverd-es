@@ -293,8 +293,10 @@ people's phones, so it goes out alongside a refresh of every pass.
 record is rebuilt from the orders on every sync. It is drawn only while it is
 one the member may still use; otherwise the card goes back to their default,
 and the choice returns if the theme does (`resolveCardTheme()` in
-`src/themes/choice.ts`). Choosing or clearing a theme is recorded in the audit
-log and reaches installed passes the way a new card name does.
+`src/themes/choice.ts`). A new or cleared theme reaches installed passes the
+way a new card name does. When an admin chooses or clears a member's theme,
+that is recorded in the audit log; a member choosing their own is not, since
+it is theirs to change as often as they like.
 
 **Who may choose** is a setting (`CARD_THEME_CHOICE`): open to admins first,
 so the choice can be tried on real cards before members are offered it, and

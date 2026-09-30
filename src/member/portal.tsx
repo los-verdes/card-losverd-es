@@ -577,7 +577,7 @@ portal.post(THEME_PATH, requireCurrentMember, csrf(), async (c) => {
   const form = await c.req.formData();
 
   if (form.get("clear")) {
-    await clearCardTheme(c.env, member.email, userId);
+    await clearCardTheme(c.env, member.email, "member", userId);
     recordOutcome("card_theme.saved", { result: "cleared" });
     return c.redirect(`${THEME_PATH}?saved=1`, 303);
   }

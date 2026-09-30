@@ -109,11 +109,21 @@ describe("choosing a theme", () => {
     expect((await member()).last_updated_at).toBeGreaterThan(1);
   });
 
-  it("records what it replaced, and when the member chose it themselves", async () => {
+  it("records what an admin's choice replaced", async () => {
     await setCardTheme(env, await member(), "2021", "admin", ADMIN_ID, THEMES);
-    await setCardTheme(env, await member(), "2024", "member", null, THEMES);
+    await setCardTheme(env, await member(), "2024", "admin", ADMIN_ID, THEMES);
 
-    expect((await audit())[1]).toMatchObject({ detail: '"2024 scarf" (was "2021 scarf"), chosen by the member themselves', actor_email: null });
+    expect((await audit())[1]).toMatchObject({ detail: '"2024 scarf" (was "2021 scarf")' });
+  });
+
+  it("leaves a member's choice for their own card out of the audit log, while still storing and sending it", async () => {
+    await setCardTheme(env, await member(), "2024", "member", null, THEMES);
+    await clearCardTheme(env, EMAIL, "member", null, THEMES);
+    await setCardTheme(env, await member(), "2021", "member", null, THEMES);
+
+    expect(await audit()).toEqual([]);
+    expect(await getCardThemeChoice(env, EMAIL)).toMatchObject({ theme_id: "2021", source: "member" });
+    expect((await member()).last_updated_at).toBeGreaterThan(1);
   });
 
   it("refuses a theme the member may not use, and stores nothing", async () => {
@@ -127,14 +137,14 @@ describe("choosing a theme", () => {
   it("clears a choice, putting the card back to its default", async () => {
     await setCardTheme(env, await member(), "2024", "admin", ADMIN_ID, THEMES);
 
-    await clearCardTheme(env, EMAIL, ADMIN_ID, THEMES);
+    await clearCardTheme(env, EMAIL, "admin", ADMIN_ID, THEMES);
 
     expect(await getCardThemeChoice(env, EMAIL)).toBeNull();
     expect((await audit())[1]).toMatchObject({ action: "card_theme.cleared", detail: 'Was "2024 scarf"' });
   });
 
   it("records nothing when there was nothing to clear", async () => {
-    await clearCardTheme(env, EMAIL, ADMIN_ID, THEMES);
+    await clearCardTheme(env, EMAIL, "admin", ADMIN_ID, THEMES);
 
     expect(await audit()).toEqual([]);
   });
