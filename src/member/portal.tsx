@@ -420,7 +420,9 @@ const portal = new Hono<PortalEnv>();
 async function storeAccountView(env: Env, userId: number, notice: string | undefined): Promise<StoreAccountView | null> {
   if (!appConfig(env) || !env.BIGCOMMERCE_STOREFRONT_URL) return null;
   const connectHref = new URL("/account.php", env.BIGCOMMERCE_STOREFRONT_URL);
-  connectHref.searchParams.set("lv_connect", "1");
+  // A fragment, which survives the store's redirects where a query does not
+  // (src/bigcommerce/storefront.ts).
+  connectHref.hash = "lv-connect";
   return {
     connected: (await storeAccountFor(env, userId)) !== null,
     connectHref: connectHref.toString(),
