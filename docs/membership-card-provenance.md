@@ -177,8 +177,13 @@ Here is how the strategy around keeping orders in sync with the LV store:
   each order records which MiniBC subscription it belongs to. The
   subscriptions themselves are read twice a day -- whether a membership renews
   automatically, when it next renews, and whether it was paused or cancelled
-  -- but only kept, not yet shown anywhere, and they never change a card
+  -- and shown to admins on each member's page and on the Renewals report.
+  They never change a card
   ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)).
+  A subscription is matched to its member through orders, never an address:
+  the order that started it (following that order's attribution, so a gift
+  carries it to its recipient), or failing that, the latest membership order
+  its store customer bought for themselves.
 
 Otherwise, a change made in BigCommerce is expected to show up here almost
 immediately: the order webhook delivers it within seconds, and the scheduled
@@ -696,6 +701,18 @@ or a change, not an open-ended design exercise.
    Merch Team to decide about, as orders that disappear are listed today. It
    turns on what the Merch Team means when they archive an order -- tidying
    the order list, or undoing a sale.
+10. **Should a membership that renews automatically stay current while its
+    renewal is being charged?** Currently no. A card runs 365 days from its
+    order, and MiniBC renews on the same date a year on, so in a year with
+    29 February the card runs out a day before the renewal is charged, and
+    the member is briefly without a current card. A renewal that fails is
+    retried over the following days or weeks, and the card stays lapsed
+    until one succeeds; the Renewals report lists those. A few days' grace
+    for an active subscription would close both gaps, at the cost of a card
+    verifying for someone whose renewal then never goes through. This is the
+    Merch Team's to weigh, with the Membership Committee consulted, since it
+    changes who holds a current membership
+    ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)).
 
 ## The Audit log: What is kept about what people did
 

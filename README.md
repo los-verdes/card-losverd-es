@@ -16,7 +16,7 @@ It runs on Cloudflare Workers, D1 and R2, and replaced [`digital-membership`](ht
 
 Deliberately dropped from the previous site: Squarespace integration, Yahoo login, BigCommerce storefront SSO, the provider-disconnect flow, and migrating installed legacy passes (members get a fresh pass).
 
-Not built yet: showing admins MiniBC's renewal dates, which are read but not yet shown ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)), and a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
+Not built yet: a look at Workers' built-in deployment and observability ([#56](https://github.com/los-verdes/card-losverd-es/issues/56)).
 
 ## Stack
 

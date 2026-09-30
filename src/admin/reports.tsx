@@ -19,6 +19,7 @@ import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
+import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
 import {
   activeMemberships,
   attentionCounts,
@@ -377,6 +378,10 @@ reports.get("/", async (c) => {
         <li>
           <a href="/admin/reports/over-time">Membership over time</a>: active members and membership orders,
           any years side by side, and orders by product each year.
+        </li>
+        <li>
+          <a href="/admin/reports/renewals">Renewals</a>: what MiniBC says about members' automatic renewals --
+          cards that ran out with a renewal still on, renewals due after the card runs out, and those coming up.
         </li>
         <li>
           <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
@@ -807,6 +812,157 @@ reports.get("/slack", async (c) => {
                     })}
                   </tr>
                 ))}
+              </tbody>
+            </ReportTable>
+          </section>
+        );
+      })}
+    </AdminPage>,
+  );
+});
+
+/** One section of the Renewals report, and which subscriptions it lists. */
+interface RenewalSection {
+  key: string;
+  title: string;
+  about: string;
+  pick: (row: RenewalRow, state: RenewalState, today: string, soon: string) => boolean;
+}
+
+const RENEWAL_SECTIONS: RenewalSection[] = [
+  {
+    key: "overdue",
+    title: "Card ran out, automatic renewal still on",
+    about: "The renewal failed, or is still to be tried: the member has no current card until it goes through.",
+    pick: (row, state) => row.member_email !== null && state.kind === "overdue",
+  },
+  {
+    key: "late",
+    title: "Renews after the card runs out",
+    about: "MiniBC next charges more than a day after the card's last day, most often after an earlier failed charge, so the card lapses in between.",
+    pick: (row, state) => row.member_email !== null && state.kind === "renews-late",
+  },
+  {
+    key: "soon",
+    title: "Renewing in the next 30 days",
+    about: "On time: MiniBC charges on or just after the card's last day.",
+    pick: (row, state, _today, soon) => row.member_email !== null && state.kind === "renews" && state.on <= soon,
+  },
+  {
+    key: "stopped",
+    title: "Cancelled or paused, card still current",
+    about: "These won't renew by themselves; the member would need to buy again.",
+    pick: (row, state, today) =>
+      row.member_email !== null && (state.kind === "cancelled" || state.kind === "paused") && (row.expiration_date ?? "") >= today,
+  },
+  {
+    key: "unmatched",
+    title: "Not matched to a member",
+    about:
+      "No membership order held here started or carries the subscription, and its store customer has no membership order of their own. Usually one bought before these records begin, or under an order since re-attributed.",
+    pick: (row) => row.member_email === null,
+  },
+];
+
+const RENEWAL_COLUMNS = [
+  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next",
+] as const;
+
+reports.get("/renewals", async (c) => {
+  const today = toIsoSeconds(new Date()).slice(0, 10);
+  const soon = toIsoSeconds(new Date(Date.now() + 30 * 86_400_000)).slice(0, 10);
+  const format = c.req.query("format");
+  const csvSection = format === "csv" ? RENEWAL_SECTIONS.find((section) => section.key === c.req.query("section")) : undefined;
+  if (format === "csv" && !csvSection) {
+    throw new BadRequest(`section must be one of ${RENEWAL_SECTIONS.map((section) => section.key).join(", ")}`);
+  }
+  const [rows, lastRead] = await Promise.all([allRenewals(c.env), lastRenewalsRead(c.env)]);
+  const withState = rows.map((row) => ({ row, state: renewalState(row, row.member_email ? row.expiration_date : null, today) }));
+  const sectionRows = (section: RenewalSection) => withState.filter(({ row, state }) => section.pick(row, state, today, soon));
+
+  if (csvSection) {
+    const csvRows = sectionRows(csvSection).map(({ row, state }) => ({
+      subscription_id: String(row.subscription_id),
+      member_email: row.member_email,
+      member_id: row.member_id,
+      name: row.display_name ?? ([row.first_name, row.last_name].filter(Boolean).join(" ") || null),
+      good_through: row.expiration_date,
+      status: row.status,
+      next_payment_on: row.next_payment_on,
+      paused_on: row.paused_on,
+      cancelled_on: row.cancelled_on,
+      signup_on: row.signup_on,
+      order_id: row.order_id === null ? null : String(row.order_id),
+      what_next: row.member_email ? renewalText(state) : null,
+    }));
+    return new Response(toCsv([...RENEWAL_COLUMNS], csvRows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="renewals-${csvSection.key}-${today}.csv"`,
+      },
+    });
+  }
+
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  return c.html(
+    <AdminPage title="Renewals">
+      <p>
+        What MiniBC, which runs the store's automatic renewals, says about each member's. It changes no card: a renewal
+        counts once its BigCommerce order is paid, like any other. Subscriptions are matched to members through their
+        orders, never an address.
+      </p>
+      <p>
+        {c.env.MINIBC_API_KEY ? (
+          lastRead === null ? (
+            "MiniBC has not been read here yet; it is read twice a day."
+          ) : (
+            <>
+              {rows.length} subscriptions as of {toIsoSeconds(new Date(lastRead))}:{" "}
+              {[...counts].map(([status, n]) => `${n} ${status === "inactive" ? "cancelled" : status}`).join(", ")}. Read twice a
+              day.
+            </>
+          )
+        ) : (
+          "MiniBC isn't read in this environment (MINIBC_API_KEY unset)."
+        )}
+      </p>
+      {RENEWAL_SECTIONS.map((section) => {
+        const listed = sectionRows(section);
+        return (
+          <section>
+            <h2>
+              {section.title} ({listed.length})
+            </h2>
+            <p class="muted">{section.about}</p>
+            <ReportTable
+              headings={section.key === "unmatched" ? ["Subscription", "MiniBC", "Next charge", "Signed up", "Started by order"] : ["Member", "Good through", "What next", "Subscription"]}
+              csvHref={`/admin/reports/renewals?section=${section.key}&format=csv`}
+              csvLabel={`Download all ${listed.length} as CSV`}
+              empty="None."
+              rowCount={listed.length}
+            >
+              <tbody>
+                {listed.map(({ row, state }) =>
+                  section.key === "unmatched" ? (
+                    <tr>
+                      <td style={cellStyle}>{row.subscription_id}</td>
+                      <td style={cellStyle}>{row.status === "inactive" ? "cancelled" : row.status}</td>
+                      <td style={cellStyle}>{row.next_payment_on ?? ""}</td>
+                      <td style={cellStyle}>{row.signup_on ?? ""}</td>
+                      <td style={cellStyle}>{row.order_id ?? ""}</td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td style={cellStyle}>
+                        <MemberLink email={row.member_email!} />
+                      </td>
+                      <td style={cellStyle}>{row.expiration_date ?? "no counted orders"}</td>
+                      <td style={`${cellStyle}; white-space: normal; min-width: 14rem; max-width: 32rem`}>{renewalText(state)}</td>
+                      <td style={cellStyle}>{row.subscription_id}</td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </ReportTable>
           </section>
