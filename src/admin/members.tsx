@@ -62,7 +62,7 @@ import {
   type ThemeChoice,
 } from "../themes/choice";
 import { emailFootprint, type EmailFootprint } from "./attribution";
-import { AuditHistory } from "./audit";
+import { AuditHistory, actorDirectory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
@@ -629,6 +629,7 @@ members.get("/", async (c) => {
     }
   }
   const history: AuditEntry[] | null = historyEmail ? await readWholeAuditLog(c.env, { email: historyEmail }) : null;
+  const historyActors = history ? await actorDirectory(c.env, history) : new Map();
   // Nothing but history: somebody the log remembers, with no card or orders
   // left to show -- still a page, so no link from the audit log dead-ends.
   const historyOnly = lookup.kind === "email" && !member && !orphan && history !== null && history.length > 0;
@@ -736,7 +737,7 @@ members.get("/", async (c) => {
           log remembers it.
         </p>
       )}
-      {found && history && historyEmail && <AuditHistory email={historyEmail} entries={history} />}
+      {found && history && historyEmail && <AuditHistory email={historyEmail} entries={history} actors={historyActors} />}
       {found && (
         <>
           <h2>Find someone else</h2>

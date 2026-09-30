@@ -61,7 +61,59 @@ export function memberHistoryHref(email: string): string {
   return `/admin/members?q=${encodeURIComponent(email)}#history`;
 }
 
-const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubject }) => (
+/** A member's page, by their address. */
+function memberHref(email: string): string {
+  return `/admin/members?q=${encodeURIComponent(email)}`;
+}
+
+/** D1 accepts at most 100 bound parameters a statement. */
+const MEMBER_LOOKUP_CHUNK = 90;
+
+/** Who an actor address belongs to, as far as this site knows. */
+export interface ActorIdentity {
+  /** The name to show: their card's name if they hold a membership, else their account's. */
+  name: string | null;
+  /** Whether they hold a membership, so there is a member page to link to. */
+  member: boolean;
+}
+
+/**
+ * Names for these entries' actors, so "Who did it" reads as people rather
+ * than addresses: the name on their card when they hold a membership (the one
+ * they chose, else their orders'), otherwise the name on their account, which
+ * is how an admin with no membership is known. An address with neither is
+ * shown as written.
+ */
+export async function actorDirectory(env: Env, entries: readonly AuditEntry[]): Promise<Map<string, ActorIdentity>> {
+  const actors = [...new Set(entries.map((entry) => entry.actor_email).filter((email): email is string => Boolean(email)))];
+  const directory = new Map<string, ActorIdentity>();
+  for (let i = 0; i < actors.length; i += MEMBER_LOOKUP_CHUNK) {
+    const chunk = actors.slice(i, i + MEMBER_LOOKUP_CHUNK);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const [users, members] = await env.DB.batch<{ email: string; name: string | null }>([
+      env.DB.prepare(
+        `SELECT email, COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')), '')) AS name
+           FROM users WHERE email IN (${placeholders})`,
+      ).bind(...chunk),
+      env.DB.prepare(
+        `SELECT m.email, COALESCE(d.display_name, NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), '')) AS name
+           FROM members m LEFT JOIN member_display_names d ON d.email = m.email
+          WHERE m.email IN (${placeholders})`,
+      ).bind(...chunk),
+    ]);
+    for (const { email, name } of users.results) directory.set(email, { name, member: false });
+    for (const { email, name } of members.results) {
+      directory.set(email, { name: name ?? directory.get(email)?.name ?? null, member: true });
+    }
+  }
+  return directory;
+}
+
+const Row: FC<{ entry: AuditEntry; showSubject: boolean; actors: ReadonlyMap<string, ActorIdentity> }> = ({
+  entry,
+  showSubject,
+  actors,
+}) => (
   <tr>
     <td style={cellStyle}>{formatWhen(entry.created_at)}</td>
     <td style={cellStyle}>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
@@ -72,18 +124,24 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
     )}
     <td style={cellStyle}>{entry.detail}</td>
     <td style={cellStyle}>
-      <Actor entry={entry} />
+      <Actor entry={entry} actors={actors} />
     </td>
   </tr>
 );
 
 /**
- * An address as written; what acted when no person did (`auditActor`)
- * muted, so it reads as a description rather than an account to look up.
+ * A person by name (`actorDirectory`), their address on hover, and a link to
+ * their member page when they hold a membership; an address nobody has a name
+ * for, as written. What acted when no person did (`auditActor`) is muted, so
+ * it reads as a description rather than an account to look up.
  */
-const Actor: FC<{ entry: AuditEntry }> = ({ entry }) => {
+const Actor: FC<{ entry: AuditEntry; actors: ReadonlyMap<string, ActorIdentity> }> = ({ entry, actors }) => {
   const actor = auditActor(entry);
-  return actor.person ? <>{actor.text}</> : <span class="muted">{actor.text}</span>;
+  if (!actor.person) return <span class="muted">{actor.text}</span>;
+  const known = actors.get(actor.text);
+  const label = known?.name ?? actor.text;
+  if (known?.member) return <a href={memberHref(actor.text)} title={actor.text}>{label}</a>;
+  return known?.name ? <span title={actor.text}>{label}</span> : <>{label}</>;
 };
 
 const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
@@ -94,7 +152,11 @@ const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
  * includes what has since been undone, which no other part of that page
  * shows. Their CSV stays a link away.
  */
-export const AuditHistory: FC<{ email: string; entries: AuditEntry[] }> = ({ email, entries }) => (
+export const AuditHistory: FC<{ email: string; entries: AuditEntry[]; actors: ReadonlyMap<string, ActorIdentity> }> = ({
+  email,
+  entries,
+  actors,
+}) => (
   <section id="history">
     <h3>History</h3>
     <p class="muted">
@@ -115,7 +177,7 @@ export const AuditHistory: FC<{ email: string; entries: AuditEntry[] }> = ({ ema
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <Row entry={entry} showSubject={false} />
+              <Row entry={entry} showSubject={false} actors={actors} />
             ))}
           </tbody>
         </table>
@@ -135,13 +197,14 @@ function parseBefore(raw: string | undefined): number | null {
   return raw !== undefined && /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : null;
 }
 
-const CSV_COLUMNS = ["id", "when_utc", "action", "what", "who_it_was_about", "detail", "who_did_it"] as const;
+const CSV_COLUMNS = ["id", "when_utc", "action", "what", "who_it_was_about", "detail", "who_did_it", "who_did_it_name"] as const;
 
 audit.get("/", async (c) => {
   const email = c.req.query("email")?.trim().toLowerCase() || null;
 
   if (c.req.query("format") === "csv") {
     const entries = await readWholeAuditLog(c.env, { email });
+    const actors = await actorDirectory(c.env, entries);
     // Recorded before the file goes out, and allowed to fail the download: an
     // export nobody can see happened is the thing this log exists to prevent.
     await recordAuditEvent(c.env, {
@@ -158,6 +221,7 @@ audit.get("/", async (c) => {
       who_it_was_about: entry.subject_email,
       detail: entry.detail,
       who_did_it: auditActor(entry).text || null,
+      who_did_it_name: (entry.actor_email && actors.get(entry.actor_email)?.name) || null,
     }));
     const stamp = new Date().toISOString().slice(0, 10);
     return new Response(toCsv(CSV_COLUMNS, rows), {
@@ -178,6 +242,7 @@ audit.get("/", async (c) => {
   const olderHref =
     fetched.length > AUDIT_PAGE_SIZE ? auditHref(null, { before: String(entries[entries.length - 1].id) }) : null;
   const headings = ["When (UTC)", "What", "Who it was about", "Detail", "Who did it"];
+  const actors = await actorDirectory(c.env, entries);
 
   return c.html(
     <AdminPage title="Audit log">
@@ -212,7 +277,7 @@ audit.get("/", async (c) => {
             </thead>
             <tbody>
               {entries.map((entry) => (
-                <Row entry={entry} showSubject />
+                <Row entry={entry} showSubject actors={actors} />
               ))}
             </tbody>
           </table>
