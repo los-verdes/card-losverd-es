@@ -20,6 +20,7 @@ import {
   signSaveToWalletPayload,
 } from "../google/jwt";
 import { tracing } from "cloudflare:workers";
+import { CARD_IMAGE_VERSION } from "../cardimage/template";
 import type { Env } from "../index";
 import { resolveCardTheme } from "../themes/choice";
 import { applePosterMode, posterAssets } from "../passkit/poster";
@@ -378,10 +379,34 @@ export async function getApplePassBundle(
   return bundle;
 }
 
+/** Where a member's drawn card is cached in R2, one per theme it has been drawn in. */
+function cardCacheKey(memberId: string, themeId: string): string {
+  return `cache/card/${memberId}/${themeId}.png`;
+}
+
+/**
+ * What a cached card was drawn from, besides the member record's own version
+ * (`last_updated_at`): the drawing's version, the theme's, and a fingerprint
+ * of the QR code's link, which changes if the key that signs it does.
+ */
+async function cardCacheTag(theme: CardTheme, qrUrl: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(qrUrl)));
+  const fingerprint = [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${CARD_IMAGE_VERSION}|${themeCacheTag(theme)}|${fingerprint}`;
+}
+
 /**
  * The member's card image (PNG). Uses a dedicated 256px crest rather than the
  * pass icon, which at 58px is too small for the 240px crest on the card.
  * Drawn in the member's own theme unless `theme` names another.
+ *
+ * Drawing one costs about half a second of CPU (2026-09-29), and the same
+ * card was drawn afresh on every view, so a drawn card is kept in R2 and
+ * served from there until anything it was drawn from changes: the member
+ * (`last_updated_at`, which every change to their name, dates or theme
+ * choice moves), the theme, the drawing (`CARD_IMAGE_VERSION`) or the QR
+ * code's link. The cache is a convenience: failing to read or write it only
+ * means the card is drawn.
  */
 export async function renderCardImage(
   env: Env,
@@ -389,6 +414,30 @@ export async function renderCardImage(
   requestedTheme?: CardTheme,
 ): Promise<Uint8Array> {
   const theme = requestedTheme ?? (await resolveCardTheme(env, member));
+  const qrUrl = await verifyUrl(env, member);
+  const key = cardCacheKey(member.member_id, theme.id);
+  const tag = await cardCacheTag(theme, qrUrl);
+  try {
+    const cached = await env.ASSETS.get(key);
+    if (cached?.customMetadata?.lastUpdatedAt === String(member.last_updated_at) && cached.customMetadata?.tag === tag) {
+      return new Uint8Array(await cached.arrayBuffer());
+    }
+  } catch (err) {
+    console.warn("Card image cache unreadable; drawing instead:", err);
+  }
+  const png = await drawCardImage(env, member, theme, qrUrl);
+  try {
+    await env.ASSETS.put(key, png, {
+      httpMetadata: { contentType: "image/png" },
+      customMetadata: { lastUpdatedAt: String(member.last_updated_at), tag },
+    });
+  } catch (err) {
+    console.warn("Card image cache unwritable; serving the card uncached:", err);
+  }
+  return png;
+}
+
+async function drawCardImage(env: Env, member: MemberRecord, theme: CardTheme, qrUrl: string): Promise<Uint8Array> {
   // Imported here rather than at the top of the file. This module is imported
   // by nearly everything that touches a member, and the renderer brings satori
   // and resvg with it -- several megabytes of JavaScript that most requests
@@ -401,7 +450,7 @@ export async function renderCardImage(
     {
       ...cardName(member),
       memberId: member.member_id,
-      verifyUrl: await verifyUrl(env, member),
+      verifyUrl: qrUrl,
       expirationDate: member.expiration_date,
       memberSince: member.member_since,
     },

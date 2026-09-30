@@ -15,6 +15,16 @@
 
 import { CLASSIC_THEME, type CardThemeColors } from '../themes/cardTheme';
 
+/**
+ * Bump when a change here or in render.ts alters how a card is drawn: its
+ * layout, text, sizes or anything else a member would see. Drawn cards are
+ * cached in R2 (`renderCardImage()` in src/member/artifacts.ts) and redrawn
+ * only when the member, their theme or this changes, so a change to the
+ * drawing that leaves this alone would reach nobody whose card is cached. The
+ * same discipline as `PASS_CONTENT_VERSION`.
+ */
+export const CARD_IMAGE_VERSION = "2026-09-30.1";
+
 export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
