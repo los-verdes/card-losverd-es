@@ -22,10 +22,21 @@
  * ones, and created oldest first, so the store gives them ids in date order
  * as production's are. Creation can stop and resume (`--from`).
  *
+ * Production's orders before February 2023 came from the previous site, not
+ * the store, so this plan starts there. `--early` is a second, separate plan
+ * for 2020 to 2022, so staging has members whose history reaches those years
+ * (the year themes, #333): about half its orders go to people from the main
+ * plan, giving them an earlier "member since", and the rest to new people.
+ * It has its own seed and progress file, so the main plan's order, and a
+ * resume of it, are unchanged. `--for` gives one address a membership order
+ * in each of 2020, 2021 and 2022, so a tester's own staging card can use
+ * those years' themes.
+ *
  * Usage:
- *   node scripts/seed-staging-orders.mjs                  # the plan; no requests
- *   node scripts/seed-staging-orders.mjs --try-one        # create one order, read it back
- *   node scripts/seed-staging-orders.mjs --create [--from N] [--limit N]
+ *   node scripts/seed-staging-orders.mjs [--early]                  # the plan; no requests
+ *   node scripts/seed-staging-orders.mjs [--early] --try-one        # create one order, read it back
+ *   node scripts/seed-staging-orders.mjs [--early] --create [--from N] [--limit N]
+ *   node scripts/seed-staging-orders.mjs --for ADDRESS --name "First Last"
  *
  * The token is an API account on the staging store with Orders: modify, from
  * BIGCOMMERCE_SEED_TOKEN or ~/.config/.wrangler/bigcommerce-staging-orders.json.
@@ -58,7 +69,7 @@ function random(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rand = random(20260926);
+let rand = random(20260926);
 const pick = (items) => items[Math.floor(rand() * items.length)];
 function weighted(table) {
   const total = table.reduce((sum, [, weight]) => sum + weight, 0);
@@ -99,13 +110,13 @@ const FIRST_NAMES = ["Alex", "Sam", "Jordan", "Casey", "Riley", "Morgan", "Taylo
 const LAST_NAMES = ["Sampleton", "Testwell", "Mockford", "Fixtureson", "Seedwell", "Demoway", "Placerton",
   "Exampleby", "Trialsby", "Stagingham"];
 
-/** A day in a given year, drawn with production's seasonality, never after LAST_DAY. */
-function dayIn(year) {
+/** A day in a given year, drawn with production's seasonality, between `first` and `last`. */
+function dayIn(year, first = FIRST_DAY, last = LAST_DAY) {
   for (;;) {
     const month = weighted(MONTHS.map((weight, i) => [i, year === 2023 && i === 0 ? 0 : weight]));
     const day = 1 + Math.floor(rand() * 28);
     const at = Date.UTC(year, month, day, 12 + Math.floor(rand() * 10), Math.floor(rand() * 60));
-    if (at >= FIRST_DAY && at <= LAST_DAY) return at;
+    if (at >= first && at <= last) return at;
   }
 }
 
@@ -142,6 +153,29 @@ function plan() {
   }
 
   return { orders: orders.sort((a, b) => a.at - b.at), people };
+}
+
+// The early plan: 2020 to 2022, before the store. The previous site sold the
+// group's first memberships in 2020 and more each year after, so the volumes
+// rise; they are illustrative, not production's (whose early orders are not in
+// the store to count).
+const EARLY_SEED = 20200101;
+const EARLY_YEARS = [[2020, 150], [2021, 400], [2022, 450]];
+const EARLY_FIRST_DAY = Date.parse("2020-01-01T00:00:00Z");
+const EARLY_LAST_DAY = Date.parse("2023-01-31T23:59:59Z");
+
+function earlyPlan(main) {
+  rand = random(EARLY_SEED);
+  const members = [...new Map(main.orders.filter((order) => order.membership).map((order) => [order.who.email, order.who])).values()];
+  let people = main.people;
+  const orders = [];
+  for (const [year, count] of EARLY_YEARS) {
+    for (let i = 0; i < count; i++) {
+      const who = rand() < 0.5 ? pick(members) : person(++people);
+      orders.push({ at: dayIn(year, EARLY_FIRST_DAY, EARLY_LAST_DAY), who, membership: true, status: weighted(STATUSES), quantity: 1 });
+    }
+  }
+  return { orders: orders.sort((a, b) => a.at - b.at), people: people - main.people };
 }
 
 function orderBody(order) {
@@ -228,7 +262,29 @@ const option = (name, fallback) => {
   return i === -1 ? fallback : Number(args[i + 1]);
 };
 
-const { orders, people } = plan();
+const main = plan();
+const early = flag("--early");
+const { orders, people } = early ? earlyPlan(main) : main;
+
+if (args.includes("--for")) {
+  const email = String(args[args.indexOf("--for") + 1] ?? "").trim().toLowerCase();
+  const name = args.includes("--name") ? String(args[args.indexOf("--name") + 1] ?? "").trim() : "";
+  const [first, ...rest] = name.split(/\s+/);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !first) {
+    console.error('Usage: --for ADDRESS --name "First Last"');
+    process.exit(2);
+  }
+  const who = { first, last: rest.join(" "), email };
+  for (const year of [2020, 2021, 2022]) {
+    const at = Date.UTC(year, 1, 15, 18, 0);
+    const created = await request("/orders", {
+      method: "POST",
+      body: JSON.stringify(orderBody({ at, who, membership: true, status: STATUSES[0][0], quantity: 1 })),
+    });
+    console.log(`Created order ${created.id}: a ${year} membership for the address given.`);
+  }
+  process.exit(0);
+}
 
 if (!flag("--create") && !flag("--try-one")) {
   const byYear = {};
@@ -239,7 +295,10 @@ if (!flag("--create") && !flag("--try-one")) {
     byYear[year][order.membership ? "membership" : "other"]++;
     if (order.membership) byStatus[order.status.name] = (byStatus[order.status.name] ?? 0) + 1;
   }
-  console.log(`Plan for staging's store (${stagingHash}): ${orders.length} orders for ${people} synthetic people.`);
+  console.log(
+    `${early ? "Early plan (2020-2022)" : "Plan"} for staging's store (${stagingHash}): ` +
+      `${orders.length} orders for ${people} ${early ? "new " : ""}synthetic people.`,
+  );
   console.table(byYear);
   console.log("Membership orders by status:");
   console.table(byStatus);
@@ -263,7 +322,7 @@ if (flag("--try-one")) {
 
 const from = option("--from", 0);
 const limit = option("--limit", orders.length);
-const progressFile = join(homedir(), ".config/.wrangler/seed-staging-orders.progress");
+const progressFile = join(homedir(), `.config/.wrangler/seed-staging-orders${early ? "-early" : ""}.progress`);
 const to = Math.min(orders.length, from + limit);
 console.log(`Creating orders ${from}..${to - 1} of ${orders.length} in staging's store (${stagingHash}).`);
 for (let i = from; i < to; i++) {
