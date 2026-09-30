@@ -36,6 +36,8 @@ let email: FakeEmailBinding;
 function mockUpstreams(orders: BigCommerceOrder[]) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = input instanceof Request ? input.url : String(input);
+    // The MiniBC subscription lookup (#397): these orders have none.
+    if (url.includes("/metafields")) return Response.json({ data: [] });
     const listed = url.match(/\/v2\/orders\?/);
     if (listed) return Response.json(url.includes("min_id=0") ? orders : []);
     const match = url.match(/\/v2\/orders\/(\d+)(\/products)?$/);

@@ -171,10 +171,13 @@ Here is how the strategy around keeping orders in sync with the LV store:
   its SKU here too, which is a code change rather than a store setting, and is
   the first thing to check if a new product's buyers say they never received a
   card.
-* **Renewals taken through MiniBC.** MiniBC handles recurring subscriptions,
-  and those do not flow through order webhooks at all. Reconciling them is
-  not built, so a MiniBC renewal reaches this system only if it also produces
-  a BigCommerce order. (Though we can technically reference MiniBC if given the need.)
+* **What MiniBC knows about renewals.** MiniBC runs the store's automatic
+  renewals. Each renewal it charges creates a BigCommerce order, per MiniBC's
+  own guide, so a renewal counts like any other order once it is paid, and
+  each order records which MiniBC subscription it belongs to. What is not
+  read yet is the subscription itself: whether a membership renews
+  automatically, when it next renews, and whether it was paused, cancelled,
+  or is failing to charge ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)).
 
 Otherwise, a change made in BigCommerce is expected to show up here almost
 immediately: the order webhook delivers it within seconds, and the scheduled
