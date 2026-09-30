@@ -151,6 +151,25 @@ export async function ordersByDay(db: D1Database): Promise<{ day: string; orders
   return results;
 }
 
+/**
+ * Membership orders per year and product: `product` is the SKU for
+ * BigCommerce orders, empty when none was recorded, and `squarespace` for
+ * every order from before BigCommerce, whose products are not told apart.
+ * Counted by the same rule as `ordersByDay`, in the year each was placed.
+ */
+export async function ordersByYearAndProduct(db: D1Database): Promise<{ year: string; product: string; orders: number }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT substr(created_on, 1, 4) AS year,
+              CASE WHEN source = 'squarespace' THEN 'squarespace' ELSE COALESCE(sku, '') END AS product,
+              COUNT(*) AS orders
+       FROM membership_orders WHERE ${COUNTS_AS_MEMBERSHIP}
+       GROUP BY year, product ORDER BY year, product`,
+    )
+    .all<{ year: string; product: string; orders: number }>();
+  return results;
+}
+
 export interface SlackCrossReferenceRow {
   [key: string]: string | null;
   email: string;

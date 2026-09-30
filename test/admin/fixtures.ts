@@ -9,6 +9,8 @@ export interface OrderFixture {
   created: string;
   status?: string | null;
   channel?: string | null;
+  /** The product's SKU; none unless given. */
+  sku?: string | null;
   source?: "bigcommerce" | "squarespace";
   /** The verdict an imported Squarespace-era row carries (`frozen_counts`); 1 unless given. */
   counted?: 0 | 1;
@@ -23,8 +25,8 @@ export async function insertOrder(o: OrderFixture) {
   const expires = `${Number(o.created.slice(0, 4)) + 1}${o.created.slice(4)}`;
   await env.DB.prepare(
     `INSERT INTO membership_orders (order_id, source, channel_name, order_email, member_email, first_name, last_name,
-       status, created_on, expires_on, first_seen_via, frozen_counts)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sync', ?)`,
+       sku, status, created_on, expires_on, first_seen_via, frozen_counts)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sync', ?)`,
   )
     .bind(
       o.id,
@@ -34,6 +36,7 @@ export async function insertOrder(o: OrderFixture) {
       o.memberEmail ?? o.email,
       o.first ?? "Test",
       o.last ?? "Member",
+      o.sku ?? null,
       o.status === undefined ? "Completed" : o.status,
       o.created,
       expires,
