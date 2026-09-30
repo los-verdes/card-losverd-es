@@ -123,9 +123,18 @@ r2-init-local:
 # environment's R2 bucket (card-losverd-es-assets-<env>) under the same keys
 # (templates/**): the Apple pass icons/logos pass generation reads, and the
 # card image crest. Idempotent -- the Deploy workflow runs it on every deploy.
-# Pass `--local` as the target for local dev R2.
+# Remotely it uploads only the images whose contents changed, compared by MD5
+# against each object's ETag (scripts/r2-sync-templates.mjs), and needs
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Pass `--local` as the target
+# for local dev R2, which puts every image through wrangler.
 r2-upload-templates env="production" target="--remote":
-    cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets-{{ env }}/$key" --file "$key" --content-type image/png {{target}}; done
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{ target }}" = "--remote" ]; then
+        node scripts/r2-sync-templates.mjs "card-losverd-es-assets-{{ env }}"
+    else
+        cd assets && find templates -type f -name '*.png' | sort | while read -r key; do npx wrangler r2 object put "card-losverd-es-assets-{{ env }}/$key" --file "$key" --content-type image/png {{ target }}; done
+    fi
 
 # Deploy to Cloudflare Workers: `just deploy` (production) or `just deploy
 # staging`. CI normally does this (see .github/workflows/deploy.yml). The
