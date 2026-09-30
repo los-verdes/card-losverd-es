@@ -214,6 +214,61 @@ describe("reading it back", () => {
     expect(body).toMatch(/>Unattributed<\/td><td[^>]*><span class="muted"><\/span><\/td>/);
   });
 
+  it("names who did it: a member by their card's name, linked to their page; anyone else by their account's name", async () => {
+    await env.DB.prepare("UPDATE users SET full_name = 'Second Admin' WHERE id = ?").bind(OTHER_ADMIN_ID).run();
+    // Jane, a member, changing her own card; an admin with a name on their
+    // account and one without; and the site itself.
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: EMAIL, detail: "By Jane" });
+    await recordAuditEvent(env, {
+      action: "membership.revoked",
+      subjectEmail: EMAIL,
+      actorEmail: "second.admin@example.com",
+      detail: "By the named admin",
+    });
+    await recordAuditEvent(env, {
+      action: "membership.restored",
+      subjectEmail: EMAIL,
+      actorEmail: "admin@example.com",
+      detail: "By the unnamed admin",
+    });
+    await recordAuditEvent(env, { action: "card.emailed", subjectEmail: EMAIL, actorEmail: null, detail: "By nobody" });
+
+    for (const page of ["/admin/audit", `/admin/members?q=${encodeURIComponent(EMAIL)}`]) {
+      const body = await (await get(page)).text();
+
+      expect(body).toMatch(
+        />By Jane<\/td><td[^>]*><a href="\/admin\/members\?q=jane%40example\.com" title="jane@example\.com">Jane Doe<\/a><\/td>/,
+      );
+      expect(body).toMatch(/>By the named admin<\/td><td[^>]*><span title="second\.admin@example\.com">Second Admin<\/span><\/td>/);
+      expect(body).toMatch(/>By the unnamed admin<\/td><td[^>]*>admin@example\.com<\/td>/);
+      expect(body).toMatch(/>By nobody<\/td><td[^>]*><span class="muted">site automation<\/span><\/td>/);
+    }
+  });
+
+  it("names a member by the name they chose for their card", async () => {
+    await setDisplayName(env, EMAIL, "Chuy", "member", null, ADMIN_ID);
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: EMAIL, detail: "By Chuy" });
+
+    const body = await (await get("/admin/audit")).text();
+
+    expect(body).toMatch(/>By Chuy<\/td><td[^>]*><a href="\/admin\/members\?q=jane%40example\.com" title="jane@example\.com">Chuy<\/a><\/td>/);
+  });
+
+  it("names people from the same read as the entries, one row per entry however they are known", async () => {
+    // A member who also has an account and a chosen name: three tables with
+    // a row for the address, which must still be one entry.
+    await env.DB.prepare("INSERT INTO users (id, email, full_name) VALUES (3, ?, 'Jane Account')").bind(EMAIL).run();
+    await setDisplayName(env, EMAIL, "Chuy", "member", null, 3);
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: EMAIL, detail: "Once" });
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: "nobody@example.com", detail: "Twice" });
+
+    const entries = await readAuditLog(env, { email: EMAIL });
+
+    expect(entries.filter((entry) => entry.detail === "Once")).toHaveLength(1);
+    expect(entries.find((entry) => entry.detail === "Once")).toMatchObject({ actor_name: "Chuy", actor_is_member: true });
+    expect(entries.find((entry) => entry.detail === "Twice")).toMatchObject({ actor_name: null, actor_is_member: false });
+  });
+
   it("says so plainly when there is nothing to show", async () => {
     expect(await (await get("/admin/audit")).text()).toContain("Nothing recorded yet");
     const member = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
@@ -327,9 +382,17 @@ describe("downloading it", () => {
     expect(res.headers.get("Content-Disposition")).toMatch(/^attachment; filename="audit-log-\d{4}-\d{2}-\d{2}\.csv"$/);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const lines = text.trimEnd().split("\r\n");
-    expect(lines[0]).toBe("id,when_utc,action,what,who_it_was_about,detail,who_did_it");
+    expect(lines[0]).toBe("id,when_utc,action,what,who_it_was_about,detail,who_did_it,who_did_it_name");
     expect(lines).toHaveLength(AUDIT_PAGE_SIZE + 2);
-    expect(lines[1]).toMatch(/^\d+,\d{4}-\d{2}-\d{2}T[\d:.]+Z,card\.emailed,Card emailed,jane@example\.com,entry 100,site automation$/);
+    expect(lines[1]).toMatch(/^\d+,\d{4}-\d{2}-\d{2}T[\d:.]+Z,card\.emailed,Card emailed,jane@example\.com,entry 100,site automation,$/);
+  });
+
+  it("names who did it beside their address", async () => {
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: EMAIL, detail: "By Jane" });
+
+    const { text } = await csv("/admin/audit?format=csv");
+
+    expect(text).toContain(",By Jane,jane@example.com,Jane Doe");
   });
 
   it("records each download, by whom and how much", async () => {

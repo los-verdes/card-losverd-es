@@ -61,6 +61,11 @@ export function memberHistoryHref(email: string): string {
   return `/admin/members?q=${encodeURIComponent(email)}#history`;
 }
 
+/** A member's page, by their address. */
+function memberHref(email: string): string {
+  return `/admin/members?q=${encodeURIComponent(email)}`;
+}
+
 const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubject }) => (
   <tr>
     <td style={cellStyle}>{formatWhen(entry.created_at)}</td>
@@ -78,12 +83,17 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
 );
 
 /**
- * An address as written; what acted when no person did (`auditActor`)
- * muted, so it reads as a description rather than an account to look up.
+ * A person by name (`AuditEntry.actor_name`), their address on hover, and a
+ * link to their member page when they hold a membership; an address nobody
+ * has a name for, as written. What acted when no person did (`auditActor`)
+ * is muted, so it reads as a description rather than an account to look up.
  */
 const Actor: FC<{ entry: AuditEntry }> = ({ entry }) => {
   const actor = auditActor(entry);
-  return actor.person ? <>{actor.text}</> : <span class="muted">{actor.text}</span>;
+  if (!actor.person) return <span class="muted">{actor.text}</span>;
+  const label = entry.actor_name ?? actor.text;
+  if (entry.actor_is_member) return <a href={memberHref(actor.text)} title={actor.text}>{label}</a>;
+  return entry.actor_name ? <span title={actor.text}>{label}</span> : <>{label}</>;
 };
 
 const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
@@ -135,14 +145,14 @@ function parseBefore(raw: string | undefined): number | null {
   return raw !== undefined && /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : null;
 }
 
-const CSV_COLUMNS = ["id", "when_utc", "action", "what", "who_it_was_about", "detail", "who_did_it"] as const;
+const CSV_COLUMNS = ["id", "when_utc", "action", "what", "who_it_was_about", "detail", "who_did_it", "who_did_it_name"] as const;
 
 audit.get("/", async (c) => {
   const email = c.req.query("email")?.trim().toLowerCase() || null;
 
   if (c.req.query("format") === "csv") {
     const entries = await readWholeAuditLog(c.env, { email });
-    // Recorded before the file goes out, and allowed to fail the download: an
+      // Recorded before the file goes out, and allowed to fail the download: an
     // export nobody can see happened is the thing this log exists to prevent.
     await recordAuditEvent(c.env, {
       action: "audit_log.exported",
@@ -158,6 +168,7 @@ audit.get("/", async (c) => {
       who_it_was_about: entry.subject_email,
       detail: entry.detail,
       who_did_it: auditActor(entry).text || null,
+      who_did_it_name: entry.actor_name,
     }));
     const stamp = new Date().toISOString().slice(0, 10);
     return new Response(toCsv(CSV_COLUMNS, rows), {
