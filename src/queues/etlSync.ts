@@ -14,6 +14,7 @@ import { runReadinessCheck } from "../admin/readinessAlert";
 import { refreshLapsedPasses, runPassExpirySweep } from "../member/passExpirySweep";
 import { runOpsWatch } from "../ops/watch";
 import { runSlackMembersEtl } from "../slack/membersEtl";
+import { syncSlackChannelMembers } from "../slack/channelMembers";
 
 /**
  * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
@@ -101,6 +102,9 @@ async function dispatchEtlSyncMessage(
       return;
     case "run_slack_members_etl":
       await runSlackMembersEtl(env);
+      // After the user list, which is what matches a channel's members to
+      // addresses (#333's subgroup themes).
+      await syncSlackChannelMembers(env);
       return;
     case "run_readiness_check":
       await runReadinessCheck(env);

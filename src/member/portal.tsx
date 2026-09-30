@@ -506,7 +506,8 @@ const ThemeForm: FC<{
     <p>
       Your card is drawn in <strong>{current.label}</strong>
       {chosen ? ", which you chose." : ", the default."} You can use the theme of
-      any year you bought a membership, as well as the classic look.
+      any year you bought a membership, and of any subgroup you belong to, as
+      well as the classic look.
     </p>
     {currentFirst(options.themes, current).map((theme) => (
       <form method="post" action={THEME_PATH} class="order">

@@ -12,6 +12,9 @@
  *   correction puts it before their first order.
  * - Classic is always theirs. It is how every card looked before themes, and
  *   the fallback for a year with no theme.
+ * - A group theme is theirs while they belong to its subgroup: while the
+ *   Slack account with their address is in the subgroup's channel
+ *   (src/themes/groups.ts). It is never anyone's default.
  * - Only themes in `CARD_THEMES` are offered, so a year without a published
  *   theme offers nothing extra.
  *
@@ -30,6 +33,7 @@ import type { Env } from "../index";
 import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import type { MemberRecord } from "../member/artifacts";
 import { CARD_THEMES, CLASSIC_THEME, type CardTheme } from "./cardTheme";
+import { groupsFor } from "./groups";
 
 /** What the answer is worked out from. */
 export interface ThemeHistory {
@@ -37,10 +41,12 @@ export interface ThemeHistory {
   orders: ReadonlyArray<{ created_on: string; expires_on: string }>;
   /** Effective "member since" (`YYYY-MM-DD`), or null when there is none. */
   memberSince: string | null;
+  /** The subgroups they belong to now (`CardGroup.id`). */
+  groups?: ReadonlySet<string>;
 }
 
 export interface ThemeOptions {
-  /** Classic first, then year themes in year order. */
+  /** Classic first, then year themes in year order, then group themes. */
   themes: CardTheme[];
   /** The theme the card is drawn in until its holder chooses; always one of `themes`. */
   defaultTheme: CardTheme;
@@ -74,9 +80,11 @@ export function themeOptions(
     .filter((theme) => theme.year !== undefined && years.has(theme.year))
     .sort((a, b) => a.year! - b.year!);
 
+  const groupThemes = themes.filter((theme) => theme.group !== undefined && history.groups?.has(theme.group));
+
   const defaultTheme = (yearDefaults && yearThemes.find((theme) => theme.year === sinceYear)) || CLASSIC_THEME;
 
-  return { themes: [CLASSIC_THEME, ...yearThemes], defaultTheme };
+  return { themes: [CLASSIC_THEME, ...yearThemes, ...groupThemes], defaultTheme };
 }
 
 /**
@@ -102,7 +110,7 @@ export async function getThemeOptions(
     .all<{ created_on: string; expires_on: string }>();
 
   return themeOptions(
-    { orders: results, memberSince: member.member_since },
+    { orders: results, memberSince: member.member_since, groups: await groupsFor(env, member.email) },
     await themeYearDefaultsEnabled(env),
     themes,
   );

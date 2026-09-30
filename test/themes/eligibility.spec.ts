@@ -8,6 +8,7 @@ import {
   themeOptions,
   themeYearDefaultsEnabled,
 } from "../../src/themes/eligibility";
+import { groupsFor } from "../../src/themes/groups";
 
 function yearTheme(year: number): CardTheme {
   return { ...CLASSIC_THEME, id: String(year), label: String(year), year };
@@ -159,5 +160,76 @@ describe("getThemeOptions", () => {
   it("offers the real registry by default", async () => {
     // Member since 2021, which has a published theme.
     expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021"]);
+  });
+});
+
+describe("group themes", () => {
+  const PRINGLES: CardTheme = { ...CLASSIC_THEME, id: "los-pringles", label: "Los Pringles", group: "los-pringles" };
+  const WITH_GROUP = [...THEMES, PRINGLES];
+  const history = { orders: [order("2021-07-04", "2022-07-04")], memberSince: "2021-07-04" };
+
+  it("are offered, after the year themes, only to the group's members", () => {
+    expect(ids(themeOptions({ ...history, groups: new Set(["los-pringles"]) }, false, WITH_GROUP).themes)).toEqual([
+      "classic",
+      "2021",
+      "los-pringles",
+    ]);
+    expect(ids(themeOptions(history, false, WITH_GROUP).themes)).toEqual(["classic", "2021"]);
+    expect(ids(themeOptions({ ...history, groups: new Set(["someone-else"]) }, false, WITH_GROUP).themes)).not.toContain(
+      "los-pringles",
+    );
+  });
+
+  it("are never anyone's default", () => {
+    expect(themeOptions({ ...history, groups: new Set(["los-pringles"]) }, true, WITH_GROUP).defaultTheme.id).toBe("2021");
+    expect(themeOptions({ orders: [], memberSince: null, groups: new Set(["los-pringles"]) }, true, WITH_GROUP).defaultTheme).toBe(
+      CLASSIC_THEME,
+    );
+  });
+});
+
+describe("groupsFor, and getThemeOptions with groups", () => {
+  const EMAIL = "pat@example.com";
+
+  afterEach(async () => {
+    await env.DB.exec("DELETE FROM slack_channel_members");
+    await env.DB.exec("DELETE FROM slack_users");
+  });
+
+  async function inChannel(slackId: string, email: string, channel: string, deleted = 0) {
+    await env.DB.prepare("INSERT INTO slack_users (slack_id, email, deleted, synced_at) VALUES (?, ?, ?, 1)")
+      .bind(slackId, email, deleted)
+      .run();
+    await env.DB.prepare("INSERT INTO slack_channel_members VALUES (?, ?, 1)").bind(channel, slackId).run();
+  }
+
+  it("is the groups whose channel holds a current Slack account with this address", async () => {
+    await inChannel("U1", EMAIL, "los-pringles");
+    await inChannel("U2", "other@example.com", "some-other-channel");
+
+    expect(await groupsFor(env, " Pat@Example.com ")).toEqual(new Set(["los-pringles"]));
+    expect(await groupsFor(env, "other@example.com")).toEqual(new Set());
+    expect(await groupsFor(env, "nobody@example.com")).toEqual(new Set());
+  });
+
+  it("leaves out a deactivated Slack account", async () => {
+    await inChannel("U1", EMAIL, "los-pringles", 1);
+
+    expect(await groupsFor(env, EMAIL)).toEqual(new Set());
+  });
+
+  it("offers the real registry's group theme to a member of its channel", async () => {
+    await inChannel("U1", EMAIL, "los-pringles");
+
+    expect(ids((await getThemeOptions(env, { email: EMAIL, member_since: null })).themes)).toContain("los-pringles");
+    expect(ids((await getThemeOptions(env, { email: "nobody@example.com", member_since: null })).themes)).not.toContain(
+      "los-pringles",
+    );
+  });
+
+  it("offers nothing when there are no groups", async () => {
+    await inChannel("U1", EMAIL, "los-pringles");
+
+    expect(await groupsFor(env, EMAIL, [])).toEqual(new Set());
   });
 });
