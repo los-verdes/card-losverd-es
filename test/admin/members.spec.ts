@@ -12,6 +12,7 @@ import LOGO from "../fixtures/sample-logo.png";
 import BACKGROUND from "../fixtures/sample-card-background.png";
 import { YEAR_THEMES } from "../../src/themes/cardTheme";
 import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
+import { linkStoreAccount } from "../../src/bigcommerce/storeAccount";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -795,5 +796,38 @@ describe("their card's theme, on their page", () => {
     expect(res.status).toBe(200);
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(await renderCardImage(env, member, Y2021));
     expect((await get(`/admin/members/card.png?id=${encodeURIComponent(CARD)}&theme=2022`)).status).toBe(404);
+  });
+});
+
+describe("their store account, on their page", () => {
+  afterEach(async () => {
+    await env.DB.exec("DELETE FROM audit_log");
+  });
+
+  const page = async () => (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+
+  it("says when they have no account here to connect one to", async () => {
+    expect(await page()).toMatch(/Store account<\/th><td[^>]*>no account here yet/);
+  });
+
+  it("shows the connected account, and lets an admin disconnect it, on the record", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email) VALUES (5, ?)").bind(EMAIL).run();
+    await linkStoreAccount(env, 5, 4242, 5);
+
+    expect(await page()).toContain("Customer 4242, connected ");
+    const res = await post({ email: EMAIL, action: "store-unlink", user_id: "5" });
+
+    expect(res.headers.get("Location")).toContain("saved=store-unlinked");
+    expect(await page()).toMatch(/Store account<\/th><td[^>]*>not connected/);
+    const { results } = await env.DB.prepare("SELECT action, actor_email FROM audit_log").all();
+    expect(results).toContainEqual({ action: "store_account.unlinked", actor_email: "admin@example.com" });
+  });
+
+  it("says so when there was nothing to disconnect", async () => {
+    const res = await post({ email: EMAIL, action: "store-unlink", user_id: "999" });
+
+    expect(new URL(res.headers.get("Location")!, "https://card.losverd.es").searchParams.get("error")).toBe(
+      "There was no store account to disconnect.",
+    );
   });
 });

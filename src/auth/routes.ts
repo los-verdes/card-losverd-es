@@ -8,6 +8,7 @@ import { isUserExpelled } from "../member/expulsion";
 import { recordOutcome } from "../lib/outcome";
 import { isAppleRelayAddress } from "../member/portal";
 import { LV_PROVIDER_CLAIM, LV_USER_ID_CLAIM, authConfig } from "./authjs";
+import { finishPendingStoreLink } from "../bigcommerce/storeHandoff";
 import { configuredProviders, renderLoginPage } from "./loginPage";
 import {
   clearSessionCookie,
@@ -45,6 +46,7 @@ auth.get(LOGIN_PATH, (c) => {
       providers: configuredProviders(c.env),
       failed: c.req.query("error") !== undefined,
       blocked: c.req.query("error") === EXPELLED_REASON,
+      connectingStore: c.req.query("connect") === "store",
     }),
   );
 });
@@ -123,7 +125,9 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
   // worked and the session this app issued could not be read on the very
   // next request -- which is a completely different problem from never
   // having reached here at all.
-  return c.redirect("/?signed_in=1");
+  // A store account waiting on this sign-in to be connected (#38), if any.
+  const store = await finishPendingStoreLink(c, user.id);
+  return c.redirect(store === "none" ? "/?signed_in=1" : `/?signed_in=1&store=${store === "linked" ? "connected" : "taken"}`);
 });
 
 /**

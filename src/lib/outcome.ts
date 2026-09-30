@@ -33,6 +33,7 @@ export const OUTCOMES = [
   "claim.confirmed",
   "pass.verified",
   "order.reread",
+  "store.handoff",
 ] as const;
 
 export type Outcome = (typeof OUTCOMES)[number];

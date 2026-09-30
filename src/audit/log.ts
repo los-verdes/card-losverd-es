@@ -57,6 +57,8 @@ export const AUDIT_ACTIONS = [
   "audit_log.exported",
   "card_theme.set",
   "card_theme.cleared",
+  "store_account.linked",
+  "store_account.unlinked",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -80,6 +82,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "audit_log.exported": "Audit log downloaded",
   "card_theme.set": "Card theme chosen",
   "card_theme.cleared": "Card theme cleared",
+  "store_account.linked": "Store account connected",
+  "store_account.unlinked": "Store account disconnected",
 };
 
 /**

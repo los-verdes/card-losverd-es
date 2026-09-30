@@ -34,6 +34,11 @@ export interface LoginPageProps {
    * that will never work.
    */
   blocked?: boolean;
+  /**
+   * Set when the member came from the store and their store account is not
+   * connected yet (#38): signing in here once connects it.
+   */
+  connectingStore?: boolean;
 }
 
 export const LoginPage: FC<LoginPageProps> = ({
@@ -41,6 +46,7 @@ export const LoginPage: FC<LoginPageProps> = ({
   providers,
   failed,
   blocked,
+  connectingStore,
 }) => (
   <Page title="Your Membership Card">
     <h1>Los Verdes Membership Card</h1>
@@ -67,6 +73,13 @@ export const LoginPage: FC<LoginPageProps> = ({
         you can still have your card emailed to you below.
       </p>
       )
+    )}
+
+    {connectingStore && !blocked && (
+      <p style="color: var(--success)">
+        Sign in once to connect your store account. After that, "Membership card" on the store brings you
+        straight to your card.
+      </p>
     )}
 
     {providers.length > 0 ? (

@@ -23,6 +23,7 @@ export const WORKER_SECRETS: string[] = [
   // BigCommerce
   "BIGCOMMERCE_ACCESS_TOKEN",
   "BIGCOMMERCE_WEBHOOK_SIGNING_KEY",
+  "BIGCOMMERCE_APP_CLIENT_SECRET", // the store handoff's app (#38); BIGCOMMERCE_APP_CLIENT_ID is a plain var
   // Apple Wallet passes and QR verification
   "APPLE_PASS_CERT_PEM",
   "APPLE_PASS_KEY_PEM",
