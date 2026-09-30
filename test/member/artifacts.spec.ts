@@ -12,6 +12,7 @@ import {
   isMembershipCurrent,
   renderCardImage,
   type MemberRecord,
+  resetTemplateAssetCache,
 } from "../../src/member/artifacts";
 import { unzipSync } from "fflate";
 import LOGO from "../fixtures/sample-logo.png";
@@ -21,6 +22,7 @@ import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
 import { GOOGLE_WALLET_API, resetGoogleWalletTokenCache } from "../../src/google/api";
 import { fakeGoogleWallet } from "../google/fake";
 import { named, recordSpans } from "../fixtures/spans";
+import { forgetDrawnCards } from "../setup/templateCache";
 
 const PASS_KEY = "test-pass-signature-key".repeat(5);
 
@@ -137,6 +139,7 @@ describe("template images, kept in memory", () => {
     const member = (await getMemberById(env, "BC-1"))!;
 
     const first = await renderCardImage(env, member);
+    await forgetDrawnCards(); // so the second is drawn, not served from the drawn-card cache
     const second = await renderCardImage(env, member);
 
     expect(second).toEqual(first);
@@ -160,8 +163,10 @@ describe("template images, kept in memory", () => {
 
     await renderCardImage(env, member);
     clock.mockReturnValue(now + 59 * 60 * 1000);
+    await forgetDrawnCards();
     await renderCardImage(env, member);
     clock.mockReturnValue(now + 61 * 60 * 1000);
+    await forgetDrawnCards();
     await renderCardImage(env, member);
 
     expect(crestReads(get)).toBe(2);
@@ -175,6 +180,84 @@ describe("template images, kept in memory", () => {
     await env.ASSETS.put(CREST, new Uint8Array(LOGO));
 
     expect(Array.from((await renderCardImage(env, member)).slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  });
+});
+
+describe("drawn cards, cached in R2", () => {
+  const CREST = "templates/card/crest.png";
+  const KEY = "cache/card/BC-1/classic.png";
+
+  beforeEach(async () => {
+    env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+    await insertMember();
+    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
+  });
+
+  afterEach(async () => {
+    await env.ASSETS.delete(CREST);
+  });
+
+  const member = async () => (await getMemberById(env, "BC-1"))!;
+  /** Whether a call drew the card, told by whether it needed the crest (template images are forgotten first). */
+  async function drew(render: () => Promise<Uint8Array>): Promise<boolean> {
+    resetTemplateAssetCache();
+    const get = vi.spyOn(env.ASSETS, "get");
+    await render();
+    const drawn = get.mock.calls.some(([key]) => key === CREST);
+    get.mockRestore();
+    return drawn;
+  }
+
+  it("serves a card already drawn, unchanged, without drawing it again", async () => {
+    const first = await renderCardImage(env, await member());
+
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
+    expect(await renderCardImage(env, await member())).toEqual(first);
+    expect((await env.ASSETS.head(KEY))?.httpMetadata?.contentType).toBe("image/png");
+  });
+
+  it("draws it again once the member has changed", async () => {
+    const before = await renderCardImage(env, await member());
+    await env.DB.prepare("UPDATE members SET first_name = 'Janet', last_updated_at = 2 WHERE member_id = 'BC-1'").run();
+
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(true);
+    expect(await renderCardImage(env, await member())).not.toEqual(before);
+  });
+
+  it("keeps one per theme, and draws again when a theme's version changes", async () => {
+    await renderCardImage(env, await member());
+    const other: CardTheme = { ...CLASSIC_THEME, id: "other", colors: { ...CLASSIC_THEME.colors, background: "#123456" } };
+
+    expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(true);
+    expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(false);
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
+    expect(await drew(async () => renderCardImage(env, await member(), { ...other, version: 2 }))).toBe(true);
+  });
+
+  it("draws again for a card cached by an older drawing, or with a QR code for another signing key", async () => {
+    await renderCardImage(env, await member());
+    const cached = (await env.ASSETS.head(KEY))!;
+    await env.ASSETS.put(KEY, new Uint8Array([1, 2, 3]), {
+      customMetadata: { ...cached.customMetadata, tag: cached.customMetadata!.tag.replace(/^[^|]+/, "2000-01-01.1") },
+    });
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(true);
+
+    env.PASS_SIGNATURE_KEY = "another-pass-signature-key-9876543210";
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(true);
+  });
+
+  it("still draws the card when the cache cannot be read or written", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const realGet = env.ASSETS.get.bind(env.ASSETS);
+    vi.spyOn(env.ASSETS, "get").mockImplementation(((key: string) =>
+      key.startsWith("cache/card/") ? Promise.reject(new Error("R2 down")) : realGet(key)) as typeof env.ASSETS.get);
+    vi.spyOn(env.ASSETS, "put").mockRejectedValue(new Error("R2 down"));
+
+    const png = await renderCardImage(env, await member());
+
+    expect(Array.from(png.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("unreadable"), expect.any(Error));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("unwritable"), expect.any(Error));
   });
 });
 
