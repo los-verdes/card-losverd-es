@@ -13,7 +13,7 @@ Every year has the same files, at the sizes in `ARTWORK_SIZES`:
 | --- | --- | --- |
 | `card-background.png` | 1050 x 660 | Under everything on the card image |
 | `apple-poster/poster.png`, `@2x`, `@3x` | 358 x 448 pt (1074 x 1344 at 3x) | Behind the whole Apple pass on iOS 27 and later (`artwork.png` in the pass) |
-| `apple-poster/primaryLogo.png`, `@2x` | 100 x 29 pt | The logo at the top of the Apple poster: light over dark art, dark over light |
+| `apple-poster/primaryLogo.png`, `@2x`, `@3x` | 100 x 23 pt | The logo at the top of the Apple poster: light over dark art, dark over light |
 | `apple/thumbnail.png`, `@2x`, `@3x` | 90, 180, 270 square | Beside the name on the Apple pass before iOS 27 |
 | `google-hero.png` | 1032 x 812 | Full width under the details of the Google pass |
 

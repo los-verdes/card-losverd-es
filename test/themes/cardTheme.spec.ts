@@ -107,7 +107,7 @@ describe("the theme registry", () => {
   });
 
   it("names only images that are committed for upload to R2", () => {
-    const APPLE_PASS_FILES = ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"];
+    const APPLE_PASS_FILES = ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"];
     for (const theme of CARD_THEMES) {
       const keys = [
         theme.assets.cardCrest,

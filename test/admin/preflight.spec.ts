@@ -27,8 +27,10 @@ const PASS_TYPE = "pass.es.losverd.card";
 const TEMPLATE_KEYS = [
   "templates/apple/icon.png",
   "templates/apple/icon@2x.png",
+  "templates/apple/icon@3x.png",
   "templates/apple/logo.png",
   "templates/apple/logo@2x.png",
+  "templates/apple/logo@3x.png",
   "templates/card/crest.png",
   "templates/google/logo.png",
 ];

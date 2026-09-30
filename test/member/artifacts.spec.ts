@@ -118,7 +118,7 @@ describe("a theme's artwork (#333)", () => {
   const BACKGROUND_KEY = "templates/themes/test/card-background.png";
   const THUMBNAIL_PREFIX = "templates/themes/test/apple/";
   const THUMBNAILS = ["thumbnail.png", "thumbnail@2x.png", "thumbnail@3x.png"];
-  const APPLE_FILES = ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"];
+  const APPLE_FILES = ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"];
   const THEME: CardTheme = {
     ...CLASSIC_THEME,
     id: "test",
@@ -184,7 +184,7 @@ describe("a theme's artwork (#333)", () => {
     const member = (await getMemberById(env, "BC-1"))!;
     const POSTER_THEME: CardTheme = { ...THEME, artwork: { ...THEME.artwork, applePosterPrefix: "templates/themes/test/apple-poster/" } };
     const posterKeys = [
-      ...["primaryLogo.png", "primaryLogo@2x.png", "poster.png", "poster@2x.png", "poster@3x.png"].map((name) => `templates/themes/test/apple-poster/${name}`),
+      ...["primaryLogo.png", "primaryLogo@2x.png", "primaryLogo@3x.png", "poster.png", "poster@2x.png", "poster@3x.png"].map((name) => `templates/themes/test/apple-poster/${name}`),
     ];
     for (const name of APPLE_FILES) {
       await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));

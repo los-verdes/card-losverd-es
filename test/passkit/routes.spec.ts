@@ -42,7 +42,7 @@ async function seedMember(options: SeedMemberOptions = {}) {
 }
 
 async function seedTemplateAssets() {
-  for (const name of ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"]) {
+  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
     await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
   }
 }
@@ -335,8 +335,10 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
     expect(Object.keys(files).sort()).toEqual([
       "icon.png",
       "icon@2x.png",
+      "icon@3x.png",
       "logo.png",
       "logo@2x.png",
+      "logo@3x.png",
       "manifest.json",
       "pass.json",
       "signature",
@@ -355,7 +357,7 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
 
     // Remove the template assets: a second request would fail if it needed
     // to rebuild the bundle, so a 200 here proves the cache path was taken.
-    for (const name of ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"]) {
+    for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
       await env.ASSETS.delete(`templates/apple/${name}`);
     }
 
