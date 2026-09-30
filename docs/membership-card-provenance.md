@@ -85,9 +85,14 @@ as one, and that this app's accounting of orders matches the store's.
 
 An order becomes a membership order when one of the products on it is a
 membership. The product SKU is what decides this: the app holds a list of
-membership SKUs (currently the
-single entry `LOSV-MEM-0001`), and an order is recorded here only when one of
-its line items matches. No other orders are considered for the app.
+membership SKUs, and an order is recorded here only when one of its line
+items matches. No other orders are considered for the app. The list has two
+entries, one per product selling the same membership:
+
+* `LOSV-MEM-0001`, the membership pack, which ships merchandise;
+* `LOSV-DIGI-5000`, the membership without merchandise.
+
+Either one makes the same membership and the same card.
 
 ### One order per membership
 
