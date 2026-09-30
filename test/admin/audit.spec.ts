@@ -161,6 +161,14 @@ describe("reading it back", () => {
     expect(body).toContain(`<a href="/admin/members?q=${encodeURIComponent(EMAIL)}#history">${EMAIL}</a>`);
   });
 
+  it("wraps a long detail within a width, rather than pushing the other columns off the page", async () => {
+    await revokeCard(env, CARD, "a reason long enough that it would once have run straight off the side of the page", ADMIN_ID);
+
+    const body = await (await get("/admin/audit")).text();
+
+    expect(body).toMatch(/<td style="[^"]*white-space: nowrap; white-space: normal; min-width: 14rem; max-width: 32rem[^"]*">[^<]*a reason long enough/);
+  });
+
   it("sends an old one-person link to that person's history on their member page", async () => {
     for (const query of [`email=${encodeURIComponent(EMAIL)}`, `email=${encodeURIComponent(" Jane@Example.com ")}&before=5`]) {
       const res = await get(`/admin/audit?${query}`);

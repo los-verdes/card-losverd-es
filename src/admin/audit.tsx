@@ -66,8 +66,16 @@ function memberHref(email: string): string {
   return `/admin/members?q=${encodeURIComponent(email)}`;
 }
 
+/**
+ * The detail is free text and can run long, so it wraps within a width rather
+ * than taking the admin tables' usual no-wrap, which pushed every column after
+ * it off the page.
+ */
+const detailCellStyle = `${cellStyle}; white-space: normal; min-width: 14rem; max-width: 32rem; overflow-wrap: anywhere`;
+
 const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubject }) => (
-  <tr>
+  // Top-aligned, so the other cells sit level with a wrapped detail's first line.
+  <tr style="vertical-align: top">
     <td style={cellStyle}>{formatWhen(entry.created_at)}</td>
     <td style={cellStyle}>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
     {showSubject && (
@@ -75,7 +83,7 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
         {entry.subject_email ? <a href={memberHistoryHref(entry.subject_email)}>{entry.subject_email}</a> : ""}
       </td>
     )}
-    <td style={cellStyle}>{entry.detail}</td>
+    <td style={detailCellStyle}>{entry.detail}</td>
     <td style={cellStyle}>
       <Actor entry={entry} />
     </td>
