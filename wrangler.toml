@@ -85,6 +85,12 @@ name = "EMAIL"
 # public placeholder signing key would let anyone forge webhook signatures.
 BIGCOMMERCE_STORE_HASH = "3nco2w7eup"
 BIGCOMMERCE_CLIENT_ID = "fsnukglh18ksbdvd1g5xh7f6hfpe2p8"
+# The store's own address, and this environment's Developer Portal app for
+# the store handoff (#38). The app's id stays empty, and the handoff off,
+# until an app is installed on the store; its secret is
+# BIGCOMMERCE_APP_CLIENT_SECRET.
+BIGCOMMERCE_STOREFRONT_URL = "https://store.losverdesatx.org"
+BIGCOMMERCE_APP_CLIENT_ID = "g1vpjmv5bbedb6in9nzenavswbi18f9"
 
 # Apple PassKit identifiers (Phase 4) - not secret, safe to commit (both are
 # embedded in every issued pass). These are the legacy app's real values
@@ -250,6 +256,9 @@ name = "EMAIL"
 # The test BigCommerce store (legacy DevelopmentSettings' store hash).
 BIGCOMMERCE_STORE_HASH = "kouyh8feen"
 BIGCOMMERCE_CLIENT_ID = "g1vpjmv5bbedb6in9nzenavswbi18f9"
+# The sandbox store (a prelaunch Partner Sandbox, checked 2026-09-30).
+BIGCOMMERCE_STOREFRONT_URL = "https://los-verdes-sandbox.mybigcommerce.com"
+BIGCOMMERCE_APP_CLIENT_ID = "bi8tmu4q63tvdn8yz1tduf6srq94kub"
 PASSKIT_PASS_TYPE_IDENTIFIER = "pass.es.losverd.card"
 PASSKIT_TEAM_IDENTIFIER = "KJHZP635V9"
 PASSKIT_ORGANIZATION_NAME = "Los Verdes"

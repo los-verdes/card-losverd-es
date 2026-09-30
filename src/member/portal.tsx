@@ -40,6 +40,9 @@ import {
   type MemberRecord,
 } from "./artifacts";
 import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
+import { appConfig } from "../bigcommerce/appJwt";
+import { storeAccountFor } from "../bigcommerce/storeAccount";
+import { STORE_DISCONNECT_PATH } from "../bigcommerce/storeHandoff";
 import { Page, SUPPORT_EMAIL } from "./layout";
 import {
   MAX_DISPLAY_NAME_LENGTH,
@@ -198,13 +201,63 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
   </section>
 );
 
+/**
+ * Their store account (#38): connected or not, and the way to change that.
+ * Shown only once this environment has a store app, so there is a handoff to
+ * connect through.
+ */
+export interface StoreAccountView {
+  connected: boolean;
+  /** Where "Connect your store account" goes: the store's account page, which runs the handoff. */
+  connectHref: string;
+  /** What just happened, from the handoff's redirect. */
+  notice?: "connected" | "taken" | "disconnected";
+}
+
+const STORE_NOTICES = {
+  connected: { color: "var(--success)", text: "Your store account is connected." },
+  disconnected: { color: "var(--success)", text: "Your store account is disconnected." },
+  taken: {
+    color: "var(--danger)",
+    text: "That store account is already connected to someone else's card, so it wasn't connected to yours.",
+  },
+} as const;
+
+const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
+  <section style="margin-top: 2rem">
+    <h2 style="font-size: 1.1rem">Store account</h2>
+    {store.notice && <p style={`color: ${STORE_NOTICES[store.notice].color}`}>{STORE_NOTICES[store.notice].text}</p>}
+    {store.connected ? (
+      <>
+        <p class="muted">
+          Connected. "Membership card" on the Los Verdes store brings you straight here, without signing in again.
+        </p>
+        <form method="post" action={STORE_DISCONNECT_PATH}>
+          <button type="submit">Disconnect my store account</button>
+        </form>
+      </>
+    ) : (
+      <>
+        <p class="muted">
+          Connect the account you shop with, and "Membership card" on the store brings you straight here.
+        </p>
+        <a href={store.connectHref} class="action">
+          Connect your store account
+        </a>
+      </>
+    )}
+  </section>
+);
+
 export const MemberCard: FC<{
   member: CurrentMember;
   orders: MemberOrder[];
   isAdmin: boolean;
   /** Whether they may choose a theme yet (`mayChooseTheme`): admins first, then everyone. */
   canChooseTheme?: boolean;
-}> = ({ member, orders, isAdmin, canChooseTheme = false }) => (
+  /** Their store account, when this environment has a store app. */
+  store?: StoreAccountView | null;
+}> = ({ member, orders, isAdmin, canChooseTheme = false, store = null }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
@@ -253,6 +306,7 @@ export const MemberCard: FC<{
         Change how my card looks
       </a>
     )}
+    {store && <StoreAccount store={store} />}
     <MembershipHistory orders={orders} email={member.email} />
     <LogoutButton />
   </Page>
@@ -362,6 +416,18 @@ export const NoActiveMembership: FC<{
 
 const portal = new Hono<PortalEnv>();
 
+/** The store account section, or null when this environment has no store app to connect through. */
+async function storeAccountView(env: Env, userId: number, notice: string | undefined): Promise<StoreAccountView | null> {
+  if (!appConfig(env) || !env.BIGCOMMERCE_STOREFRONT_URL) return null;
+  const connectHref = new URL("/account.php", env.BIGCOMMERCE_STOREFRONT_URL);
+  connectHref.searchParams.set("lv_connect", "1");
+  return {
+    connected: (await storeAccountFor(env, userId)) !== null,
+    connectHref: connectHref.toString(),
+    notice: notice === "connected" || notice === "taken" || notice === "disconnected" ? notice : undefined,
+  };
+}
+
 portal.get("/", requireCurrentMember, async (c) => {
   const member = c.get("member");
   const [orders, isAdmin] = await Promise.all([
@@ -375,6 +441,7 @@ portal.get("/", requireCurrentMember, async (c) => {
       orders={orders}
       isAdmin={isAdmin}
       canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
+      store={await storeAccountView(c.env, c.get("session").userId, c.req.query("store"))}
     />,
   );
 });

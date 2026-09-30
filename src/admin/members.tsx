@@ -50,6 +50,7 @@ import {
 } from "../member/revocation";
 import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } from "../member/expulsion";
 import { readWholeAuditLog, type AuditEntry } from "../audit/log";
+import { unlinkStoreAccount } from "../bigcommerce/storeAccount";
 import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
@@ -299,6 +300,41 @@ const ThemeSection: FC<{ member: MemberRecord; theme: ThemeSummary }> = ({ membe
   );
 };
 
+/**
+ * The store account (#38) connected to this member's user: the user signed
+ * in under their address, or the one who claimed the membership.
+ */
+interface StoreAccountRow {
+  userId: number;
+  customerId: number | null;
+  linkedAt: number | null;
+}
+
+async function storeAccountForMember(env: Env, member: MemberRecord): Promise<StoreAccountRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT u.id, u.bigcommerce_id, u.bigcommerce_linked_at FROM users u
+      WHERE u.email = ?1 OR u.id = (SELECT user_id FROM members WHERE member_id = ?2)
+      ORDER BY u.email = ?1 DESC LIMIT 1`,
+  )
+    .bind(member.email, member.member_id)
+    .first<{ id: number; bigcommerce_id: number | null; bigcommerce_linked_at: number | null }>();
+  return row ? { userId: row.id, customerId: row.bigcommerce_id, linkedAt: row.bigcommerce_linked_at } : null;
+}
+
+const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null }> = ({ member, store }) =>
+  store?.customerId ? (
+    <form method="post" action={MEMBERS_PATH} style="margin: 0">
+      Customer {store.customerId}
+      {store.linkedAt ? `, connected ${new Date(store.linkedAt).toISOString().slice(0, 10)}` : ""}{" "}
+      <input type="hidden" name="email" value={member.email} />
+      <input type="hidden" name="action" value="store-unlink" />
+      <input type="hidden" name="user_id" value={String(store.userId)} />
+      <button type="submit">Disconnect</button>
+    </form>
+  ) : (
+    <>{store ? "not connected" : "no account here yet"}</>
+  );
+
 const Summary: FC<{
   member: MemberRecord;
   footprint: EmailFootprint;
@@ -307,7 +343,8 @@ const Summary: FC<{
   nameSetByEmail: string | null;
   expelled: boolean;
   theme: ThemeSummary;
-}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme }) => (
+  store: StoreAccountRow | null;
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme, store }) => (
   <>
     {member.display_name && (
       <p class="muted">
@@ -351,6 +388,12 @@ const Summary: FC<{
           <th style={cellStyle}>Slack</th>
           <td style={cellStyle}>
             {slackText(footprint.slack)}
+          </td>
+        </tr>
+        <tr>
+          <th style={cellStyle}>Store account</th>
+          <td style={cellStyle}>
+            <StoreAccountCell member={member} store={store} />
           </td>
         </tr>
       </tbody>
@@ -602,15 +645,16 @@ members.get("/", async (c) => {
   const historyEmail =
     member?.email ?? (lookup.kind === "email" && isWellFormedEmail(lookup.value) ? lookup.value : null);
 
-  const [footprint, orders, override, expelled, theme] = member
+  const [footprint, orders, override, expelled, theme, store] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
         getDisplayName(c.env, member.email),
         isExpelled(c.env, member.email),
         themeSummary(c.env, member),
+        storeAccountForMember(c.env, member),
       ])
-    : [null, [], null, false, null];
+    : [null, [], null, false, null, null];
 
   // An address can hold orders and no membership, and that is a real answer
   // rather than a dead end (#241). Only when there is nothing at all does the
@@ -686,6 +730,9 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}
+      {c.req.query("saved") === "store-unlinked" && (
+        <p style="color: var(--success)">Store account disconnected.</p>
+      )}
       {c.req.query("saved") === "theme" && (
         <p style="color: var(--success)">Theme saved. Their passes will catch up shortly.</p>
       )}
@@ -728,6 +775,7 @@ members.get("/", async (c) => {
           nameSetByEmail={override?.set_by_email ?? null}
           expelled={expelled}
           theme={theme}
+          store={store}
         />
       )}
       {historyOnly && (
@@ -792,6 +840,14 @@ members.post("/", csrf(), async (c) => {
     return (await revokeCard(c.env, member.member_id, note, c.get("session").userId))
       ? back({ saved: "revoked" })
       : back({ error: "That membership has already been revoked." });
+  }
+
+  if (form.action === "store-unlink") {
+    const userId = Number(form.user_id);
+    if (!Number.isInteger(userId) || !(await unlinkStoreAccount(c.env, userId, c.get("session").userId))) {
+      return back({ error: "There was no store account to disconnect." });
+    }
+    return back({ saved: "store-unlinked" });
   }
 
   if (form.action === "theme" || form.action === "theme-clear") {

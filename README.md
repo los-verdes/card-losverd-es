@@ -149,12 +149,13 @@ Some secrets can't just be regenerated: changing production's `PASS_SIGNATURE_KE
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Login with Google |
 | `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY_PEM` | Sign in with Apple |
 | `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_WEBHOOK_SIGNING_KEY` | Order sync and webhook verification |
+| `BIGCOMMERCE_APP_CLIENT_SECRET` | The store handoff: "Membership card" on the store signing a member in here, and connecting their store account (#38). The client secret of this environment's Developer Portal app, whose client id is the plain var `BIGCOMMERCE_APP_CLIENT_ID`. Optional: the handoff stays off until both are set |
 | `APPLE_PASS_CERT_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_WWDR_CERT_PEM` | Signing Apple Wallet passes |
 | `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM` | Pushing Apple pass updates |
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | "Save to Google Wallet" links |
 | `PASS_SIGNATURE_KEY` | Card QR code signatures; deliberately the legacy key, see [`docs/legacy-pass-compatibility.md`](docs/legacy-pass-compatibility.md) |
 | `TURNSTILE_SECRET_KEY` | `/email-card` (also needs the non-secret `TURNSTILE_SITE_KEY` var). Sending itself needs no secret -- it is the `send_email` binding, see "Sending email" below |
-| `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read` and `users:read.email` |
+| `SLACK_BOT_TOKEN` | Slack members sync; scopes `users:read`, `users:read.email`, and `channels:read` for the subgroup channels behind group card themes |
 | `SLACK_ALERT_WEBHOOK_URL` | Dead-letter alerts; an incoming webhook, deliberately not the bot token above. Optional: alerts are skipped until it's set |
 
 For the `*_PEM` secrets, paste the file's own text. 1Password's password fields strip the line breaks, which is harmless -- both parsers used here (`node-forge` for pass signing, `jose` for JWT keys) discard whitespace before decoding the base64. A value carrying literal `\n` escapes, as copied out of a Google service-account JSON file, is *not* harmless: it fails at runtime with an opaque ASN.1 error, so `secrets-push` refuses it (along with a value that isn't PEM at all, one that's truncated, and a passphrase-protected key, which `node-forge` can't read).

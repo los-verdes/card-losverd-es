@@ -14,6 +14,8 @@ import { authConfig, landOnSessionBridge } from "./auth/authjs";
 import auth from "./auth/routes";
 import assets from "./assets";
 import bigcommerce from "./bigcommerce/routes";
+import bigcommerceApp from "./bigcommerce/app";
+import storeHandoff from "./bigcommerce/storeHandoff";
 import { handleServerError } from "./lib/serverError";
 import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
@@ -31,6 +33,15 @@ export interface Env {
   ASSETS: R2Bucket;
   BIGCOMMERCE_STORE_HASH: string;
   BIGCOMMERCE_CLIENT_ID: string;
+  // Not secret -- this environment's Developer Portal app (#38), whose client
+  // secret signs storefront `current.jwt`s and control-panel callbacks. Empty
+  // until one is installed on the store, which leaves the store handoff off.
+  BIGCOMMERCE_APP_CLIENT_ID?: string;
+  // Secret -- that app's client secret (`wrangler secret put`).
+  BIGCOMMERCE_APP_CLIENT_SECRET?: string;
+  // Not secret -- the store's own address, the only origin the store handoff
+  // accepts and where "connect your store account" sends a member.
+  BIGCOMMERCE_STOREFRONT_URL?: string;
   // Secrets (`wrangler secret put`, no wrangler.toml placeholders). Webhook
   // verification fails closed without the signing key.
   BIGCOMMERCE_ACCESS_TOKEN: string;
@@ -180,7 +191,11 @@ app.get("/healthz", (c) => c.json({ status: "ok" }));
 app.get("/favicon.ico", (c) => c.redirect("/assets/favicon.svg", 301));
 // Likewise asked for by every crawler; what it says differs by environment.
 app.route("/robots.txt", robots);
+// Before `/bigcommerce`, whose own routes would otherwise be tried first.
+app.route("/bigcommerce/app", bigcommerceApp);
 app.route("/bigcommerce", bigcommerce);
+// The store handoff (#38): `/store-handoff` and `/store-account/disconnect`.
+app.route("/", storeHandoff);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);

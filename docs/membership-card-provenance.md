@@ -587,6 +587,18 @@ buyer. And the one-time legacy import skipped any order that already had an
 attribution recorded against it, so an admin's decision outranked the
 historical export.
 
+**Neither address decides who is signing in, and nor does the store account
+that paid.** A member can connect their store account to their card, so that
+"Membership card" on the store brings them straight to it (#38). The
+connection is made only when the same browser is signed in to both at once:
+to the store, and to the card site with Google or Apple. The sign-in page
+shows the store account's email as a hint of which account to use, but
+never matches it against anything. An order's store
+account is never used for it, because a gift is usually bought from the
+buyer's account: the buyer following "Membership card" reaches their own
+membership, or none, never the recipient's. Which membership a signed-in
+person then sees is decided exactly as it is for any other sign-in.
+
 What attribution does _not_ change is the name on the order. The billing name
 stays the purchaser's, and since the card's holder name comes from the latest
 counted order, a gift can leave the purchaser's name on the recipient's card.
@@ -681,7 +693,8 @@ or a change, not an open-ended design exercise.
 Alongside the records of what is true now, there is a permanent record of what
 was done: every revocation and expulsion and the lifting of either, every card
 name set or cleared, every "member since" correction, every re-attributed
-order, and every card email sent. Each line says when, what, who it was about,
+order, every card theme an admin chose or cleared for somebody, every store
+account connected or disconnected, and every card email sent. Each line says when, what, who it was about,
 who did it, and one sentence of detail -- including the value that was
 replaced, where there was one. Where no person did it, "who" says what did:
 "site automation" for every card email, "command line" for admin access
