@@ -18,22 +18,13 @@ import {
 } from "../../src/google/api";
 import worker from "../../src/index";
 import { fakeEmailBinding } from "../fixtures/emailBinding";
+import { useTemplates } from "../fixtures/templates";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
 const MEMBER_ID = 2;
 const PASS_TYPE = "pass.es.losverd.card";
 
-const TEMPLATE_KEYS = [
-  "templates/apple/icon.png",
-  "templates/apple/icon@2x.png",
-  "templates/apple/icon@3x.png",
-  "templates/apple/logo.png",
-  "templates/apple/logo@2x.png",
-  "templates/apple/logo@3x.png",
-  "templates/card/crest.png",
-  "templates/google/logo.png",
-];
 
 /**
  * A stand-in for an Apple-issued chain, built per case so a test can choose
@@ -187,7 +178,6 @@ async function configureHealthyEnvironment() {
   env.BIGCOMMERCE_STORE_HASH = "storehash";
   env.BIGCOMMERCE_ACCESS_TOKEN = "bc-access-token";
   env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "bc-signing-key";
-  for (const key of TEMPLATE_KEYS) await env.ASSETS.put(key, "png-bytes");
   remote = {
     classStatus: 200,
     storeStatus: 200,
@@ -230,7 +220,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const key of TEMPLATE_KEYS) await env.ASSETS.delete(key);
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM legacy_membership_cards");
   await env.DB.exec("DELETE FROM etl_sync_state");
@@ -574,12 +563,16 @@ describe("who we may email", () => {
 });
 
 describe("storage", () => {
-  it("names the template assets an environment's bucket is missing", async () => {
-    await env.ASSETS.delete("templates/apple/logo@2x.png");
-    const result = find(await check(), "R2 template assets");
+  it("finds every template image the passes and cards need bundled with this version", async () => {
+    expect(find(await check(), "Template images")).toMatchObject({ status: "ok", detail: "All 8 bundled with this version." });
+  });
+
+  it("names a template image missing from the bundle", async () => {
+    useTemplates({ "templates/apple/logo@2x.png": null });
+    const result = find(await check(), "Template images");
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("logo@2x.png");
-    expect(result.detail).toContain("r2-upload-templates");
+    expect(result.detail).toContain("commit them under assets/templates/");
   });
 });
 
@@ -744,7 +737,7 @@ describe("the readiness page", () => {
   it("counts failures at the top so the page can be read at a glance", async () => {
     // Deliberately a self-contained break: the client id, say, also feeds the
     // derived webhook token, so breaking it would fail two checks at once.
-    await env.ASSETS.delete("templates/card/crest.png");
+    useTemplates({ "templates/card/crest.png": null });
     expect(await (await get()).text()).toContain("1 failing");
   });
 });

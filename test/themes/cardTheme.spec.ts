@@ -17,8 +17,9 @@ import { CARD_HEIGHT, CARD_WIDTH } from "../../src/cardimage/template";
 import { contrast } from "../fixtures/contrast";
 import { CARD_GROUPS } from "../../src/themes/groups";
 
-// Every image committed for upload to R2 (`just r2-upload-templates`), keyed
-// by its R2 key. Only the paths are needed, so nothing is loaded.
+// Every image committed under assets/, and so bundled with the Worker
+// (src/templates.ts), keyed as the code names it. Only the paths are needed,
+// so nothing is loaded.
 const COMMITTED_ASSETS = new Set(
   Object.keys(import.meta.glob("../../assets/templates/**/*.png")).map((path) =>
     path.replace("../../assets/", ""),

@@ -69,6 +69,17 @@ migrations_dir = "src/db/migrations"
 binding = "ASSETS"
 bucket_name = "card-losverd-es-assets-production"
 
+# The template images committed under assets/templates/ -- crests, pass
+# images, theme art -- bundled with each Worker version (#399), so they
+# deploy and roll back with the code that reads them. Read through the
+# `STATIC` binding only: `run_worker_first` sends every request to the
+# Worker, as before, so nothing here is served at its own path; the public
+# ones go through `/assets/:name` (src/assets.ts).
+[assets]
+directory = "./assets"
+binding = "STATIC"
+run_worker_first = true
+
 # Cloudflare Email Service (#244). The binding is the credential: there is no
 # API key. The sending domain has to be onboarded in this Cloudflare account,
 # and who may actually receive mail is still decided by

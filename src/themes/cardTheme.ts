@@ -27,11 +27,11 @@ export interface CardThemeColors {
   passText: string;
 }
 
-/** Where a theme's images live. R2 keys are uploaded from `assets/` by `just r2-upload-templates`. */
+/** Where a theme's images live: keys of the images under `assets/`, bundled with the Worker (src/templates.ts). */
 export interface CardThemeAssets {
-  /** R2 key of the crest drawn on the card image (square, at least `CREST_SIZE`). */
+  /** Key of the crest drawn on the card image (square, at least `CREST_SIZE`). */
   cardCrest: string;
-  /** R2 prefix holding the Apple pass's `icon.png`, `icon@2x.png`, `logo.png` and `logo@2x.png`. */
+  /** Template key prefix holding the Apple pass's `icon.png`, `icon@2x.png`, `logo.png` and `logo@2x.png`. */
   applePrefix: string;
   /**
    * Public path of the logo Google fetches for the pass (served by
@@ -51,14 +51,14 @@ export interface CardThemeAssets {
  * Sizes are in `ARTWORK_SIZES`.
  */
 export interface CardThemeArtwork {
-  /** R2 key of the card image's background art (`ARTWORK_SIZES.cardBackground`), drawn under everything else. */
+  /** Key of the card image's background art (`ARTWORK_SIZES.cardBackground`), drawn under everything else. */
   cardBackground?: string;
-  /** R2 prefix holding the Apple pass's `thumbnail.png`, `thumbnail@2x.png` and `thumbnail@3x.png`. */
+  /** Template key prefix holding the Apple pass's `thumbnail.png`, `thumbnail@2x.png` and `thumbnail@3x.png`. */
   appleThumbnailPrefix?: string;
-  /** R2 key of the Google pass's hero image, served publicly at `googleHeroPath()`. */
+  /** Key of the Google pass's hero image, served publicly at `googleHeroPath()`. */
   googleHero?: string;
   /**
-   * R2 prefix holding the Apple poster pass's full-bleed art (`APPLE_POSTER_FILES`),
+   * Template key prefix holding the Apple poster pass's full-bleed art (`APPLE_POSTER_FILES`),
    * drawn behind the whole pass on iOS 27 and later, and the `primaryLogo.png`
    * and `primaryLogo@2x.png` that sit on it (src/passkit/poster.ts).
    */

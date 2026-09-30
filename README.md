@@ -121,7 +121,7 @@ The pages say which is which (`src/environment.tsx`): staging has an amber banne
 
 `.github/workflows/deploy.yml`:
 
-- **Merge to `main`:** `terraform apply`, then staging (D1 migrations, R2 template assets, Worker deploy), then the same for production -- full GitOps, no manual step.
+- **Merge to `main`:** `terraform apply`, then staging (D1 migrations, Worker deploy, which carries the template images in `assets/` with it), then the same for production -- full GitOps, no manual step.
 - **Manual "Run workflow" from any branch:** deploys that branch to **staging only**, to try a change against the test store before merging. Terraform is skipped for these runs, so unmerged infrastructure changes never apply.
 
 Secrets are per Worker and pushed from 1Password (see "Secrets" below). Named Wrangler environments don't inherit vars or bindings, so `[env.staging]` spells everything out; `just check-wrangler-envs` (run in CI) fails if its names drift from production's or if it ever points at a production resource.
@@ -372,7 +372,7 @@ Worth doing early on a new environment rather than last: the readiness page belo
 
 ## Checking whether an environment is ready
 
-`/admin/preflight` reports what the deployed Worker can see of its own environment: whether `PUBLIC_BASE_URL` matches the host serving it, whether the D1 migrations ran and the R2 template images are uploaded, whether the Apple pass certificate matches its key and its bundled WWDR intermediate and how long it has left, whether the Google Wallet class exists, whether BigCommerce accepts the access token and has an order webhook pointing here carrying the token this Worker verifies, and which of the optional integrations are configured.
+`/admin/preflight` reports what the deployed Worker can see of its own environment: whether `PUBLIC_BASE_URL` matches the host serving it, whether the D1 migrations ran and the template images are bundled, whether the Apple pass certificate matches its key and its bundled WWDR intermediate and how long it has left, whether the Google Wallet class exists, whether BigCommerce accepts the access token and has an order webhook pointing here carrying the token this Worker verifies, and which of the optional integrations are configured.
 
 It exists because the problems worth finding are invisible from outside. A private key stored with literal `\n` escapes, a template image never uploaded, a Wallet class that was never created — each shows up only as a generic error page, or the provider's own generic failure, some time after the deploy that caused it. The code that can tell the difference is the code that parses the credential, which runs in the Worker.
 

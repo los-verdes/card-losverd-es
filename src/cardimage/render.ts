@@ -9,12 +9,11 @@
 // What changed from the spike: the crest logo is a parameter (see
 // `renderMembershipCardPng`'s `logoPngBytes`) instead of a bundled
 // synthetic placeholder, so the caller supplies it -- expected to be the
-// same real R2-hosted asset PassKit's routes already fetch
+// same template image PassKit's routes already read
 // (`templates/apple/icon.png` or `icon@2x.png`, Phase 3.1), keeping one
 // crest image rather than a second copy specific to card images. The font
-// stays bundled at build time, same as the spike: it's a fixed design
-// asset, not something that needs R2's runtime-swappable flexibility the
-// way branding images do.
+// stays bundled into the code at build time, same as the spike: satori needs
+// the raw bytes before anything else is read.
 import { tracing } from 'cloudflare:workers';
 import satori, { init as initYoga } from 'satori/standalone';
 import YOGA_WASM from 'satori/yoga.wasm';

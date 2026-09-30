@@ -7,8 +7,6 @@ import { getMemberByEmail, renderCardImage } from "../../src/member/artifacts";
 import { THEME_PATH, currentFirst } from "../../src/member/portal";
 import { YEAR_THEMES } from "../../src/themes/cardTheme";
 import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
-import BACKGROUND from "../fixtures/sample-card-background.png";
-import LOGO from "../fixtures/sample-logo.png";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -34,8 +32,6 @@ beforeEach(async () => {
   )
     .bind(EMAIL, USER_ID)
     .run();
-  await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
-  await env.ASSETS.put(Y2021.artwork.cardBackground!, new Uint8Array(BACKGROUND));
 });
 
 afterEach(async () => {
@@ -45,8 +41,6 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
-  await env.ASSETS.delete("templates/card/crest.png");
-  await env.ASSETS.delete(Y2021.artwork.cardBackground!);
 });
 
 async function request(path: string, init: RequestInit = {}) {

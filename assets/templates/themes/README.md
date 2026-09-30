@@ -18,8 +18,8 @@ Every year has the same files, at the sizes in `ARTWORK_SIZES`:
 | `google-hero.png` | 1032 x 812 | Full width under the details of the Google pass |
 
 The Apple poster and the Google hero show the same design, each composed for
-its own shape. Deploys upload everything under `assets/templates/` to R2
-(`just r2-upload-templates`).
+its own shape. Everything under `assets/templates/` is bundled with the Worker
+on each deploy, and ships and rolls back with the code that reads it.
 
 ## Legibility
 
