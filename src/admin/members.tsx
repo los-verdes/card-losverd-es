@@ -799,7 +799,7 @@ members.post("/", csrf(), async (c) => {
     const member = await getMemberByEmail(c.env, email);
     if (!member) return back({ error: "No membership is held under that address." });
     if (form.action === "theme-clear") {
-      await clearCardTheme(c.env, email, c.get("session").userId);
+      await clearCardTheme(c.env, email, "admin", c.get("session").userId);
       return back({ saved: "theme-cleared" });
     }
     try {

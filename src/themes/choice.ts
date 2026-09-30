@@ -70,6 +70,10 @@ function label(themeId: string, themes: readonly CardTheme[]): string {
 /**
  * Records `themeId` as this member's theme. Refuses one they may not use, so
  * a stored choice is always one that was allowed when it was made.
+ *
+ * An admin's choice on somebody's behalf goes in the audit log; a member's
+ * choice for their own card does not. It is theirs to make and to change as
+ * often as they like, and the stored choice already says who made it.
  */
 export async function setCardTheme(
   env: Env,
@@ -96,29 +100,32 @@ export async function setCardTheme(
   )
     .bind(key, themeId, source, setBy)
     .run();
-  await recordAuditEvent(env, {
-    action: "card_theme.set",
-    subjectEmail: key,
-    actorEmail: await actorEmail(env, setBy),
-    detail:
-      `"${label(themeId, themes)}"` +
-      (previous ? ` (was "${label(previous.theme_id, themes)}")` : "") +
-      (source === "member" ? ", chosen by the member themselves" : ""),
-  });
+  if (source === "admin") {
+    await recordAuditEvent(env, {
+      action: "card_theme.set",
+      subjectEmail: key,
+      actorEmail: await actorEmail(env, setBy),
+      detail: `"${label(themeId, themes)}"` + (previous ? ` (was "${label(previous.theme_id, themes)}")` : ""),
+    });
+  }
   await touchAndNotify(env, key);
 }
 
-/** Removes the choice, putting the card back to the member's default theme. */
+/**
+ * Removes the choice, putting the card back to the member's default theme.
+ * Recorded in the audit log when an admin clears it, as with `setCardTheme`.
+ */
 export async function clearCardTheme(
   env: Env,
   email: string,
+  source: ThemeChoiceSource,
   clearedBy: number | null,
   themes: readonly CardTheme[] = CARD_THEMES,
 ): Promise<void> {
   const key = email.trim().toLowerCase();
   const previous = await getCardThemeChoice(env, key);
   const result = await env.DB.prepare("DELETE FROM member_card_themes WHERE email = ?").bind(key).run();
-  if ((result.meta.changes ?? 0) > 0) {
+  if (source === "admin" && (result.meta.changes ?? 0) > 0) {
     await recordAuditEvent(env, {
       action: "card_theme.cleared",
       subjectEmail: key,
