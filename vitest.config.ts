@@ -44,6 +44,8 @@ export default defineConfig(async () => {
 			// Builds the pass-signing certificate chain once per run and
 			// provides it to every file -- see test/setup/global.ts.
 			globalSetup: ["./test/setup/global.ts"],
+			// Runs in each spec's worker, before each test: see the file.
+			setupFiles: ["./test/setup/templateCache.ts"],
 			// Extends (not replaces) Vitest's own defaults, which don't cover
 			// `.claude/` -- without this, test files inside a background-agent
 			// worktree checked out under `.claude/worktrees/` (a separate,

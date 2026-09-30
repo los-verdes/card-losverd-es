@@ -114,6 +114,70 @@ describe("renderCardImage", () => {
   });
 });
 
+describe("template images, kept in memory", () => {
+  const CREST = "templates/card/crest.png";
+
+  beforeEach(async () => {
+    env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+    await insertMember();
+    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
+  });
+
+  afterEach(async () => {
+    await env.ASSETS.delete(CREST);
+  });
+
+  /** How many times R2 was asked for the crest. */
+  function crestReads(get: { mock: { calls: unknown[][] } }) {
+    return get.mock.calls.filter(([key]) => key === CREST).length;
+  }
+
+  it("are read from R2 once, however many cards are drawn", async () => {
+    const get = vi.spyOn(env.ASSETS, "get");
+    const member = (await getMemberById(env, "BC-1"))!;
+
+    const first = await renderCardImage(env, member);
+    const second = await renderCardImage(env, member);
+
+    expect(second).toEqual(first);
+    expect(crestReads(get)).toBe(1);
+  });
+
+  it("share one read between cards drawn at the same time", async () => {
+    const get = vi.spyOn(env.ASSETS, "get");
+    const member = (await getMemberById(env, "BC-1"))!;
+
+    await Promise.all([renderCardImage(env, member), renderCardImage(env, member), renderCardImage(env, member)]);
+
+    expect(crestReads(get)).toBe(1);
+  });
+
+  it("are read again after an hour, in case one was uploaded without a deploy", async () => {
+    const get = vi.spyOn(env.ASSETS, "get");
+    const member = (await getMemberById(env, "BC-1"))!;
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+
+    await renderCardImage(env, member);
+    clock.mockReturnValue(now + 59 * 60 * 1000);
+    await renderCardImage(env, member);
+    clock.mockReturnValue(now + 61 * 60 * 1000);
+    await renderCardImage(env, member);
+
+    expect(crestReads(get)).toBe(2);
+  });
+
+  it("do not remember one that was missing, so uploading it is enough", async () => {
+    await env.ASSETS.delete(CREST);
+    const member = (await getMemberById(env, "BC-1"))!;
+    await expect(renderCardImage(env, member)).rejects.toThrow(/crest\.png/);
+
+    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
+
+    expect(Array.from((await renderCardImage(env, member)).slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  });
+});
+
 describe("a theme's artwork (#333)", () => {
   const BACKGROUND_KEY = "templates/themes/test/card-background.png";
   const THUMBNAIL_PREFIX = "templates/themes/test/apple/";
