@@ -160,7 +160,7 @@ until it has run (`SLACK_BOT_TOKEN` set) every member shows as not in Slack.
 | Legacy page | Plan |
 | :--- | :--- |
 | Membership Cards (cards generated, unique Apple devices, plus web analytics charts) | Low priority. Counts can come from `registrations`/`devices`. The analytics charts are covered by Cloudflare Web Analytics on the member pages (see the README, "What we record about visits"), so they are not rebuilt here. |
-| MiniBC Subscriptions | Not started. MiniBC handles renewals, so it knows things about membership status that nothing else records; D1 holds none of it today and the sync job is a stub. |
+| MiniBC Subscriptions | In progress (#397). Subscriptions are read twice a day into `minibc_subscriptions` (docs/bigcommerce-ingestion.md §4); the admin view of renewal dates is the next part. |
 
 ## Slack members sync
 

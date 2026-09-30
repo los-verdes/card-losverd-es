@@ -51,6 +51,7 @@ describe("scheduled()", () => {
     ["0 9 * * SUN", { type: "run_readiness_check" }],
     ["30 0 * * *", { type: "run_pass_expiry_sweep" }],
     ["10 * * * *", { type: "run_ops_watch" }],
+    ["40 */12 * * *", { type: "sync_minibc_subscriptions_etl" }],
   ];
 
   for (const [cron, expectedMessage] of cases) {

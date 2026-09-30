@@ -18,7 +18,6 @@ import {
   refreshMemberFromOrders,
   syncBigCommerceOrder,
   syncCustomersEtl,
-  syncMinibcSubscriptionsEtl,
   recheckUnlistedOrders,
   syncSubscriptionsEtl,
   type BigCommerceOrder,
@@ -986,7 +985,7 @@ describe("syncSubscriptionsEtl", () => {
   });
 });
 
-describe("syncCustomersEtl / syncMinibcSubscriptionsEtl (stubs)", () => {
+describe("syncCustomersEtl (stub)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -994,14 +993,6 @@ describe("syncCustomersEtl / syncMinibcSubscriptionsEtl (stubs)", () => {
   it("syncCustomersEtl resolves without touching D1 or BigCommerce (not yet implemented)", async () => {
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     await expect(syncCustomersEtl(env)).resolves.toBeUndefined();
-    expect(infoSpy).toHaveBeenCalledWith(
-      expect.stringContaining("not yet implemented"),
-    );
-  });
-
-  it("syncMinibcSubscriptionsEtl resolves without touching D1 or BigCommerce (not yet implemented)", async () => {
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    await expect(syncMinibcSubscriptionsEtl(env)).resolves.toBeUndefined();
     expect(infoSpy).toHaveBeenCalledWith(
       expect.stringContaining("not yet implemented"),
     );

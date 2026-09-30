@@ -218,11 +218,12 @@ max_retries = 0
 # The scheduled jobs (src/scheduled.ts), on the same schedules as staging: the
 # Slack members sync, the BigCommerce resync that repairs anything a webhook
 # missed, the weekly full resync that backs it up, the weekly readiness check, the daily refresh of lapsed members'
-# passes, and the hourly watch for operational trouble. See [env.staging.triggers] at the end
+# passes, the hourly watch for operational trouble, and the twice-daily read of
+# MiniBC's membership subscriptions. See [env.staging.triggers] at the end
 # of this file for why each runs when it does. A resync never emails anyone
 # (src/email/newOrder.ts).
 [triggers]
-crons = ["0 */6 * * *", "15 */6 * * *", "45 4 * * SUN", "0 9 * * SUN", "30 0 * * *", "10 * * * *"]
+crons = ["0 */6 * * *", "15 */6 * * *", "45 4 * * SUN", "0 9 * * SUN", "30 0 * * *", "10 * * * *", "40 */12 * * *"]
 
 # =============================================================================
 # Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
@@ -324,11 +325,9 @@ queue = "etl-sync-dlq-staging"
 max_batch_size = 10
 max_retries = 0
 
-# Cron triggers, the same schedules as production's [triggers] block. Two
-# mapped schedules are left out of both because they would only log that they
-# are not implemented: "30 * * * *" (customers) and "30 */12 * * *" (MiniBC,
-# not built -- docs/membership-card-provenance.md). A resync never emails
-# anyone (src/email/newOrder.ts).
+# Cron triggers, the same schedules as production's [triggers] block. The
+# customer sync, which is not implemented, is left out of both. A resync never
+# emails anyone (src/email/newOrder.ts).
 # The Slack sync reads staging's own Slack credentials (#133), never
 # production's, so the real membership roll stays out of staging.
 [env.staging.triggers]
@@ -338,11 +337,13 @@ max_retries = 0
 # "0 9 * * SUN" the weekly readiness check, which posts failures to Slack, and
 # an all-clear while READINESS_POST_WHEN_HEALTHY is "true"; "30 0 * * *" the
 # daily refresh of passes whose membership lapsed yesterday (#295); and
-# "10 * * * *" the hourly watch for operational trouble (#56). Each maps to a
-# message in src/scheduled.ts.
+# "10 * * * *" the hourly watch for operational trouble (#56); and
+# "40 */12 * * *" MiniBC's membership subscriptions (#397), which staging,
+# without a MiniBC key, only logs as not configured. Each maps to a message in
+# src/scheduled.ts.
 #
 # The Slack sync is offset a quarter-hour from the resync rather than sharing
 # its schedule: the queue runs one consumer at a time, so two jobs due
 # together would simply queue behind each other, and staggering them keeps a
 # slow run of one from delaying the other.
-crons = ["0 */6 * * *", "15 */6 * * *", "45 4 * * SUN", "0 9 * * SUN", "30 0 * * *", "10 * * * *"]
+crons = ["0 */6 * * *", "15 */6 * * *", "45 4 * * SUN", "0 9 * * SUN", "30 0 * * *", "10 * * * *", "40 */12 * * *"]

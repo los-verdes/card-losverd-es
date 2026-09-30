@@ -31,6 +31,8 @@ import {
 } from "../email/send";
 import type { Env } from "../index";
 import { evaluateSignals } from "../ops/signals";
+import { MEMBERSHIP_SKUS } from "../bigcommerce/sync";
+import { MinibcAuthError, MinibcClient } from "../minibc/subscriptions";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -598,6 +600,22 @@ async function bigCommerceChecks(env: Env): Promise<CheckGroup> {
         "The registered header is not what this Worker verifies, so every delivery is being rejected. Re-register with `just bigcommerce-ensure-webhook <env>`.",
       );
     }),
+  );
+
+  // MiniBC, the store's subscription app (#397): one search, which is all the
+  // code ever asks of it.
+  results.push(
+    env.MINIBC_API_KEY
+      ? await attempt("MiniBC", async () => {
+          try {
+            const page = await new MinibcClient(env.MINIBC_API_KEY!, 0).searchSubscriptions([...MEMBERSHIP_SKUS][0], 1);
+            return ok("MiniBC", page ? "Key accepted; it lists membership subscriptions." : "Key accepted, but MiniBC lists no membership subscriptions.");
+          } catch (err) {
+            if (err instanceof MinibcAuthError) return fail("MiniBC", `MiniBC refused MINIBC_API_KEY (${err.status}); renewal dates are not being read.`);
+            throw err;
+          }
+        })
+      : skip("MiniBC", "MINIBC_API_KEY unset; renewal dates are not read here."),
   );
 
   return { title: "BigCommerce", results };

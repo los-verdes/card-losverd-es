@@ -16,6 +16,7 @@
 //   just etl-run staging resync       # the BigCommerce order resync
 //   just etl-run staging full-resync  # the same, over the whole store
 //   just etl-run staging readiness    # the readiness checks
+//   just etl-run production minibc --yes-production  # MiniBC membership subscriptions (#397)
 //   just etl-run staging refresh-lapsed-passes  # one-off: lapsed members' passes (#295)
 //   just etl-run production slack --yes-production
 
@@ -48,6 +49,10 @@ const JOBS = {
   "full-resync": {
     message: { type: "sync_subscriptions_etl", loadAll: true },
     does: "Re-reads every order in the BigCommerce store, not just recent ones, and rebuilds every membership. Runs by itself every Sunday; by hand, for a database that was just rebuilt or imported (docs/cutover.md step 8). Never emails anyone.",
+  },
+  minibc: {
+    message: { type: "sync_minibc_subscriptions_etl" },
+    does: "Reads every membership subscription from MiniBC -- renews or not, when next, paused or cancelled -- into D1, for admins (#397). Runs by itself twice a day; changes no card and emails nobody. Needs MINIBC_API_KEY in that environment.",
   },
   "refresh-lapsed-passes": {
     message: { type: "refresh_lapsed_passes" },

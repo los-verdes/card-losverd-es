@@ -59,6 +59,20 @@ describe("the signals", () => {
     expect(signals.map((s) => s.firing)).toEqual([false, false, false, false]);
   });
 
+  it("watch the MiniBC read only where there is a key to read with", async () => {
+    const minibc = async () => (await evaluateSignals(env, NOW)).find((s) => s.name === "MiniBC subscriptions");
+    expect(await minibc()).toBeUndefined();
+
+    env.MINIBC_API_KEY = "test-minibc-key";
+    try {
+      expect(await minibc()).toMatchObject({ firing: false, detail: expect.stringContaining("Has never completed here.") });
+      await jobRan("sync_minibc_subscriptions_etl", 37);
+      expect(await minibc()).toMatchObject({ firing: true, detail: expect.stringContaining("twice a day") });
+    } finally {
+      env.MINIBC_API_KEY = undefined;
+    }
+  });
+
   it("do not fire for a job that has never run here, which is a new environment rather than a fault", async () => {
     await env.DB.exec("DELETE FROM etl_sync_state");
 

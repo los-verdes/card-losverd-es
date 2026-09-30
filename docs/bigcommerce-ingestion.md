@@ -280,18 +280,23 @@ one is implemented fully:
   reads it yet: it is what later ties a MiniBC subscription to the member
   whose orders carry it (#397). A failed read is logged and asked again on
   the next sync; it never fails the order's own sync.
-* **`sync_minibc_subscriptions_etl` — stubbed, and not scheduled.** Planned
-  in #397: read MiniBC's `POST /subscriptions/search` for the renewal state
-  that only MiniBC knows -- whether a membership renews automatically, when
-  next, and whether it was paused, cancelled or is failing to charge -- for
-  admins to see. Renewals themselves already arrive: each one MiniBC charges
-  creates a BigCommerce order.
+* **`sync_minibc_subscriptions_etl` — MiniBC's membership subscriptions,
+  twice a day** (`40 */12 * * *`, `src/minibc/subscriptions.ts`, #397). Reads
+  every subscription to each of `MEMBERSHIP_SKUS` through MiniBC's
+  `POST /subscriptions/search` (50 a page, ten pages a message, chained like
+  the resync) into `minibc_subscriptions`: status, signup, next payment,
+  paused and cancelled dates, the order that started it and the store
+  customer paying for it -- none of its names, email, addresses or payment
+  details. A subscription a complete read no longer lists is flagged
+  (`missing_since`), not deleted. It is informational only: renewals already
+  arrive as the BigCommerce orders MiniBC creates, and nothing here changes a
+  card or emails anyone. Without `MINIBC_API_KEY` (staging) it logs that and
+  stops. The key can also cancel subscriptions and charge cards; the client
+  only searches. Admins seeing it is the next part of #397.
 
 ## 5. What's deferred
 
-* **`sync_customers_etl` and `sync_minibc_subscriptions_etl` full
-  implementations** — stubbed with a clear high-level description each
-  (§4); `sync_subscriptions_etl` is the one fully implemented, working
-  example.
+* **`sync_customers_etl`'s implementation** — stubbed with a high-level
+  description (§4).
 * **Admin app-install/OAuth routes** (`/bigcommerce/callback`, `/load`,
   `/uninstall`, `/remove-user`) — out of scope for order ingestion; see §1.
