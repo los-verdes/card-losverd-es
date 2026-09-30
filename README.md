@@ -332,7 +332,7 @@ It reads the access token and signing key from the environment's 1Password item 
 
 ### Adding the storefront script
 
-"Membership card" on the store comes from one script tag, added once per store by hand in the control panel: *Storefront → Script Manager → Create a Script*.
+"Membership card" on the store comes from one script tag, added once per store by hand in the control panel's Script Manager, then *Create a Script*. On a store with multi-storefront, Script Manager is under the storefront's channel: *Channel Manager*, open the storefront, then *Script Manager* (`/manage/channel/1/script-manager`); otherwise *Storefront → Script Manager*. Only users with the Script Manager permission see it.
 
 - **Name:** Los Verdes membership card
 - **Location:** Footer; **Pages:** All pages; **Category:** Essential; **Script type:** URL
