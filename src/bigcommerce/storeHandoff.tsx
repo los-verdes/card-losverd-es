@@ -17,10 +17,12 @@
  *
  * The store hands out the same token for its whole 15 minutes, however it is
  * fetched (checked on staging, 2026-09-30), so a second "Membership card"
- * within that time arrives with a spent token. It is sent on without a
- * pending cookie rather than refused: that grants nothing, and shows the card
- * to somebody still signed in here, or the sign-in page, saying why, to
- * anyone else.
+ * within that time arrives with a spent token. The browser that spent it was
+ * given a random marker cookie at the time (`lv_store_browser`), and a spent
+ * token is honoured only from the browser holding that marker: the same
+ * member coming back, not somebody holding a copy. Without it, a spent token
+ * grants nothing: it shows the card to somebody still signed in here, or the
+ * sign-in page, saying why, to anyone else.
  *
  * Orders are never consulted, and the store's email is never matched: see
  * src/bigcommerce/storeAccount.ts.
@@ -37,7 +39,14 @@ import { Page, SUPPORT_EMAIL } from "../member/layout";
 import { recordOutcome } from "../lib/outcome";
 import { issueSessionToken, readSessionCookie, setSessionCookie, verifySessionToken } from "../auth/session";
 import { AppJwtRejected, appConfig, verifyCurrentCustomer } from "./appJwt";
-import { StoreAccountTaken, claimHandoffToken, linkStoreAccount, unlinkStoreAccount, userForStoreCustomer } from "./storeAccount";
+import {
+  StoreAccountTaken,
+  claimHandoffToken,
+  handoffTokenHeldBy,
+  linkStoreAccount,
+  unlinkStoreAccount,
+  userForStoreCustomer,
+} from "./storeAccount";
 
 export const STORE_HANDOFF_PATH = "/store-handoff";
 export const STORE_HANDOFF_CONTINUE_PATH = "/store-handoff/continue";
@@ -54,11 +63,19 @@ const envOf = (c: HandoffContext): Env => c.env as Env;
 
 /**
  * The verified store customer waiting to be connected, across the redirect
- * and any sign-in: `<customer id>.<expires ms>.<store email, base64url>.<hmac>`.
+ * and any sign-in: `<customer id>.<expires ms>.<store email, base64url>.<spent token hash>.<hmac>`.
  * The email is only shown back to them, as a hint of which account to sign
- * in with; it never decides anything.
+ * in with; it never decides anything. A spent token hash marks one set by a
+ * token already used: it counts for nothing until `/store-handoff/continue`
+ * has seen the browser's marker, and nowhere else at all.
  */
 const PENDING_COOKIE = "lv_store_link";
+
+/**
+ * A random marker given to the browser that first used a token, held only as
+ * long as the token is, and sent only to the handoff's own paths.
+ */
+const BROWSER_COOKIE = "lv_store_browser";
 /** Long enough to sign in with Google or Apple, short enough not to linger. */
 const PENDING_TTL_SECONDS = 10 * 60;
 
@@ -77,11 +94,18 @@ interface PendingLink {
   customerId: number;
   /** The store account's email, when the store gave one; for display only. */
   email: string | null;
+  /** Set when a spent token made it; see `PENDING_COOKIE`. */
+  spentTokenHash: string | null;
 }
 
-async function setPendingLink(c: HandoffContext, customerId: number, email: string | null): Promise<void> {
+async function setPendingLink(
+  c: HandoffContext,
+  customerId: number,
+  email: string | null,
+  spentTokenHash: string | null = null,
+): Promise<void> {
   const expires = Date.now() + PENDING_TTL_SECONDS * 1000;
-  const body = `${customerId}.${expires}.${toBase64Url(email ?? "")}`;
+  const body = `${customerId}.${expires}.${toBase64Url(email ?? "")}.${spentTokenHash ?? ""}`;
   const signature = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${body}`);
   setCookie(c, PENDING_COOKIE, `${body}.${signature}`, {
     httpOnly: true,
@@ -92,19 +116,39 @@ async function setPendingLink(c: HandoffContext, customerId: number, email: stri
   });
 }
 
-/** The store customer waiting to be connected, if the cookie is genuine and in date. */
-async function readPendingLink(c: HandoffContext): Promise<PendingLink | null> {
+/**
+ * The store customer waiting to be connected, if the cookie is genuine and in
+ * date. One a spent token made is left out unless `allowSpent`, which only
+ * the continue step passes, because only it checks the browser's marker.
+ */
+async function readPendingLink(c: HandoffContext, { allowSpent = false } = {}): Promise<PendingLink | null> {
   const value = getCookie(c, PENDING_COOKIE);
-  const match = value ? /^(\d+)\.(\d+)\.([A-Za-z0-9_-]*)\.([A-Za-z0-9_-]+)$/.exec(value) : null;
+  const match = value ? /^(\d+)\.(\d+)\.([A-Za-z0-9_-]*)\.([0-9a-f]*)\.([A-Za-z0-9_-]+)$/.exec(value) : null;
   if (!match) return null;
-  const [, customerId, expires, email, signature] = match;
+  const [, customerId, expires, email, spent, signature] = match;
   if (Number(expires) < Date.now()) return null;
-  const expected = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${customerId}.${expires}.${email}`);
+  const expected = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${customerId}.${expires}.${email}.${spent}`);
   // Both are fixed-length base64url strings of an HMAC; compare every character.
   let difference = expected.length ^ signature.length;
   for (let i = 0; i < expected.length; i++) difference |= expected.charCodeAt(i) ^ (signature.charCodeAt(i) || 0);
   if (difference !== 0) return null;
-  return { customerId: Number(customerId), email: fromBase64Url(email) || null };
+  if (spent && !allowSpent) return null;
+  return { customerId: Number(customerId), email: fromBase64Url(email) || null, spentTokenHash: spent || null };
+}
+
+/** A fresh random marker for the browser spending a token. */
+function newBrowserMarker(): string {
+  return [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function setBrowserMarker(c: HandoffContext, marker: string, expiresAtSeconds: number): void {
+  setCookie(c, BROWSER_COOKIE, marker, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: STORE_HANDOFF_PATH,
+    maxAge: Math.max(60, expiresAtSeconds - Math.floor(Date.now() / 1000)),
+  });
 }
 
 /** The email of the store account waiting on a sign-in, for the sign-in page to show. */
@@ -126,7 +170,11 @@ export async function finishPendingStoreLink(
 ): Promise<"linked" | "taken" | "none"> {
   const pending = await readPendingLink(c);
   if (pending === null) return "none";
-  const { customerId } = pending;
+  return connectStoreAccount(c, userId, pending.customerId);
+}
+
+/** Connects a verified store customer to a signed-in user, clearing whatever was waiting. */
+async function connectStoreAccount(c: HandoffContext, userId: number, customerId: number): Promise<"linked" | "taken"> {
   clearPendingLink(c);
   try {
     await linkStoreAccount(envOf(c), userId, customerId, userId);
@@ -182,12 +230,16 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
   const token = typeof form.jwt === "string" ? form.jwt.trim() : "";
   try {
     const { customerId, email, expiresAt } = await verifyCurrentCustomer(token, app);
-    if (!(await claimHandoffToken(c.env, token, expiresAt))) {
+    const marker = newBrowserMarker();
+    const { claimed, tokenHash } = await claimHandoffToken(c.env, token, expiresAt, marker);
+    if (claimed) {
+      setBrowserMarker(c, marker, expiresAt);
+      await setPendingLink(c, customerId, email);
+    } else {
       // Spent already, most likely by this same member a few minutes ago.
-      recordOutcome("store.handoff", { result: "refused", reason: "replayed" });
-      return c.redirect(`${STORE_HANDOFF_CONTINUE_PATH}?spent=1`, 303);
+      // The continue step decides, once it can see this browser's marker.
+      await setPendingLink(c, customerId, email, tokenHash);
     }
-    await setPendingLink(c, customerId, email);
   } catch (err) {
     if (!(err instanceof AppJwtRejected)) throw err;
     recordOutcome("store.handoff", { result: "refused", reason: err.reason });
@@ -197,19 +249,24 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
 });
 
 handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
-  const pending = await readPendingLink(c);
-  if (pending === null) {
-    // A spent token, from somebody no longer signed in here: say why the
-    // store didn't sign them in, rather than showing a bare sign-in page.
-    if (c.req.query("spent") !== undefined) {
-      const token = readSessionCookie(c);
-      if (!token || !(await verifySessionToken(c.env.SESSION_SIGNING_KEY, token))) {
-        return c.redirect(`${LOGIN_PATH}?store=spent`);
-      }
-    }
-    return c.redirect("/");
-  }
+  const pending = await readPendingLink(c, { allowSpent: true });
+  if (pending === null) return c.redirect("/");
   const { customerId } = pending;
+  const token = readSessionCookie(c);
+  const session = token ? await verifySessionToken(c.env.SESSION_SIGNING_KEY, token) : null;
+
+  if (pending.spentTokenHash) {
+    const marker = getCookie(c, BROWSER_COOKIE);
+    if (!marker || !(await handoffTokenHeldBy(c.env, pending.spentTokenHash, marker))) {
+      // A copy of somebody's token, or this browser's marker is gone: it
+      // grants nothing. Somebody signed out is told why the store didn't
+      // sign them in, rather than shown a bare sign-in page.
+      clearPendingLink(c);
+      recordOutcome("store.handoff", { result: "refused", reason: "replayed" });
+      return c.redirect(session ? "/" : `${LOGIN_PATH}?store=spent`);
+    }
+    recordOutcome("store.handoff", { result: "reused", reason: "same_browser" });
+  }
 
   // Connected already: sign in as whoever it is connected to.
   const holder = await userForStoreCustomer(c.env, customerId);
@@ -225,15 +282,15 @@ handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
   }
 
   // Not connected, and signed in here: connect it to them.
-  const token = readSessionCookie(c);
-  const session = token ? await verifySessionToken(c.env.SESSION_SIGNING_KEY, token) : null;
   if (session && !(await isUserExpelled(c.env, session.userId))) {
-    const result = await finishPendingStoreLink(c, session.userId);
+    const result = await connectStoreAccount(c, session.userId, customerId);
     return c.redirect(result === "linked" ? "/?store=connected" : "/?store=taken");
   }
 
   // Not connected and not signed in: sign in once, and the connection is
-  // made when it completes. The pending cookie waits for it.
+  // made when it completes. The pending cookie waits for it, rewritten
+  // without the spent mark once this browser has proved it spent the token.
+  if (pending.spentTokenHash) await setPendingLink(c, customerId, pending.email);
   recordOutcome("store.handoff", { result: "needs_sign_in" });
   return c.redirect(`${LOGIN_PATH}?connect=store`);
 });

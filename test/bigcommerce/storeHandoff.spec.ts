@@ -9,6 +9,7 @@ import { BIGCOMMERCE_TOKEN_URL } from "../../src/bigcommerce/app";
 import {
   StoreAccountTaken,
   claimHandoffToken,
+  handoffTokenHeldBy,
   linkStoreAccount,
   storeAccountFor,
   unlinkStoreAccount,
@@ -186,14 +187,27 @@ describe("connecting a store account", () => {
 describe("spending a handoff token", () => {
   it("accepts each token once, and forgets it once it would have expired", async () => {
     const later = Math.floor(Date.now() / 1000) + 600;
-    expect(await claimHandoffToken(env, "token-a", later)).toBe(true);
-    expect(await claimHandoffToken(env, "token-a", later)).toBe(false);
+    expect(await claimHandoffToken(env, "token-a", later, "marker-1")).toMatchObject({ claimed: true });
+    expect(await claimHandoffToken(env, "token-a", later, "marker-2")).toMatchObject({ claimed: false });
 
-    await claimHandoffToken(env, "token-b", Math.floor(Date.now() / 1000) - 1);
-    await claimHandoffToken(env, "token-c", later);
-    const { results } = await env.DB.prepare("SELECT token_hash FROM store_handoff_tokens").all<{ token_hash: string }>();
+    await claimHandoffToken(env, "token-b", Math.floor(Date.now() / 1000) - 1, "marker-3");
+    await claimHandoffToken(env, "token-c", later, "marker-4");
+    const { results } = await env.DB.prepare("SELECT token_hash, browser_hash FROM store_handoff_tokens").all<{ token_hash: string; browser_hash: string }>();
     expect(results).toHaveLength(2);
-    expect(results.every((row) => /^[0-9a-f]{64}$/.test(row.token_hash))).toBe(true);
+    expect(results.every((row) => /^[0-9a-f]{64}$/.test(row.token_hash) && /^[0-9a-f]{64}$/.test(row.browser_hash))).toBe(true);
+  });
+
+  it("knows which browser spent a token, while it is in date", async () => {
+    const later = Math.floor(Date.now() / 1000) + 600;
+    const { tokenHash } = await claimHandoffToken(env, "token-a", later, "first-browser");
+    await claimHandoffToken(env, "token-a", later, "second-browser");
+
+    expect(await handoffTokenHeldBy(env, tokenHash, "first-browser")).toBe(true);
+    expect(await handoffTokenHeldBy(env, tokenHash, "second-browser")).toBe(false);
+    expect(await handoffTokenHeldBy(env, "0".repeat(64), "first-browser")).toBe(false);
+
+    const { tokenHash: expired } = await claimHandoffToken(env, "token-b", Math.floor(Date.now() / 1000) - 1, "first-browser");
+    expect(await handoffTokenHeldBy(env, expired, "first-browser")).toBe(false);
   });
 });
 
@@ -203,11 +217,23 @@ describe("POST /store-handoff", () => {
 
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe("/store-handoff/continue");
-    expect(setCookie(res, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+$`));
+    expect(setCookie(res, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]*\\.\\.[A-Za-z0-9_-]+$`));
     const attributes = res.headers.getSetCookie().find((c) => c.startsWith("lv_store_link="))!;
     for (const attribute of [/HttpOnly/i, /Secure/i, /SameSite=Lax/i, /Max-Age=600/i, /Path=\//i]) {
       expect(attributes).toMatch(attribute);
     }
+  });
+
+  it("marks the browser that spent the token, for as long as the token lasts, on the handoff's paths only", async () => {
+    const res = await fetchWorker("/store-handoff", handoffForm(await currentJwt()));
+
+    expect(setCookie(res, "lv_store_browser")).toMatch(/^lv_store_browser=[0-9a-f]{64}$/);
+    const attributes = res.headers.getSetCookie().find((c) => c.startsWith("lv_store_browser="))!;
+    for (const attribute of [/HttpOnly/i, /Secure/i, /SameSite=Lax/i, /Path=\/store-handoff(;|$)/i]) {
+      expect(attributes).toMatch(attribute);
+    }
+    expect(Number(/Max-Age=(\d+)/i.exec(attributes)![1])).toBeGreaterThan(800);
+    expect(Number(/Max-Age=(\d+)/i.exec(attributes)![1])).toBeLessThanOrEqual(900);
   });
 
   it("refuses a request from anywhere but the store", async () => {
@@ -227,28 +253,17 @@ describe("POST /store-handoff", () => {
     expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "signature" });
   });
 
-  it("sends a spent token on without a pending cookie, granting nothing, since the store hands the same one out for its lifetime", async () => {
-    const outcomes = spyOnOutcomes();
+  it("sends a spent token on with the customer marked as unproven, and gives that browser no marker", async () => {
     const token = await currentJwt();
     await fetchWorker("/store-handoff", handoffForm(token));
 
     const replayed = await fetchWorker("/store-handoff", handoffForm(token));
 
     expect(replayed.status).toBe(303);
-    expect(replayed.headers.get("Location")).toBe("/store-handoff/continue?spent=1");
-    expect(setCookie(replayed, "lv_store_link")).toBeNull();
+    expect(replayed.headers.get("Location")).toBe("/store-handoff/continue");
+    expect(setCookie(replayed, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]*\\.[0-9a-f]{64}\\.`));
+    expect(setCookie(replayed, "lv_store_browser")).toBeNull();
     expect(setCookie(replayed, SESSION_COOKIE_NAME)).toBeNull();
-    expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "replayed" });
-  });
-
-  it("then shows somebody signed in their card, and tells anyone else why the store didn't sign them in", async () => {
-    const signedIn = await fetchWorker("/store-handoff/continue?spent=1", { cookies: [await sessionCookie(USER_ID)] });
-    expect(signedIn.headers.get("Location")).toBe("/");
-
-    const signedOut = await fetchWorker("/store-handoff/continue?spent=1");
-    expect(signedOut.headers.get("Location")).toBe("/login?store=spent");
-    expect(await (await fetchWorker("/login?store=spent")).text()).toContain("The store&#39;s link was already used a few minutes ago");
-    expect(await (await fetchWorker("/login")).text()).not.toContain("already used a few minutes ago");
   });
 
   it("is not there until the environment has an app", async () => {
@@ -312,6 +327,75 @@ describe("GET /store-handoff/continue", () => {
       "lv_store_link",
     )!;
     expect(await (await fetchWorker("/login?connect=store", { cookies: [noEmail] })).text()).not.toContain("Your store account uses");
+  });
+
+  describe("with a token already spent, as the store hands out the same one for 15 minutes", () => {
+    /** Spends a token in one browser, then presents it again; returns that browser's marker and the second pending cookie. */
+    async function spendTwice() {
+      const token = await currentJwt();
+      const first = await fetchWorker("/store-handoff", handoffForm(token));
+      const second = await fetchWorker("/store-handoff", handoffForm(token));
+      return { marker: setCookie(first, "lv_store_browser")!, spent: setCookie(second, "lv_store_link")! };
+    }
+
+    it("reconnects from the browser that spent it, as after disconnecting and choosing Connect", async () => {
+      const outcomes = spyOnOutcomes();
+      const { marker, spent } = await spendTwice();
+
+      const res = await fetchWorker("/store-handoff/continue", { cookies: [spent, marker, await sessionCookie(USER_ID)] });
+
+      expect(res.headers.get("Location")).toBe("/?store=connected");
+      expect((await userForStoreCustomer(env, CUSTOMER))?.id).toBe(USER_ID);
+      expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "reused", reason: "same_browser" });
+    });
+
+    it("signs that browser straight in again once connected", async () => {
+      await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
+      const { marker, spent } = await spendTwice();
+
+      const res = await fetchWorker("/store-handoff/continue", { cookies: [spent, marker] });
+
+      expect(res.headers.get("Location")).toBe("/");
+      expect((await verifySessionToken(SESSION_KEY, setCookie(res, SESSION_COOKIE_NAME)!.split("=")[1]))?.userId).toBe(USER_ID);
+    });
+
+    it("keeps the account waiting through a sign-in, proven, for that browser", async () => {
+      const { marker, spent } = await spendTwice();
+
+      const res = await fetchWorker("/store-handoff/continue", { cookies: [spent, marker] });
+
+      expect(res.headers.get("Location")).toBe("/login?connect=store");
+      expect(setCookie(res, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]*\\.\\.`));
+    });
+
+    it("grants nothing to any other browser: the card for somebody signed in, the sign-in page saying why for anyone else", async () => {
+      const outcomes = spyOnOutcomes();
+      await linkStoreAccount(env, OTHER_ID, CUSTOMER, OTHER_ID);
+      const { spent } = await spendTwice();
+      const otherMarker = "lv_store_browser=" + "a".repeat(64);
+
+      const signedIn = await fetchWorker("/store-handoff/continue", { cookies: [spent, otherMarker, await sessionCookie(USER_ID)] });
+      expect(signedIn.headers.get("Location")).toBe("/");
+      expect(setCookie(signedIn, SESSION_COOKIE_NAME)).toBeNull();
+      expect(setCookie(signedIn, "lv_store_link")).toBe("lv_store_link=");
+
+      const signedOut = await fetchWorker("/store-handoff/continue", { cookies: [spent] });
+      expect(signedOut.headers.get("Location")).toBe("/login?store=spent");
+      expect(setCookie(signedOut, SESSION_COOKIE_NAME)).toBeNull();
+      expect(await (await fetchWorker("/login?store=spent")).text()).toContain("The store&#39;s link was already used a few minutes ago");
+      expect(await (await fetchWorker("/login")).text()).not.toContain("already used a few minutes ago");
+      expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "replayed" });
+    });
+
+    it("is never honoured at sign-in, nor shown there, without the continue step's check", async () => {
+      const { spent } = await spendTwice();
+
+      expect(await (await fetchWorker("/login?connect=store", { cookies: [spent] })).text()).not.toContain("Your store account uses");
+      const app = new Hono<{ Bindings: typeof env }>();
+      app.get("/", async (c) => c.text(await finishPendingStoreLink(c, USER_ID)));
+      expect(await (await app.request("/", { headers: { Cookie: spent } }, env)).text()).toBe("none");
+      expect(await userForStoreCustomer(env, CUSTOMER)).toBeNull();
+    });
   });
 
   it("goes home when there is no genuine account waiting", async () => {
