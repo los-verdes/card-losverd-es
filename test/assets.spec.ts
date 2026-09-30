@@ -1,23 +1,18 @@
 import { createExecutionContext, env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
 import { CLASSIC_THEME, GROUP_THEMES, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 import GOOGLE_LOGO from "../assets/templates/google/logo.png";
+import CREST from "../assets/templates/card/crest.png";
+import { useTemplates } from "./fixtures/templates";
 
 const CREST_KEY = "templates/card/crest.png";
-// A one-pixel PNG is enough: the route streams bytes through untouched.
-const CREST_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
-beforeEach(async () => {
-  await env.ASSETS.put(CREST_KEY, CREST_BYTES);
-});
-
-afterEach(async () => {
+afterEach(() => {
   vi.restoreAllMocks();
-  await env.ASSETS.delete(CREST_KEY);
 });
 
 function get(path: string, headers: HeadersInit = {}) {
@@ -34,7 +29,7 @@ describe("GET /assets/:name", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("image/png");
-    expect(new Uint8Array(await res.arrayBuffer())).toEqual(CREST_BYTES);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(CREST));
   });
 
   it("is cacheable and revalidates with an ETag", async () => {
@@ -50,20 +45,16 @@ describe("GET /assets/:name", () => {
     expect(await revalidated.text()).toBe("");
   });
 
-  it("serves nothing that isn't allow-listed, whatever else is in the bucket", async () => {
-    // The Apple pass templates live in the same bucket and must stay private.
-    await env.ASSETS.put("templates/apple/icon.png", CREST_BYTES);
-    try {
-      expect((await get("/assets/icon.png")).status).toBe(404);
-      expect((await get("/assets/templates/apple/icon.png")).status).toBe(404);
-      expect((await get("/assets/..%2Ftemplates%2Fapple%2Ficon.png")).status).toBe(404);
-    } finally {
-      await env.ASSETS.delete("templates/apple/icon.png");
-    }
+  it("serves nothing that isn't allow-listed, whatever else is bundled", async () => {
+    // The Apple pass templates are bundled alongside, and have no public path.
+    expect((await get("/assets/icon.png")).status).toBe(404);
+    expect((await get("/assets/templates/apple/icon.png")).status).toBe(404);
+    expect((await get("/assets/..%2Ftemplates%2Fapple%2Ficon.png")).status).toBe(404);
+    expect((await get("/templates/apple/icon.png")).status).not.toBe(200);
   });
 
-  it("404s, and says so in the log, when a listed asset is missing from R2", async () => {
-    await env.ASSETS.delete(CREST_KEY);
+  it("404s, and says so in the log, when a listed image isn't bundled", async () => {
+    useTemplates({ [CREST_KEY]: null });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await get("/assets/crest.png");
@@ -84,16 +75,11 @@ describe("GET /assets/:name", () => {
   });
 
   it("serves a year theme's hero image, which Google fetches for the pass", async () => {
-    const key = YEAR_THEMES[0].artwork.googleHero!;
-    await env.ASSETS.put(key, CREST_BYTES);
-    try {
-      const res = await get(googleHeroPath(YEAR_THEMES[0])!);
+    const res = await get(googleHeroPath(YEAR_THEMES[0])!);
 
-      expect(res.status).toBe(200);
-      expect(new Uint8Array(await res.arrayBuffer())).toEqual(CREST_BYTES);
-    } finally {
-      await env.ASSETS.delete(key);
-    }
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+    expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
   });
 
   it("actually serves the URL the Google Wallet object tells Google to fetch", async () => {
@@ -107,15 +93,11 @@ describe("GET /assets/:name", () => {
     });
 
     expect(logoUri).not.toBe("");
-    await env.ASSETS.put("templates/google/logo.png", CREST_BYTES);
-    try {
-      const res = await get(new URL(logoUri).pathname);
+    const res = await get(new URL(logoUri).pathname);
 
-      expect(res.status).toBe(200);
-      expect(res.headers.get("Content-Type")).toBe("image/png");
-    } finally {
-      await env.ASSETS.delete("templates/google/logo.png");
-    }
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(GOOGLE_LOGO));
   });
 });
 

@@ -11,7 +11,6 @@ import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../s
 import { getTestCertChain } from "../fixtures/certChain";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import { CARD_WIDTH, CARD_HEIGHT } from "../../src/cardimage/template";
-import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
@@ -92,15 +91,6 @@ async function seedCurrentMember() {
   await insertMember({});
 }
 
-async function seedTemplateAssets() {
-  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
-    await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array(LOGO));
-  }
-  // The card image's crest is moving to its own R2 key (PR #44); seed both
-  // so the /card.png test passes before and after that change.
-  await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
-}
-
 async function insertOrder(fields: {
   orderId: string;
   memberEmail?: string;
@@ -172,7 +162,6 @@ describe("the card image", () => {
     // intrinsic dimensions the browser cannot know its shape until the bytes
     // land, and everything below it moves when they do.
     await seedCurrentMember();
-    await seedTemplateAssets();
 
     const html = await (await get("/")).text();
 
@@ -188,7 +177,6 @@ describe("the card image", () => {
     // off the side of a phone screen -- worse than the layout shift it was
     // added to fix. Inline, the two cannot disagree.
     await seedCurrentMember();
-    await seedTemplateAssets();
 
     const html = await (await get("/")).text();
     const img = html.match(/<img[^>]*class="card-image"[^>]*>/)?.[0] ?? "";
@@ -202,7 +190,6 @@ describe("the card image", () => {
     // card is resized, and wrong silently -- the page would simply reserve
     // the wrong shape.
     await seedCurrentMember();
-    await seedTemplateAssets();
 
     const html = await (await get("/")).text();
 
@@ -444,7 +431,6 @@ describe("GET / membership history", () => {
 describe("GET /card.png", () => {
   it("renders the member's card image, uncached", async () => {
     await seedCurrentMember();
-    await seedTemplateAssets();
 
     const res = await get("/card.png");
 
@@ -459,7 +445,6 @@ describe("GET /card.png", () => {
 describe("GET /passes/apple.pkpass", () => {
   it("downloads the member's signed Apple Wallet pass", async () => {
     await seedCurrentMember();
-    await seedTemplateAssets();
 
     const res = await get("/passes/apple.pkpass");
 

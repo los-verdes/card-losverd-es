@@ -15,7 +15,6 @@ import {
   resetTemplateAssetCache,
 } from "../../src/member/artifacts";
 import { unzipSync } from "fflate";
-import LOGO from "../fixtures/sample-logo.png";
 import BACKGROUND from "../fixtures/sample-card-background.png";
 import { getTestCertChain } from "../fixtures/certChain";
 import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
@@ -23,6 +22,7 @@ import { GOOGLE_WALLET_API, resetGoogleWalletTokenCache } from "../../src/google
 import { fakeGoogleWallet } from "../google/fake";
 import { named, recordSpans } from "../fixtures/spans";
 import { forgetDrawnCards } from "../setup/templateCache";
+import { useTemplates } from "../fixtures/templates";
 
 const PASS_KEY = "test-pass-signature-key".repeat(5);
 
@@ -36,7 +36,6 @@ afterEach(async () => {
   resetGoogleWalletTokenCache();
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
-  await env.ASSETS.delete("templates/card/crest.png");
 });
 
 async function insertMember(memberId = "BC-1", email = "jane@example.com") {
@@ -102,15 +101,15 @@ describe("effectiveStatus", () => {
 });
 
 describe("renderCardImage", () => {
-  it("fails loudly when the crest isn't in R2", async () => {
+  it("fails loudly when the crest is missing from the bundled templates", async () => {
     await insertMember();
+    useTemplates({ "templates/card/crest.png": null });
     const member = (await getMemberById(env, "BC-1"))!;
-    await expect(renderCardImage(env, member)).rejects.toThrow(/templates\/card\/crest\.png.*just r2-upload-templates/);
+    await expect(renderCardImage(env, member)).rejects.toThrow(/templates\/card\/crest\.png \(404\); commit it under assets\//);
   });
 
-  it("renders a PNG using the R2 crest", async () => {
+  it("renders a PNG using the bundled crest", async () => {
     await insertMember();
-    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
     const png = await renderCardImage(env, (await getMemberById(env, "BC-1"))!);
     expect(Array.from(png.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
@@ -122,20 +121,15 @@ describe("template images, kept in memory", () => {
   beforeEach(async () => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
     await insertMember();
-    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
   });
 
-  afterEach(async () => {
-    await env.ASSETS.delete(CREST);
-  });
-
-  /** How many times R2 was asked for the crest. */
-  function crestReads(get: { mock: { calls: unknown[][] } }) {
-    return get.mock.calls.filter(([key]) => key === CREST).length;
+  /** How many times the bundle was asked for the crest. */
+  function crestReads(reads: string[]) {
+    return reads.filter((key) => key === CREST).length;
   }
 
-  it("are read from R2 once, however many cards are drawn", async () => {
-    const get = vi.spyOn(env.ASSETS, "get");
+  it("are read from the bundle once, however many cards are drawn", async () => {
+    const { reads } = useTemplates();
     const member = (await getMemberById(env, "BC-1"))!;
 
     const first = await renderCardImage(env, member);
@@ -143,41 +137,38 @@ describe("template images, kept in memory", () => {
     const second = await renderCardImage(env, member);
 
     expect(second).toEqual(first);
-    expect(crestReads(get)).toBe(1);
+    expect(crestReads(reads)).toBe(1);
   });
 
   it("share one read between cards drawn at the same time", async () => {
-    const get = vi.spyOn(env.ASSETS, "get");
+    const { reads } = useTemplates();
     const member = (await getMemberById(env, "BC-1"))!;
 
     await Promise.all([renderCardImage(env, member), renderCardImage(env, member), renderCardImage(env, member)]);
 
-    expect(crestReads(get)).toBe(1);
+    expect(crestReads(reads)).toBe(1);
   });
 
-  it("are read again after an hour, in case one was uploaded without a deploy", async () => {
-    const get = vi.spyOn(env.ASSETS, "get");
+  it("are kept for the life of the instance, since only a deploy changes them", async () => {
+    const { reads } = useTemplates();
     const member = (await getMemberById(env, "BC-1"))!;
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
 
     await renderCardImage(env, member);
-    clock.mockReturnValue(now + 59 * 60 * 1000);
-    await forgetDrawnCards();
-    await renderCardImage(env, member);
-    clock.mockReturnValue(now + 61 * 60 * 1000);
+    clock.mockReturnValue(now + 24 * 60 * 60 * 1000);
     await forgetDrawnCards();
     await renderCardImage(env, member);
 
-    expect(crestReads(get)).toBe(2);
+    expect(crestReads(reads)).toBe(1);
   });
 
-  it("do not remember one that was missing, so uploading it is enough", async () => {
-    await env.ASSETS.delete(CREST);
+  it("do not remember a read that failed", async () => {
+    useTemplates({ [CREST]: null });
     const member = (await getMemberById(env, "BC-1"))!;
     await expect(renderCardImage(env, member)).rejects.toThrow(/crest\.png/);
 
-    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
+    useTemplates();
 
     expect(Array.from((await renderCardImage(env, member)).slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
@@ -190,22 +181,15 @@ describe("drawn cards, cached in R2", () => {
   beforeEach(async () => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
     await insertMember();
-    await env.ASSETS.put(CREST, new Uint8Array(LOGO));
-  });
-
-  afterEach(async () => {
-    await env.ASSETS.delete(CREST);
   });
 
   const member = async () => (await getMemberById(env, "BC-1"))!;
   /** Whether a call drew the card, told by whether it needed the crest (template images are forgotten first). */
   async function drew(render: () => Promise<Uint8Array>): Promise<boolean> {
     resetTemplateAssetCache();
-    const get = vi.spyOn(env.ASSETS, "get");
+    const { reads } = useTemplates();
     await render();
-    const drawn = get.mock.calls.some(([key]) => key === CREST);
-    get.mockRestore();
-    return drawn;
+    return reads.includes(CREST);
   }
 
   it("serves a card already drawn, unchanged, without drawing it again", async () => {
@@ -284,23 +268,24 @@ describe("a theme's artwork (#333)", () => {
   });
 
   afterEach(async () => {
-    const keys = [
-      BACKGROUND_KEY,
-      ...THUMBNAILS.map((name) => `${THUMBNAIL_PREFIX}${name}`),
-      ...APPLE_FILES.map((name) => `templates/apple/${name}`),
-      `cache/pkpass/pass.es.losverd.card.test/BC-1.pkpass`,
-    ];
-    await env.ASSETS.delete(keys);
+    await env.ASSETS.delete(`cache/pkpass/pass.es.losverd.card.test/BC-1.pkpass`);
   });
+
+  /** The theme's own images, each holding its own name, and the pass images as three bytes. */
+  const passTemplates = (extra: string[] = []) =>
+    Object.fromEntries([
+      ...APPLE_FILES.map((name) => [`templates/apple/${name}`, new Uint8Array([1, 2, 3])]),
+      ...THUMBNAILS.map((name) => [`${THUMBNAIL_PREFIX}${name}`, new TextEncoder().encode(name)]),
+      ...extra.map((key) => [key, new TextEncoder().encode(key)]),
+    ]);
 
   it("draws the card image over the theme's background art", async () => {
     await insertMember();
     const member = (await getMemberById(env, "BC-1"))!;
-    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
 
-    await expect(renderCardImage(env, member, THEME)).rejects.toThrow(/card-background\.png.*just r2-upload-templates/);
+    await expect(renderCardImage(env, member, THEME)).rejects.toThrow(/card-background\.png \(404\); commit it under assets\//);
 
-    await env.ASSETS.put(BACKGROUND_KEY, new Uint8Array(BACKGROUND));
+    useTemplates({ [BACKGROUND_KEY]: new Uint8Array(BACKGROUND) });
     const themed = await renderCardImage(env, member, THEME);
     expect(themed).not.toEqual(await renderCardImage(env, member));
   });
@@ -308,12 +293,7 @@ describe("a theme's artwork (#333)", () => {
   it("puts the theme's thumbnail in the Apple pass, at every scale", async () => {
     await insertMember();
     const member = (await getMemberById(env, "BC-1"))!;
-    for (const name of APPLE_FILES) {
-      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
-    }
-    for (const name of THUMBNAILS) {
-      await env.ASSETS.put(`${THUMBNAIL_PREFIX}${name}`, new TextEncoder().encode(name));
-    }
+    useTemplates(passTemplates());
 
     const files = unzipSync(await getApplePassBundle(env, member, THEME));
 
@@ -333,13 +313,7 @@ describe("a theme's artwork (#333)", () => {
     const posterKeys = [
       ...["primaryLogo.png", "primaryLogo@2x.png", "primaryLogo@3x.png", "poster.png", "poster@2x.png", "poster@3x.png"].map((name) => `templates/themes/test/apple-poster/${name}`),
     ];
-    for (const name of APPLE_FILES) {
-      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
-    }
-    for (const name of THUMBNAILS) {
-      await env.ASSETS.put(`${THUMBNAIL_PREFIX}${name}`, new TextEncoder().encode(name));
-    }
-    for (const key of posterKeys) await env.ASSETS.put(key, new TextEncoder().encode(key));
+    useTemplates(passTemplates(posterKeys));
     try {
       env.APPLE_POSTER_PASSES = "off";
       const plain = unzipSync(await getApplePassBundle(env, member, POSTER_THEME));
@@ -353,15 +327,11 @@ describe("a theme's artwork (#333)", () => {
       expect(JSON.parse(new TextDecoder().decode(poster["pass.json"]))).toHaveProperty("posterGeneric");
     } finally {
       env.APPLE_POSTER_PASSES = undefined;
-      await env.ASSETS.delete(posterKeys);
     }
   });
 
   it("leaves the thumbnail out of a classic pass", async () => {
     await insertMember();
-    for (const name of APPLE_FILES) {
-      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
-    }
 
     const files = unzipSync(await getApplePassBundle(env, (await getMemberById(env, "BC-1"))!));
 
@@ -370,9 +340,6 @@ describe("a theme's artwork (#333)", () => {
 
   it("builds and signs a pass inside a span, and a cached pass without one", async () => {
     await insertMember();
-    for (const name of APPLE_FILES) {
-      await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
-    }
     const member = (await getMemberById(env, "BC-1"))!;
     const spans = recordSpans();
 

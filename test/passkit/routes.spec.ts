@@ -4,6 +4,8 @@ import { strFromU8, unzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import { getTestCertChain } from "../fixtures/certChain";
+import { useTemplates } from "../fixtures/templates";
+import { resetTemplateAssetCache } from "../../src/member/artifacts";
 import {
   LOG_RATE_LIMIT,
   MAX_LOG_ENTRIES,
@@ -39,12 +41,6 @@ async function seedMember(options: SeedMemberOptions = {}) {
     )
     .run();
   return { memberId, authToken };
-}
-
-async function seedTemplateAssets() {
-  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
-    await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array([1, 2, 3]));
-  }
 }
 
 beforeEach(() => {
@@ -270,9 +266,8 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
     expect(res.status).toBe(304);
   });
 
-  it("fails loudly rather than serving a broken pass when template assets are missing from R2", async () => {
-    // No seedTemplateAssets() call -- matches a not-yet-provisioned R2
-    // bucket (Phase 3.2's asset migration script hasn't run).
+  it("fails loudly rather than serving a broken pass when a template image is missing", async () => {
+    useTemplates({ "templates/apple/icon.png": null });
     const { memberId, authToken } = await seedMember({ memberId: "LV-30005" });
 
     const res = await SELF.fetch(path(memberId), {
@@ -283,7 +278,6 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
   });
 
   it("ignores an unparseable If-Modified-Since header rather than treating it as a match", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({ memberId: "LV-30006" });
 
     const res = await SELF.fetch(path(memberId), {
@@ -299,7 +293,6 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
   it("marks a lapsed membership expired even when nothing has synced since", async () => {
     // Nothing stores "expired": a membership lapses because a date passes,
     // with no sync to notice. The pass Apple fetches works it out when built.
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({
       memberId: "LV-30007",
       expirationDate: "2020-01-15",
@@ -319,7 +312,6 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
   });
 
   it("returns a signed .pkpass bundle on a cache miss, and caches it", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({ memberId: "LV-30003" });
 
     const res = await SELF.fetch(path(memberId), {
@@ -348,7 +340,6 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
   });
 
   it("serves from the R2 cache on a second request, without needing template assets again", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({ memberId: "LV-30004" });
     const headers = { authorization: `ApplePass ${authToken}` };
 
@@ -357,16 +348,16 @@ describe("GET /v1/passes/:passTypeIdentifier/:serialNumber", () => {
 
     // Remove the template assets: a second request would fail if it needed
     // to rebuild the bundle, so a 200 here proves the cache path was taken.
-    for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
-      await env.ASSETS.delete(`templates/apple/${name}`);
-    }
+    useTemplates(
+      Object.fromEntries(["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"].map((name) => [`templates/apple/${name}`, null])),
+    );
+    resetTemplateAssetCache();
 
     const second = await SELF.fetch(path(memberId), { headers });
     expect(second.status).toBe(200);
   });
 
   it("regenerates instead of serving a stale cached pass once the member has been updated", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({
       memberId: "LV-30005",
       lastUpdatedAt: 1_000,
@@ -500,7 +491,6 @@ describe("POST /v1/log", () => {
 
 describe("member_since overrides on issued passes", () => {
   it("shows a member_since_overrides date instead of the order-derived one", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({ memberId: "LV-40001" }); // members.member_since = 2021-07-15
     await env.DB.prepare(
       "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('lv-40001@example.com', '2016-03-01', 'manual')",
@@ -521,7 +511,6 @@ describe("member_since overrides on issued passes", () => {
 
 describe("pass QR code", () => {
   it("encodes a signed /verify-pass URL that the verification page accepts", async () => {
-    await seedTemplateAssets();
     const { memberId, authToken } = await seedMember({ memberId: "LV-50001" });
 
     const res = await SELF.fetch(`${BASE}/v1/passes/${PASS_TYPE_ID}/${memberId}`, {

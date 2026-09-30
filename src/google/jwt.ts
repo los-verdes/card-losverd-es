@@ -36,7 +36,7 @@ export interface GoogleWalletConfig {
   hexBackgroundColor: string;
   /**
    * Absolute URL of the pass logo. Google fetches this itself, so it has to be
-   * publicly reachable -- served by `src/assets.ts`, not from R2 directly.
+   * publicly reachable -- served by `src/assets.ts`, from the bundled templates.
    */
   logoUri: string;
 }

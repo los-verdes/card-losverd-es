@@ -3,7 +3,7 @@
  *
  * These exist because of what validating staging by hand actually cost. Every
  * problem found there -- a private key stored with literal `\n` escapes, a
- * template image never uploaded to R2, a Wallet class that didn't exist, a
+ * template image never uploaded to R2 (as they then were), a Wallet class that didn't exist, a
  * Turnstile widget bound to the wrong hostname -- was invisible from outside
  * the Worker. Each one surfaced as a generic error page, or as a provider's
  * own generic failure, hours after the deploy that introduced it. The code
@@ -21,6 +21,7 @@
  *    and would report success for a state it had just manufactured.
  */
 
+import { fetchTemplate } from "../templates";
 import forge from "node-forge";
 import { signWebhookToken } from "../bigcommerce/webhookToken";
 import { GOOGLE_WALLET_API, getGoogleWalletAccessToken } from "../google/api";
@@ -216,8 +217,9 @@ async function storageChecks(env: Env): Promise<CheckGroup> {
     }),
   );
 
-  // Pass generation reads these from R2 at issue time, so an environment whose
-  // bucket was never populated signs passes right up to the point of failing.
+  // Pass generation and the card image read these at issue time. They ship
+  // with the code (src/templates.ts), so one missing is a file named in code
+  // but never committed; this says so before a member finds out.
   const templateKeys = [
     "templates/apple/icon.png",
     "templates/apple/icon@2x.png",
@@ -229,17 +231,16 @@ async function storageChecks(env: Env): Promise<CheckGroup> {
     "templates/google/logo.png",
   ];
   results.push(
-    await attempt("R2 template assets", async () => {
+    await attempt("Template images", async () => {
       const missing: string[] = [];
       for (const key of templateKeys) {
-        if (!(await env.ASSETS.head(key))) missing.push(key);
+        const res = await fetchTemplate(env, key, { method: "HEAD" });
+        await res.body?.cancel();
+        if (!res.ok) missing.push(key);
       }
       return missing.length === 0
-        ? ok("R2 template assets", `All ${templateKeys.length} present.`)
-        : fail(
-            "R2 template assets",
-            `Missing ${missing.join(", ")} -- run \`just r2-upload-templates\` for this environment.`,
-          );
+        ? ok("Template images", `All ${templateKeys.length} bundled with this version.`)
+        : fail("Template images", `Missing ${missing.join(", ")} from this version's bundle -- commit them under assets/templates/.`);
     }),
   );
 

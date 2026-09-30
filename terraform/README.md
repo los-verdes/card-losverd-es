@@ -24,7 +24,7 @@ The minimum this token needs, derived from what Terraform and the Deploy workflo
 | Permission group | Needed by |
 | --- | --- |
 | Account > **D1** > Edit | `cloudflare_d1_database`; `just db-migrate-remote` |
-| Account > **Workers R2 Storage** > Edit | `cloudflare_r2_bucket`; `just r2-upload-templates` |
+| Account > **Workers R2 Storage** > Edit | `cloudflare_r2_bucket` |
 | Account > **Queues** > Edit | `cloudflare_queue`; `wrangler deploy` configuring queue consumers |
 | Account > **Workers Scripts** > Edit | `wrangler deploy` |
 

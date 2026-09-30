@@ -10,8 +10,8 @@ import { IP_RATE_LIMIT, RECIPIENT_RATE_LIMIT } from "../../src/member/email-card
 import { getTestCertChain } from "../fixtures/certChain";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
-import LOGO from "../fixtures/sample-logo.png";
 import { fakeGoogleWallet } from "../google/fake";
+import { useTemplates } from "../fixtures/templates";
 
 const ORIGIN = "https://card.losverd.es";
 const GOOGLE_SAVE_PREFIX = "https://pay.google.com/gp/v/save/";
@@ -37,19 +37,6 @@ beforeEach(async () => {
   env.EMAIL = email;
   env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = undefined;
   env.GOOGLE_WALLET_PRIVATE_KEY_PEM = undefined;
-  // `templates/card/crest.png` too, so these keep passing once the card image
-  // reads its crest from there instead of the Apple pass template.
-  for (const key of [
-    "templates/apple/icon.png",
-    "templates/apple/icon@2x.png",
-    "templates/apple/icon@3x.png",
-    "templates/apple/logo.png",
-    "templates/apple/logo@2x.png",
-    "templates/apple/logo@3x.png",
-    "templates/card/crest.png",
-  ]) {
-    await env.ASSETS.put(key, new Uint8Array(LOGO));
-  }
 
   await insertMember("BC-1", "jane@example.com", "2099-03-04");
   await insertMember("BC-2", "lapsed@example.com", "2020-01-01");
@@ -455,7 +442,7 @@ describe("POST /email-card", () => {
     });
 
     it("logs a card rendering failure without emailing", async () => {
-      await env.ASSETS.delete(["templates/apple/icon@2x.png", "templates/card/crest.png"]);
+      useTemplates({ "templates/apple/icon@2x.png": null, "templates/card/crest.png": null });
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockUpstreams();
 

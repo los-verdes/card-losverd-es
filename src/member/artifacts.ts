@@ -22,6 +22,7 @@ import {
 import { tracing } from "cloudflare:workers";
 import { CARD_IMAGE_VERSION } from "../cardimage/template";
 import type { Env } from "../index";
+import { fetchTemplate } from "../templates";
 import { resolveCardTheme } from "../themes/choice";
 import { applePosterMode, posterAssets } from "../passkit/poster";
 import { buildVerifyPassUrl } from "../lib/passSignature";
@@ -238,52 +239,47 @@ function verifyUrl(env: Env, member: MemberRecord): Promise<string> {
 }
 
 /**
- * Template images read this hour, kept for the life of the Worker instance.
+ * Template images already read, kept for the life of the Worker instance.
  *
- * They are the crest, pass images and theme art committed under
- * `assets/templates/`, which change only when a deploy uploads new ones, and
- * reading one from R2 took about 200 ms at the median (1.4 s at p99): two of
- * them were most of the time a card image took to draw (2026-09-29). A deploy
- * starts fresh instances, so a changed image is read again; the hour is a
- * backstop for images uploaded without one. The read itself is what is kept,
- * so requests arriving together share it, and a failed read is forgotten
- * rather than remembered.
+ * They are the crest, pass images and theme art bundled with this version
+ * (src/templates.ts), which change only with a deploy, and a deploy starts
+ * fresh instances. Two of them were once most of the time a card image took
+ * to draw, read from R2 (about 200 ms each at the median, 2026-09-29). The
+ * read itself is what is kept, so requests arriving together share it, and a
+ * failed read is forgotten rather than remembered.
  */
-const TEMPLATE_CACHE_MS = 60 * 60 * 1000;
-const templateCache = new Map<string, { read: Promise<Uint8Array>; at: number }>();
+const templateCache = new Map<string, Promise<Uint8Array>>();
 
-/** Forgets every cached template image. For tests, which change R2's contents between cases. */
+/** Forgets every cached template image. For tests, which swap the templates between cases. */
 export function resetTemplateAssetCache(): void {
   templateCache.clear();
 }
 
 /**
- * Template images committed under assets/templates/ and synced to R2 on
- * deploy, from this instance's cache when it has read them this hour. The
- * bytes are shared between callers, so nothing may write to them.
+ * A template image, from this instance's cache when it has read it before.
+ * The bytes are shared between callers, so nothing may write to them.
  */
 function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
   const cached = templateCache.get(key);
-  if (cached && Date.now() - cached.at < TEMPLATE_CACHE_MS) return cached.read;
-  const read = readTemplateAssetFromR2(env, key);
-  templateCache.set(key, { read, at: Date.now() });
+  if (cached) return cached;
+  const read = readBundledTemplate(env, key);
+  templateCache.set(key, read);
   read.catch(() => {
-    if (templateCache.get(key)?.read === read) templateCache.delete(key);
+    if (templateCache.get(key) === read) templateCache.delete(key);
   });
   return read;
 }
 
-async function readTemplateAssetFromR2(env: Env, key: string): Promise<Uint8Array> {
-  const object = await env.ASSETS.get(key);
-  if (!object) {
-    throw new Error(
-      `Missing template asset in R2: ${key} (committed under assets/; upload with \`just r2-upload-templates\`)`,
-    );
+async function readBundledTemplate(env: Env, key: string): Promise<Uint8Array> {
+  const res = await fetchTemplate(env, key);
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new Error(`Missing template image: ${key} (${res.status}); commit it under assets/`);
   }
-  return new Uint8Array(await object.arrayBuffer());
+  return new Uint8Array(await res.arrayBuffer());
 }
 
-// Matches Phase 3.1's R2 `templates/apple/` layout -- no strip.png: it's a
+// Matches the `templates/apple/` layout -- no strip.png: it's a
 // `generic`-style pass, which doesn't render a strip. A theme with artwork
 // adds its thumbnail (APPLE_THUMBNAIL_FILES) from its own prefix.
 const PASS_TEMPLATE_ASSETS = [

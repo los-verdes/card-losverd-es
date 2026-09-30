@@ -8,8 +8,6 @@ import { getDisplayName, setDisplayName } from "../../src/member/displayName";
 import { isExpelled, expelPerson } from "../../src/member/expulsion";
 import { isRevoked, revokeCard } from "../../src/member/revocation";
 import { cardNameText, getMemberByEmail, renderCardImage } from "../../src/member/artifacts";
-import LOGO from "../fixtures/sample-logo.png";
-import BACKGROUND from "../fixtures/sample-card-background.png";
 import { YEAR_THEMES } from "../../src/themes/cardTheme";
 import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
 import { linkStoreAccount } from "../../src/bigcommerce/storeAccount";
@@ -651,13 +649,8 @@ describe("their Slack account on the member page", () => {
 });
 
 describe("their card, on their page", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
-    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
-  });
-
-  afterEach(async () => {
-    await env.ASSETS.delete("templates/card/crest.png");
   });
 
   it("shows the card beside their details, fetched by card number rather than address", async () => {
@@ -712,14 +705,10 @@ describe("their card's theme, on their page", () => {
 
   beforeEach(async () => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
-    await env.ASSETS.put("templates/card/crest.png", new Uint8Array(LOGO));
-    await env.ASSETS.put(Y2021.artwork.cardBackground!, new Uint8Array(BACKGROUND));
   });
 
   afterEach(async () => {
     env.CARD_THEME_CHOICE = "admins";
-    await env.ASSETS.delete("templates/card/crest.png");
-    await env.ASSETS.delete(Y2021.artwork.cardBackground!);
   });
 
   it("says what their card is drawn in and why, and offers only the themes they may use", async () => {

@@ -1,6 +1,7 @@
 /**
  * Public, unauthenticated assets: the stylesheet and display font bundled
- * into the Worker, and an allow-list of images from R2.
+ * into the Worker, and an allow-list of the bundled template images
+ * (src/templates.ts).
  *
  * This exists because Google Wallet will not accept a pass logo as bytes: a
  * `GenericObject` names it as a URL (`logo.sourceUri`) and Google's servers
@@ -8,9 +9,9 @@
  * reachable without a session. Everything else the app serves is behind a
  * login.
  *
- * Only an explicit allow-list is served. The same bucket holds the Apple pass
- * templates and whatever else deploys put there, so a route that mapped its
- * path straight onto an R2 key would publish the bucket's future contents by
+ * Only an explicit allow-list is served. The same bundle holds the Apple pass
+ * templates and whatever else is committed under assets/ in future, so a
+ * route that mapped its path straight onto a key would publish all of it by
  * default -- a decision nobody would be making deliberately.
  */
 
@@ -19,10 +20,11 @@ import bungeeFont from "./cardimage/assets/bungee-latin-400-normal.woff";
 import { siteEnvironment } from "./environment";
 import type { Env } from "./index";
 import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
+import { fetchTemplate } from "./templates";
 import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTheme";
 
 /**
- * Public file name -> R2 key: the logo Google shows on the pass, and each
+ * Public file name -> template key: the logo Google shows on the pass, and each
  * theme's Google hero image, which Google fetches the same way.
  *
  * `google-logo-2.png` is the crest at 1200 x 1200, above Google's minimum
@@ -111,9 +113,9 @@ export const STAGING_FAVICON_SVG = faviconSvg("#000", VERDE);
 
 const assets = new Hono<{ Bindings: Env }>();
 
-// Bundled rather than in R2, and so declared before the R2 handler below:
-// both are fetched by a browser on the first page it renders, and neither
-// should depend on the bucket having been populated by a deploy.
+// Bundled into the Worker's code rather than read as a template image, and so
+// declared before the `/:name` handler below: both are fetched by a browser
+// on the first page it renders.
 // Named after its own contents, so a browser either holds this exact
 // stylesheet or fetches it -- the HTML can never ask for a rule its CSS has
 // not got. That is what makes caching it forever safe, and the hour-long
@@ -152,22 +154,27 @@ assets.get("/:name", async (c) => {
     return c.notFound();
   }
 
-  const object = await c.env.ASSETS.get(key);
-  if (!object) {
-    // Deploy uploads these (`just r2-upload-templates`), so a miss means the
-    // bucket and the code have drifted apart rather than a bad request.
-    console.error(`GET /assets: ${key} is missing from R2`);
+  // The bundle answers a conditional request itself, with its own ETag.
+  const ifNoneMatch = c.req.header("If-None-Match");
+  const res = await fetchTemplate(c.env, key, ifNoneMatch ? { headers: { "If-None-Match": ifNoneMatch } } : undefined);
+  const etag = res.headers.get("ETag");
+  if (res.status === 304) {
+    return c.body(null, 304, etag ? { ETag: etag } : {});
+  }
+  if (!res.ok) {
+    // These ship with the code, so a miss means a key in the code names a
+    // file that was never committed, rather than a bad request.
+    await res.body?.cancel();
+    console.error(`GET /assets: ${key} is missing from the bundled templates (${res.status})`);
     return c.notFound();
   }
 
-  if (c.req.header("If-None-Match") === object.httpEtag) {
-    return c.body(null, 304, { ETag: object.httpEtag });
-  }
-
-  return c.body(object.body, 200, {
-    "Content-Type": "image/png",
-    "Cache-Control": `public, max-age=${MAX_AGE_SECONDS}`,
-    ETag: object.httpEtag,
+  return new Response(res.body, {
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": `public, max-age=${MAX_AGE_SECONDS}`,
+      ...(etag ? { ETag: etag } : {}),
+    },
   });
 });
 

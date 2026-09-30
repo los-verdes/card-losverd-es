@@ -109,9 +109,9 @@ interface PassJson {
 
 /**
  * Non-`pass.json` bundle files -- icon/logo/strip images per Apple's pass
- * asset conventions. Sourced from R2 (Phase 3.1's `templates/apple/`
- * layout) by the caller (the eventual `src/passkit/routes.ts`), not fetched
- * here -- keeps this module pure/testable without an R2 fixture per test.
+ * asset conventions. Read from the bundled template images (`templates/apple/`,
+ * src/templates.ts) by the caller, not fetched here -- keeps this module pure
+ * and testable without a fixture per test.
  */
 export type PassAssetFiles = Record<string, Uint8Array>;
 

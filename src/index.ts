@@ -31,7 +31,10 @@ import { scheduled } from "./scheduled";
 
 export interface Env {
   DB: D1Database;
+  /** Caches: signed passes and drawn cards. Template images are `STATIC`. */
   ASSETS: R2Bucket;
+  /** The template images, bundled with this version (src/templates.ts). */
+  STATIC: Fetcher;
   BIGCOMMERCE_STORE_HASH: string;
   BIGCOMMERCE_CLIENT_ID: string;
   // Not secret -- this environment's Developer Portal app (#38), whose client

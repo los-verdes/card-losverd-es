@@ -54,7 +54,7 @@ const PROBES = [
     name: "R2",
     path: `/accounts/${accountId}/r2/buckets?per_page=1`,
     group: "Account > Workers R2 Storage > Edit",
-    usedBy: "terraform apply (cloudflare_r2_bucket), just r2-upload-templates",
+    usedBy: "terraform apply (cloudflare_r2_bucket)",
   },
   {
     name: "Queues",
