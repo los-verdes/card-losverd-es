@@ -16,6 +16,7 @@ import assets from "./assets";
 import bigcommerce from "./bigcommerce/routes";
 import bigcommerceApp from "./bigcommerce/app";
 import storeHandoff from "./bigcommerce/storeHandoff";
+import storefront from "./bigcommerce/storefront";
 import { handleServerError } from "./lib/serverError";
 import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
@@ -196,6 +197,8 @@ app.route("/bigcommerce/app", bigcommerceApp);
 app.route("/bigcommerce", bigcommerce);
 // The store handoff (#38): `/store-handoff` and `/store-account/disconnect`.
 app.route("/", storeHandoff);
+// The script the store runs on every page, adding "Membership card" (#38).
+app.route("/", storefront);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);

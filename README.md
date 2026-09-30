@@ -40,6 +40,9 @@ Not built yet: MiniBC renewal data (see the provenance document), and a look at 
 | `/privacy-policy` | The privacy policy, linked from every member page and from Google's OAuth consent screen (`src/member/privacy.tsx`) | Anyone |
 | `/passkit/v1/*` | Apple PassKit web service: device registration, pass delivery, update polling, device logs (`src/passkit/`) | Per-pass auth token |
 | `/bigcommerce/order-webhook` | BigCommerce order webhook; validates, then queues the sync (`src/bigcommerce/routes.ts`) | Signed bearer token |
+| `/store-handoff`, `/store-handoff/continue`, `/store-account/disconnect` | "Membership card" on the store: verifies the store's signed-in customer and signs them in here, connecting their store account the first time (#38, `src/bigcommerce/storeHandoff.tsx`) | The store's signed token; disconnect is signed in |
+| `/store/storefront.js` | The script the store runs on every page, adding "Membership card" to its header, account pages and membership page (`src/bigcommerce/storefront.ts`); see [Adding the storefront script](#adding-the-storefront-script) | Public |
+| `/bigcommerce/app/{auth,load,uninstall}` | The Developer Portal app's install callbacks (`src/bigcommerce/app.tsx`) | BigCommerce's signed payload |
 | `/admin/reports/*` | Membership reports with CSV export (`src/admin/`), see [`docs/reporting.md`](docs/reporting.md) | Admin |
 | `/admin/members` | Find a member by the card number on their pass, their email, or an order number, or list everyone whose name or Slack handle contains some text (`?name=`, `@` for a handle only); set the name their card shows. An address with orders and no membership shows those orders and why none makes one. A member's page shows their card as it looks to them, drawn by the same code as their own card page (`/admin/members/card.png?id=<card number>`). Every page ends with that address's whole audit history (`#history`), and an address the audit log remembers but that has no card or orders still gets a page for it (`src/admin/members.tsx`) | Admin |
 | `/admin/revocations` | Memberships revoked before they expired, and people expelled from the group; lifting either (`src/admin/revocations.tsx`) | Admin |
@@ -326,6 +329,16 @@ just bigcommerce-ensure-webhook staging
 ```
 
 It reads the access token and signing key from the environment's 1Password item and the store and client ids from `wrangler.toml` (refusing a placeholder client id). The destination is the environment's `PUBLIC_BASE_URL` unless `--origin` names another.
+
+### Adding the storefront script
+
+"Membership card" on the store comes from one script tag, added once per store by hand in the control panel's Script Manager, then *Create a Script*. On a store with multi-storefront, Script Manager is under the storefront's channel: *Channel Manager*, open the storefront, then *Script Manager* (`/manage/channel/1/script-manager`); otherwise *Storefront → Script Manager*. Only users with the Script Manager permission see it.
+
+- **Name:** Los Verdes membership card
+- **Location:** Footer; **Pages:** All pages; **Category:** Essential; **Script type:** URL
+- **URL:** `https://card.losverd.es/store/storefront.js` (staging: `https://stagingcard.losverd.es/store/storefront.js`)
+
+The tag never changes: what the script does is served by this site, so it changes with a deploy. It does nothing until the environment has its app configured (`BIGCOMMERCE_APP_CLIENT_ID` and `BIGCOMMERCE_APP_CLIENT_SECRET`), so it can be added before then. Where the theme's markup it looks for is missing, it adds nothing.
 
 ### Finding webhooks that no longer belong
 
