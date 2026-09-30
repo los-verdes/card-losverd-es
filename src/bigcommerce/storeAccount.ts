@@ -82,19 +82,46 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export interface HandoffClaim {
+  /** Whether this was the token's first use. */
+  claimed: boolean;
+  /** The token's SHA-256, which is how it is referred to after this. */
+  tokenHash: string;
+}
+
 /**
- * Accepts a storefront token for a handoff once. Returns false when it has
- * been used before. It is a bearer token for its lifetime, so a copy
- * of one (from a log, a proxy, a shared machine) must not sign anyone in
- * again. Only its SHA-256 is kept, until it would have expired.
+ * Accepts a storefront token for a handoff once. It is a bearer token for its
+ * lifetime, so a copy of one (from a log, a proxy, a shared machine) must not
+ * sign anyone in again. Only its SHA-256 is kept, until it would have
+ * expired, along with the SHA-256 of the marker given to the browser that
+ * used it first (`handoffTokenHeldBy`).
  */
-export async function claimHandoffToken(env: Env, token: string, expiresAtSeconds: number): Promise<boolean> {
+export async function claimHandoffToken(
+  env: Env,
+  token: string,
+  expiresAtSeconds: number,
+  browserMarker: string,
+): Promise<HandoffClaim> {
   const now = Date.now();
+  const tokenHash = await sha256Hex(token);
   await env.DB.prepare("DELETE FROM store_handoff_tokens WHERE expires_at < ?").bind(now).run();
   const result = await env.DB.prepare(
-    "INSERT INTO store_handoff_tokens (token_hash, expires_at) VALUES (?, ?) ON CONFLICT(token_hash) DO NOTHING",
+    "INSERT INTO store_handoff_tokens (token_hash, expires_at, browser_hash) VALUES (?, ?, ?) ON CONFLICT(token_hash) DO NOTHING",
   )
-    .bind(await sha256Hex(token), expiresAtSeconds * 1000)
+    .bind(tokenHash, expiresAtSeconds * 1000, await sha256Hex(browserMarker))
     .run();
-  return (result.meta.changes ?? 0) > 0;
+  return { claimed: (result.meta.changes ?? 0) > 0, tokenHash };
+}
+
+/**
+ * Whether a spent token was spent by the browser holding this marker, and is
+ * still in date. The store reuses one token for 15 minutes, so the same member
+ * coming back inside that time presents it again; anyone else presenting it
+ * holds a copy.
+ */
+export async function handoffTokenHeldBy(env: Env, tokenHash: string, browserMarker: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT browser_hash FROM store_handoff_tokens WHERE token_hash = ? AND expires_at >= ?")
+    .bind(tokenHash, Date.now())
+    .first<{ browser_hash: string | null }>();
+  return row?.browser_hash != null && row.browser_hash === (await sha256Hex(browserMarker));
 }
