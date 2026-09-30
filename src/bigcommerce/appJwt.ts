@@ -7,8 +7,10 @@
  * - `signed_payload_jwt`, which the store sends to an app's load and
  *   uninstall callbacks, naming the store and the control-panel user.
  *
- * Both are HS256 only, addressed to this environment's app (`aud`), and must
- * name this environment's store; anything else is refused. The app's client
+ * Both are HMAC-signed with the client secret -- the store signs `current.jwt`
+ * with HS512 and `signed_payload_jwt` with HS256 (seen on staging,
+ * 2026-09-30) -- addressed to this environment's app (`aud`), and must name
+ * this environment's store; anything else is refused. The app's client
  * id and secret (`BIGCOMMERCE_APP_CLIENT_ID`, `BIGCOMMERCE_APP_CLIENT_SECRET`)
  * are one per environment, never the store-level account ingestion uses.
  */
@@ -33,17 +35,22 @@ export class AppJwtRejected extends Error {
   }
 }
 
+/** HMAC only: a key that is a shared secret must never be read as a public one. */
+const APP_JWT_ALGORITHMS = ["HS256", "HS512"];
+
 async function verify(token: string, app: AppConfig) {
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(app.clientSecret), {
-      algorithms: ["HS256"],
+      algorithms: APP_JWT_ALGORITHMS,
       audience: app.clientId,
     });
     return payload;
   } catch (err) {
     if (err instanceof errors.JWTExpired) throw new AppJwtRejected("expired");
     if (err instanceof errors.JWTClaimValidationFailed) throw new AppJwtRejected(`claim:${err.claim}`);
-    throw new AppJwtRejected("signature");
+    if (err instanceof errors.JOSEAlgNotAllowed) throw new AppJwtRejected("alg");
+    if (err instanceof errors.JWSSignatureVerificationFailed) throw new AppJwtRejected("signature");
+    throw new AppJwtRejected("malformed");
   }
 }
 

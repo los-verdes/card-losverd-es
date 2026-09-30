@@ -27,7 +27,7 @@ const OTHER_ID = 8;
 const CUSTOMER = 4242;
 
 /** A storefront `current.jwt` as the store would sign it, with anything overridden. */
-async function currentJwt(overrides: Record<string, unknown> = {}, secret = SECRET, expiresIn = "15m") {
+async function currentJwt(overrides: Record<string, unknown> = {}, secret = SECRET, expiresIn = "15m", alg = "HS512") {
   return new SignJWT({
     customer: { id: CUSTOMER, email: "shopper@example.com", group_id: "0" },
     store_hash: env.BIGCOMMERCE_STORE_HASH,
@@ -35,7 +35,7 @@ async function currentJwt(overrides: Record<string, unknown> = {}, secret = SECR
     application_id: CLIENT_ID,
     ...overrides,
   })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setProtectedHeader({ alg, typ: "JWT" })
     .setIssuer("bc/apps")
     .setAudience(CLIENT_ID)
     .setIssuedAt()
@@ -107,12 +107,18 @@ describe("the storefront's current.jwt", () => {
     expect(await verifyCurrentCustomer(await currentJwt(), app())).toMatchObject({ customerId: CUSTOMER });
   });
 
+  it("is accepted signed with HS256 as well as the store's HS512", async () => {
+    expect(await verifyCurrentCustomer(await currentJwt({}, SECRET, "15m", "HS256"), app())).toMatchObject({ customerId: CUSTOMER });
+  });
+
   it.each([
     ["another app's secret", () => currentJwt({}, "some-other-secret-0123456789"), "signature"],
     ["another store", () => currentJwt({ store_hash: "otherstore" }), "store"],
     ["another operation", () => currentJwt({ operation: "customer_login" }), "operation"],
     ["a guest", () => currentJwt({ customer: { id: 0 } }), "customer"],
     ["an expired token", () => currentJwt({}, SECRET, "-1m"), "expired"],
+    ["an unexpected algorithm", () => currentJwt({}, SECRET, "15m", "HS384"), "alg"],
+    ["something that is not a token", async () => "not-a-token", "malformed"],
   ])("is refused from %s", async (_, make, reason) => {
     await expect(verifyCurrentCustomer(await make(), app())).rejects.toMatchObject({ reason });
   });
