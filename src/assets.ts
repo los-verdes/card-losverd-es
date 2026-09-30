@@ -25,15 +25,22 @@ import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTh
  * Public file name -> R2 key: the logo Google shows on the pass, and each
  * theme's Google hero image, which Google fetches the same way.
  *
- * `google-logo.png` is the crest at 1200 x 1200 with a 15% margin, as
- * Google's guidelines ask (at least 660 x 660; it masks the logo to a
- * circle). `crest.png` is the card image's 256px crest, which passes issued
- * before 2026-09-29 still name as their logo, so it stays served.
+ * `google-logo-2.png` is the crest at 1200 x 1200, above Google's minimum
+ * of 660 x 660. It fills the square edge to edge, as other passes' logos do:
+ * Google masks the logo to a circle, which the round crest already is, and
+ * the 15% margin its guidelines suggest left the crest looking small. The
+ * number is there because Google keeps its own copy of an image and fetches
+ * it again only when the address changes, so a new logo needs a new name.
+ *
+ * Older addresses stay served for passes that still name them:
+ * `google-logo.png` (the crest with that margin, briefly) and `crest.png`
+ * (the card image's 256px crest, named before 2026-09-29).
  */
 export function publicAssets(themes: readonly CardTheme[]): Record<string, string> {
   return {
     "crest.png": "templates/card/crest.png",
     "google-logo.png": "templates/google/logo.png",
+    "google-logo-2.png": "templates/google/logo.png",
     ...Object.fromEntries(
       themes.flatMap((theme) =>
         theme.artwork.googleHero ? [[googleHeroFileName(theme), theme.artwork.googleHero]] : [],

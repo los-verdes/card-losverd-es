@@ -129,7 +129,7 @@ export const CLASSIC_THEME: CardTheme = {
   assets: {
     cardCrest: "templates/card/crest.png",
     applePrefix: "templates/apple/",
-    googleLogoPath: "/assets/google-logo.png",
+    googleLogoPath: "/assets/google-logo-2.png",
   },
   artwork: {},
 };

@@ -76,6 +76,7 @@ describe("GET /assets/:name", () => {
     expect(PUBLIC_ASSETS).toEqual({
       "crest.png": CREST_KEY,
       "google-logo.png": "templates/google/logo.png",
+      "google-logo-2.png": "templates/google/logo.png",
       ...Object.fromEntries(YEAR_THEMES.map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero])),
     });
   });
@@ -236,8 +237,10 @@ describe("the Google pass logo", () => {
     expect(width).toBeGreaterThanOrEqual(660);
   });
 
-  it("is what passes name, while the crest older passes name stays served", () => {
-    expect(CLASSIC_THEME.assets.googleLogoPath).toBe("/assets/google-logo.png");
+  it("is what passes name, under a new address whenever it changes, while older addresses stay served", () => {
+    // Google keeps its own copy of an image and fetches it again only when the address changes.
+    expect(CLASSIC_THEME.assets.googleLogoPath).toBe("/assets/google-logo-2.png");
+    expect(PUBLIC_ASSETS["google-logo.png"]).toBe("templates/google/logo.png");
     expect(PUBLIC_ASSETS["crest.png"]).toBe("templates/card/crest.png");
   });
 });
@@ -247,6 +250,7 @@ describe("publicAssets", () => {
     expect(publicAssets([CLASSIC_THEME])).toEqual({
       "crest.png": "templates/card/crest.png",
       "google-logo.png": "templates/google/logo.png",
+      "google-logo-2.png": "templates/google/logo.png",
     });
   });
 
@@ -261,6 +265,7 @@ describe("publicAssets", () => {
     expect(publicAssets([CLASSIC_THEME, theme])).toEqual({
       "crest.png": "templates/card/crest.png",
       "google-logo.png": "templates/google/logo.png",
+      "google-logo-2.png": "templates/google/logo.png",
       "hero-2026-2.png": "templates/themes/2026/google-hero.png",
     });
   });
