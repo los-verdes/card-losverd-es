@@ -10,6 +10,7 @@
 import { Hono } from "hono";
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
+import { MEMBERSHIP_PRODUCTS } from "../bigcommerce/sync";
 import { parseIsoDate } from "../lib/dateFormat";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
@@ -29,6 +30,7 @@ import {
   extraMembershipOrdersSetAside,
   ordersWithExtraMemberships,
   ordersByDay,
+  ordersByYearAndProduct,
   slackCrossReference,
   type AttentionCounts,
   type Consolidations,
@@ -374,7 +376,7 @@ reports.get("/", async (c) => {
         </li>
         <li>
           <a href="/admin/reports/over-time">Membership over time</a>: active members and membership orders,
-          any years side by side.
+          any years side by side, and orders by product each year.
         </li>
         <li>
           <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
@@ -475,6 +477,22 @@ function yearMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
+/** A product's name in "Orders by product": its store name where known. */
+export function productLabel(product: string): string {
+  if (product === "squarespace") return "Squarespace (before BigCommerce)";
+  if (product === "") return "No SKU recorded";
+  const name = MEMBERSHIP_PRODUCTS.get(product);
+  return name ? `${name} (${product})` : product;
+}
+
+/** Squarespace first, then the store's products in their listed order, then anything else. */
+function productOrder(products: Iterable<string>): string[] {
+  const known = [...MEMBERSHIP_PRODUCTS.keys()];
+  const rank = (product: string) =>
+    product === "squarespace" ? -1 : known.includes(product) ? known.indexOf(product) : product === "" ? known.length + 1 : known.length;
+  return [...new Set(products)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
 /**
  * Membership over time: how many people held an active membership each day
  * (src/admin/membersOverTime.ts), and how many membership orders came in
@@ -489,7 +507,11 @@ function yearMonth(year: number, month: number): string {
  */
 reports.get("/over-time", async (c) => {
   const today = toIsoSeconds(new Date()).slice(0, 10);
-  const [orders, perDay] = await Promise.all([countedMembershipOrders(c.env.DB), ordersByDay(c.env.DB)]);
+  const [orders, perDay, byProduct] = await Promise.all([
+    countedMembershipOrders(c.env.DB),
+    ordersByDay(c.env.DB),
+    ordersByYearAndProduct(c.env.DB),
+  ]);
   const firstDay = [orders.reduce((min, order) => (order.created_on < min ? order.created_on : min), today), perDay[0]?.day ?? today]
     .sort()[0]
     .slice(0, 10);
@@ -512,7 +534,13 @@ reports.get("/over-time", async (c) => {
         headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="membership-orders-by-month-${stamp}` },
       });
     }
-    throw new BadRequest("table must be one of members, orders");
+    if (table === "products") {
+      const rows = byProduct.map((row) => ({ year: row.year, sku: row.product, product: productLabel(row.product), orders: row.orders }));
+      return new Response(toCsv(["year", "sku", "product", "orders"], rows), {
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="membership-orders-by-product-${stamp}` },
+      });
+    }
+    throw new BadRequest("table must be one of members, orders, products");
   }
 
   const thisYear = Number(today.slice(0, 4));
@@ -567,6 +595,9 @@ reports.get("/over-time", async (c) => {
   const ordersByNowLastYear = ordersBetween(`${thisYear - 1}-01-01`, lastYearToday);
   const count = (value: number) => value.toLocaleString("en-US");
   const which = timeline ? `from ${firstDay} to ${today}` : `in ${years.join(", ")}, one line per year`;
+  const products = productOrder(byProduct.map((row) => row.product));
+  const productOrders = new Map(byProduct.map((row) => [`${row.year}|${row.product}`, row.orders]));
+  const ordersFor = (year: number | string, product: string) => productOrders.get(`${year}|${product}`) ?? 0;
 
   return c.html(
     <AdminPage title="Membership over time">
@@ -658,6 +689,40 @@ reports.get("/over-time", async (c) => {
                 {count(Array.from({ length: 12 }, (_, month) => ordersIn.get(yearMonth(year, month)) ?? 0).reduce((a, b) => a + b, 0))}
               </th>
             ))}
+          </tr>
+        </tfoot>
+      </ReportTable>
+
+      <h2>Orders by product</h2>
+      <p class="muted">
+        The same orders, each year, by which membership product was bought. Every year is shown, whichever are
+        compared above.
+      </p>
+      <ReportTable
+        headings={["Year (UTC)", ...products.map(productLabel), "Total"]}
+        csvHref={`${OVER_TIME_PATH}?table=products&format=csv`}
+        csvLabel="Download as CSV"
+        empty="No membership orders yet."
+        rowCount={byProduct.length}
+      >
+        <tbody>
+          {available.map((year) => (
+            <tr>
+              <td style={cellStyle}>{year}</td>
+              {products.map((product) => (
+                <td style={cellStyle}>{count(ordersFor(year, product))}</td>
+              ))}
+              <th style={cellStyle}>{count(products.reduce((sum, product) => sum + ordersFor(year, product), 0))}</th>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th style={cellStyle}>Total</th>
+            {products.map((product) => (
+              <th style={cellStyle}>{count(available.reduce((sum, year) => sum + ordersFor(year, product), 0))}</th>
+            ))}
+            <th style={cellStyle}>{count(byProduct.reduce((sum, row) => sum + row.orders, 0))}</th>
           </tr>
         </tfoot>
       </ReportTable>

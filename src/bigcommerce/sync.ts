@@ -17,12 +17,14 @@ const BC_API_BASE = "https://api.bigcommerce.com/stores";
 // merchandise, and the same membership without it -- and draws no
 // distinction between kinds of member, so there is nothing for a SKU to map
 // *to*.
-export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set([
-  // The membership pack.
-  "LOSV-MEM-0001",
-  // The membership without merchandise ("Los Verdes Annual Membership (No Swag)").
-  "LOSV-DIGI-5000",
+//
+// Each is named for reports (orders by product, /admin/reports/over-time).
+export const MEMBERSHIP_PRODUCTS: ReadonlyMap<string, string> = new Map([
+  ["LOSV-MEM-0001", "Membership pack"],
+  // "Los Verdes Annual Membership (No Swag)" in the store.
+  ["LOSV-DIGI-5000", "Membership without merchandise"],
 ]);
+export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set(MEMBERSHIP_PRODUCTS.keys());
 
 export interface BigCommerceAddress {
   first_name: string;

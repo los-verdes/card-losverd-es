@@ -637,6 +637,38 @@ describe("GET /admin/reports/over-time", () => {
     expect(orders).toMatch(/Total<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th>/);
   });
 
+  it("breaks every year's orders down by product, whichever years are compared, with totals", async () => {
+    await env.DB.exec("UPDATE membership_orders SET sku = 'LOSV-MEM-0001' WHERE order_id IN ('2', '3')");
+    await env.DB.exec("UPDATE membership_orders SET sku = 'LOSV-DIGI-5000' WHERE order_id = '5'");
+    await insertOrder({ id: "7", email: "old@example.com", created: "2024-01-05T00:00:00Z", source: "squarespace" });
+    await insertOrder({ id: "8", email: "other@example.com", created: "2026-04-01T00:00:00Z", sku: "LOSV-OLD-0001" });
+    await insertOrder({ id: "9", email: "refunded@example.com", created: "2026-04-02T00:00:00Z", sku: "LOSV-DIGI-5000", status: "Refunded" });
+
+    const body = await (await get("/admin/reports/over-time?year=2026")).text();
+    const products = body.slice(body.indexOf("<h2>Orders by product</h2>"));
+
+    expect(products).toMatch(
+      /<th[^>]*>Year \(UTC\)<\/th><th[^>]*>Squarespace \(before BigCommerce\)<\/th><th[^>]*>Membership pack \(LOSV-MEM-0001\)<\/th><th[^>]*>Membership without merchandise \(LOSV-DIGI-5000\)<\/th><th[^>]*>LOSV-OLD-0001<\/th><th[^>]*>No SKU recorded<\/th><th[^>]*>Total<\/th>/,
+    );
+    // 2024: one Squarespace order, one without a SKU; 2026: the refund does not count.
+    expect(products).toMatch(/>2024<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>2<\/td><th[^>]*>3<\/th>/);
+    expect(products).toMatch(/>2025<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>2026<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><th[^>]*>3<\/th>/);
+    expect(products).toMatch(/Total<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>1<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>7<\/th>/);
+
+    const csv = await get("/admin/reports/over-time?table=products&format=csv");
+    expect(csv.headers.get("Content-Disposition")).toBe('attachment; filename="membership-orders-by-product-2026-06-01.csv"');
+    expect((await csv.text()).trimEnd().split("\r\n")).toEqual([
+      "year,sku,product,orders",
+      "2024,,No SKU recorded,2",
+      "2024,squarespace,Squarespace (before BigCommerce),1",
+      "2025,LOSV-MEM-0001,Membership pack (LOSV-MEM-0001),1",
+      "2026,LOSV-DIGI-5000,Membership without merchandise (LOSV-DIGI-5000),1",
+      "2026,LOSV-MEM-0001,Membership pack (LOSV-MEM-0001),1",
+      "2026,LOSV-OLD-0001,LOSV-OLD-0001,1",
+    ]);
+  });
+
   it("shows every year as one line in each chart", async () => {
     const body = await (await get("/admin/reports/over-time?view=timeline")).text();
 
