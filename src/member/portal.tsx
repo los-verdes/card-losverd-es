@@ -77,10 +77,8 @@ export type PortalEnv = {
  * email, else one linked to them by `members.user_id` (the same two ways
  * `requireActiveMembership` matches), preferring whichever is current.
  */
-async function findCurrentMember(
-  env: Env,
-  userId: number,
-): Promise<CurrentMember | null> {
+/** Every membership a user holds a claim to: under their address, and any linked to them. */
+export async function findMembershipsForUser(env: Env, userId: number): Promise<(MemberRecord | null)[]> {
   const user = await env.DB.prepare("SELECT email FROM users WHERE id = ?")
     .bind(userId)
     .first<{ email: string }>();
@@ -93,6 +91,14 @@ async function findCurrentMember(
   for (const { member_id } of linked) {
     candidates.push(await getMemberById(env, member_id));
   }
+  return candidates;
+}
+
+export async function findCurrentMember(
+  env: Env,
+  userId: number,
+): Promise<CurrentMember | null> {
+  const candidates = await findMembershipsForUser(env, userId);
   return (
     candidates.find(
       (member): member is CurrentMember =>

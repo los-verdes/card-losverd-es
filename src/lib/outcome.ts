@@ -34,6 +34,7 @@ export const OUTCOMES = [
   "pass.verified",
   "order.reread",
   "store.handoff",
+  "store.member",
 ] as const;
 
 export type Outcome = (typeof OUTCOMES)[number];

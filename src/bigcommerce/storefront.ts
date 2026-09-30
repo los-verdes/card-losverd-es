@@ -25,6 +25,12 @@
  * page first finds the customer signed in: at once if they already were, or
  * after they sign in to the store.
  *
+ * On the account pages and the membership page it also shows the member's
+ * card itself (Phase 2): it asks `/store/member` with the store's token, and
+ * draws the card with its wallet buttons, or says the membership ran out, or,
+ * on the account pages, offers to connect the store account. Changing the
+ * name or theme, or emailing the card, links through to the card site.
+ *
  * Wherever the markup it expects is missing, it adds nothing: a theme change
  * can hide the links, but not break a page.
  */
@@ -33,6 +39,7 @@ import { Hono } from "hono";
 import type { Env } from "../index";
 import { appConfig } from "./appJwt";
 import { STORE_HANDOFF_PATH } from "./storeHandoff";
+import { STORE_MEMBER_PATH, type StoreMemberResponse } from "./storeMember";
 
 export const STOREFRONT_SCRIPT_PATH = "/store/storefront.js";
 
@@ -43,12 +50,14 @@ export interface StorefrontConfig {
   handoffUrl: string;
   /** The card site itself, for anyone the store can't vouch for. */
   cardUrl: string;
+  /** Where the card on the store comes from (src/bigcommerce/storeMember.tsx). */
+  memberUrl: string;
 }
 
 /** The minimum of `window` the script touches, so tests can hand it a stand-in. */
 export interface StorefrontWindow {
   location: { pathname: string; search: string; hash: string; assign(url: string): void };
-  fetch(url: string, init?: RequestInit): Promise<{ ok: boolean; text(): Promise<string> }>;
+  fetch(url: string, init?: RequestInit): Promise<{ ok: boolean; text(): Promise<string>; json(): Promise<unknown> }>;
   /** Absent or throwing in some browsers' private modes; the script copes. */
   sessionStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 }
@@ -162,13 +171,15 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   if (accountNav) accountNav.appendChild(listItem("navBar-item", cardLink("navBar-action", label)));
 
   // The membership category page, under its heading.
-  if (/^\/membership\/?$/.test(win.location.pathname)) {
+  const onMembershipPage = /^\/membership\/?$/.test(win.location.pathname);
+  let membershipLine: HTMLParagraphElement | null = null;
+  if (onMembershipPage) {
     const heading = doc.querySelector(".page-heading");
     if (heading && heading.parentNode) {
-      const line = doc.createElement("p");
-      line.appendChild(doc.createTextNode("Already a member? "));
-      line.appendChild(cardLink("", "Open your membership card"));
-      heading.parentNode.insertBefore(line, heading.nextSibling);
+      membershipLine = doc.createElement("p");
+      membershipLine.appendChild(doc.createTextNode("Already a member? "));
+      membershipLine.appendChild(cardLink("", "Open your membership card"));
+      heading.parentNode.insertBefore(membershipLine, heading.nextSibling);
     }
   }
 
@@ -176,7 +187,90 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   // gave before the fragment, still honoured).
   const asked = /^#lv-connect$/.test(win.location.hash) || /[?&]lv_connect=1(&|$)/.test(win.location.search);
   if (asked) rememberConnect();
-  if (asked || connectRemembered()) void connect();
+  const connecting = asked || connectRemembered();
+  if (connecting) {
+    void connect();
+    return;
+  }
+
+  // The card itself, on the account pages and the membership page.
+  function element(tag: string, attributes: Record<string, string>, text?: string): HTMLElement {
+    const node = doc.createElement(tag);
+    for (const name of Object.keys(attributes)) node.setAttribute(name, attributes[name]);
+    if (text) node.appendChild(doc.createTextNode(text));
+    return node;
+  }
+  function showDate(iso: string): string {
+    const date = new Date(iso + "T00:00:00Z");
+    return isNaN(date.getTime())
+      ? iso
+      : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  }
+  async function showCard(after: Element, onMembership: boolean): Promise<void> {
+    const token = await storeToken();
+    if (!token) return;
+    let data: StoreMemberResponse;
+    try {
+      const res = await win.fetch(config.memberUrl, { headers: { Authorization: "Bearer " + token }, credentials: "omit" });
+      if (!res.ok) return;
+      data = (await res.json()) as StoreMemberResponse;
+    } catch {
+      return;
+    }
+    const panel = element("section", { class: "lv-card-panel", style: "margin: 1.5rem 0" });
+    panel.appendChild(element("h3", {}, "Your membership card"));
+    if (!data.connected || !data.member) {
+      // The membership page already offers the way in; a store account page is where to explain it.
+      if (onMembership) return;
+      const line = element(
+        "p",
+        {},
+        data.connected
+          ? "Your store account is connected, but there's no Los Verdes membership on it yet. "
+          : "Connect your store account to see your Los Verdes membership card here. ",
+      );
+      line.appendChild(cardLink("", data.connected ? "Open the card site" : "Connect it"));
+      panel.appendChild(line);
+    } else if (!data.member.current) {
+      const line = element(
+        "p",
+        {},
+        data.member.goodThrough ? "Your membership ran out on " + showDate(data.member.goodThrough) + ". " : "Your membership isn't current. ",
+      );
+      if (!onMembership) {
+        const renew = element("a", { href: "/membership/" }, "Renew it");
+        line.appendChild(renew);
+      }
+      panel.appendChild(line);
+    } else {
+      const member = data.member;
+      if (member.cardImageUrl) {
+        panel.appendChild(
+          element("img", {
+            src: member.cardImageUrl,
+            alt: "Los Verdes membership card for " + member.name,
+            style: "display: block; width: 100%; max-width: 360px; height: auto; border-radius: 12px",
+          }),
+        );
+      }
+      if (member.goodThrough) panel.appendChild(element("p", {}, "Good through " + showDate(member.goodThrough)));
+      const wallets = element("p", {});
+      if (member.appleWalletUrl) wallets.appendChild(element("a", { class: "button button--primary", href: member.appleWalletUrl }, "Add to Apple Wallet"));
+      if (member.appleWalletUrl && member.googleWalletUrl) wallets.appendChild(doc.createTextNode(" "));
+      if (member.googleWalletUrl) wallets.appendChild(element("a", { class: "button", href: member.googleWalletUrl }, "Save to Google Wallet"));
+      panel.appendChild(wallets);
+      const more = element("p", {});
+      more.appendChild(cardLink("", "Change the name or theme, or email yourself the card"));
+      panel.appendChild(more);
+      // The card is here now; the line offering to open it is not needed.
+      if (membershipLine) membershipLine.setAttribute("hidden", "");
+    }
+    if (after.parentNode) after.parentNode.insertBefore(panel, after.nextSibling);
+  }
+
+  const accountBar = doc.querySelector(".navBar--account");
+  if (accountBar) void showCard(accountBar, false);
+  else if (membershipLine) void showCard(membershipLine, true);
 }
 
 /**
@@ -213,6 +307,7 @@ storefront.get(STOREFRONT_SCRIPT_PATH, (c) => {
       clientId: app.clientId,
       handoffUrl: new URL(STORE_HANDOFF_PATH, base).toString(),
       cardUrl: new URL("/", base).toString(),
+      memberUrl: new URL(STORE_MEMBER_PATH, base).toString(),
     }),
     200,
     headers,

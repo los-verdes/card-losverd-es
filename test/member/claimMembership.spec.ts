@@ -131,7 +131,13 @@ describe("the claim token", () => {
   });
 
   it.each([
-    ["tampered", (t: string) => `${t.slice(0, -2)}xy`],
+    // One character well inside the signature, changed: replacing the last
+    // two with fixed ones was a no-op whenever the token already ended that
+    // way, or differed only in the final character's unused padding bits.
+    ["tampered", (t: string) => {
+      const at = t.length - 10;
+      return `${t.slice(0, at)}${t[at] === "A" ? "B" : "A"}${t.slice(at + 1)}`;
+    }],
     ["truncated", (t: string) => t.slice(0, 20)],
     ["empty", () => ""],
     ["not a token at all", () => "hello"],

@@ -1,6 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { storefrontMain, storefrontScript, type StorefrontConfig, type StorefrontWindow } from "../../src/bigcommerce/storefront";
+import type { StoreMemberResponse } from "../../src/bigcommerce/storeMember";
 import worker from "../../src/index";
 import { FakeDocument, FakeElement, el } from "../fixtures/miniDom";
 
@@ -8,6 +9,7 @@ const CONFIG: StorefrontConfig = {
   clientId: "app-client-id",
   handoffUrl: "https://card.example.com/store-handoff",
   cardUrl: "https://card.example.com/",
+  memberUrl: "https://card.example.com/store/member",
 };
 
 /** A store page shaped like the store's Cornerstone-based theme, with whichever parts are asked for. */
@@ -44,11 +46,19 @@ function storeWindow({
   token = "store.jwt.token" as string | null,
   fails = false,
   storage = fakeStorage() as StorefrontWindow["sessionStorage"] | undefined,
+  /** What `/store/member` answers; null for an error. */
+  member = null as StoreMemberResponse | null,
+  memberFails = false,
 } = {}) {
   const assign = vi.fn();
-  const fetch = vi.fn(async () => {
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    void init;
     if (fails) throw new TypeError("network");
-    return { ok: token !== null, text: async () => (token === null ? "" : `${token}\n`) };
+    if (url === CONFIG.memberUrl) {
+      if (memberFails) throw new TypeError("network");
+      return { ok: member !== null, text: async () => JSON.stringify(member), json: async () => member };
+    }
+    return { ok: token !== null, text: async () => (token === null ? "" : `${token}\n`), json: async () => null };
   });
   const win: StorefrontWindow = { location: { pathname, search, hash, assign }, fetch, sessionStorage: storage };
   return { win, assign, fetch };
@@ -207,6 +217,104 @@ describe("the storefront script", () => {
       await settle();
       expect(fetch).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("the card on the store (Phase 2)", () => {
+  const CURRENT: StoreMemberResponse = {
+    connected: true,
+    member: {
+      name: "Jane Doe",
+      cardNumber: "BC-1",
+      goodThrough: "2027-02-14",
+      memberSince: "2021-07-15",
+      current: true,
+      cardImageUrl: "https://card.example.com/store/card.png?m=BC-1&x=1&s=a",
+      appleWalletUrl: "https://card.example.com/store/apple.pkpass?m=BC-1&x=1&s=b",
+      googleWalletUrl: "https://card.example.com/store/google?m=BC-1&x=1&s=c",
+    },
+  };
+  const LAPSED: StoreMemberResponse = { connected: true, member: { name: "Jane Doe", cardNumber: "BC-1", goodThrough: "2026-02-14", memberSince: null, current: false } };
+  const panelIn = (doc: FakeDocument) => doc.querySelector(".lv-card-panel");
+
+  it("draws the card, its wallet buttons and a way to change it, under the account navigation", async () => {
+    const doc = storePage({ accountNav: true });
+    const { win, fetch } = storeWindow({ pathname: "/account.php", token: "a.b.c", member: CURRENT });
+    run(doc, win);
+    await settle();
+
+    expect(fetch).toHaveBeenCalledWith(CONFIG.memberUrl, { headers: { Authorization: "Bearer a.b.c" }, credentials: "omit" });
+    const panel = panelIn(doc)!;
+    const children = doc.body.children;
+    expect(children.indexOf(panel)).toBe(children.indexOf(doc.querySelector(".navBar--account")!) + 1);
+    const image = panel.children.find((child) => child.tagName === "img")!;
+    expect(image.getAttribute("src")).toBe(CURRENT.member!.cardImageUrl);
+    expect(image.getAttribute("alt")).toBe("Los Verdes membership card for Jane Doe");
+    expect(panel.textContent).toContain("Good through Feb 14, 2027");
+    const links = panel.querySelectorAll("button");
+    expect(links.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Add to Apple Wallet", CURRENT.member!.appleWalletUrl],
+      ["Save to Google Wallet", CURRENT.member!.googleWalletUrl],
+    ]);
+    expect(panel.textContent).toContain("Change the name or theme, or email yourself the card");
+  });
+
+  it("replaces the membership page's line with the card itself", async () => {
+    const doc = storePage({ heading: "Membership" });
+    run(doc, storeWindow({ pathname: "/membership/", member: CURRENT }).win);
+    await settle();
+
+    const container = doc.querySelector(".container")!;
+    expect(container.children.map((child) => child.tagName)).toEqual(["h1", "p", "section", "div"]);
+    expect(container.children[1].hasAttribute("hidden")).toBe(true);
+  });
+
+  it("offers to connect an unconnected store account on the account pages, and leaves the membership page's line to do it", async () => {
+    const account = storePage({ accountNav: true });
+    run(account, storeWindow({ pathname: "/account.php", member: { connected: false } }).win);
+    await settle();
+    expect(panelIn(account)!.textContent).toContain("Connect your store account to see your Los Verdes membership card here. Connect it");
+
+    const membership = storePage({ heading: "Membership" });
+    run(membership, storeWindow({ pathname: "/membership/", member: { connected: false } }).win);
+    await settle();
+    expect(panelIn(membership)).toBeNull();
+    expect(membership.querySelector(".container")!.children[1].hasAttribute("hidden")).toBe(false);
+  });
+
+  it("says when a connected account has no membership yet", async () => {
+    const doc = storePage({ accountNav: true });
+    run(doc, storeWindow({ pathname: "/account.php", member: { connected: true, member: null } }).win);
+    await settle();
+    expect(panelIn(doc)!.textContent).toContain("there's no Los Verdes membership on it yet");
+  });
+
+  it("says when the membership ran out, offering to renew from the account pages", async () => {
+    const account = storePage({ accountNav: true });
+    run(account, storeWindow({ pathname: "/account.php", member: LAPSED }).win);
+    await settle();
+    expect(panelIn(account)!.textContent).toContain("Your membership ran out on Feb 14, 2026. Renew it");
+    expect(panelIn(account)!.querySelectorAll("img")).toEqual([]);
+
+    const membership = storePage({ heading: "Membership" });
+    run(membership, storeWindow({ pathname: "/membership/", member: LAPSED }).win);
+    await settle();
+    expect(panelIn(membership)!.textContent).not.toContain("Renew it");
+  });
+
+  it("shows nothing for a guest, a failed request, or while Connect is carrying on", async () => {
+    for (const options of [{ token: null }, { member: null }, { memberFails: true }]) {
+      const doc = storePage({ accountNav: true });
+      run(doc, storeWindow({ pathname: "/account.php", member: CURRENT, ...options }).win);
+      await settle();
+      expect(panelIn(doc)).toBeNull();
+    }
+
+    const doc = storePage({ accountNav: true });
+    const connecting = storeWindow({ pathname: "/account.php", hash: "#lv-connect", member: CURRENT });
+    run(doc, connecting.win);
+    await settle();
+    expect(connecting.fetch).not.toHaveBeenCalledWith(CONFIG.memberUrl, expect.anything());
   });
 });
 

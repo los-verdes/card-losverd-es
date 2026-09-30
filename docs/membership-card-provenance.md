@@ -611,7 +611,9 @@ never matches it against anything. An order's store
 account is never used for it, because a gift is usually bought from the
 buyer's account: the buyer following "Membership card" reaches their own
 membership, or none, never the recipient's. Which membership a signed-in
-person then sees is decided exactly as it is for any other sign-in.
+person then sees is decided exactly as it is for any other sign-in. The card
+the store shows on a member's account page is found the same way: through the
+connected store account only, never an order or an address.
 
 What attribution does _not_ change is the name on the order. The billing name
 stays the purchaser's, and since the card's holder name comes from the latest
