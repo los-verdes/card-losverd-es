@@ -160,6 +160,14 @@ export interface AuditEntry {
   actor_email: string | null;
   detail: string;
   created_at: number;
+  /**
+   * The actor's name as the log is read: the name on their card when they
+   * hold a membership (the one they chose, else their orders'), else the name
+   * on their account. Null when neither has one, or nobody acted.
+   */
+  actor_name: string | null;
+  /** Whether the actor holds a membership now, so there is a member page to link to. */
+  actor_is_member: boolean;
 }
 
 /**
@@ -197,22 +205,36 @@ async function selectAuditLog(
   const where: string[] = [];
   const binds: (string | number)[] = [];
   if (email !== null) {
-    where.push("subject_email = ?");
+    where.push("a.subject_email = ?");
     binds.push(email);
   }
   if (before !== null) {
-    where.push("id < ?");
+    where.push("a.id < ?");
     binds.push(before);
   }
   if (limit !== null) binds.push(limit);
+  // The actor's name comes with each row, from outer joins on their address
+  // (unique in all three tables, so no row is repeated), rather than from a
+  // second lookup.
   const { results } = await env.DB.prepare(
-    `SELECT id, action, subject_email, actor_email, detail, created_at
-       FROM audit_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY id DESC${limit !== null ? " LIMIT ?" : ""}`,
+    `SELECT a.id, a.action, a.subject_email, a.actor_email, a.detail, a.created_at,
+            COALESCE(
+              d.display_name,
+              NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), ''),
+              NULLIF(TRIM(u.full_name), ''),
+              NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '')
+            ) AS actor_name,
+            m.email IS NOT NULL AS actor_is_member
+       FROM audit_log a
+       LEFT JOIN members m ON m.email = a.actor_email
+       LEFT JOIN member_display_names d ON d.email = m.email
+       LEFT JOIN users u ON u.email = a.actor_email
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY a.id DESC${limit !== null ? " LIMIT ?" : ""}`,
   )
     .bind(...binds)
-    .all<AuditEntry>();
-  return results;
+    .all<Omit<AuditEntry, "actor_is_member"> & { actor_is_member: number }>();
+  return results.map((row) => ({ ...row, actor_is_member: row.actor_is_member === 1 }));
 }
 
 /**

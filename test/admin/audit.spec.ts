@@ -254,21 +254,19 @@ describe("reading it back", () => {
     expect(body).toMatch(/>By Chuy<\/td><td[^>]*><a href="\/admin\/members\?q=jane%40example\.com" title="jane@example\.com">Chuy<\/a><\/td>/);
   });
 
-  it("looks names up in batches D1 will accept, however many people acted", async () => {
-    // D1 takes at most 100 bound parameters a statement.
-    const actors = Array.from({ length: 150 }, (_, i) => `actor${i}@example.com`);
-    for (const [i, actor] of actors.entries()) {
-      await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: actor, detail: `Change ${i}` });
-    }
-    await env.DB.prepare(
-      `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, member_since, auth_token, last_updated_at)
-       VALUES ('LV-2', 'Late', 'Actor', 'actor149@example.com', '2099-03-04', '2021-07-15', 'token', 1)`,
-    ).run();
+  it("names people from the same read as the entries, one row per entry however they are known", async () => {
+    // A member who also has an account and a chosen name: three tables with
+    // a row for the address, which must still be one entry.
+    await env.DB.prepare("INSERT INTO users (id, email, full_name) VALUES (3, ?, 'Jane Account')").bind(EMAIL).run();
+    await setDisplayName(env, EMAIL, "Chuy", "member", null, 3);
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: EMAIL, detail: "Once" });
+    await recordAuditEvent(env, { action: "display_name.set", subjectEmail: EMAIL, actorEmail: "nobody@example.com", detail: "Twice" });
 
-    const body = await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+    const entries = await readAuditLog(env, { email: EMAIL });
 
-    expect(body).toContain('<a href="/admin/members?q=actor149%40example.com" title="actor149@example.com">Late Actor</a>');
-    expect(body).toMatch(/>Change 0<\/td><td[^>]*>actor0@example\.com<\/td>/);
+    expect(entries.filter((entry) => entry.detail === "Once")).toHaveLength(1);
+    expect(entries.find((entry) => entry.detail === "Once")).toMatchObject({ actor_name: "Chuy", actor_is_member: true });
+    expect(entries.find((entry) => entry.detail === "Twice")).toMatchObject({ actor_name: null, actor_is_member: false });
   });
 
   it("says so plainly when there is nothing to show", async () => {
