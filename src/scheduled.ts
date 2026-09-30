@@ -7,8 +7,8 @@ import { enqueueEtlSync, type EtlSyncMessage } from "./queues/etlSync";
  * environments; a test holds the three together, so a job cannot be mapped
  * here and never scheduled, or scheduled and never mapped.
  *
- * `sync_customers_etl` and `sync_minibc_subscriptions_etl` are stubs
- * (src/bigcommerce/sync.ts) and are not scheduled.
+ * `sync_customers_etl` is a stub (src/bigcommerce/sync.ts) and is not
+ * scheduled.
  *
  * Days of the week are written by name. Cloudflare numbers them 1 (Sunday)
  * to 7 (Saturday), not cron's usual 0 to 6, so a number misleads anyone
@@ -33,6 +33,10 @@ export const CRON_TO_MESSAGE: Record<string, EtlSyncMessage> = {
   // Hourly, on the tens so it does not share a minute with the others: looks
   // for operational trouble and says so once (#56, src/ops/watch.ts).
   "10 * * * *": { type: "run_ops_watch" },
+  // Twice a day, at twenty to one: MiniBC's membership subscriptions, for
+  // renewal dates (#397). Off the hours the other jobs share, so it never
+  // queues behind them; an environment without a key only logs that.
+  "40 */12 * * *": { type: "sync_minibc_subscriptions_etl" },
 };
 
 /**

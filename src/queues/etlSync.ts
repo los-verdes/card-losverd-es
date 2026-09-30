@@ -5,7 +5,6 @@ import {
   recheckUnlistedOrders,
   syncBigCommerceOrder,
   syncCustomersEtl,
-  syncMinibcSubscriptionsEtl,
   syncSubscriptionsEtl,
   type SubscriptionsEtlCursor,
   type UnlistedRecheckCursor,
@@ -15,6 +14,7 @@ import { refreshLapsedPasses, runPassExpirySweep } from "../member/passExpirySwe
 import { runOpsWatch } from "../ops/watch";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 import { syncSlackChannelMembers } from "../slack/channelMembers";
+import { syncMinibcSubscriptions, type MinibcCursor } from "../minibc/subscriptions";
 
 /**
  * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
@@ -36,7 +36,8 @@ export type EtlSyncMessage =
    */
   | { type: "recheck_unlisted_orders"; cursor: UnlistedRecheckCursor }
   | { type: "sync_customers_etl" }
-  | { type: "sync_minibc_subscriptions_etl" }
+  /** MiniBC's membership subscriptions (#397); `cursor` is set on a read's follow-up messages. */
+  | { type: "sync_minibc_subscriptions_etl"; cursor?: MinibcCursor }
   | { type: "run_slack_members_etl" }
   | { type: "run_readiness_check" }
   | { type: "run_pass_expiry_sweep" }
@@ -97,9 +98,12 @@ async function dispatchEtlSyncMessage(
     case "sync_customers_etl":
       await syncCustomersEtl(env);
       return;
-    case "sync_minibc_subscriptions_etl":
-      await syncMinibcSubscriptionsEtl(env);
+    case "sync_minibc_subscriptions_etl": {
+      const { next } = await syncMinibcSubscriptions(env, message.cursor);
+      // Only once the slice has succeeded, as with the resync chain.
+      if (next) await enqueueEtlSync(env, { type: "sync_minibc_subscriptions_etl", cursor: next });
       return;
+    }
     case "run_slack_members_etl":
       await runSlackMembersEtl(env);
       // After the user list, which is what matches a channel's members to

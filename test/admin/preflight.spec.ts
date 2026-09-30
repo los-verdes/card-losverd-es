@@ -114,6 +114,9 @@ interface RemoteState {
   ordersStatus: number;
   hooksStatus: number;
   hooks: unknown[];
+  /** MiniBC's subscription search: its status, and whether it lists anything. */
+  minibcStatus: number;
+  minibcListed: boolean;
 }
 
 /**
@@ -139,6 +142,10 @@ function mockRemotes() {
       return new Response(JSON.stringify({ name: "Los Verdes", domain: "shop.example" }), {
         status: remote.storeStatus,
       });
+    if (url.endsWith("/subscriptions/search")) {
+      if (remote.minibcStatus !== 200) return new Response("no", { status: remote.minibcStatus });
+      return Response.json(remote.minibcListed ? [{ id: 1, status: "active" }] : []);
+    }
     if (url.endsWith("/v3/hooks"))
       return new Response(JSON.stringify({ data: remote.hooks }), { status: remote.hooksStatus });
     throw new Error(`unexpected fetch: ${url}`);
@@ -179,6 +186,8 @@ async function configureHealthyEnvironment() {
   env.BIGCOMMERCE_ACCESS_TOKEN = "bc-access-token";
   env.BIGCOMMERCE_WEBHOOK_SIGNING_KEY = "bc-signing-key";
   remote = {
+    minibcStatus: 200,
+    minibcListed: true,
     classStatus: 200,
     storeStatus: 200,
     ordersStatus: 200,
@@ -622,6 +631,24 @@ describe("configuration", () => {
     const results = await check();
     expect(find(results, "Slack alerts").status).toBe("warn");
     expect(find(results, "Slack member ETL").status).toBe("warn");
+  });
+
+  it("reports MiniBC only as far as its key goes: not configured, accepted, or refused", async () => {
+    env.MINIBC_API_KEY = undefined;
+    expect(find(await check(), "MiniBC")).toMatchObject({ status: "skip", detail: expect.stringContaining("MINIBC_API_KEY unset") });
+
+    env.MINIBC_API_KEY = "test-minibc-key";
+    try {
+      expect(find(await check(), "MiniBC")).toMatchObject({ status: "ok", detail: expect.stringContaining("lists membership subscriptions") });
+      remote.minibcListed = false;
+      expect(find(await check(), "MiniBC").detail).toContain("lists no membership subscriptions");
+      remote.minibcStatus = 401;
+      expect(find(await check(), "MiniBC")).toMatchObject({ status: "fail", detail: expect.stringContaining("refused MINIBC_API_KEY (401)") });
+      remote.minibcStatus = 500;
+      expect(find(await check(), "MiniBC")).toMatchObject({ status: "fail", detail: expect.stringContaining("Check itself failed") });
+    } finally {
+      env.MINIBC_API_KEY = undefined;
+    }
   });
 
   it("warns when the order resync has never completed here", async () => {

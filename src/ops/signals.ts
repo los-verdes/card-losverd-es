@@ -16,6 +16,7 @@
 
 import type { Env } from "../index";
 import { countOpsEvents } from "./events";
+import { MINIBC_JOB_NAME } from "../minibc/subscriptions";
 
 export interface Signal {
   /** Stable across runs: it keys the alert state. */
@@ -108,5 +109,10 @@ export async function evaluateSignals(env: Env, now: Date = new Date()): Promise
     },
     staleness("Order resync", await hoursSinceJob(env, "sync_subscriptions_etl", now), 12, "six-hourly"),
     staleness("Pass expiry sweep", await hoursSinceJob(env, "pass_expiry_sweep", now), 36, "daily"),
+    // Only where there is a key to read with: without one it never runs,
+    // which is how staging is meant to be rather than something to fix.
+    ...(env.MINIBC_API_KEY
+      ? [staleness("MiniBC subscriptions", await hoursSinceJob(env, MINIBC_JOB_NAME, now), 36, "twice a day")]
+      : []),
   ];
 }

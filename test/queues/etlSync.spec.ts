@@ -2,6 +2,7 @@ import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_UNLISTED_RECHECKS_PER_MESSAGE, ORDERS_PAGE_SIZE } from "../../src/bigcommerce/sync";
+import { MINIBC_PAGES_PER_MESSAGE } from "../../src/minibc/subscriptions";
 import {
   enqueueEtlSync,
   handleEtlSyncBatch,
@@ -467,20 +468,13 @@ describe("handleEtlSyncBatch", () => {
     });
   });
 
-  it("dispatches the sync_customers_etl / sync_minibc_subscriptions_etl stubs and acks", async () => {
+  it("dispatches the sync_customers_etl stub and acks", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const customersMessage = makeMessage({ type: "sync_customers_etl" });
-    const minibcMessage = makeMessage({
-      type: "sync_minibc_subscriptions_etl",
-    });
 
-    await handleEtlSyncBatch(
-      makeBatch([customersMessage, minibcMessage]),
-      env,
-    );
+    await handleEtlSyncBatch(makeBatch([customersMessage]), env);
 
     expect(customersMessage.ack).toHaveBeenCalledOnce();
-    expect(minibcMessage.ack).toHaveBeenCalledOnce();
   });
 
   it("routes run_slack_members_etl to the Slack members ETL (skipped, but acked, with no bot token)", async () => {
@@ -569,5 +563,55 @@ describe("handleEtlSyncBatch", () => {
       "etl-sync handler failed",
       expect.objectContaining({ type: "sync_bigcommerce_order", attempts: 2 }),
     );
+  });
+});
+
+describe("sync_minibc_subscriptions_etl", () => {
+  const realQueue = env.ETL_SYNC_QUEUE;
+  let sent: EtlSyncMessage[];
+
+  beforeEach(() => {
+    sent = [];
+    env.MINIBC_API_KEY = "test-minibc-key";
+    (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
+      send: async (message: EtlSyncMessage) => {
+        sent.push(message);
+      },
+    } as unknown as Queue<EtlSyncMessage>;
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    // More pages than one message reads, of one synthetic subscription each.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const { product_sku: sku, page } = JSON.parse(String(init?.body)) as { product_sku: string; page: number };
+      void input;
+      if (sku !== "LOSV-MEM-0001" || page > MINIBC_PAGES_PER_MESSAGE + 1) return new Response("", { status: 404 });
+      return Response.json([{ id: page, order_id: 1000 + page, status: "active", signup_date: "2025-02-14", next_payment_date: "2027-02-14" }]);
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    env.MINIBC_API_KEY = undefined;
+    env.ETL_SYNC_QUEUE = realQueue;
+    await env.DB.exec("DELETE FROM minibc_subscriptions");
+    await env.DB.exec("DELETE FROM etl_sync_state");
+  });
+
+  it("carries a read over to a follow-up message, and acks each", async () => {
+    const first = makeMessage({ type: "sync_minibc_subscriptions_etl" });
+    await handleEtlSyncBatch(makeBatch([first]), env);
+
+    expect(first.ack).toHaveBeenCalledOnce();
+    expect(sent).toEqual([
+      { type: "sync_minibc_subscriptions_etl", cursor: { walkStartedAt: expect.any(Number), skuIndex: 0, page: MINIBC_PAGES_PER_MESSAGE + 1 } },
+    ]);
+
+    const followUp = makeMessage(sent[0]);
+    sent = [];
+    await handleEtlSyncBatch(makeBatch([followUp]), env);
+
+    expect(followUp.ack).toHaveBeenCalledOnce();
+    expect(sent).toEqual([]);
+    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM minibc_subscriptions").first<{ n: number }>())!;
+    expect(n).toBe(MINIBC_PAGES_PER_MESSAGE + 1);
   });
 });

@@ -166,6 +166,11 @@ export interface Env {
   // Optional -- the ETL is skipped (with a warning) until it's set via
   // `wrangler secret put`; no wrangler.toml placeholder.
   SLACK_BOT_TOKEN?: string;
+  // Secret -- MiniBC's API key, for reading membership subscriptions
+  // (src/minibc/subscriptions.ts, #397). Optional: without it the read logs
+  // that it is not configured and stops. The key can also cancel
+  // subscriptions and charge cards; the code only ever searches.
+  MINIBC_API_KEY?: string;
   // Secret -- a Slack incoming webhook URL for operational alerts
   // (src/slack/alert.ts). Deliberately separate from SLACK_BOT_TOKEN, which
   // can read every workspace member's email; this grants only "post to one

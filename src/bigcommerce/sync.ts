@@ -1084,17 +1084,3 @@ export async function syncCustomersEtl(env: Env): Promise<void> {
     "syncCustomersEtl(): not yet implemented - see docs/bigcommerce-ingestion.md section 4",
   );
 }
-
-/**
- * Stub - see docs/bigcommerce-ingestion.md section 4 for the intended
- * design (call MiniBC's recurring-subscription API and reconcile
- * `expiration_date` for members on a MiniBC plan).
- * Deferred: no MiniBC sandbox API key is available in this environment to
- * validate request/response shapes against.
- */
-export async function syncMinibcSubscriptionsEtl(env: Env): Promise<void> {
-  void env;
-  console.info(
-    "syncMinibcSubscriptionsEtl(): not yet implemented - see docs/bigcommerce-ingestion.md section 4",
-  );
-}

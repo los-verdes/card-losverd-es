@@ -174,10 +174,11 @@ Here is how the strategy around keeping orders in sync with the LV store:
 * **What MiniBC knows about renewals.** MiniBC runs the store's automatic
   renewals. Each renewal it charges creates a BigCommerce order, per MiniBC's
   own guide, so a renewal counts like any other order once it is paid, and
-  each order records which MiniBC subscription it belongs to. What is not
-  read yet is the subscription itself: whether a membership renews
-  automatically, when it next renews, and whether it was paused, cancelled,
-  or is failing to charge ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)).
+  each order records which MiniBC subscription it belongs to. The
+  subscriptions themselves are read twice a day -- whether a membership renews
+  automatically, when it next renews, and whether it was paused or cancelled
+  -- but only kept, not yet shown anywhere, and they never change a card
+  ([#397](https://github.com/los-verdes/card-losverd-es/issues/397)).
 
 Otherwise, a change made in BigCommerce is expected to show up here almost
 immediately: the order webhook delivers it within seconds, and the scheduled
