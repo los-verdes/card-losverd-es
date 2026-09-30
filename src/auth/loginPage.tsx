@@ -39,6 +39,11 @@ export interface LoginPageProps {
    * connected yet (#38): signing in here once connects it.
    */
   connectingStore?: boolean;
+  /**
+   * The email on that store account, when the store gave one. Shown only as a
+   * hint of which account to sign in with; the connection never matches it.
+   */
+  storeEmail?: string | null;
 }
 
 export const LoginPage: FC<LoginPageProps> = ({
@@ -47,6 +52,7 @@ export const LoginPage: FC<LoginPageProps> = ({
   failed,
   blocked,
   connectingStore,
+  storeEmail,
 }) => (
   <Page title="Your Membership Card">
     <h1>Los Verdes Membership Card</h1>
@@ -79,6 +85,12 @@ export const LoginPage: FC<LoginPageProps> = ({
       <p style="color: var(--success)">
         Sign in once to connect your store account. After that, "Membership card" on the store brings you
         straight to your card.
+      </p>
+    )}
+    {connectingStore && !blocked && storeEmail && (
+      <p>
+        Your store account uses <strong>{storeEmail}</strong>. Sign in with the Google or Apple account your
+        membership is under, which is usually the same address.
       </p>
     )}
 

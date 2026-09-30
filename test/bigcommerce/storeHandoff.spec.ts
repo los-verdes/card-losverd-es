@@ -104,7 +104,7 @@ afterEach(async () => {
 
 describe("the storefront's current.jwt", () => {
   it("names the signed-in customer", async () => {
-    expect(await verifyCurrentCustomer(await currentJwt(), app())).toMatchObject({ customerId: CUSTOMER });
+    expect(await verifyCurrentCustomer(await currentJwt(), app())).toMatchObject({ customerId: CUSTOMER, email: "shopper@example.com" });
   });
 
   it("is accepted signed with HS256 as well as the store's HS512", async () => {
@@ -203,7 +203,7 @@ describe("POST /store-handoff", () => {
 
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe("/store-handoff/continue");
-    expect(setCookie(res, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]+$`));
+    expect(setCookie(res, "lv_store_link")).toMatch(new RegExp(`^lv_store_link=${CUSTOMER}\\.\\d+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+$`));
     const attributes = res.headers.getSetCookie().find((c) => c.startsWith("lv_store_link="))!;
     for (const attribute of [/HttpOnly/i, /Secure/i, /SameSite=Lax/i, /Max-Age=600/i, /Path=\//i]) {
       expect(attributes).toMatch(attribute);
@@ -218,24 +218,27 @@ describe("POST /store-handoff", () => {
     expect(setCookie(res, "lv_store_link")).toBeNull();
   });
 
-  it("says to go back to the store for a token that is bad or already used", async () => {
+  it("says to go back to the store for a token that is bad", async () => {
+    const outcomes = spyOnOutcomes();
+    const forged = await fetchWorker("/store-handoff", handoffForm(await currentJwt({}, "wrong-secret-0123456789")));
+
+    expect(forged.status).toBe(400);
+    expect(await forged.text()).toContain("Back to the store");
+    expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "signature" });
+  });
+
+  it("sends a spent token home, granting nothing, since the store hands the same one out for its lifetime", async () => {
     const outcomes = spyOnOutcomes();
     const token = await currentJwt();
     await fetchWorker("/store-handoff", handoffForm(token));
 
     const replayed = await fetchWorker("/store-handoff", handoffForm(token));
-    const forged = await fetchWorker("/store-handoff", handoffForm(await currentJwt({}, "wrong-secret-0123456789")));
 
-    for (const res of [replayed, forged]) {
-      expect(res.status).toBe(400);
-      expect(await res.text()).toContain("Back to the store");
-    }
-    expect(outcomesFrom(outcomes)).toEqual(
-      expect.arrayContaining([
-        { outcome: "store.handoff", result: "refused", reason: "replayed" },
-        { outcome: "store.handoff", result: "refused", reason: "signature" },
-      ]),
-    );
+    expect(replayed.status).toBe(303);
+    expect(replayed.headers.get("Location")).toBe("/");
+    expect(setCookie(replayed, "lv_store_link")).toBeNull();
+    expect(setCookie(replayed, SESSION_COOKIE_NAME)).toBeNull();
+    expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "replayed" });
   });
 
   it("is not there until the environment has an app", async () => {
@@ -284,6 +287,21 @@ describe("GET /store-handoff/continue", () => {
     expect(setCookie(res, "lv_store_link")).toBeNull();
     expect(await userForStoreCustomer(env, CUSTOMER)).toBeNull();
     expect(await (await fetchWorker("/login?connect=store")).text()).toContain("Sign in once to connect your store account");
+  });
+
+  it("names the store account's email on the sign-in page, as a hint only", async () => {
+    const cookie = await pending();
+
+    const page = await (await fetchWorker("/login?connect=store", { cookies: [cookie] })).text();
+    expect(page).toContain("Your store account uses <strong>shopper@example.com</strong>");
+
+    // Without one waiting, or without the store saying, there is no hint.
+    expect(await (await fetchWorker("/login?connect=store")).text()).not.toContain("Your store account uses");
+    const noEmail = setCookie(
+      await fetchWorker("/store-handoff", handoffForm(await currentJwt({ customer: { id: CUSTOMER } }))),
+      "lv_store_link",
+    )!;
+    expect(await (await fetchWorker("/login?connect=store", { cookies: [noEmail] })).text()).not.toContain("Your store account uses");
   });
 
   it("goes home when there is no genuine account waiting", async () => {

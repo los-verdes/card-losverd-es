@@ -8,7 +8,7 @@ import { isUserExpelled } from "../member/expulsion";
 import { recordOutcome } from "../lib/outcome";
 import { isAppleRelayAddress } from "../member/portal";
 import { LV_PROVIDER_CLAIM, LV_USER_ID_CLAIM, authConfig } from "./authjs";
-import { finishPendingStoreLink } from "../bigcommerce/storeHandoff";
+import { finishPendingStoreLink, pendingStoreEmail } from "../bigcommerce/storeHandoff";
 import { configuredProviders, renderLoginPage } from "./loginPage";
 import {
   clearSessionCookie,
@@ -37,16 +37,18 @@ const AUTHJS_SESSION_COOKIES = [
  * only by knowing the URL. The hand-off to Auth.js is unchanged -- the sign-in
  * link goes exactly where this redirect went.
  */
-auth.get(LOGIN_PATH, (c) => {
+auth.get(LOGIN_PATH, async (c) => {
   const signIn = new URL("/api/auth/signin", c.req.url);
   signIn.searchParams.set("callbackUrl", LOGIN_COMPLETE_PATH);
+  const connectingStore = c.req.query("connect") === "store";
   return c.html(
     renderLoginPage({
       signInHref: signIn.pathname + signIn.search,
       providers: configuredProviders(c.env),
       failed: c.req.query("error") !== undefined,
       blocked: c.req.query("error") === EXPELLED_REASON,
-      connectingStore: c.req.query("connect") === "store",
+      connectingStore,
+      storeEmail: connectingStore ? await pendingStoreEmail(c) : null,
     }),
   );
 });

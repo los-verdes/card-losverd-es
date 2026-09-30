@@ -591,7 +591,9 @@ historical export.
 that paid.** A member can connect their store account to their card, so that
 "Membership card" on the store brings them straight to it (#38). The
 connection is made only when the same browser is signed in to both at once:
-to the store, and to the card site with Google or Apple. An order's store
+to the store, and to the card site with Google or Apple. The sign-in page
+shows the store account's email as a hint of which account to use, but
+never matches it against anything. An order's store
 account is never used for it, because a gift is usually bought from the
 buyer's account: the buyer following "Membership card" reaches their own
 membership, or none, never the recipient's. Which membership a signed-in

@@ -6,14 +6,20 @@
  * top-level form POST to `/store-handoff`. That request is cross-site, so the
  * card site's own `lv_session` cookie (SameSite=Lax) does not come with it.
  * So the POST only verifies the token, spends it (each is accepted once), and
- * keeps the verified customer id in a short-lived signed cookie, then sends
- * the browser on to `GET /store-handoff/continue`. That is a top-level GET, on
+ * keeps the verified customer in a short-lived signed cookie, then sends the
+ * browser on to `GET /store-handoff/continue`. That is a top-level GET, on
  * which both cookies arrive, and it decides:
  *
  * - a store account already connected: sign in as its user;
  * - not connected, and signed in here: connect it to that user;
  * - not connected and not signed in: sign in once with Google or Apple, and
  *   the connection is made at `/login/complete` (`finishPendingStoreLink`).
+ *
+ * The store hands out the same token for its whole 15 minutes, however it is
+ * fetched (checked on staging, 2026-09-30), so a second "Membership card"
+ * within that time arrives with a spent token. It is sent to `/` rather than
+ * refused: that grants nothing, and shows the card to somebody still signed
+ * in here, or the sign-in page to anyone else.
  *
  * Orders are never consulted, and the store's email is never matched: see
  * src/bigcommerce/storeAccount.ts.
@@ -45,7 +51,12 @@ type HandoffContext = Context;
 /** The Worker's bindings, from a context whose type doesn't carry them. */
 const envOf = (c: HandoffContext): Env => c.env as Env;
 
-/** The verified store customer waiting to be connected, across the redirect and any sign-in. */
+/**
+ * The verified store customer waiting to be connected, across the redirect
+ * and any sign-in: `<customer id>.<expires ms>.<store email, base64url>.<hmac>`.
+ * The email is only shown back to them, as a hint of which account to sign
+ * in with; it never decides anything.
+ */
 const PENDING_COOKIE = "lv_store_link";
 /** Long enough to sign in with Google or Apple, short enough not to linger. */
 const PENDING_TTL_SECONDS = 10 * 60;
@@ -56,9 +67,20 @@ async function hmac(key: string, message: string): Promise<string> {
   return btoa(String.fromCharCode(...signature)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function setPendingLink(c: HandoffContext, customerId: number): Promise<void> {
+const toBase64Url = (text: string) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(text))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromBase64Url = (text: string) =>
+  new TextDecoder().decode(Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), (ch) => ch.charCodeAt(0)));
+
+interface PendingLink {
+  customerId: number;
+  /** The store account's email, when the store gave one; for display only. */
+  email: string | null;
+}
+
+async function setPendingLink(c: HandoffContext, customerId: number, email: string | null): Promise<void> {
   const expires = Date.now() + PENDING_TTL_SECONDS * 1000;
-  const body = `${customerId}.${expires}`;
+  const body = `${customerId}.${expires}.${toBase64Url(email ?? "")}`;
   const signature = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${body}`);
   setCookie(c, PENDING_COOKIE, `${body}.${signature}`, {
     httpOnly: true,
@@ -70,17 +92,23 @@ async function setPendingLink(c: HandoffContext, customerId: number): Promise<vo
 }
 
 /** The store customer waiting to be connected, if the cookie is genuine and in date. */
-async function readPendingLink(c: HandoffContext): Promise<number | null> {
+async function readPendingLink(c: HandoffContext): Promise<PendingLink | null> {
   const value = getCookie(c, PENDING_COOKIE);
-  const match = value ? /^(\d+)\.(\d+)\.([A-Za-z0-9_-]+)$/.exec(value) : null;
+  const match = value ? /^(\d+)\.(\d+)\.([A-Za-z0-9_-]*)\.([A-Za-z0-9_-]+)$/.exec(value) : null;
   if (!match) return null;
-  const [, customerId, expires, signature] = match;
+  const [, customerId, expires, email, signature] = match;
   if (Number(expires) < Date.now()) return null;
-  const expected = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${customerId}.${expires}`);
+  const expected = await hmac(envOf(c).SESSION_SIGNING_KEY, `store-link:${customerId}.${expires}.${email}`);
   // Both are fixed-length base64url strings of an HMAC; compare every character.
   let difference = expected.length ^ signature.length;
   for (let i = 0; i < expected.length; i++) difference |= expected.charCodeAt(i) ^ (signature.charCodeAt(i) || 0);
-  return difference === 0 ? Number(customerId) : null;
+  if (difference !== 0) return null;
+  return { customerId: Number(customerId), email: fromBase64Url(email) || null };
+}
+
+/** The email of the store account waiting on a sign-in, for the sign-in page to show. */
+export async function pendingStoreEmail(c: HandoffContext): Promise<string | null> {
+  return (await readPendingLink(c))?.email ?? null;
 }
 
 function clearPendingLink(c: HandoffContext): void {
@@ -95,8 +123,9 @@ export async function finishPendingStoreLink(
   c: HandoffContext,
   userId: number,
 ): Promise<"linked" | "taken" | "none"> {
-  const customerId = await readPendingLink(c);
-  if (customerId === null) return "none";
+  const pending = await readPendingLink(c);
+  if (pending === null) return "none";
+  const { customerId } = pending;
   clearPendingLink(c);
   try {
     await linkStoreAccount(envOf(c), userId, customerId, userId);
@@ -122,8 +151,8 @@ const TryAgain: FC<{ storeUrl: string | null }> = ({ storeUrl }) => (
   <Page title="Back to the store">
     <h1>That link has run out</h1>
     <p>
-      The link from the store only works once, and only for a few minutes. Go back to the store and choose
-      "Membership card" again.
+      The link from the store only works for a few minutes. Go back to the store and choose "Membership card"
+      again.
     </p>
     {storeUrl && (
       <a href={storeUrl} class="action">
@@ -151,9 +180,13 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
   const form = await c.req.parseBody();
   const token = typeof form.jwt === "string" ? form.jwt.trim() : "";
   try {
-    const { customerId, expiresAt } = await verifyCurrentCustomer(token, app);
-    if (!(await claimHandoffToken(c.env, token, expiresAt))) throw new AppJwtRejected("replayed");
-    await setPendingLink(c, customerId);
+    const { customerId, email, expiresAt } = await verifyCurrentCustomer(token, app);
+    if (!(await claimHandoffToken(c.env, token, expiresAt))) {
+      // Spent already, most likely by this same member a few minutes ago.
+      recordOutcome("store.handoff", { result: "refused", reason: "replayed" });
+      return c.redirect("/", 303);
+    }
+    await setPendingLink(c, customerId, email);
   } catch (err) {
     if (!(err instanceof AppJwtRejected)) throw err;
     recordOutcome("store.handoff", { result: "refused", reason: err.reason });
@@ -163,8 +196,9 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
 });
 
 handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
-  const customerId = await readPendingLink(c);
-  if (customerId === null) return c.redirect("/");
+  const pending = await readPendingLink(c);
+  if (pending === null) return c.redirect("/");
+  const { customerId } = pending;
 
   // Connected already: sign in as whoever it is connected to.
   const holder = await userForStoreCustomer(c.env, customerId);

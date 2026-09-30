@@ -59,18 +59,24 @@ export interface CurrentCustomer {
   customerId: number;
   /** When the token expires, epoch seconds: how long a replay record must be kept. */
   expiresAt: number;
+  /**
+   * The store account's email. Only ever shown back to that customer, as a
+   * hint of which account to sign in with: it never matches anyone.
+   */
+  email: string | null;
 }
 
-/** Verifies a storefront `current.jwt`. The email it carries is deliberately not returned: it is never used to match anyone. */
+/** Verifies a storefront `current.jwt`. */
 export async function verifyCurrentCustomer(token: string, app: AppConfig): Promise<CurrentCustomer> {
   const payload = await verify(token, app);
   if (payload.operation !== "current_customer") throw new AppJwtRejected("operation");
   if (payload.store_hash !== app.storeHash) throw new AppJwtRejected("store");
-  const customer = payload.customer as { id?: unknown } | undefined;
+  const customer = payload.customer as { id?: unknown; email?: unknown } | undefined;
   const customerId = Number(customer?.id);
   if (!Number.isInteger(customerId) || customerId <= 0) throw new AppJwtRejected("customer");
   if (typeof payload.exp !== "number") throw new AppJwtRejected("claim:exp");
-  return { customerId, expiresAt: payload.exp };
+  const email = typeof customer?.email === "string" && customer.email.trim() ? customer.email.trim() : null;
+  return { customerId, expiresAt: payload.exp, email };
 }
 
 /** Verifies a load or uninstall callback's `signed_payload_jwt`, returning the control-panel user's id. */
