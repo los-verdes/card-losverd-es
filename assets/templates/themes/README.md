@@ -62,7 +62,10 @@ id here rather than a year.
 - **Los Pringles (`los-pringles/`).** The centre of the back of the Los
   Pringles scarf, the all-seeing Pringle on black, with the flying Pringles
   either side. The scarf's end panels are left out: one carries lettering of
-  people's names, and both carry barcodes. Darkened 35% on the card.
+  people's names, and both carry barcodes. The emblem itself is laid over
+  the scarf's copy from a separate, sharper source file of it (about 1,230
+  pixels across), so it stays crisp where the scarf image is soft. Darkened
+  35% on the card.
 
 ## Adding a year
 
