@@ -53,6 +53,20 @@ side. So the art's subject belongs in the top half, clear of the sides.
   the skull, then "VERDES") on the mint of the scarf's other side. Faded 68%
   towards the mint on the card, so its dark text reads.
 
+## Subgroup themes
+
+A subgroup theme (`GROUP_THEMES`) is for the members of one subgroup
+(`CARD_GROUPS` in `src/themes/groups.ts`), and keeps its files under its own
+id here rather than a year.
+
+- **Los Pringles (`los-pringles/`).** The centre of the back of the Los
+  Pringles scarf, the all-seeing Pringle on black, with the flying Pringles
+  either side. The scarf's end panels are left out: one carries lettering of
+  people's names, and both carry barcodes. The emblem itself is laid over
+  the scarf's copy from a separate, sharper source file of it (about 1,230
+  pixels across), so it stays crisp where the scarf image is soft. Darkened
+  35% on the card.
+
 ## Adding a year
 
 A pull request with that year's files here and an entry in `YEAR_THEMES`:

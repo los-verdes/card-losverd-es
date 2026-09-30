@@ -2,7 +2,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
-import { CLASSIC_THEME, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
+import { CLASSIC_THEME, GROUP_THEMES, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 import GOOGLE_LOGO from "../assets/templates/google/logo.png";
@@ -72,12 +72,14 @@ describe("GET /assets/:name", () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining(CREST_KEY));
   });
 
-  it("lists the Google logo, the crest older passes name, and each year theme's hero image", () => {
+  it("lists the Google logo, the crest older passes name, and each theme's hero image", () => {
     expect(PUBLIC_ASSETS).toEqual({
       "crest.png": CREST_KEY,
       "google-logo.png": "templates/google/logo.png",
       "google-logo-2.png": "templates/google/logo.png",
-      ...Object.fromEntries(YEAR_THEMES.map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero])),
+      ...Object.fromEntries(
+        [...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero]),
+      ),
     });
   });
 

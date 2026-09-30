@@ -6,6 +6,7 @@ import {
   CARD_THEMES,
   CLASSIC_THEME,
   YEAR_THEMES,
+  GROUP_THEMES,
   appleRgb,
   googleHeroFileName,
   googleHeroPath,
@@ -14,6 +15,7 @@ import {
 } from "../../src/themes/cardTheme";
 import { CARD_HEIGHT, CARD_WIDTH } from "../../src/cardimage/template";
 import { contrast } from "../fixtures/contrast";
+import { CARD_GROUPS } from "../../src/themes/groups";
 
 // Every image committed for upload to R2 (`just r2-upload-templates`), keyed
 // by its R2 key. Only the paths are needed, so nothing is loaded.
@@ -146,13 +148,13 @@ describe("artwork", () => {
 
 describe("the year themes", () => {
   it("are one per year, each id its year, in year order after classic", () => {
-    expect(CARD_THEMES.slice(1)).toEqual(YEAR_THEMES);
+    expect(CARD_THEMES.slice(1, 1 + YEAR_THEMES.length)).toEqual(YEAR_THEMES);
     expect(YEAR_THEMES.map((theme) => theme.id)).toEqual(YEAR_THEMES.map((theme) => String(theme.year)));
     const years = YEAR_THEMES.map((theme) => theme.year!);
     expect(years).toEqual([...years].sort());
   });
 
-  it.each(YEAR_THEMES.map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
+  it.each([...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
     const { cardBackground, appleThumbnailPrefix, googleHero } = theme.artwork;
     expect(theme.artwork.applePosterPrefix).toBeDefined();
 
@@ -175,11 +177,21 @@ describe("the year themes", () => {
   // under dark text. The card's title and name are large text (3:1); the rest
   // is small (4.5:1). Classic predates the check, and its white on verde falls
   // short of 3:1, so it is left as every card has always been.
-  it.each(YEAR_THEMES.map((theme) => [theme.id, theme.colors] as const))("%s keeps its text legible", (_, colors) => {
+  it.each([...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [theme.id, theme.colors] as const))("%s keeps its text legible", (_, colors) => {
     expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.secondaryText, colors.background)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.passText, colors.background)).toBeGreaterThanOrEqual(4.5);
     // The card number sits on the QR code's white box.
     expect(contrast(colors.qrLabel, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("the group themes", () => {
+  it("follow the year themes, each for a subgroup that exists, and none also a year's", () => {
+    expect(CARD_THEMES.slice(1 + YEAR_THEMES.length)).toEqual(GROUP_THEMES);
+    for (const theme of GROUP_THEMES) {
+      expect(CARD_GROUPS.map((group) => group.id)).toContain(theme.group);
+      expect(theme.year).toBeUndefined();
+    }
   });
 });

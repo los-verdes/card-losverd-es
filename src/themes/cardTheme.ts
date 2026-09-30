@@ -104,6 +104,11 @@ export interface CardTheme {
    */
   year?: number;
   /**
+   * The subgroup whose members may use a group theme (`CARD_GROUPS` in
+   * src/themes/groups.ts); absent for any other theme.
+   */
+  group?: string;
+  /**
    * Bump when this theme's colours or images change. Cached Apple passes are
    * tagged with it, so a changed theme is not served from an old cache (the
    * same discipline as `PASS_CONTENT_VERSION`, for one theme rather than all).
@@ -199,8 +204,38 @@ export const YEAR_THEMES: readonly CardTheme[] = [
   }),
 ];
 
+/**
+ * The subgroup themes, each for the members of one subgroup (`CARD_GROUPS` in
+ * src/themes/groups.ts), with artwork under `templates/themes/<id>/`.
+ */
+export const GROUP_THEMES: readonly CardTheme[] = [
+  // The all-seeing Pringle from the back of the Los Pringles scarf, on black.
+  // The scarf's end panels are left out: one carries people's names.
+  {
+    id: "los-pringles",
+    label: "Los Pringles",
+    group: "los-pringles",
+    version: 1,
+    colors: {
+      background: "#000000",
+      border: "#1ac64a",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
+    assets: CLASSIC_THEME.assets,
+    artwork: {
+      cardBackground: "templates/themes/los-pringles/card-background.png",
+      appleThumbnailPrefix: "templates/themes/los-pringles/apple/",
+      applePosterPrefix: "templates/themes/los-pringles/apple-poster/",
+      googleHero: "templates/themes/los-pringles/google-hero.png",
+    },
+  },
+];
+
 /** Every theme there is. Classic stays first: it is the fallback. */
-export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES];
+export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES, ...GROUP_THEMES];
 
 /**
  * The public file name of a theme's Google hero image, served by

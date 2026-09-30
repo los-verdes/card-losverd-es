@@ -157,9 +157,11 @@ export function effectiveTheme(options: ThemeOptions, choice: string | null | un
 /**
  * Tells installed passes the card changed. The choice lives outside
  * `members`, so nothing else moves `last_updated_at`, which is what Apple's
- * polling compares against.
+ * polling compares against. Also used when a card's theme changes without a
+ * choice changing: somebody leaving the subgroup whose theme they had chosen
+ * (src/slack/channelMembers.ts).
  */
-async function touchAndNotify(env: Env, email: string): Promise<void> {
+export async function touchAndNotify(env: Env, email: string): Promise<void> {
   await env.DB.prepare("UPDATE members SET last_updated_at = unixepoch('subsec') * 1000 WHERE email = ?")
     .bind(email)
     .run();

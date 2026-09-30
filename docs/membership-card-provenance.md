@@ -281,6 +281,12 @@ Which themes a member may use (`src/themes/eligibility.ts`):
   order was placed, as with the year's membership pack and scarf, not the
   following year the membership runs on into;
 * the theme of their "member since" year;
+* the theme of any subgroup they belong to -- a subgroup is a public Slack
+  channel, and they belong while the Slack account with their address is in it
+  (`src/themes/groups.ts`). Los Pringles, `#los-pringles`, is the first. The
+  Slack sync reads each channel's members and removes whoever has left; a
+  member who leaves goes back to their default theme, and their passes are
+  told. A subgroup theme is never anyone's default;
 * classic, always.
 
 **Until they choose, a card is drawn in their default:** classic, or -- once
