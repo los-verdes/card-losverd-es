@@ -1193,6 +1193,25 @@ describe("more than one membership on an order", () => {
     expect(await unitsFor(order.id)).toBe(2);
   });
 
+  it("counts the membership without merchandise the same as the pack", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts([{ sku: "LOSV-DIGI-5000", name: "Los Verdes Annual Membership (No Swag)" }]));
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(1);
+    expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
+  });
+
+  it("counts one of each membership product as two", async () => {
+    const order = makeOrder();
+    mockBigCommerceOrderFetch(order, makeProducts([{ sku: "LOSV-MEM-0001" }, { sku: "LOSV-DIGI-5000" }]));
+
+    await syncBigCommerceOrder(env, "store123", order.id);
+
+    expect(await unitsFor(order.id)).toBe(2);
+  });
+
   it("does not count merchandise bought alongside a membership", async () => {
     const order = makeOrder();
     mockBigCommerceOrderFetch(

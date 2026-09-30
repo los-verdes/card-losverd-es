@@ -12,10 +12,17 @@ const BC_API_BASE = "https://api.bigcommerce.com/stores";
 //
 // An allow-list rather than a single hardcoded SKU, so a renamed or
 // additional membership product is one line here. This is the same job the
-// previous site's `BIGCOMMERCE_MEMBERSHIP_SKUS` did; Los Verdes sells one
-// membership and draws no distinction between kinds of member, so there is
-// nothing for a SKU to map *to*.
-export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set(["LOSV-MEM-0001"]);
+// previous site's `BIGCOMMERCE_MEMBERSHIP_SKUS` did. Los Verdes sells one
+// membership, as two products -- the membership pack, which ships
+// merchandise, and the same membership without it -- and draws no
+// distinction between kinds of member, so there is nothing for a SKU to map
+// *to*.
+export const MEMBERSHIP_SKUS: ReadonlySet<string> = new Set([
+  // The membership pack.
+  "LOSV-MEM-0001",
+  // The membership without merchandise ("Los Verdes Annual Membership (No Swag)").
+  "LOSV-DIGI-5000",
+]);
 
 export interface BigCommerceAddress {
   first_name: string;
