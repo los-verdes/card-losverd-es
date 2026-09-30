@@ -93,7 +93,7 @@ async function seedCurrentMember() {
 }
 
 async function seedTemplateAssets() {
-  for (const name of ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"]) {
+  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
     await env.ASSETS.put(`templates/apple/${name}`, new Uint8Array(LOGO));
   }
   // The card image's crest is moving to its own R2 key (PR #44); seed both

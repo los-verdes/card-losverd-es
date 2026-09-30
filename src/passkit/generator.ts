@@ -177,7 +177,7 @@ export async function buildManifest(
  * pass, the last detail of a Google one -- so that a member can be asked what
  * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
-export const PASS_CONTENT_VERSION = "2026-09-29.1";
+export const PASS_CONTENT_VERSION = "2026-09-29.2";
 
 /**
  * The moment a membership ends, for the wallets' own expiry fields (#295):

@@ -50,6 +50,7 @@ describe("posterAssets", () => {
     expect(decode((await posterAssets("on", POSTER_THEME, read))!)).toEqual({
       "primaryLogo.png": "templates/themes/2026/apple-poster/primaryLogo.png",
       "primaryLogo@2x.png": "templates/themes/2026/apple-poster/primaryLogo@2x.png",
+      "primaryLogo@3x.png": "templates/themes/2026/apple-poster/primaryLogo@3x.png",
       "artwork.png": "templates/themes/2026/apple-poster/poster.png",
       "artwork@2x.png": "templates/themes/2026/apple-poster/poster@2x.png",
       "artwork@3x.png": "templates/themes/2026/apple-poster/poster@3x.png",

@@ -253,8 +253,10 @@ async function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
 const PASS_TEMPLATE_ASSETS = [
   "icon.png",
   "icon@2x.png",
+  "icon@3x.png",
   "logo.png",
   "logo@2x.png",
+  "logo@3x.png",
 ];
 
 /**

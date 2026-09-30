@@ -328,7 +328,7 @@ describe("emailing the new member their card", () => {
     env.APPLE_WWDR_CERT_PEM = chain.rootCertPem;
     env.PUBLIC_BASE_URL = ORIGIN;
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key".repeat(5);
-    for (const key of ["templates/apple/icon.png", "templates/apple/icon@2x.png", "templates/apple/logo.png", "templates/apple/logo@2x.png", "templates/card/crest.png"]) {
+    for (const key of ["templates/apple/icon.png", "templates/apple/icon@2x.png", "templates/apple/icon@3x.png", "templates/apple/logo.png", "templates/apple/logo@2x.png", "templates/apple/logo@3x.png", "templates/card/crest.png"]) {
       await env.ASSETS.put(key, new Uint8Array(LOGO));
     }
   });
