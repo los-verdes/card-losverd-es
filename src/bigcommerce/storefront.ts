@@ -17,8 +17,13 @@
  * Anyone the store doesn't know -- signed out, or who checked out as a guest
  * and has no store account -- goes to the card site's own sign-in instead.
  *
- * `/account.php?lv_connect=1`, where the card page's "Connect" button points,
- * starts the handoff on its own.
+ * The card page's "Connect" button points at `/account.php#lv-connect`. The
+ * store drops query strings on the way to its account page (and to its
+ * sign-in page, for somebody signed out), but a browser keeps the fragment
+ * across those redirects. Seeing it, the script remembers the request in the
+ * store's session storage for ten minutes, and starts the handoff on whichever
+ * page first finds the customer signed in: at once if they already were, or
+ * after they sign in to the store.
  *
  * Wherever the markup it expects is missing, it adds nothing: a theme change
  * can hide the links, but not break a page.
@@ -42,8 +47,10 @@ export interface StorefrontConfig {
 
 /** The minimum of `window` the script touches, so tests can hand it a stand-in. */
 export interface StorefrontWindow {
-  location: { pathname: string; search: string; assign(url: string): void };
+  location: { pathname: string; search: string; hash: string; assign(url: string): void };
   fetch(url: string, init?: RequestInit): Promise<{ ok: boolean; text(): Promise<string> }>;
+  /** Absent or throwing in some browsers' private modes; the script copes. */
+  sessionStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 }
 
 /**
@@ -58,19 +65,20 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
 
   const label = "Membership card";
   const tokenUrl = "/customer/current.jwt?app_client_id=" + encodeURIComponent(config.clientId);
+  const connectKey = "lv-card-connect";
+  const connectForMs = 10 * 60 * 1000;
 
-  async function openCard(): Promise<void> {
-    let token = "";
+  /** The store's token for whoever is signed in to it, or "" for nobody. */
+  async function storeToken(): Promise<string> {
     try {
       const res = await win.fetch(tokenUrl, { credentials: "same-origin" });
-      if (res.ok) token = (await res.text()).trim();
+      return res.ok ? (await res.text()).trim() : "";
     } catch {
-      token = "";
+      return "";
     }
-    if (!token) {
-      win.location.assign(config.cardUrl);
-      return;
-    }
+  }
+
+  function submit(token: string): void {
     const form = doc.createElement("form");
     form.method = "POST";
     form.action = config.handoffUrl;
@@ -81,6 +89,43 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     form.appendChild(input);
     doc.body.appendChild(form);
     form.submit();
+  }
+
+  async function openCard(): Promise<void> {
+    const token = await storeToken();
+    if (token) submit(token);
+    else win.location.assign(config.cardUrl);
+  }
+
+  // The card page's "Connect", remembered across the store's own pages.
+  function rememberConnect(): void {
+    try {
+      if (win.sessionStorage) win.sessionStorage.setItem(connectKey, String(Date.now()));
+    } catch {
+      // Nowhere to remember it: this page is the only chance.
+    }
+  }
+  function connectRemembered(): boolean {
+    try {
+      const at = Number(win.sessionStorage ? win.sessionStorage.getItem(connectKey) : 0);
+      return at > 0 && Date.now() - at < connectForMs;
+    } catch {
+      return false;
+    }
+  }
+  function forgetConnect(): void {
+    try {
+      if (win.sessionStorage) win.sessionStorage.removeItem(connectKey);
+    } catch {
+      // Nothing was remembered.
+    }
+  }
+  /** Hands off once the store knows who this is; until then, waits for them to sign in to it. */
+  async function connect(): Promise<void> {
+    const token = await storeToken();
+    if (!token) return;
+    forgetConnect();
+    submit(token);
   }
 
   function cardLink(className: string, text: string): HTMLAnchorElement {
@@ -127,9 +172,11 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     }
   }
 
-  // Sent here by the card page's "Connect" button: carry straight on. Only on
-  // the account pages, which the store shows only to somebody signed in.
-  if (accountNav && /[?&]lv_connect=1(&|$)/.test(win.location.search)) void openCard();
+  // Sent by the card page's "Connect" button (`?lv_connect=1` is the link it
+  // gave before the fragment, still honoured).
+  const asked = /^#lv-connect$/.test(win.location.hash) || /[?&]lv_connect=1(&|$)/.test(win.location.search);
+  if (asked) rememberConnect();
+  if (asked || connectRemembered()) void connect();
 }
 
 /**

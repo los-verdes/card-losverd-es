@@ -26,15 +26,35 @@ function storePage({ header = true, mobile = true, accountNav = false, heading =
   return doc;
 }
 
-function storeWindow({ pathname = "/", search = "", token = "store.jwt.token" as string | null, fails = false } = {}) {
+/** The store's session storage, kept across the pages of one "visit" in a test. */
+function fakeStorage(): Storage & { entries: Map<string, string> } {
+  const entries = new Map<string, string>();
+  return {
+    entries,
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => void entries.set(key, value),
+    removeItem: (key: string) => void entries.delete(key),
+  } as unknown as Storage & { entries: Map<string, string> };
+}
+
+function storeWindow({
+  pathname = "/",
+  search = "",
+  hash = "",
+  token = "store.jwt.token" as string | null,
+  fails = false,
+  storage = fakeStorage() as StorefrontWindow["sessionStorage"] | undefined,
+} = {}) {
   const assign = vi.fn();
   const fetch = vi.fn(async () => {
     if (fails) throw new TypeError("network");
     return { ok: token !== null, text: async () => (token === null ? "" : `${token}\n`) };
   });
-  const win: StorefrontWindow = { location: { pathname, search, assign }, fetch };
+  const win: StorefrontWindow = { location: { pathname, search, hash, assign }, fetch, sessionStorage: storage };
   return { win, assign, fetch };
 }
+
+const formIn = (doc: FakeDocument) => doc.body.children.find((child) => child.tagName === "form");
 
 const run = (doc: FakeDocument, win: StorefrontWindow) => storefrontMain(CONFIG, win, doc as unknown as Document);
 
@@ -121,20 +141,72 @@ describe("the storefront script", () => {
     expect(doc.body.children.some((child) => child.tagName === "form")).toBe(false);
   });
 
-  it("carries straight on from the card page's Connect button, on the account pages only", async () => {
-    const account = storePage({ accountNav: true });
-    const connecting = storeWindow({ pathname: "/account.php", search: "?lv_connect=1" });
-    run(account, connecting.win);
-    await settle();
-    expect(connecting.fetch).toHaveBeenCalledOnce();
+  it("hands off at once from the card page's Connect button when already signed in to the store, on whatever page it lands", async () => {
+    for (const [pathname, hash, search] of [["/account.php", "#lv-connect", ""], ["/account.php", "", "?action=order_status&lv_connect=1"], ["/", "#lv-connect", ""]]) {
+      const doc = storePage();
+      const { win, fetch } = storeWindow({ pathname, hash, search, token: "a.b.c" });
+      run(doc, win);
+      await settle();
 
-    const elsewhere = storeWindow({ pathname: "/login.php", search: "?lv_connect=1" });
-    run(storePage(), elsewhere.win);
-    const lookalike = storeWindow({ pathname: "/account.php", search: "?lv_connect=10" });
-    run(storePage({ accountNav: true }), lookalike.win);
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(formIn(doc)).toMatchObject({ action: CONFIG.handoffUrl, submitted: 1 });
+      expect(win.sessionStorage!.getItem("lv-card-connect")).toBeNull();
+    }
+  });
+
+  it("waits through a sign-in to the store, then hands off on the next page", async () => {
+    const storage = fakeStorage();
+    // Signed out: the store sends /account.php#lv-connect to its sign-in page, keeping the fragment.
+    const signIn = storePage();
+    const signedOut = storeWindow({ pathname: "/login.php", search: "?from=account.php%3Faction%3D", hash: "#lv-connect", token: null, storage });
+    run(signIn, signedOut.win);
     await settle();
-    expect(elsewhere.fetch).not.toHaveBeenCalled();
-    expect(lookalike.fetch).not.toHaveBeenCalled();
+    expect(formIn(signIn)).toBeUndefined();
+    expect(signedOut.assign).not.toHaveBeenCalled();
+    expect(storage.entries.has("lv-card-connect")).toBe(true);
+
+    // Signed in, the store lands them on their account page, fragment gone.
+    const account = storePage({ accountNav: true });
+    run(account, storeWindow({ pathname: "/account.php", token: "a.b.c", storage }).win);
+    await settle();
+    expect(formIn(account)).toMatchObject({ submitted: 1 });
+    expect(storage.entries.has("lv-card-connect")).toBe(false);
+
+    // And only once.
+    const later = storePage();
+    const again = storeWindow({ pathname: "/", token: "a.b.c", storage });
+    run(later, again.win);
+    await settle();
+    expect(again.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forgets a Connect after ten minutes", async () => {
+    const storage = fakeStorage();
+    storage.setItem("lv-card-connect", String(Date.now() - 11 * 60 * 1000));
+    const { win, fetch } = storeWindow({ storage });
+    run(storePage(), win);
+    await settle();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("still hands off from the page Connect lands on where session storage is missing or refuses", async () => {
+    const refusing = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); }, removeItem: () => { throw new Error("denied"); } };
+    for (const storage of [undefined, refusing]) {
+      const doc = storePage();
+      const { win } = storeWindow({ hash: "#lv-connect", token: "a.b.c", storage });
+      run(doc, win);
+      await settle();
+      expect(formIn(doc)).toMatchObject({ submitted: 1 });
+    }
+  });
+
+  it("ignores lookalikes", async () => {
+    for (const [hash, search] of [["#lv-connected", ""], ["#other", "?lv_connect=10"]]) {
+      const { win, fetch } = storeWindow({ hash, search });
+      run(storePage(), win);
+      await settle();
+      expect(fetch).not.toHaveBeenCalled();
+    }
   });
 });
 

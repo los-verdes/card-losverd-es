@@ -521,7 +521,7 @@ describe("the member's page", () => {
     const body = await page();
 
     expect(body).toContain("Store account");
-    expect(body).toContain(`href="${STORE}/account.php?lv_connect=1"`);
+    expect(body).toContain(`href="${STORE}/account.php#lv-connect"`);
   });
 
   it("says when it is connected, with a way to disconnect, and what just happened", async () => {
