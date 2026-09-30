@@ -236,8 +236,43 @@ function verifyUrl(env: Env, member: MemberRecord): Promise<string> {
   );
 }
 
-/** Template images committed under assets/templates/ and synced to R2 on deploy. */
-async function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
+/**
+ * Template images read this hour, kept for the life of the Worker instance.
+ *
+ * They are the crest, pass images and theme art committed under
+ * `assets/templates/`, which change only when a deploy uploads new ones, and
+ * reading one from R2 took about 200 ms at the median (1.4 s at p99): two of
+ * them were most of the time a card image took to draw (2026-09-29). A deploy
+ * starts fresh instances, so a changed image is read again; the hour is a
+ * backstop for images uploaded without one. The read itself is what is kept,
+ * so requests arriving together share it, and a failed read is forgotten
+ * rather than remembered.
+ */
+const TEMPLATE_CACHE_MS = 60 * 60 * 1000;
+const templateCache = new Map<string, { read: Promise<Uint8Array>; at: number }>();
+
+/** Forgets every cached template image. For tests, which change R2's contents between cases. */
+export function resetTemplateAssetCache(): void {
+  templateCache.clear();
+}
+
+/**
+ * Template images committed under assets/templates/ and synced to R2 on
+ * deploy, from this instance's cache when it has read them this hour. The
+ * bytes are shared between callers, so nothing may write to them.
+ */
+function readTemplateAsset(env: Env, key: string): Promise<Uint8Array> {
+  const cached = templateCache.get(key);
+  if (cached && Date.now() - cached.at < TEMPLATE_CACHE_MS) return cached.read;
+  const read = readTemplateAssetFromR2(env, key);
+  templateCache.set(key, { read, at: Date.now() });
+  read.catch(() => {
+    if (templateCache.get(key)?.read === read) templateCache.delete(key);
+  });
+  return read;
+}
+
+async function readTemplateAssetFromR2(env: Env, key: string): Promise<Uint8Array> {
   const object = await env.ASSETS.get(key);
   if (!object) {
     throw new Error(
