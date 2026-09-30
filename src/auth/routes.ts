@@ -49,6 +49,7 @@ auth.get(LOGIN_PATH, async (c) => {
       blocked: c.req.query("error") === EXPELLED_REASON,
       connectingStore,
       storeEmail: connectingStore ? await pendingStoreEmail(c) : null,
+      storeLinkSpent: c.req.query("store") === "spent",
     }),
   );
 });

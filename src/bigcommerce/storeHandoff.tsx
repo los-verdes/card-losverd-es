@@ -17,9 +17,10 @@
  *
  * The store hands out the same token for its whole 15 minutes, however it is
  * fetched (checked on staging, 2026-09-30), so a second "Membership card"
- * within that time arrives with a spent token. It is sent to `/` rather than
- * refused: that grants nothing, and shows the card to somebody still signed
- * in here, or the sign-in page to anyone else.
+ * within that time arrives with a spent token. It is sent on without a
+ * pending cookie rather than refused: that grants nothing, and shows the card
+ * to somebody still signed in here, or the sign-in page, saying why, to
+ * anyone else.
  *
  * Orders are never consulted, and the store's email is never matched: see
  * src/bigcommerce/storeAccount.ts.
@@ -184,7 +185,7 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
     if (!(await claimHandoffToken(c.env, token, expiresAt))) {
       // Spent already, most likely by this same member a few minutes ago.
       recordOutcome("store.handoff", { result: "refused", reason: "replayed" });
-      return c.redirect("/", 303);
+      return c.redirect(`${STORE_HANDOFF_CONTINUE_PATH}?spent=1`, 303);
     }
     await setPendingLink(c, customerId, email);
   } catch (err) {
@@ -197,7 +198,17 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
 
 handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
   const pending = await readPendingLink(c);
-  if (pending === null) return c.redirect("/");
+  if (pending === null) {
+    // A spent token, from somebody no longer signed in here: say why the
+    // store didn't sign them in, rather than showing a bare sign-in page.
+    if (c.req.query("spent") !== undefined) {
+      const token = readSessionCookie(c);
+      if (!token || !(await verifySessionToken(c.env.SESSION_SIGNING_KEY, token))) {
+        return c.redirect(`${LOGIN_PATH}?store=spent`);
+      }
+    }
+    return c.redirect("/");
+  }
   const { customerId } = pending;
 
   // Connected already: sign in as whoever it is connected to.

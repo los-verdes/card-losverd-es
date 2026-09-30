@@ -227,7 +227,7 @@ describe("POST /store-handoff", () => {
     expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "signature" });
   });
 
-  it("sends a spent token home, granting nothing, since the store hands the same one out for its lifetime", async () => {
+  it("sends a spent token on without a pending cookie, granting nothing, since the store hands the same one out for its lifetime", async () => {
     const outcomes = spyOnOutcomes();
     const token = await currentJwt();
     await fetchWorker("/store-handoff", handoffForm(token));
@@ -235,10 +235,20 @@ describe("POST /store-handoff", () => {
     const replayed = await fetchWorker("/store-handoff", handoffForm(token));
 
     expect(replayed.status).toBe(303);
-    expect(replayed.headers.get("Location")).toBe("/");
+    expect(replayed.headers.get("Location")).toBe("/store-handoff/continue?spent=1");
     expect(setCookie(replayed, "lv_store_link")).toBeNull();
     expect(setCookie(replayed, SESSION_COOKIE_NAME)).toBeNull();
     expect(outcomesFrom(outcomes)).toContainEqual({ outcome: "store.handoff", result: "refused", reason: "replayed" });
+  });
+
+  it("then shows somebody signed in their card, and tells anyone else why the store didn't sign them in", async () => {
+    const signedIn = await fetchWorker("/store-handoff/continue?spent=1", { cookies: [await sessionCookie(USER_ID)] });
+    expect(signedIn.headers.get("Location")).toBe("/");
+
+    const signedOut = await fetchWorker("/store-handoff/continue?spent=1");
+    expect(signedOut.headers.get("Location")).toBe("/login?store=spent");
+    expect(await (await fetchWorker("/login?store=spent")).text()).toContain("The store&#39;s link was already used a few minutes ago");
+    expect(await (await fetchWorker("/login")).text()).not.toContain("already used a few minutes ago");
   });
 
   it("is not there until the environment has an app", async () => {

@@ -44,6 +44,11 @@ export interface LoginPageProps {
    * hint of which account to sign in with; the connection never matches it.
    */
   storeEmail?: string | null;
+  /**
+   * Set when "Membership card" on the store arrived with a link already used
+   * in the last few minutes, which cannot sign anyone in (#38).
+   */
+  storeLinkSpent?: boolean;
 }
 
 export const LoginPage: FC<LoginPageProps> = ({
@@ -53,6 +58,7 @@ export const LoginPage: FC<LoginPageProps> = ({
   blocked,
   connectingStore,
   storeEmail,
+  storeLinkSpent,
 }) => (
   <Page title="Your Membership Card">
     <h1>Los Verdes Membership Card</h1>
@@ -85,6 +91,13 @@ export const LoginPage: FC<LoginPageProps> = ({
       <p style="color: var(--success)">
         Sign in once to connect your store account. After that, "Membership card" on the store brings you
         straight to your card.
+      </p>
+    )}
+    {storeLinkSpent && !blocked && (
+      <p>
+        Sign in to see your card. The store's link was already used a few minutes ago, and each link only
+        signs you in once. In a few minutes, if your store account is connected, "Membership card" on the store
+        will bring you straight to your card again.
       </p>
     )}
     {connectingStore && !blocked && storeEmail && (
