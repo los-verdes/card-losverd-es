@@ -820,3 +820,60 @@ describe("their store account, on their page", () => {
     );
   });
 });
+
+describe("their renewal, on their page (#397)", () => {
+  const page = async () => (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+
+  beforeEach(() => {
+    env.MINIBC_API_KEY = "test-minibc-key";
+  });
+
+  afterEach(async () => {
+    env.MINIBC_API_KEY = undefined;
+    await env.DB.exec("DELETE FROM minibc_subscriptions");
+  });
+
+  async function subscribe(status: string, next: string | null, cancelled: string | null = null) {
+    await env.DB.prepare(
+      `INSERT INTO membership_orders (order_id, source, order_email, member_email, status, created_on, expires_on, first_seen_via)
+       VALUES ('5005', 'bigcommerce', ?1, ?1, 'Completed', '2026-02-14T00:00:00Z', '2027-02-14T00:00:00Z', 'sync')`,
+    )
+      .bind(EMAIL)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO minibc_subscriptions (subscription_id, order_id, sku, status, next_payment_on, cancelled_on, seen_at)
+       VALUES (61, 5005, 'LOSV-MEM-0001', ?, ?, ?, 1)`,
+    )
+      .bind(status, next, cancelled)
+      .run();
+  }
+
+  it("says when MiniBC doesn't renew them, and nothing at all where MiniBC isn't read", async () => {
+    expect(await page()).toMatch(/Renewal<\/th><td[^>]*>Doesn&#39;t renew automatically/);
+
+    env.MINIBC_API_KEY = undefined;
+    expect(await page()).not.toContain("Renewal</th>");
+  });
+
+  it("says when their card renews, and which subscription says so", async () => {
+    await env.DB.prepare("UPDATE members SET expiration_date = '2099-02-14' WHERE email = ?").bind(EMAIL).run();
+    await subscribe("active", "2099-02-14");
+
+    const body = await page();
+    expect(body).toContain("Renews automatically on Feb 14, 2099");
+    expect(body).toContain("(MiniBC subscription 61)");
+    expect(body).not.toMatch(/color: var\(--danger\)"[^>]*>Renews automatically/);
+  });
+
+  it("flags a card that ran out while its renewal is still on", async () => {
+    await env.DB.prepare("UPDATE members SET expiration_date = '2020-02-14' WHERE email = ?").bind(EMAIL).run();
+    await subscribe("active", "2099-03-01");
+
+    expect(await page()).toMatch(/color: var\(--danger\)">Card ran out on Feb 14, 2020, but automatic renewal is still on/);
+  });
+
+  it("says when they cancelled", async () => {
+    await subscribe("inactive", null, "2026-06-01");
+    expect(await page()).toContain("Automatic renewal cancelled on Jun 1, 2026");
+  });
+});

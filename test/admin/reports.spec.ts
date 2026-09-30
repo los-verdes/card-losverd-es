@@ -727,3 +727,89 @@ describe("GET /admin/reports/orders", () => {
     expect((await get(`/admin/reports/orders?${query}`)).status).toBe(400);
   });
 });
+
+describe("GET /admin/reports/renewals (#397)", () => {
+  beforeEach(async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-01T12:00:00Z"), toFake: ["Date"] });
+    env.MINIBC_API_KEY = "test-minibc-key";
+    const member = async (id: string, email: string, expiration: string) => {
+      await env.DB.prepare(
+        "INSERT INTO members (member_id, first_name, last_name, email, expiration_date, auth_token, last_updated_at) VALUES (?, 'Test', 'Member', ?, ?, 'token', 1)",
+      )
+        .bind(id, email, expiration)
+        .run();
+      await insertOrder({ id: id.replace("BC-", ""), email, created: "2026-02-14T00:00:00Z" });
+    };
+    await member("BC-1", "lapsed@example.com", "2026-09-14"); // ran out, renewal still on
+    await member("BC-2", "late@example.com", "2026-10-20"); // renews a month after
+    await member("BC-3", "soon@example.com", "2026-10-15"); // renews on time, soon
+    await member("BC-4", "later@example.com", "2027-05-01"); // renews on time, not soon
+    await member("BC-5", "stopped@example.com", "2026-12-01"); // cancelled, still current
+    const subscription = (id: number, orderId: number, status: string, next: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO minibc_subscriptions (subscription_id, order_id, sku, status, next_payment_on, seen_at) VALUES (?, ?, 'LOSV-MEM-0001', ?, ?, 1)",
+      )
+        .bind(id, orderId, status, next)
+        .run();
+    await subscription(11, 1, "active", "2026-10-14");
+    await subscription(12, 2, "active", "2026-11-20");
+    await subscription(13, 3, "active", "2026-10-15");
+    await subscription(14, 4, "active", "2027-05-01");
+    await subscription(15, 5, "inactive", null);
+    await subscription(16, 9999, "active", "2027-01-01"); // no order held here
+    await env.DB.prepare("INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES ('sync_minibc_subscriptions_etl', 1, ?)")
+      .bind(Date.parse("2026-10-01T00:40:00Z"))
+      .run();
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    env.MINIBC_API_KEY = undefined;
+    await env.DB.exec("DELETE FROM minibc_subscriptions");
+    await env.DB.exec("DELETE FROM etl_sync_state");
+    await env.DB.exec("DELETE FROM members");
+  });
+
+  const section = (body: string, title: string) => {
+    const start = body.indexOf(`<h2>${title}`);
+    const end = body.indexOf("<h2>", start + 1);
+    return body.slice(start, end < 0 ? undefined : end);
+  };
+
+  it("sorts each subscription into what needs a look, with the read's time and counts", async () => {
+    const body = await (await get("/admin/reports/renewals")).text();
+
+    expect(body).toContain("6 subscriptions as of 2026-10-01T00:40:00Z: 5 active, 1 cancelled.");
+    expect(section(body, "Card ran out, automatic renewal still on")).toContain("lapsed@example.com");
+    expect(section(body, "Renews after the card runs out")).toContain("late@example.com");
+    expect(section(body, "Renews after the card runs out")).toContain("31 days after the card runs out");
+    const soon = section(body, "Renewing in the next 30 days");
+    expect(soon).toContain("soon@example.com");
+    expect(soon).not.toContain("later@example.com");
+    expect(section(body, "Cancelled or paused, card still current")).toContain("stopped@example.com");
+    expect(section(body, "Not matched to a member")).toMatch(/>16<\/td>/);
+  });
+
+  it("downloads a section as CSV, and refuses one that doesn't exist", async () => {
+    const res = await get("/admin/reports/renewals?section=overdue&format=csv");
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="renewals-overdue-2026-10-01.csv"');
+    const lines = (await res.text()).trimEnd().split("\r\n");
+    expect(lines[0]).toBe("subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("lapsed@example.com");
+
+    expect((await get("/admin/reports/renewals?section=nope&format=csv")).status).toBe(400);
+  });
+
+  it("says when MiniBC isn't read here, or hasn't been yet", async () => {
+    await env.DB.exec("DELETE FROM etl_sync_state");
+    expect(await (await get("/admin/reports/renewals")).text()).toContain("MiniBC has not been read here yet");
+    env.MINIBC_API_KEY = undefined;
+    expect(await (await get("/admin/reports/renewals")).text()).toContain("MiniBC isn&#39;t read in this environment");
+  });
+
+  it("is listed on the reports index and in the nav", async () => {
+    const body = await (await get("/admin/reports")).text();
+    expect(body).toContain('<a href="/admin/reports/renewals">Renewals</a>');
+  });
+});

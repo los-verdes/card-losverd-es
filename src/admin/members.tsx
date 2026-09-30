@@ -67,6 +67,7 @@ import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
+import { renewalState, renewalText, renewalsForMember, type RenewalRow } from "../minibc/renewals";
 
 const members = new Hono<AuthEnv & { Bindings: Env }>();
 members.use("*", requireAdmin);
@@ -335,6 +336,27 @@ const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null
     <>{store ? "not connected" : "no account here yet"}</>
   );
 
+/** What MiniBC says about their renewal: one line per subscription, the one that decides it first. */
+const RenewalCell: FC<{ member: MemberRecord; renewals: RenewalRow[] }> = ({ member, renewals }) => {
+  if (renewals.length === 0) return <>Doesn't renew automatically</>;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <>
+      {renewals.map((row, i) => {
+        const state = renewalState(row, member.expiration_date, today);
+        const worrying = state.kind === "overdue" || state.kind === "renews-late";
+        return (
+          <div>
+            {i > 0 && <span class="muted">Also: </span>}
+            <span style={worrying ? "color: var(--danger)" : undefined}>{renewalText(state)}</span>{" "}
+            <span class="muted">(MiniBC subscription {row.subscription_id})</span>
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
 const Summary: FC<{
   member: MemberRecord;
   footprint: EmailFootprint;
@@ -344,7 +366,9 @@ const Summary: FC<{
   expelled: boolean;
   theme: ThemeSummary;
   store: StoreAccountRow | null;
-}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme, store }) => (
+  /** MiniBC subscriptions matched to them (#397); null where MiniBC isn't read. */
+  renewals: RenewalRow[] | null;
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme, store, renewals }) => (
   <>
     {member.display_name && (
       <p class="muted">
@@ -396,6 +420,14 @@ const Summary: FC<{
             <StoreAccountCell member={member} store={store} />
           </td>
         </tr>
+        {renewals && (
+          <tr>
+            <th style={cellStyle}>Renewal</th>
+            <td style={`${cellStyle}; white-space: normal; max-width: 28rem`}>
+              <RenewalCell member={member} renewals={renewals} />
+            </td>
+          </tr>
+        )}
       </tbody>
     </table>
     <CardPreview member={member} />
@@ -645,7 +677,7 @@ members.get("/", async (c) => {
   const historyEmail =
     member?.email ?? (lookup.kind === "email" && isWellFormedEmail(lookup.value) ? lookup.value : null);
 
-  const [footprint, orders, override, expelled, theme, store] = member
+  const [footprint, orders, override, expelled, theme, store, renewals] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
@@ -653,8 +685,10 @@ members.get("/", async (c) => {
         isExpelled(c.env, member.email),
         themeSummary(c.env, member),
         storeAccountForMember(c.env, member),
+        // Only where MiniBC is read at all: elsewhere "doesn't renew" would be a guess.
+        c.env.MINIBC_API_KEY ? renewalsForMember(c.env, member.email) : Promise.resolve(null),
       ])
-    : [null, [], null, false, null, null];
+    : [null, [], null, false, null, null, null];
 
   // An address can hold orders and no membership, and that is a real answer
   // rather than a dead end (#241). Only when there is nothing at all does the
@@ -776,6 +810,7 @@ members.get("/", async (c) => {
           expelled={expelled}
           theme={theme}
           store={store}
+          renewals={renewals}
         />
       )}
       {historyOnly && (
