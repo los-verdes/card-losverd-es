@@ -269,14 +269,23 @@ one is implemented fully:
   here that role belongs to `membership_orders.member_email`, which an
   admin re-points by attributing the order (see the provenance document,
   "Gift purchases and re-attributed orders").
-* **`sync_minibc_subscriptions_etl` — stubbed, and not scheduled.** High-level: call
-  MiniBC's REST API (`GET /products/search`, `POST /subscriptions/search`
-  per `member_card/minibc.py`) for recurring-subscription state that
-  doesn't flow through BigCommerce order webhooks at all, and reconcile
-  `expiration_date` for members on a MiniBC recurring
-  plan. Not started: MiniBC is the vendor that handles renewals, so it
-  holds membership status that nothing else records, and it is the largest
-  piece of ingestion not yet built.
+* **Each order's MiniBC subscription.** MiniBC writes a `minibc` metafield,
+  `subscription_id`, onto every order it creates, the first and each renewal,
+  a few minutes after the order itself. Whenever a membership order is
+  applied (webhook, resync, or an admin's re-read), the sync reads it
+  (`GET /v3/orders/{id}/metafields?namespace=minibc&key=subscription_id`)
+  into `membership_orders.minibc_subscription_id`, with `minibc_checked_at`
+  recording when it asked. An order is not asked again once it has one, or
+  once it was asked a day or more after it was placed and had none. Nothing
+  reads it yet: it is what later ties a MiniBC subscription to the member
+  whose orders carry it (#397). A failed read is logged and asked again on
+  the next sync; it never fails the order's own sync.
+* **`sync_minibc_subscriptions_etl` — stubbed, and not scheduled.** Planned
+  in #397: read MiniBC's `POST /subscriptions/search` for the renewal state
+  that only MiniBC knows -- whether a membership renews automatically, when
+  next, and whether it was paused, cancelled or is failing to charge -- for
+  admins to see. Renewals themselves already arrive: each one MiniBC charges
+  creates a BigCommerce order.
 
 ## 5. What's deferred
 

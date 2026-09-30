@@ -45,6 +45,10 @@ docs.bigcommerce.com
 developer.bigcommerce.com
 api.bigcommerce.com
 los-verdes-sandbox.mybigcommerce.com
+
+# MiniBC, the store's subscription app: its API and its documentation (#397)
+apps.minibc.com
+support.minibc.com
 store.losverdesatx.org
 
 # This project

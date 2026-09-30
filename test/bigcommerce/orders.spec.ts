@@ -153,7 +153,7 @@ describe("recordMembershipOrder", () => {
     ).run();
 
     // Returns the member the order belongs to, not its billing email.
-    expect(await recordMembershipOrder(env, ORDER, PRODUCT, 1)).toBe("sam.new@example.com");
+    expect((await recordMembershipOrder(env, ORDER, PRODUCT, 1)).memberEmail).toBe("sam.new@example.com");
 
     const rows = await orderRows();
     expect(rows).toHaveLength(1);

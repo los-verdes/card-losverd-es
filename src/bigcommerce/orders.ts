@@ -48,14 +48,23 @@ export function bigCommerceOrderKey(orderId: number | string): string {
  *   survive a resync;
  * - `first_seen_via`, which records provenance.
  *
- * Returns the row's `member_email`: the member this order belongs to.
+ * Returns the row's `member_email` -- the member this order belongs to -- and
+ * what is known of its MiniBC subscription (`minibc_*`, #397), which only
+ * the subscription lookup in src/bigcommerce/sync.ts writes.
  */
+export interface RecordedOrder {
+  memberEmail: string;
+  minibcSubscriptionId: number | null;
+  /** Epoch ms of the last time the store was asked; null if never. */
+  minibcCheckedAt: number | null;
+}
+
 export async function recordMembershipOrder(
   env: Env,
   order: BigCommerceOrder,
   product: BigCommerceOrderProduct,
   membershipUnits: number,
-): Promise<string> {
+): Promise<RecordedOrder> {
   const createdOn = new Date(order.date_created);
   const email = order.billing_address.email.trim().toLowerCase();
   const row = await env.DB.prepare(
@@ -91,7 +100,7 @@ export async function recordMembershipOrder(
        -- store's copy must not win. test/bigcommerce/orders.spec.ts pins this.
        missing_since = NULL,
        updated_at = unixepoch('subsec') * 1000
-     RETURNING member_email`,
+     RETURNING member_email, minibc_subscription_id, minibc_checked_at`,
   )
     .bind(
       bigCommerceOrderKey(order.id),
@@ -109,6 +118,10 @@ export async function recordMembershipOrder(
       order.date_modified ? toIsoSeconds(new Date(order.date_modified)) : null,
       membershipUnits,
     )
-    .first<{ member_email: string }>();
-  return row!.member_email;
+    .first<{ member_email: string; minibc_subscription_id: number | null; minibc_checked_at: number | null }>();
+  return {
+    memberEmail: row!.member_email,
+    minibcSubscriptionId: row!.minibc_subscription_id,
+    minibcCheckedAt: row!.minibc_checked_at,
+  };
 }

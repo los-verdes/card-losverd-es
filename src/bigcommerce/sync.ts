@@ -4,7 +4,7 @@ import { COUNTS_AS_MEMBERSHIP } from "../lib/membershipOrders";
 import { notifyWalletsUpdated } from "../member/walletUpdates";
 import { postSlackAlert } from "../slack/alert";
 import { maybeEmailNewOrderCard } from "../email/newOrder";
-import { bigCommerceOrderKey, recordMembershipOrder } from "./orders";
+import { bigCommerceOrderKey, recordMembershipOrder, type RecordedOrder } from "./orders";
 
 const BC_API_BASE = "https://api.bigcommerce.com/stores";
 
@@ -122,15 +122,15 @@ export class BigCommerceClient {
   // rather than rejecting it, so an id carrying dot segments would silently
   // address a different endpoint -- with this store's token attached. Ids are
   // encoded at every call site for that reason.
-  private url(path: string, query?: URLSearchParams): string {
-    const base = `${BC_API_BASE}/${this.storeHash}/v2/${path}`;
+  private url(path: string, query?: URLSearchParams, version: "v2" | "v3" = "v2"): string {
+    const base = `${BC_API_BASE}/${this.storeHash}/${version}/${path}`;
     return query ? `${base}?${query.toString()}` : base;
   }
 
   /** GET, waiting out (a bounded number of) rate-limit 429s. */
-  private async get(path: string, query?: URLSearchParams): Promise<Response> {
+  private async get(path: string, query?: URLSearchParams, version: "v2" | "v3" = "v2"): Promise<Response> {
     for (let waits = 0; ; waits++) {
-      const res = await fetch(this.url(path, query), {
+      const res = await fetch(this.url(path, query, version), {
         headers: bcHeaders(this.accessToken),
       });
       // Before the ok/not-ok checks each caller makes, because every one of
@@ -186,6 +186,26 @@ export class BigCommerceClient {
       );
     }
     return res.json();
+  }
+
+  /**
+   * The MiniBC subscription an order belongs to, or null for none: MiniBC
+   * writes a `minibc` metafield, `subscription_id`, onto every order it
+   * creates, the first and each renewal (#397).
+   */
+  async getOrderSubscriptionId(orderId: number | string): Promise<number | null> {
+    const res = await this.get(
+      `orders/${encodeURIComponent(orderId)}/metafields`,
+      new URLSearchParams({ namespace: "minibc", key: "subscription_id" }),
+      "v3",
+    );
+    if (!res.ok) {
+      throw new Error(`BigCommerce getOrderSubscriptionId(${orderId}) failed: ${res.status} ${await res.text()}`);
+    }
+    const body = (await res.json()) as { data?: { namespace?: string; key?: string; value?: unknown }[] };
+    const field = (body.data ?? []).find((f) => f.namespace === "minibc" && f.key === "subscription_id");
+    const value = String(field?.value ?? "").trim();
+    return /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
   }
 
   /**
@@ -544,8 +564,53 @@ function inOrderSpan<T>(orderId: number | string, fn: () => Promise<T>): Promise
   });
 }
 
+/**
+ * How long after an order is placed MiniBC might still be about to write its
+ * subscription onto it. Its guide says within about five minutes; a day
+ * leaves room for MiniBC being slow or down.
+ */
+export const MINIBC_METAFIELD_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether an order's MiniBC subscription is known for good: found, or looked
+ * for once the order was old enough that MiniBC would have written it.
+ */
+export function minibcSubscriptionSettled(recorded: RecordedOrder, createdOn: string): boolean {
+  if (recorded.minibcSubscriptionId !== null) return true;
+  if (recorded.minibcCheckedAt === null) return false;
+  return recorded.minibcCheckedAt - Date.parse(createdOn) >= MINIBC_METAFIELD_GRACE_MS;
+}
+
+/**
+ * Asks the store which MiniBC subscription an order belongs to, unless that
+ * is already settled, and records the answer (#397). Informational only: it
+ * changes no card, and a failure is logged and left for the next sync to
+ * ask again rather than failing the order's own sync.
+ */
+async function recordOrderSubscription(
+  env: Env,
+  client: BigCommerceClient,
+  order: BigCommerceOrder,
+  recorded: RecordedOrder,
+): Promise<void> {
+  if (minibcSubscriptionSettled(recorded, order.date_created)) return;
+  let subscriptionId: number | null;
+  try {
+    subscriptionId = await client.getOrderSubscriptionId(order.id);
+  } catch (err) {
+    console.warn(`recordOrderSubscription(${bigCommerceOrderKey(order.id)}): could not read the order's MiniBC subscription; the next sync asks again`, err);
+    return;
+  }
+  await env.DB.prepare(
+    "UPDATE membership_orders SET minibc_subscription_id = ?, minibc_checked_at = ? WHERE order_id = ?",
+  )
+    .bind(subscriptionId, Date.now(), bigCommerceOrderKey(order.id))
+    .run();
+}
+
 async function applyMembershipOrder(
   env: Env,
+  client: BigCommerceClient,
   order: BigCommerceOrder,
   membership: BigCommerceOrderProduct,
   membershipUnits: number,
@@ -553,12 +618,14 @@ async function applyMembershipOrder(
   if (membershipUnits > 1) {
     await alertOnNewExtraMemberships(env, order.id, membershipUnits);
   }
-  const memberEmail = await recordMembershipOrder(
+  const recorded = await recordMembershipOrder(
     env,
     order,
     membership,
     membershipUnits,
   );
+  const { memberEmail } = recorded;
+  await recordOrderSubscription(env, client, order, recorded);
   const result = await refreshMemberFromOrders(env, memberEmail, {
     firstName: order.billing_address.first_name,
     lastName: order.billing_address.last_name,
@@ -675,6 +742,7 @@ async function readOrder(
 
   const { memberEmail } = await applyMembershipOrder(
     env,
+    client,
     order,
     membership,
     countMembershipUnits(products),
@@ -702,17 +770,21 @@ const SUBSCRIPTIONS_ETL_JOB_NAME = "sync_subscriptions_etl";
 const DEFAULT_LOOKBACK_HOURS = 12;
 // Per-message work bound. A message fetches one page (<= ORDERS_PAGE_SIZE
 // orders) and stops early once it has applied this many membership orders.
-// Each applied order costs up to 5 D1 queries (membership_orders upsert, the
-// member's counted-orders SELECT, members SELECT, members UPDATE/INSERT,
+// Each applied order costs up to 6 D1 queries (membership_orders upsert, the
+// MiniBC subscription UPDATE while that is unsettled (#397), the member's
+// counted-orders SELECT, members SELECT, members UPDATE/INSERT,
 // notifyPassUpdated's devices SELECT) plus one DELETE per device APNs reports
-// unregistered, so a message makes at most ~120*5 + 2 watermark queries =
-// ~602 D1 queries against D1's 1,000 per Worker invocation
-// (https://developers.cloudflare.com/d1/platform/limits/), leaving ~400 for
-// device DELETEs. Subrequests (1 list + <= 250 products calls
-// + D1 + APNs pushes + 1 queue send) stay far under Workers Paid's 10,000, and
-// ~250 BigCommerce requests fit easily in a queue consumer's 15-minute wall
-// time (https://developers.cloudflare.com/workers/platform/limits/), even
-// waiting out a few rate-limit windows.
+// unregistered, so a message makes at most ~120*6 + 2 watermark queries =
+// ~722 D1 queries against D1's 1,000 per Worker invocation
+// (https://developers.cloudflare.com/d1/platform/limits/), leaving ~280 for
+// device DELETEs. Subrequests (1 list + <= 250 products calls + <= 120
+// metafield calls + D1 + APNs pushes + 1 queue send) stay far under Workers
+// Paid's 10,000, and ~370 BigCommerce requests fit easily in a queue
+// consumer's 15-minute wall time
+// (https://developers.cloudflare.com/workers/platform/limits/), even waiting
+// out a few rate-limit windows. The metafield call is made once an order's
+// subscription is settled no more, so after the first full resync nearly
+// every order skips it.
 export const MAX_MEMBERSHIP_ORDERS_PER_MESSAGE = 120;
 // Safety backstop against a chain that never ends (>= 120 orders a message,
 // so ~60,000+ orders; the store has ~10,000). Hitting it logs an error and
@@ -853,7 +925,7 @@ export async function syncSubscriptionsEtl(
       const products = await client.getOrderProducts(order.id);
       const membership = resolveMembership(products);
       return membership
-        ? applyMembershipOrder(env, order, membership, countMembershipUnits(products))
+        ? applyMembershipOrder(env, client, order, membership, countMembershipUnits(products))
         : null;
     });
     if (applied) {

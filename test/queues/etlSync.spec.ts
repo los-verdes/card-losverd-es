@@ -119,6 +119,8 @@ describe("handleEtlSyncBatch", () => {
     function mockRefusal(status: number) {
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = typeof input === "string" ? input : String(input);
+        // The MiniBC subscription lookup (#397): these orders have none.
+        if (url.includes("/metafields")) return Response.json({ data: [] });
         if (url.includes("api.bigcommerce.com")) {
           return new Response("Access denied", { status });
         }
@@ -169,6 +171,8 @@ describe("handleEtlSyncBatch", () => {
       const posts: string[] = [];
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = typeof input === "string" ? input : String(input);
+        // The MiniBC subscription lookup (#397): these orders have none.
+        if (url.includes("/metafields")) return Response.json({ data: [] });
         if (url.startsWith("https://hooks.slack.test/")) {
           posts.push(String(init?.body ?? ""));
           return new Response("ok");
@@ -203,6 +207,8 @@ describe("handleEtlSyncBatch", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
+        // The MiniBC subscription lookup (#397): these orders have none.
+        if (url.includes("/metafields")) return Response.json({ data: [] });
         if (url.endsWith(`/orders/${order.id}/products`)) {
           return new Response(JSON.stringify(products), { status: 200 });
         }
@@ -255,6 +261,8 @@ describe("handleEtlSyncBatch", () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(
         async (input: RequestInfo | URL) => {
           const url = typeof input === "string" ? input : input.toString();
+          // The MiniBC subscription lookup (#397): these orders have none.
+          if (url.includes("/metafields")) return Response.json({ data: [] });
           if (url.includes("/orders?")) {
             const orders = Array.from({ length: ORDERS_PAGE_SIZE }, (_, i) => ({
               id: i + 1,
@@ -287,6 +295,8 @@ describe("handleEtlSyncBatch", () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(
         async (input: RequestInfo | URL) => {
           const url = typeof input === "string" ? input : input.toString();
+          // The MiniBC subscription lookup (#397): these orders have none.
+          if (url.includes("/metafields")) return Response.json({ data: [] });
           if (url.includes("/orders?")) {
             return new Response(null, { status: 204 });
           }

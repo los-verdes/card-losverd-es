@@ -10,7 +10,9 @@ import {
   MAX_CHAIN_MESSAGES,
   MAX_UNLISTED_RECHECKS_PER_MESSAGE,
   MAX_MEMBERSHIP_ORDERS_PER_MESSAGE,
+  MINIBC_METAFIELD_GRACE_MS,
   ORDERS_PAGE_SIZE,
+  minibcSubscriptionSettled,
   countMembershipUnits,
   deriveMembershipState,
   refreshMemberFromOrders,
@@ -116,6 +118,8 @@ function mockBigCommerceOrderFetch(
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
+      // The MiniBC subscription lookup (#397): these orders have none.
+      if (url.includes("/metafields")) return Response.json({ data: [] });
       if (url.endsWith(`/orders/${order.id}/products`)) {
         return new Response(JSON.stringify(products), { status: 200 });
       }
@@ -724,6 +728,8 @@ describe("syncSubscriptionsEtl", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
+        // The MiniBC subscription lookup (#397): these orders have none.
+        if (url.includes("/metafields")) return Response.json({ data: [] });
         if (url.includes("/orders?")) {
           const params = new URL(url).searchParams;
           requests.list.push(params);
@@ -1075,6 +1081,8 @@ describe("pass-change detection and update pushes", () => {
     const apnsCalls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (req: RequestInfo | URL) => {
       const url = typeof req === "string" ? req : req.toString();
+      // The MiniBC subscription lookup (#397): these orders have none.
+      if (url.includes("/metafields")) return Response.json({ data: [] });
       if (url.startsWith("https://api.push.apple.com/")) {
         apnsCalls.push(url);
         return new Response(null, { status: 200 });
@@ -1403,6 +1411,8 @@ describe("the weekly full resync (#347)", () => {
   function mockStore(list: BigCommerceOrder[], stillHas: Set<number> = new Set(list.map((o) => o.id))) {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      // The MiniBC subscription lookup (#397): these orders have none.
+      if (url.includes("/metafields")) return Response.json({ data: [] });
       if (url === SLACK) {
         slackPosts.push(JSON.parse(String(init?.body)).text);
         return new Response("ok");
@@ -1568,5 +1578,123 @@ describe("the weekly full resync (#347)", () => {
       expect(orderReads).toEqual([]);
       expect(slackPosts).toEqual([]);
     });
+  });
+});
+
+describe("the MiniBC subscription behind an order (#397)", () => {
+  const METAFIELDS = "/v3/orders/1001/metafields";
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await clearMembershipTables();
+  });
+
+  /** The order, its products, and its metafields as `metafields` answers; records each metafield request. */
+  function mockOrderWithMetafields(order: BigCommerceOrder, metafields: () => Response) {
+    const asked: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/metafields")) {
+        asked.push(url);
+        return metafields();
+      }
+      if (url.endsWith(`/orders/${order.id}/products`)) return Response.json(makeProducts());
+      if (url.endsWith(`/orders/${order.id}`)) return Response.json(order);
+      throw new Error(`Unexpected fetch() call in test: ${url}`);
+    });
+    return asked;
+  }
+  const subscriptionField = (value: unknown, namespace = "minibc", key = "subscription_id") =>
+    Response.json({ data: [{ id: 1, namespace, key, value, permission_set: "read" }] });
+
+  async function recorded() {
+    return env.DB.prepare("SELECT minibc_subscription_id, minibc_checked_at FROM membership_orders WHERE order_id = '1001'").first<{
+      minibc_subscription_id: number | null;
+      minibc_checked_at: number | null;
+    }>();
+  }
+
+  it("asks the store for the order's minibc.subscription_id, through the v3 API", async () => {
+    const asked = mockOrderWithMetafields(makeOrder(), () => subscriptionField("139754"));
+
+    await syncBigCommerceOrder(env, "store123", 1001);
+
+    expect(asked).toHaveLength(1);
+    const url = new URL(asked[0]);
+    expect(url.pathname).toBe(`/stores/store123${METAFIELDS}`);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ namespace: "minibc", key: "subscription_id" });
+    expect(await recorded()).toMatchObject({ minibc_subscription_id: 139754, minibc_checked_at: expect.any(Number) });
+  });
+
+  it("does not ask again once the subscription is found", async () => {
+    const asked = mockOrderWithMetafields(makeOrder(), () => subscriptionField("139754"));
+
+    await syncBigCommerceOrder(env, "store123", 1001);
+    await syncBigCommerceOrder(env, "store123", 1001);
+
+    expect(asked).toHaveLength(1);
+  });
+
+  it("asks again about a new order with none yet, since MiniBC writes it minutes later, and stops once the order is a day old", async () => {
+    const placed = Date.parse("2026-01-15T00:00:00.000Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(placed + 60 * 1000);
+    let field = () => Response.json({ data: [] });
+    const asked = mockOrderWithMetafields(makeOrder(), () => field());
+
+    await syncBigCommerceOrder(env, "store123", 1001);
+    expect(await recorded()).toMatchObject({ minibc_subscription_id: null });
+
+    field = () => subscriptionField(139754);
+    clock.mockReturnValue(placed + 10 * 60 * 1000);
+    await syncBigCommerceOrder(env, "store123", 1001);
+    expect(await recorded()).toMatchObject({ minibc_subscription_id: 139754 });
+    expect(asked).toHaveLength(2);
+  });
+
+  it("settles an order with none once it was asked about a day after it was placed", async () => {
+    const asked = mockOrderWithMetafields(makeOrder(), () => Response.json({ data: [] }));
+
+    await syncBigCommerceOrder(env, "store123", 1001);
+    await syncBigCommerceOrder(env, "store123", 1001);
+
+    expect(asked).toHaveLength(1);
+    expect(await recorded()).toMatchObject({ minibc_subscription_id: null, minibc_checked_at: expect.any(Number) });
+  });
+
+  it("ignores anything but a positive whole number in minibc.subscription_id", async () => {
+    for (const field of [subscriptionField("abc"), subscriptionField("0"), subscriptionField("12", "other"), subscriptionField("12", "minibc", "subscription_renewals_count")]) {
+      await env.DB.exec("DELETE FROM membership_orders");
+      mockOrderWithMetafields(makeOrder(), () => field.clone());
+      await syncBigCommerceOrder(env, "store123", 1001);
+      expect((await recorded())?.minibc_subscription_id).toBeNull();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("still syncs the order when the store won't say, and asks again next time", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const asked = mockOrderWithMetafields(makeOrder(), () => new Response("nope", { status: 500 }));
+
+    await syncBigCommerceOrder(env, "store123", 1001);
+    await syncBigCommerceOrder(env, "store123", 1001);
+
+    expect(await getMemberByEmail("jane.doe@example.com")).not.toBeNull();
+    expect(await recorded()).toMatchObject({ minibc_subscription_id: null, minibc_checked_at: null });
+    expect(asked).toHaveLength(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("could not read the order's MiniBC subscription"), expect.any(Error));
+  });
+
+  it("is settled once found, or once looked for a day after the order", () => {
+    const created = "2026-01-15T00:00:00Z";
+    const at = (ms: number) => Date.parse(created) + ms;
+    expect(minibcSubscriptionSettled({ memberEmail: "", minibcSubscriptionId: 7, minibcCheckedAt: at(1) }, created)).toBe(true);
+    expect(minibcSubscriptionSettled({ memberEmail: "", minibcSubscriptionId: null, minibcCheckedAt: null }, created)).toBe(false);
+    expect(minibcSubscriptionSettled({ memberEmail: "", minibcSubscriptionId: null, minibcCheckedAt: at(MINIBC_METAFIELD_GRACE_MS - 1) }, created)).toBe(false);
+    expect(minibcSubscriptionSettled({ memberEmail: "", minibcSubscriptionId: null, minibcCheckedAt: at(MINIBC_METAFIELD_GRACE_MS) }, created)).toBe(true);
+  });
+
+  it("has a client that reads no subscription from an empty answer", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
+    expect(await new BigCommerceClient("store123", "token").getOrderSubscriptionId(1001)).toBeNull();
   });
 });

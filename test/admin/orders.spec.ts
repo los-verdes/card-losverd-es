@@ -414,6 +414,8 @@ describe("POST /admin/orders/:orderId/reread", () => {
   function mockStore(order: object | null, products: object[] = MEMBERSHIP) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = input instanceof Request ? input.url : String(input);
+      // The MiniBC subscription lookup (#397): these orders have none.
+      if (url.includes("/metafields")) return Response.json({ data: [] });
       if (url.endsWith("/orders/1001/products")) return new Response(JSON.stringify(products), { status: 200 });
       if (url.endsWith("/orders/1001")) {
         return order === null ? new Response("", { status: 404 }) : new Response(JSON.stringify(order), { status: 200 });
