@@ -18,6 +18,8 @@
 //   just etl-run staging readiness    # the readiness checks
 //   just etl-run production minibc --yes-production  # MiniBC membership subscriptions (#397)
 //   just etl-run staging refresh-lapsed-passes  # one-off: lapsed members' passes (#295)
+//   just etl-run staging refresh-passes-admins  # admins' installed passes, then:
+//   just etl-run staging refresh-passes         # every installed pass (#333)
 //   just etl-run production slack --yes-production
 
 import { sendQueueMessage } from "./lib/cloudflareQueue.ts";
@@ -57,6 +59,14 @@ const JOBS = {
   "refresh-lapsed-passes": {
     message: { type: "refresh_lapsed_passes" },
     does: "Refreshes the wallet passes of every member whose membership has already lapsed, so passes still saying \"active\" update (#295). A one-off; the daily sweep handles lapses from then on. Pushes to devices; never emails anyone.",
+  },
+  "refresh-passes-admins": {
+    message: { type: "refresh_installed_passes", audience: "admins" },
+    does: "Refreshes the installed wallet passes of admins only: the first stage of a change that alters every card, such as year themes by default (#333). Pushes to devices; never emails anyone.",
+  },
+  "refresh-passes": {
+    message: { type: "refresh_installed_passes", audience: "everyone" },
+    does: "Refreshes every installed wallet pass -- members with an Apple device registered, a sign-in here, or a card emailed -- after a change that alters every card (#333). Run refresh-passes-admins first. Pushes to devices; never emails anyone.",
   },
   readiness: {
     message: { type: "run_readiness_check" },

@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_UNLISTED_RECHECKS_PER_MESSAGE, ORDERS_PAGE_SIZE } from "../../src/bigcommerce/sync";
 import { MINIBC_PAGES_PER_MESSAGE } from "../../src/minibc/subscriptions";
+import { PASS_REFRESH_BATCH } from "../../src/member/passRefresh";
 import {
   enqueueEtlSync,
   handleEtlSyncBatch,
@@ -613,5 +614,56 @@ describe("sync_minibc_subscriptions_etl", () => {
     expect(sent).toEqual([]);
     const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM minibc_subscriptions").first<{ n: number }>())!;
     expect(n).toBe(MINIBC_PAGES_PER_MESSAGE + 1);
+  });
+});
+
+describe("refresh_installed_passes", () => {
+  const realQueue = env.ETL_SYNC_QUEUE;
+  let sent: EtlSyncMessage[];
+
+  beforeEach(async () => {
+    sent = [];
+    (env as { ETL_SYNC_QUEUE?: Queue<EtlSyncMessage> }).ETL_SYNC_QUEUE = {
+      send: async (message: EtlSyncMessage) => {
+        sent.push(message);
+      },
+    } as unknown as Queue<EtlSyncMessage>;
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    for (let i = 0; i <= PASS_REFRESH_BATCH; i++) {
+      const email = `member${i}@example.com`;
+      await env.DB.prepare(
+        "INSERT INTO members (member_id, first_name, last_name, email, expiration_date, auth_token, last_updated_at) VALUES (?, 'Test', 'Member', ?, '2099-01-01', 'token', 1)",
+      )
+        .bind(`BC-${String(i).padStart(3, "0")}`, email)
+        .run();
+      await env.DB.prepare("INSERT INTO audit_log (action, subject_email, detail) VALUES ('card.emailed', ?, 'x')").bind(email).run();
+    }
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    env.ETL_SYNC_QUEUE = realQueue;
+    await env.DB.exec("DELETE FROM audit_log");
+    await env.DB.exec("DELETE FROM members");
+  });
+
+  it("carries a run over to a follow-up message with its cursor, then stops", async () => {
+    const first = makeMessage({ type: "refresh_installed_passes", audience: "everyone" });
+    await handleEtlSyncBatch(makeBatch([first]), env);
+
+    expect(first.ack).toHaveBeenCalledOnce();
+    expect(sent).toEqual([
+      {
+        type: "refresh_installed_passes",
+        audience: "everyone",
+        cursor: { audience: "everyone", startedAt: expect.any(Number), afterMemberId: `BC-${String(PASS_REFRESH_BATCH - 1).padStart(3, "0")}`, refreshed: PASS_REFRESH_BATCH },
+      },
+    ]);
+
+    const followUp = makeMessage(sent[0]);
+    sent = [];
+    await handleEtlSyncBatch(makeBatch([followUp]), env);
+    expect(followUp.ack).toHaveBeenCalledOnce();
+    expect(sent).toEqual([]);
   });
 });
