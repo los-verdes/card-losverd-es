@@ -5,8 +5,7 @@
  * The page beacon (src/member/webAnalytics.tsx) sees that somebody loaded
  * `/`; it cannot see whether they got a card, landed on "no membership", or
  * were an Apple Hide My Email address with orders under another one. Those
- * are the cases the first real visits after cutover are expected to turn up,
- * so each decision point says which way it went, and the Workers Logs query
+ * are the cases worth counting, so each decision point says which way it went, and the Workers Logs query
  * builder can count them by field.
  *
  * Categories only. Nothing here identifies a person: no address, name, order
