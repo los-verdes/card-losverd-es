@@ -15,6 +15,7 @@ import { runOpsWatch } from "../ops/watch";
 import { runSlackMembersEtl } from "../slack/membersEtl";
 import { syncSlackChannelMembers } from "../slack/channelMembers";
 import { syncMinibcSubscriptions, type MinibcCursor } from "../minibc/subscriptions";
+import { refreshInstalledPasses, type PassRefreshAudience, type PassRefreshCursor } from "../member/passRefresh";
 
 /**
  * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
@@ -44,6 +45,12 @@ export type EtlSyncMessage =
   | { type: "run_ops_watch" }
   /** One batch of the one-off refresh; `afterMemberId` is set on follow-ups. */
   | { type: "refresh_lapsed_passes"; afterMemberId?: string }
+  /**
+   * One batch of a refresh of every installed pass (#333), for an audience:
+   * admins' cards, or everyone's. The first message carries the audience
+   * alone; the rest carry the run's cursor.
+   */
+  | { type: "refresh_installed_passes"; audience: PassRefreshAudience; cursor?: PassRefreshCursor }
   /**
    * Fails on purpose, so the dead-letter path can be exercised in a real
    * environment (`scripts/queue-dlq-drill.mjs`). Nothing produces it but that
@@ -119,6 +126,12 @@ async function dispatchEtlSyncMessage(
     case "run_ops_watch":
       await runOpsWatch(env);
       return;
+    case "refresh_installed_passes": {
+      const next = await refreshInstalledPasses(env, message.cursor ?? { audience: message.audience });
+      // Only once the batch has succeeded, as with the resync chain.
+      if (next) await enqueueEtlSync(env, { type: "refresh_installed_passes", audience: next.audience, cursor: next });
+      return;
+    }
     case "refresh_lapsed_passes": {
       const next = await refreshLapsedPasses(env, message.afterMemberId);
       // Only once the batch has succeeded, as with the resync chain.
