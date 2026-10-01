@@ -66,7 +66,6 @@ export const ADMIN_NAV: NavGroup[] = [
     label: "Members",
     links: [
       { href: "/admin/members", label: "Find" },
-      { href: "/admin/member-since", label: "Member since" },
       // Corrections made to members (attributed orders, card names and
       // "member since" dates set by hand), so it sits with them rather than
       // under Reports, though its address is a report's.

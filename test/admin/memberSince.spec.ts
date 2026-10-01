@@ -6,15 +6,18 @@ import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
 
 /**
- * This page exists so that correcting a date is not a developer's job, which
- * makes its guard rails the point rather than an extra: whoever uses it will
- * not be reading the schema, and a wrong date here is shown on a card.
+ * Correcting a date is not a developer's job, which makes these guard rails
+ * the point rather than an extra: whoever uses the form will not be reading
+ * the schema, and a wrong date here is shown on a card. The form is a section
+ * of the member's admin page (#331).
  */
 
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const ADMIN_ID = 1;
 const MEMBER_ID = 2;
-const PATH = "/admin/member-since";
+const PATH = "/admin/members";
+const OLD_PATH = "/admin/member-since";
+const memberPage = (email: string) => `${PATH}?q=${encodeURIComponent(email)}`;
 const TODAY = "2026-09-19";
 
 async function request(path: string, init: RequestInit = {}, loggedInAs: number | null = ADMIN_ID) {
@@ -70,19 +73,30 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM member_since_overrides");
   await env.DB.exec("DELETE FROM members");
   await env.DB.exec("DELETE FROM users");
 });
 
-describe("access", () => {
-  it("is admin-only", async () => {
-    expect((await request(PATH, {}, null)).status).toBe(302);
-    expect((await request(PATH, {}, MEMBER_ID)).status).toBe(403);
+describe("the page it replaced", () => {
+  it("is admin-only still", async () => {
+    expect((await request(OLD_PATH, {}, null)).status).toBe(302);
+    expect((await request(OLD_PATH, {}, MEMBER_ID)).status).toBe(403);
   });
 
-  it("is never cached, since it shows names and addresses", async () => {
-    expect((await request(PATH)).headers.get("Cache-Control")).toBe("no-store");
+  it("sends a link to someone's dates to that section of their member page", async () => {
+    const res = await request(`${OLD_PATH}?email=Pat%40Example.com`);
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe("/admin/members?q=pat%40example.com#member-since");
+  });
+
+  it("sends one without an address to the search", async () => {
+    const res = await request(OLD_PATH);
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe("/admin/members");
   });
 });
 
@@ -132,24 +146,55 @@ describe("parseMemberSince", () => {
   });
 });
 
-describe("the page", () => {
+describe("the section on the member page", () => {
   it("shows the derived date and the correction apart, which is the question being answered", async () => {
     await insertMember("pat@example.com", "2023-04-01");
     await env.DB.prepare(
       "INSERT INTO member_since_overrides (email, member_since, source, note) VALUES ('pat@example.com', '2016-03-01', 'manual', 'founding member')",
     ).run();
 
-    const html = await (await request(`${PATH}?email=pat@example.com`)).text();
+    const html = await (await request(memberPage("pat@example.com"))).text();
+    const section = html.slice(html.indexOf('id="member-since"'));
 
-    expect(html).toContain("Mar 1, 2016");
-    expect(html).toContain("Apr 1, 2023");
-    expect(html).toContain("founding member");
+    expect(section).toContain("Mar 1, 2016 (corrected)");
+    expect(section).toContain("Apr 1, 2023");
+    expect(section).toContain("founding member");
+    // The summary says so too, and leads to the section.
+    expect(html).toContain('Mar 1, 2016 (<a href="#member-since">corrected</a>)');
   });
 
-  it("warns when no card exists for the address yet", async () => {
-    const html = await (await request(`${PATH}?email=nobody@example.com`)).text();
+  it("offers to go back to the orders' date for an admin's correction", async () => {
+    await insertMember("pat@example.com", "2023-04-01");
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('pat@example.com', '2016-03-01', 'manual')",
+    ).run();
 
-    expect(html).toContain("No membership card exists for this address yet");
+    const html = await (await request(memberPage("pat@example.com"))).text();
+
+    expect(html).toContain('value="member-since-clear"');
+    expect(html).toContain("Use the date from their orders instead");
+  });
+
+  it("offers no way to remove an imported date, and says why", async () => {
+    await insertMember("pat@example.com", "2023-04-01");
+    await env.DB.prepare(
+      "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('pat@example.com', '2018-01-01', 'legacy_postgres')",
+    ).run();
+
+    const html = await (await request(memberPage("pat@example.com"))).text();
+
+    expect(html).toContain("imported from the old site");
+    expect(html).not.toContain('value="member-since-clear"');
+    expect(html).toContain("can be corrected but not removed");
+  });
+
+  it("offers nothing to remove when the date is the orders' own", async () => {
+    await insertMember("pat@example.com", "2023-04-01");
+
+    const html = await (await request(memberPage("pat@example.com"))).text();
+
+    expect(html).toContain("Apr 1, 2023 (from their orders)");
+    expect(html).not.toContain('value="member-since-clear"');
   });
 });
 
@@ -157,9 +202,10 @@ describe("saving a correction", () => {
   it("records it as manual, so a re-run of the legacy import can't undo it", async () => {
     await insertMember("pat@example.com", "2023-04-01");
 
-    const res = await post({ email: "pat@example.com", member_since: "2016-03-01", note: "paper records" });
+    const res = await post({ email: "pat@example.com", action: "member-since", member_since: "2016-03-01", note: "paper records" });
 
     expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("/admin/members?q=pat%40example.com&saved=member-since");
     expect(await overrideRow()).toEqual({
       email: "pat@example.com",
       member_since: "2016-03-01",
@@ -174,19 +220,19 @@ describe("saving a correction", () => {
     // the question.
     await insertMember("pat@example.com", "2023-04-01");
 
-    await post({ email: "pat@example.com", member_since: "2016-03-01", note: "paper records" });
+    await post({ email: "pat@example.com", action: "member-since", member_since: "2016-03-01", note: "paper records" });
 
     const row = await env.DB.prepare("SELECT set_by FROM member_since_overrides").first<{ set_by: number | null }>();
     expect(row?.set_by).toBe(ADMIN_ID);
 
-    const html = await (await request(`${PATH}?email=pat@example.com`)).text();
+    const html = await (await request(memberPage("pat@example.com"))).text();
     expect(html).toContain("by admin@example.com");
   });
 
   it("rebuilds the member's pass, via the table's trigger rather than a push", async () => {
     await insertMember("pat@example.com", "2023-04-01");
 
-    await post({ email: "pat@example.com", member_since: "2016-03-01", note: "" });
+    await post({ email: "pat@example.com", action: "member-since", member_since: "2016-03-01", note: "" });
 
     const member = await env.DB.prepare("SELECT last_updated_at FROM members WHERE email = 'pat@example.com'")
       .first<{ last_updated_at: number }>();
@@ -199,13 +245,13 @@ describe("saving a correction", () => {
       "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('pat@example.com', '2018-01-01', 'legacy_postgres')",
     ).run();
 
-    await post({ email: "pat@example.com", member_since: "2016-03-01", note: "" });
+    await post({ email: "pat@example.com", action: "member-since", member_since: "2016-03-01", note: "" });
 
     expect(await overrideRow()).toMatchObject({ member_since: "2016-03-01", source: "manual" });
   });
 
   it("sends a rejected date back to the page rather than showing an error page", async () => {
-    const res = await post({ email: "pat@example.com", member_since: "2021-02-30", note: "" });
+    const res = await post({ email: "pat@example.com", action: "member-since", member_since: "2021-02-30", note: "" });
 
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toContain("error=");
@@ -220,9 +266,9 @@ describe("removing a correction", () => {
       "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('pat@example.com', '2016-03-01', 'manual')",
     ).run();
 
-    const res = await post({ email: "pat@example.com", action: "clear" });
+    const res = await post({ email: "pat@example.com", action: "member-since-clear" });
 
-    expect(res.headers.get("Location")).toContain("saved=cleared");
+    expect(res.headers.get("Location")).toContain("saved=member-since-cleared");
     expect(await overrideRow()).toBeNull();
   });
 
@@ -233,9 +279,28 @@ describe("removing a correction", () => {
       "INSERT INTO member_since_overrides (email, member_since, source) VALUES ('pat@example.com', '2018-01-01', 'legacy_postgres')",
     ).run();
 
-    const res = await post({ email: "pat@example.com", action: "clear" });
+    const res = await post({ email: "pat@example.com", action: "member-since-clear" });
 
     expect(res.headers.get("Location")).toContain("error=");
     expect(await overrideRow()).toMatchObject({ source: "legacy_postgres" });
+  });
+});
+
+describe("the audit log", () => {
+  it("records a correction and its removal, with the date each replaced", async () => {
+    await insertMember("pat@example.com", "2023-04-01");
+
+    await post({ email: "pat@example.com", action: "member-since", member_since: "2016-03-01", note: "paper records" });
+    await post({ email: "pat@example.com", action: "member-since", member_since: "2015-06-01", note: "" });
+    await post({ email: "pat@example.com", action: "member-since-clear" });
+
+    const { results } = await env.DB.prepare(
+      "SELECT action, subject_email, actor_email, detail FROM audit_log ORDER BY id",
+    ).all();
+    expect(results).toEqual([
+      { action: "member_since.set", subject_email: "pat@example.com", actor_email: "admin@example.com", detail: "2016-03-01 -- paper records" },
+      { action: "member_since.set", subject_email: "pat@example.com", actor_email: "admin@example.com", detail: "2015-06-01 (was 2016-03-01)" },
+      { action: "member_since.cleared", subject_email: "pat@example.com", actor_email: "admin@example.com", detail: "Was 2015-06-01; back to what the orders say" },
+    ]);
   });
 });

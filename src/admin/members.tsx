@@ -67,6 +67,14 @@ import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
 import { dayText } from "./when";
+import {
+  MemberSinceSection,
+  clearMemberSince,
+  lookupMemberSince,
+  parseMemberSince,
+  saveMemberSince,
+  type MemberSinceSubject,
+} from "./memberSince";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
 import { renewalState, renewalText, renewalsForMember, type RenewalRow } from "../minibc/renewals";
 
@@ -369,7 +377,9 @@ const Summary: FC<{
   store: StoreAccountRow | null;
   /** MiniBC subscriptions matched to them (#397); null where MiniBC isn't read. */
   renewals: RenewalRow[] | null;
-}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme, store, renewals }) => (
+  memberSince: MemberSinceSubject;
+  today: string;
+}> = ({ member, footprint, orders, nameSetBy, nameSetByEmail, expelled, theme, store, renewals, memberSince, today }) => (
   <>
     {member.display_name && (
       <p class="muted">
@@ -397,7 +407,17 @@ const Summary: FC<{
         </tr>
         <tr>
           <th style={cellStyle}>Member since</th>
-          <td style={cellStyle}>{member.member_since ?? "not shown"}</td>
+          <td style={cellStyle}>
+            {member.member_since ? formatShortDate(member.member_since) : "not shown"}
+            {memberSince.override ? (
+              <>
+                {" "}
+                (<a href="#member-since">corrected</a>)
+              </>
+            ) : (
+              ""
+            )}
+          </td>
         </tr>
         <tr>
           <th style={cellStyle}>Orders</th>
@@ -433,11 +453,6 @@ const Summary: FC<{
     </table>
     <CardPreview member={member} />
     </div>
-    <p>
-      <a href={`/admin/member-since?email=${encodeURIComponent(member.email)}`}>
-        Correct their &quot;member since&quot; date
-      </a>
-    </p>
     <h3>The name on their card</h3>
     <p>
       Shown instead of the name their orders give. Useful for a gifted membership,
@@ -468,6 +483,7 @@ const Summary: FC<{
         <button type="submit">Use the name from their orders instead</button>
       </form>
     )}
+    <MemberSinceSection subject={memberSince} today={today} />
     <ThemeSection member={member} theme={theme} />
     <h3>Membership standing</h3>
     <p class="muted">
@@ -678,7 +694,7 @@ members.get("/", async (c) => {
   const historyEmail =
     member?.email ?? (lookup.kind === "email" && isWellFormedEmail(lookup.value) ? lookup.value : null);
 
-  const [footprint, orders, override, expelled, theme, store, renewals] = member
+  const [footprint, orders, override, expelled, theme, store, renewals, memberSince] = member
     ? await Promise.all([
         emailFootprint(c.env.DB, member.email),
         getMemberOrderHistory(c.env, member.email),
@@ -688,8 +704,9 @@ members.get("/", async (c) => {
         storeAccountForMember(c.env, member),
         // Only where MiniBC is read at all: elsewhere "doesn't renew" would be a guess.
         c.env.MINIBC_API_KEY ? renewalsForMember(c.env, member.email) : Promise.resolve(null),
+        lookupMemberSince(c.env, member.email),
       ])
-    : [null, [], null, false, null, null, null];
+    : [null, [], null, false, null, null, null, null];
 
   // An address can hold orders and no membership, and that is a real answer
   // rather than a dead end (#241). Only when there is nothing at all does the
@@ -765,6 +782,12 @@ members.get("/", async (c) => {
       {c.req.query("saved") === "set" && (
         <p style="color: var(--success)">Name saved. Their passes will catch up shortly.</p>
       )}
+      {c.req.query("saved") === "member-since" && (
+        <p style="color: var(--success)">&quot;Member since&quot; corrected. Their card will show it from now on.</p>
+      )}
+      {c.req.query("saved") === "member-since-cleared" && (
+        <p style="color: var(--success)">Correction removed. Their card is back to the date from their orders.</p>
+      )}
       {c.req.query("saved") === "store-unlinked" && (
         <p style="color: var(--success)">Store account disconnected.</p>
       )}
@@ -801,7 +824,7 @@ members.get("/", async (c) => {
       {c.req.query("error") && <p style="color: var(--danger)">{c.req.query("error")}</p>}
       {notFound && <p style="color: var(--danger)">{notFound}</p>}
       {orphan && <OrdersWithoutMember {...orphan} />}
-      {member && footprint && theme && (
+      {member && footprint && theme && memberSince && (
         <Summary
           member={member}
           footprint={footprint}
@@ -812,6 +835,8 @@ members.get("/", async (c) => {
           theme={theme}
           store={store}
           renewals={renewals}
+          memberSince={memberSince}
+          today={new Date().toISOString().slice(0, 10)}
         />
       )}
       {historyOnly && (
@@ -901,6 +926,19 @@ members.post("/", csrf(), async (c) => {
       return back({ error: "That is not a theme their card can use." });
     }
     return back({ saved: "theme" });
+  }
+
+  if (form.action === "member-since") {
+    const input = parseMemberSince(email, form.member_since, form.note, new Date().toISOString().slice(0, 10));
+    if ("error" in input) return back({ error: input.error });
+    await saveMemberSince(c.env, input, c.get("session").userId);
+    return back({ saved: "member-since" });
+  }
+
+  if (form.action === "member-since-clear") {
+    return (await clearMemberSince(c.env, email, c.get("session").userId))
+      ? back({ saved: "member-since-cleared" })
+      : back({ error: "There was no correction to remove." });
   }
 
   if (form.action === "clear") {
