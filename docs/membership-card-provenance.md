@@ -19,7 +19,7 @@ feedback.)
 
 - **Source of truth:** Membership derives from membership product orders placed on the Los Verdes store
   (`store.losverdesatx.org/membership/`).
-  - All counted membership orders for an individual resolve into a single aggregate membership.
+  - All counted membership orders for an individual resolve into a single aggregate "membership".
   - Members are identified uniquely by email address (order email by default, unless manually re-attributed).
   - A membership remains active until `<most recent counted order date> + 365 days` (unless revoked).
 - **Card application behavior:**
@@ -51,10 +51,10 @@ flowchart TD
 
 ## 2. System Architecture
 
-The application receives order events via BigCommerce webhooks on order updates (`POST /bigcommerce/order-webhook`) and
-runs periodic resyncs to catch missed deliveries.
+The card site is configured to receive order update events via BigCommerce webhooks and runs periodic resyncs to catch
+missed deliveries.
 
-Qualifying orders are grouped by member email. A single calculation engine (`refreshMemberFromOrders()` in
+Qualifying orders are grouped by member email. A single function (`refreshMemberFromOrders()` in
 `src/bigcommerce/sync.ts`) recalculates the full membership state whenever an order updates, a scheduled sync executes,
 or an order is manually re-attributed.
 
@@ -71,29 +71,35 @@ Non-matching orders are ignored.
 ### One Membership per Order Constraint
 
 The current schema expects **one membership product per order**. The storefront enforces this constraint at checkout.
+However, it is a per-product constraint, so it must be deliberately maintained if membership products are updated.
 
-The ingestion pipeline records `membership_orders.membership_units`. Any active order containing multiple membership
-units is flagged on the admin report under "More than one membership" until addressed or expired.
+As incoming orders are processed, we record a `membership_orders.membership_units` column. Any active order containing
+multiple membership units is flagged on the admin report under "More than one membership" until addressed or expired.
+(This isn't expected to come up normally.)
 
 ### Authoritative Source
 
 BigCommerce is authoritative; the app maintains a downstream replica. Two fields originate within the application rather
 than the store:
 
-- `membership_orders.member_email`: Attribution override (never overwritten by syncs).
-- `membership_orders.missing_since`: Flag set when an order ceases to return from the store API.
+- `membership_orders.member_email`: Attribution override (i.e., who a membership order belongs to; never overwritten by
+  syncs).
+- `membership_orders.missing_since`: Flag set when an order ceases to return from the store API. (not expected to happen
+  typically; noted for completeness)
 
 ### Sync Strategy
 
-- **Re-reading is idempotent:** Processing an order overwrites the local row by ID; multiple passes produce no duplicate
-  state.
+This is how we ensure our accounting of membership reflects the authoritative source / LV store:
+
+- **Re-reading is idempotent:** Processing an order overwrites the local row by order ID; multiple passes produce no
+  duplicate state.
 - **Direct overwrite:** Ingested store fields replace local copies rather than merging.
-- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sweep runs weekly
+- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sync runs weekly
   early Sunday morning.
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
-  than deleted, preserving current cards.
+  than deleted, preserving current cards. (once again, this scenario not expected to occur tho)
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
-  without notifying the member.
+  without notifying (i.e., without emailing) the associated member.
 
 ### Known Edge Cases
 
@@ -125,35 +131,33 @@ parity between the formats and that is tracked in this table:
 - **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin may set a
   custom display name (up to 64 characters via `member_display_names`). A member who updates their billing name at
   checkout will see it reflected on their next membership purchase; however, an attributed gift order retains the
-  purchaser’s billing name, which can result in a gifted card displaying the buyer's name (see Section 8). (Some of
-  these values were imported from the old site and don't map directly to an order.)
+  purchaser’s billing name, which can result in a gifted card displaying the buyer's name. (Some of these values were
+  imported from the old site and don't map directly to an order.)
 - **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
   all qualifying orders. Terms do not accumulate consecutively.
 - **Card Number & QR Code:** Uses a persistent UUID generated upon initial record creation.
   - The card number is not derived from the store customer ID because guest checkouts share ID 0 and gifted orders
     retain the buyer’s customer ID.
   - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
-  "Not a current membership"); specific lapse or revocation states require signed-in admin access.
+  "Not a current membership"); but certain lapse or revocation states aren't displayed without signed-in admin access
   - Cards issued by the old site still scan: their serial is looked up (`legacy_membership_cards`) and the holder's
     current membership is shown.
 
 ### Card Themes
 
-- **What a theme is:** colours plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`).
-  Year themes exist for 2020–2023. `classic` is the original look and the fallback.
-- **Where it shows:** the card image, the Apple pass (full scarf art behind the pass on iOS 27, via
-  `APPLE_POSTER_PASSES`), and the Google pass's large image. Both wallets show the same design.
+- **What a theme is:** color plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`).
+  Year themes exist (e.g., 2020, 2021, etc.) and `classic` is the original look and the fallback.
 - **Who can use which** (`src/themes/eligibility.ts`):
   - the year of each membership order they placed;
   - their "member since" year;
   - a subgroup's theme (e.g. `#los-pringles`) while their Slack account is in that public channel;
-  - `classic`, always.
+  - folks can always use `classic`
 - **Default:** `classic`. Once `CARD_THEME_YEAR_DEFAULTS` is on, the "member since" year's theme (or `classic` if that
   year has none). A subgroup theme is never a default.
 - **Choosing:** members on their card page; admins on the member's admin page. `CARD_THEME_CHOICE` sets who may choose.
-  Choices are kept apart from the rebuilt membership (`member_card_themes`).
-- **Losing access:** a choice no longer allowed (e.g. after leaving the Slack channel) falls back to the default, and
-  comes back if access does. Installed passes update either way.
+  Choices are kept tracked per member / separate from any orders (`member_card_themes`).
+- **Losing access:** a theme choice no longer allowed (e.g. after leaving the associated Slack channel) falls back to
+  the default, and comes back if access does.
 - **Audit:** an admin's choice is logged; a member's own is not.
 - **In production today:** only admins may choose, year defaults are off, and the poster layout is off.
 
@@ -204,11 +208,16 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 
 ## 7. Aggregation & Lifecycle
 
-1. Ingest all qualifying orders matching the email address.
-2. Reduce rows to card attributes via `deriveMembershipState()`.
+Here is generally how we map membership orders to members:
+
+1. Read in all qualifying orders matching the email address.
+2. Derive card attributes from these orders via `deriveMembershipState()`.
 3. Update or create the member record in `members`.
 
-- **Decoupled data models:** Orders remain historical logs; memberships are computed snapshots.
+The overall design follows these properties:
+
+- **Decoupled data models:** Orders remain historical logs; memberships are computed snapshots. (i.e., orders and
+  memberships are tracked separately)
 - **Non-accumulating terms:** Expirations do not stack. Renewing 30 days prior to expiration sets the new term to
   `purchase_date + 365 days`, shortening the overall coverage window by 30 days.
 - **Persistent identities:** Lapsed members retain their UUID (`member_id`), push tokens, and pass configurations
@@ -228,11 +237,14 @@ Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updat
 installed wallet passes. The `member_email` field is protected against automated overwrite during routine BigCommerce
 sync passes.
 
+This feature would be used if someone orders a membership with the intention of someone else receiving / using it.
+
 ---
 
 ## 9. Signing In & the Store
 
-How a person reaches their card. None of it changes who is a member.
+This sections describes the various way a members accesses their card. This includes linking their membership card
+directly with their LV store account.
 
 - **Sign-in:** with Google or Apple. The account's email finds the membership under that address
   (`findMembershipsForUser()` in `src/member/portal.tsx`).
@@ -241,9 +253,9 @@ How a person reaches their card. None of it changes who is a member.
   `src/member/claimMembership.tsx`).
 - **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says
   whether an address belongs to a member.
-- **Store accounts (#38):** a member can connect their store account once, while signed in to both in the same browser.
-  After that, "Membership card" in the store's header and account menu signs them straight in, and their store account
-  pages show their card.
+- **Store accounts (see: [#38](https://github.com/los-verdes/card-losverd-es/issues/38)):** a member can connect their
+  store account once, while signed in to both in the same browser. After that, a "Membership card" link in the store's
+  top navbar / account menu signs them straight in to the card site, and their store account pages show their card.
   - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
     never the recipient's. The store's email appears on the sign-in page only as a hint.
   - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
