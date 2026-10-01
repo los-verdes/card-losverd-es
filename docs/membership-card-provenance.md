@@ -102,9 +102,8 @@ than the store:
   continues counting toward membership.
 - **Unlisted SKUs:** Orders using an unlisted SKU will not issue cards or trigger reports. Adding new membership tiers
   requires updating `MEMBERSHIP_SKUS` in code.
-- **MiniBC renewals:** Recurring subscriptions managed through MiniBC do not fire BigCommerce webhooks unless configured
-  to generate a standard order.
-
+- **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not currently
+   use this information directly when considering membership.
 ---
 
 ## 4\. Card Fields & Verification
