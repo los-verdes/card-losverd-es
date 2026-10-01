@@ -96,7 +96,7 @@ describe("the admin navigation", () => {
   });
 
   it("is on every admin page, not just the reports index", async () => {
-    for (const path of ["/admin/members", "/admin/member-since", "/admin/revocations"]) {
+    for (const path of ["/admin/members", "/admin/reports/consolidations", "/admin/revocations"]) {
       const html = await (await get(path)).text();
       expect(navLinks(html).length, `${path} should carry the nav`).toBeGreaterThan(8);
     }
