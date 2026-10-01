@@ -2,7 +2,7 @@ import "../setup/d1";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
-import { AdminNav } from "../../src/admin/nav";
+import { ADMIN_NAV, AdminNav } from "../../src/admin/nav";
 import { attentionCounts, missingOrders, ordersWithExtraMemberships } from "../../src/admin/reportQueries";
 import { expelledPeople } from "../../src/member/expulsion";
 import { revokedCards } from "../../src/member/revocation";
@@ -72,6 +72,13 @@ describe("the admin navigation", () => {
 
     const labels = [...html.matchAll(/class="nav-label">([^<]+)</g)].map((m) => m[1]);
     expect(labels).toEqual(["Reports", "Needs a look", "Members", "This environment"]);
+  });
+
+  it("files Consolidations with the members it corrects, not with the reports", () => {
+    const hrefs = (label: string) => ADMIN_NAV.find((group) => group.label === label)!.links.map((link) => link.href);
+
+    expect(hrefs("Members")).toContain("/admin/reports/consolidations");
+    expect(hrefs("Reports")).not.toContain("/admin/reports/consolidations");
   });
 
   it("links the index of reports from the group's own label, not as one more link in it", async () => {

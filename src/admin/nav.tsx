@@ -49,7 +49,6 @@ export const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/reports/over-time", label: "Over time" },
       { href: "/admin/reports/renewals", label: "Renewals" },
       { href: "/admin/reports/slack", label: "Slack" },
-      { href: "/admin/reports/consolidations", label: "Consolidations" },
     ],
   },
   {
@@ -68,6 +67,10 @@ export const ADMIN_NAV: NavGroup[] = [
     links: [
       { href: "/admin/members", label: "Find" },
       { href: "/admin/member-since", label: "Member since" },
+      // Corrections made to members (attributed orders, card names and
+      // "member since" dates set by hand), so it sits with them rather than
+      // under Reports, though its address is a report's.
+      { href: "/admin/reports/consolidations", label: "Consolidations" },
       // Rare, and done from a member's own page; the list is only worth a
       // place in the nav once there is something on it.
       { href: "/admin/revocations", label: "Revoked & expelled", onlyWhenAny: "revocations" },
