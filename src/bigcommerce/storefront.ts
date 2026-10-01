@@ -217,7 +217,13 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     } catch {
       return;
     }
-    const panel = element("section", { class: "lv-card-panel", style: "margin: 1.5rem 0" });
+    // Centred, and no wider than the card: the pages it sits on are laid out
+    // for a full-width product grid, and a card hugging the left edge of one
+    // looked lost.
+    const panel = element("section", {
+      class: "lv-card-panel",
+      style: "margin: 1.5rem auto; max-width: 420px; text-align: center",
+    });
     panel.appendChild(element("h3", {}, "Your membership card"));
     if (!data.connected || !data.member) {
       // The membership page already offers the way in; a store account page is where to explain it.
@@ -249,7 +255,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
           element("img", {
             src: member.cardImageUrl,
             alt: "Los Verdes membership card for " + member.name,
-            style: "display: block; width: 100%; max-width: 360px; height: auto; border-radius: 12px",
+            style: "display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; border-radius: 12px",
           }),
         );
       }
