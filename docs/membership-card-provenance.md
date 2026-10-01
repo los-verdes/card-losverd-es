@@ -3,7 +3,8 @@
 This document defines how membership status is derived and displayed across digital membership cards for Los Verdes. The
 primary audiences are:
 
-- **The Merch Team** (`merchteam@losverdesatx.org`): Store administrators and primary data-source managers.
+- **The Merch Team** (`merchteam@losverdesatx.org`): Store administrators, primary data-source managers, and keepers of
+  the realm.
 - **The Membership Committee** (`mc@losverdesatx.org`): Stewards of member standing, code of conduct enforcement, and
   disciplinary processes.
 
