@@ -97,7 +97,7 @@ This is how we ensure our accounting of membership reflects the authoritative so
 - **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sync runs weekly
   early Sunday morning.
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
-  than deleted, preserving current cards. (once again, this scenario not expected to occur tho)
+  than deleted, preserving current cards. (Again, this isn't expected to happen.)
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
   without notifying (i.e., without emailing) the associated member.
 
