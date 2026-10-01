@@ -31,7 +31,9 @@ const Row: FC<{ card: RevokedCard }> = ({ card }) => (
         {card.member_id}
       </a>
     </td>
-    <td style={cellStyle}>{card.email}</td>
+    <td style={cellStyle}>
+      <MemberLink email={card.email} />
+    </td>
     <td style={cellStyle}>{new Date(card.revoked_at).toISOString().slice(0, 10)}</td>
     <td style={cellStyle}>{card.revoked_by_email ?? "unknown"}</td>
     <td style={cellStyle}>{card.note ?? ""}</td>

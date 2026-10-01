@@ -329,6 +329,14 @@ button[aria-disabled="true"]::before {
   font-size: 0.9rem;
 }
 
+/* A member in an admin table: their card's name, with the address beneath
+   in smaller, quieter type (MemberLink in src/admin/layout.tsx). */
+a.member-link .member-email {
+  display: block;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
 /* The readiness page's manual steps. Ticking one is only a way of keeping
    your place while working down a long list on a second screen -- there is no
    JavaScript here and nothing is stored, so a reload starts over, which is

@@ -289,7 +289,8 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
           </td>
           <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
           <td style={cellStyle}>
-            <MemberLink email={row.order_email} />
+            {/* The Name column is this order's; a different member is named. */}
+            <MemberLink email={row.order_email} plain />
           </td>
           <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
@@ -337,7 +338,9 @@ function consolidationCell(row: ConsolidationRow, column: string) {
   const value = row[column];
   if (column === "order_id") return value === null ? "" : <OrderLink orderId={String(value)} />;
   if ((column === "order_email" || column === "member_email") && typeof value === "string") {
-    return <MemberLink email={value} />;
+    // Named only where the row shows no name for that address already: the
+    // order's own name columns cover its buyer, "Card shows" the card's name.
+    return <MemberLink email={value} plain={column === "order_email" || "display_name" in row} />;
   }
   if (column === "attributed_at" && value === null) return "legacy import";
   if (MOMENT_COLUMNS.has(column)) return <When at={Number(value)} />;
@@ -817,7 +820,8 @@ reports.get("/slack", async (c) => {
                       if (column === "email" && table.members && value) {
                         return (
                           <td style={cellStyle}>
-                            <MemberLink email={value} />
+                            {/* The row's own name columns say who it is. */}
+                            <MemberLink email={value} plain />
                           </td>
                         );
                       }
@@ -1107,7 +1111,7 @@ reports.get("/missing", async (c) => {
                 <OrderLink orderId={row.order_id} />
               </td>
               <td style={cellStyle}>
-                <MemberLink email={row.member_email} />
+                <MemberLink email={row.member_email} plain />
               </td>
               <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
               <td style={cellStyle}>{row.status ?? ""}</td>
@@ -1189,7 +1193,7 @@ reports.get("/extra-memberships", async (c) => {
                 <OrderLink orderId={row.order_id} />
               </td>
               <td style={cellStyle}>
-                <MemberLink email={row.member_email} />
+                <MemberLink email={row.member_email} plain />
               </td>
               <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
               <td style={cellStyle}>{row.status ?? ""}</td>
