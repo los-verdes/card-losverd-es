@@ -121,9 +121,9 @@ export async function reportReadiness(
  * "did not run".
  *
  * `null` for the request URL is deliberate and load-bearing: there is no
- * request here, and `runPreflightChecks` treats that as "cannot tell which
- * side of cutover this is", which is what stops a deliberate pre-cutover
- * state being reported as a failure every week.
+ * request here, so no served origin to compare `PUBLIC_BASE_URL` with, and
+ * `runPreflightChecks` skips that check rather than comparing the configured
+ * origin with itself and reporting a tautology as "ok".
  */
 export async function runReadinessCheck(
   env: Env,

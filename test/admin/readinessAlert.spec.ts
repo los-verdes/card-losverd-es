@@ -140,7 +140,7 @@ describe("readinessAlertText", () => {
   });
 });
 
-describe("a scheduled run cannot tell which side of cutover it is on", () => {
+describe("a scheduled run, which has no request to compare origins with", () => {
   it("skips the origin check rather than comparing the configured origin with itself", async () => {
     // Passing PUBLIC_BASE_URL as the request URL would make this always
     // report "ok" -- an answer that looks like a verified fact and is

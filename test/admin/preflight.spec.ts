@@ -242,9 +242,9 @@ describe("originVerdict", () => {
   });
 
   it("fails on a mismatch whichever host is serving, now that both environments have their own", () => {
-    // This used to be the pre-cutover norm, while production was reachable
-    // only at its workers.dev host. Since #148 staging has a custom domain
-    // too, so nothing should be served from workers.dev at all.
+    // This was normal while production was reachable only at its workers.dev
+    // host. Both environments have had a custom domain since #148, so nothing
+    // should be served from workers.dev at all.
     const result = originVerdict(
       "https://card.losverd.es",
       "https://card-losverd-es-production.los-verdes.workers.dev",
@@ -254,8 +254,8 @@ describe("originVerdict", () => {
   });
 
   it("fails when the custom domain serves a Worker still configured for another origin", () => {
-    // Being served at the custom domain is proof cutover happened, so the
-    // configuration disagreeing with it is the mistake this check exists for.
+    // The custom domain is what members' cards point at, so the configuration
+    // disagreeing with it is the mistake this check exists for.
     const result = originVerdict(
       "https://card-losverd-es-production.los-verdes.workers.dev",
       "https://card.losverd.es",
@@ -362,8 +362,8 @@ describe("Google Wallet", () => {
 });
 
 describe("BigCommerce", () => {
-  /** The pre-cutover view: reachable at workers.dev, configured for the real domain. */
-  const PRE_CUTOVER = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
+  /** The page read from a host other than PUBLIC_BASE_URL's. */
+  const OTHER_HOST = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
 
   it("names the store the token opens, so a misaimed environment shows up", async () => {
     const result = find(await check(), "Access token");
@@ -439,9 +439,9 @@ describe("BigCommerce", () => {
   });
 
   it("matches the destination against PUBLIC_BASE_URL, not the host being read from", async () => {
-    // An admin reading the page at workers.dev before cutover must still see
-    // the webhook that points where BigCommerce will deliver afterwards.
-    expect(find(await check(PRE_CUTOVER), "Order webhook").status).toBe("ok");
+    // Whichever host an admin reads the page from, the webhook that counts is
+    // the one delivering to the environment's own origin.
+    expect(find(await check(OTHER_HOST), "Order webhook").status).toBe("ok");
   });
 
   it("fails when the subscription delivers somewhere other than this environment", async () => {
@@ -456,13 +456,13 @@ describe("BigCommerce", () => {
       },
     ];
 
-    const result = find(await check(PRE_CUTOVER), "Order webhook");
+    const result = find(await check(OTHER_HOST), "Order webhook");
 
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("just bigcommerce-ensure-webhook");
   });
 
-  it("still fails once cutover has happened and nothing delivers to the real origin", async () => {
+  it("fails, read from the environment's own origin, when nothing delivers there", async () => {
     remote.hooks = [
       {
         scope: "store/order/*",
@@ -472,20 +472,19 @@ describe("BigCommerce", () => {
       },
     ];
 
-    // Served from PUBLIC_BASE_URL, so cutover is done and this is real.
     expect(find(await check(), "Order webhook").status).toBe("fail");
   });
 
 
-  it("fails on a foreign webhook token once we are serving the real domain", async () => {
-    // Same state, after the flip: every delivery is being rejected and orders
-    // have stopped syncing.
+  it("fails on a webhook token this Worker does not verify", async () => {
+    // Every delivery is being rejected, and orders arrive only with the
+    // scheduled resync.
     remote.hooks = [
       {
         scope: "store/order/*",
         destination: WEBHOOK_DESTINATION,
         is_active: true,
-        headers: { Authorization: "bearer the-legacy-apps-token" },
+        headers: { Authorization: "bearer another-apps-token" },
       },
     ];
     const result = find(await check(), "Webhook token");
@@ -502,7 +501,7 @@ describe("BigCommerce", () => {
         scope: "store/order/*",
         destination: WEBHOOK_DESTINATION,
         is_active: true,
-        headers: { Authorization: "bearer the-legacy-apps-token" },
+        headers: { Authorization: "bearer another-apps-token" },
       },
     ];
 
@@ -544,7 +543,7 @@ describe("BigCommerce", () => {
 });
 
 describe("who we may email", () => {
-  const PRE_CUTOVER = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
+  const OTHER_HOST = "https://card-losverd-es-production.los-verdes.workers.dev/admin/preflight";
 
   it("fails on an empty list, which is a service answering everyone with silence", async () => {
     // Both environments serve members, so this is the safety net for
@@ -560,7 +559,7 @@ describe("who we may email", () => {
   it("is content either way once it permits anybody", async () => {
     env.EMAIL_RECIPIENT_ALLOWLIST = "*";
     expect(find(await check(), "Who we may email").status).toBe("ok");
-    expect(find(await check(PRE_CUTOVER), "Who we may email").status).toBe("ok");
+    expect(find(await check(OTHER_HOST), "Who we may email").status).toBe("ok");
   });
 
   it("names the addresses a restricted environment may reach", async () => {
@@ -756,8 +755,8 @@ describe("the readiness page", () => {
 
   it("says plainly that ticking is not saved", async () => {
     // There is no JavaScript and no storage here, so a reload starts over.
-    // Someone part-way down a cutover checklist needs to know that before
-    // they rely on it, not after.
+    // Someone part-way down the checklist needs to know that before they
+    // rely on it, not after.
     expect(await (await get()).text()).toContain("nothing is saved");
   });
 

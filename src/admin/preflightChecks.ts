@@ -167,25 +167,35 @@ async function identityChecks(
 
 /** Tables every route assumes; a missing one means migrations didn't apply. */
 const EXPECTED_TABLES = [
+  "audit_log",
   "card_emails",
   "devices",
   "etl_sync_state",
+  "expelled_people",
   "legacy_membership_cards",
+  "member_card_themes",
+  "member_display_names",
   "member_since_overrides",
   "members",
   "membership_order_attributions",
   "membership_orders",
+  "minibc_subscriptions",
   "oauth_identities",
+  "ops_alert_state",
+  "ops_events",
   "pass_device_logs",
   "rate_limit_counters",
   "registrations",
+  "revoked_cards",
+  "slack_channel_members",
   "slack_users",
+  "store_handoff_tokens",
   "users",
 ];
 
 /**
- * Row counts worth eyeballing before cutover, as a sanity check on the legacy
- * import and the first full resync. Counts only -- never a row.
+ * Row counts worth eyeballing: an environment pointed at the wrong database,
+ * or one emptied by mistake, shows up here first. Counts only -- never a row.
  */
 const COUNTED_TABLES = ["members", "membership_orders", "legacy_membership_cards", "users"];
 
@@ -472,14 +482,12 @@ interface BigCommerceHook {
  * when it does.
  *
  * The second half is the one worth automating. A webhook subscription carries
- * its `Authorization` header from the moment it was registered, so the
- * production store's subscription holds the *legacy* app's token right up
- * until someone updates it by hand after DNS moves -- at which point every
- * delivery is a 401 and orders quietly stop syncing. The plan calls this out
- * as a step to do "right after the flip", which is exactly the kind of step
- * that gets missed.
+ * its `Authorization` header from the moment it was registered, so one
+ * registered before a key or client id changed keeps sending a token this
+ * Worker no longer verifies: every delivery is a 401, and orders arrive only
+ * with the six-hourly resync, with nothing else looking wrong.
  *
- * Both environments now serve their own `PUBLIC_BASE_URL`, so a subscription
+ * Both environments serve their own `PUBLIC_BASE_URL`, so a subscription
  * pointing anywhere else, or carrying a token this Worker does not verify,
  * means orders are being dropped right now.
  */
@@ -549,8 +557,8 @@ async function bigCommerceChecks(env: Env): Promise<CheckGroup> {
   );
 
   // Matched against PUBLIC_BASE_URL rather than the host serving this page:
-  // the destination has to be where BigCommerce will deliver after cutover,
-  // not where an admin happens to be reading from.
+  // the destination is where BigCommerce has to deliver, whichever host an
+  // admin happens to be reading from.
   //
   // Guarded rather than assumed. This page's whole purpose is to be readable
   // on a half-configured environment, so an unset PUBLIC_BASE_URL has to cost
@@ -576,7 +584,6 @@ async function bigCommerceChecks(env: Env): Promise<CheckGroup> {
         data.find((each) => each.destination === destination && each.scope === WEBHOOK_SCOPE);
       hook = subscribedTo(expected);
       if (!hook) {
-        // Before cutover the subscription belongs on this Worker's own
         return fail(
           "Order webhook",
           `No ${WEBHOOK_SCOPE} subscription delivering to ${expected}. Register one with \`just bigcommerce-ensure-webhook\`.`,
@@ -643,10 +650,6 @@ async function queueChecks(env: Env): Promise<CheckGroup> {
 }
 
 /**
- * Runs every automated check. Groups are ordered roughly by how early a
- * failure would stop cutover.
- */
-/**
  * What the hourly watch is looking at (#56), shown here too: it alerts only
  * on a signal that keeps firing, so this page is where a signal that fired
  * once, or is firing right now and has not yet been announced, is visible.
@@ -660,6 +663,11 @@ async function operationalSignals(env: Env, now: Date): Promise<CheckGroup> {
   return { title: "Operational signals", results };
 }
 
+/**
+ * Runs every automated check: the operational signals first, then the
+ * configuration, roughly from what would stop everything to what would stop
+ * one feature.
+ */
 export async function runPreflightChecks(
   env: Env,
   requestUrl: string | null,
@@ -678,17 +686,20 @@ export async function runPreflightChecks(
 }
 
 /**
- * The steps no code can take for us. Kept beside the automated checks rather
- * than in a separate runbook, so there is one page to work down and no second
- * document to fall out of date.
+ * The checks no code can make for us: what a member sees on a real phone or
+ * in a real inbox. Kept beside the automated checks rather than in a separate
+ * runbook, so there is one page to work down and no second document to fall
+ * out of date. Worth working through after a change to passes, sign-in or
+ * email.
+ *
+ * The migration's one-off steps (comparing reports with the old Data Studio
+ * report, checking the legacy import) are not here: what is left of them is
+ * a gate on decommissioning GCP, recorded in docs/cutover.md section 5.
  */
 export const MANUAL_STEPS = [
   "Install a .pkpass on a real iPhone: check colours, logo, barcode and text, then change the membership and confirm the push wakes the device.",
   "Save a pass to Google Wallet on a real Android phone.",
   "Sign in with Google, and with Apple, from a browser that has never held a session here.",
-  "Scan a QR code from a legacy pass or an emailed card image and confirm /verify-pass accepts it.",
+  "Scan the QR code on an emailed card image, and on a pass from the previous site if one is to hand, and confirm /verify-pass accepts it.",
   "Send yourself a card from /email-card and confirm it arrives.",
-  "Compare the admin reports against the legacy report; decommissioning the previous stack waits on it.",
-  "Spot-check a few early members' \"member since\" dates against the legacy import.",
-  "Reconcile the member count above against BigCommerce's own admin, after the legacy import and a full resync.",
 ];

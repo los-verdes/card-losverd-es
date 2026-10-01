@@ -380,7 +380,7 @@ It exists because the problems worth finding are invisible from outside. A priva
 
 Two properties it keeps: it never reports a secret's value (presence, shape, expiry and already-public identifiers only), and it never writes anything — a check that created the Wallet class it was looking for would report success for a state it had just manufactured.
 
-The steps no code can take — installing a pass on a real iPhone, saving one on Android, comparing the admin reports against the legacy report — are listed on the same page, so there is one list to work down instead of a separate runbook to keep current.
+The checks no code can make — installing a pass on a real iPhone, saving one on Android, signing in from a fresh browser, scanning a card's QR code, receiving an emailed card — are listed on the same page, to work through after a change to passes, sign-in or email, so there is one list instead of a separate runbook to keep current.
 
 ## What we record about visits
 
