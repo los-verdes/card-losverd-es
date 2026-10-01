@@ -278,6 +278,22 @@ describe("the admin nav on a member page", () => {
 });
 
 describe("GET /", () => {
+  it("leads back to this environment's store, or the store when none is set", async () => {
+    await seedCurrentMember();
+    const realStore = env.BIGCOMMERCE_STOREFRONT_URL;
+    try {
+      env.BIGCOMMERCE_STOREFRONT_URL = "https://store.example.com/some/page";
+      expect(await (await get("/")).text()).toContain('<a href="https://store.example.com/">← Back to the Los Verdes store</a>');
+
+      for (const unset of [undefined, "not a url"]) {
+        env.BIGCOMMERCE_STOREFRONT_URL = unset;
+        expect(await (await get("/")).text()).toContain('<a href="https://store.losverdesatx.org/">');
+      }
+    } finally {
+      env.BIGCOMMERCE_STOREFRONT_URL = realStore;
+    }
+  });
+
   it("shows the member's card, wallet links, and a logout button", async () => {
     await seedCurrentMember();
 
