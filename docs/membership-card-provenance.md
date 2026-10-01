@@ -244,7 +244,7 @@ How a person reaches their card. None of it changes who is a member.
 
 1. **When does membership activate?**
    - Current: Immediately upon payment (`Awaiting Fulfillment`).
-   - Alternatives: Delay activation until physical fulfillment (`Shipped`).
+   - Alternatives: Delay activation until processed (`Shipped` or `Completed` statuses).
 2. **Do refunds revoke membership retroactively?**
    - Current: Yes; order stops counting immediately upon refund status.
    - Alternatives: Retain active status through the season for partial refunds.
