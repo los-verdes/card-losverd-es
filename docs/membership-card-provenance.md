@@ -136,12 +136,18 @@ this table:
 
 ### Card Themes
 
-- **Season themes:** Scarf artwork and color palettes exist for 2020, 2021, 2022, and 2023; fallback is `'classic'`.
-- **Eligible themes:** Years of purchased memberships, "Member Since" year, active Slack subgroup channels (e.g.
-  `#los-pringles`), and `'classic'`.
-- **Subgroup validity:** Active while the member's email remains in the Slack channel; leaving reverts to default.
-- **Persistence:** Stored in `member_card_themes` to preserve choices across sync rebuilds; controlled via
-  `CARD_THEME_CHOICE` setting.
+- **What a theme is:** colours plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`). Year themes exist for 2020–2023. `classic` is the original look and the fallback.
+- **Where it shows:** the card image, the Apple pass (full scarf art behind the pass on iOS 27, via `APPLE_POSTER_PASSES`), and the Google pass's large image. Both wallets show the same design.
+- **Who can use which** (`src/themes/eligibility.ts`):
+  - the year of each membership order they placed;
+  - their "member since" year;
+  - a subgroup's theme (e.g. `#los-pringles`) while their Slack account is in that public channel;
+  - `classic`, always.
+- **Default:** `classic`. Once `CARD_THEME_YEAR_DEFAULTS` is on, the "member since" year's theme (or `classic` if that year has none). A subgroup theme is never a default.
+- **Choosing:** members on their card page; admins on the member's admin page. `CARD_THEME_CHOICE` sets who may choose. Choices are kept apart from the rebuilt membership (`member_card_themes`).
+- **Losing access:** a choice no longer allowed (e.g. after leaving the Slack channel) falls back to the default, and comes back if access does. Installed passes update either way.
+- **Audit:** an admin's choice is logged; a member's own is not.
+- **In production today:** only admins may choose, year defaults are off, and the poster layout is off.
 
 ---
 
