@@ -65,6 +65,21 @@ import {
 export const MEMBERSHIP_STORE_URL =
   "https://store.losverdesatx.org/membership/";
 
+/**
+ * The store's home page, for the card page's way back to it: this
+ * environment's own storefront (the sandbox, on staging), or the store.
+ * Members arrive from the store's "Membership card" link and may well have
+ * shopping to finish.
+ */
+export function storeHomeUrl(env: Env): string {
+  try {
+    if (env.BIGCOMMERCE_STOREFRONT_URL) return new URL("/", env.BIGCOMMERCE_STOREFRONT_URL).toString();
+  } catch {
+    // A malformed setting falls back to the store below.
+  }
+  return new URL("/", MEMBERSHIP_STORE_URL).toString();
+}
+
 type CurrentMember = MemberRecord & { expiration_date: string };
 
 export type PortalEnv = {
@@ -263,8 +278,15 @@ export const MemberCard: FC<{
   canChooseTheme?: boolean;
   /** Their store account, when this environment has a store app. */
   store?: StoreAccountView | null;
-}> = ({ member, orders, isAdmin, canChooseTheme = false, store = null }) => (
+  /** The store's home page (`storeHomeUrl`). */
+  storeUrl?: string;
+}> = ({ member, orders, isAdmin, canChooseTheme = false, store = null, storeUrl }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
+    {storeUrl && (
+      <p class="muted" style="margin: 0 0 0.5rem">
+        <a href={storeUrl}>&larr; Back to the Los Verdes store</a>
+      </p>
+    )}
     <h1>Los Verdes Membership Card</h1>
     <p style="font-size: 1.5rem; margin-bottom: 0">
       {`${member.first_name} ${member.last_name}`.trim()}
@@ -450,6 +472,7 @@ portal.get("/", requireCurrentMember, async (c) => {
       isAdmin={isAdmin}
       canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
       store={await storeAccountView(c.env, c.get("session").userId, c.req.query("store"))}
+      storeUrl={storeHomeUrl(c.env)}
     />,
   );
 });
