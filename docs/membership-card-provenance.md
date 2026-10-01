@@ -86,7 +86,8 @@ than the store:
 - **Re-reading is idempotent:** Processing an order overwrites the local row by ID; multiple passes produce no duplicate
   state.
 - **Direct overwrite:** Ingested store fields replace local copies rather than merging.
-- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sweep runs weekly early Sunday morning.
+- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sweep runs weekly
+  early Sunday morning.
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
   than deleted, preserving current cards.
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
@@ -98,16 +99,15 @@ than the store:
   continues counting toward membership.
 - **Unlisted SKUs:** Orders using an unlisted SKU will not issue cards or trigger reports. Adding new membership tiers
   requires updating `MEMBERSHIP_SKUS` in code.
-- **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not currently
-   use this information directly when considering membership.
+- **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not
+   currently use this information directly when considering membership.
 
 ---
 
 ## 4. Card Fields & Verification
 
-All card formats resolve through a shared query
-(`MEMBER_SELECT` in `src/member/artifacts.ts`). We attempt to keep parity between the formats and that is tracked in
-this table:
+All card formats resolve through a shared query (`MEMBER_SELECT` in `src/member/artifacts.ts`). We attempt to keep
+parity between the formats and that is tracked in this table:
 
 | | Apple Wallet pass | Google Wallet card | Emailed card image |
 | :--- | :--- | :--- | :--- |
@@ -120,10 +120,11 @@ this table:
 
 ### Field Details
 
-- **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin
-  may set a custom display name (up to 64 characters via `member_display_names`). A member who updates their billing
-  name at checkout will see it reflected on their next membership purchase; however, an attributed gift order retains
-  the purchaser’s billing name, which can result in a gifted card displaying the buyer's name (see Section 8).
+- **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin may set a
+  custom display name (up to 64 characters via `member_display_names`). A member who updates their billing name at
+  checkout will see it reflected on their next membership purchase; however, an attributed gift order retains the
+  purchaser’s billing name, which can result in a gifted card displaying the buyer's name (see Section 8). (Some of
+  these values were imported from the old site and don't map directly to an order.)
 - **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
   all qualifying orders. Terms do not accumulate consecutively.
 - **Card Number & QR Code:** Uses a persistent UUID generated upon initial record creation.
@@ -131,20 +132,26 @@ this table:
     retain the buyer’s customer ID.
   - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
   "Not a current membership"); specific lapse or revocation states require signed-in admin access.
-  - Cards issued by the old site still scan: their serial is looked up (legacy_membership_cards) and the holder's current membership is shown.
+  - Cards issued by the old site still scan: their serial is looked up (legacy_membership_cards) and the holder's
+    current membership is shown.
 
 ### Card Themes
 
-- **What a theme is:** colours plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`). Year themes exist for 2020–2023. `classic` is the original look and the fallback.
-- **Where it shows:** the card image, the Apple pass (full scarf art behind the pass on iOS 27, via `APPLE_POSTER_PASSES`), and the Google pass's large image. Both wallets show the same design.
+- **What a theme is:** colours plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`).
+  Year themes exist for 2020–2023. `classic` is the original look and the fallback.
+- **Where it shows:** the card image, the Apple pass (full scarf art behind the pass on iOS 27, via
+  `APPLE_POSTER_PASSES`), and the Google pass's large image. Both wallets show the same design.
 - **Who can use which** (`src/themes/eligibility.ts`):
   - the year of each membership order they placed;
   - their "member since" year;
   - a subgroup's theme (e.g. `#los-pringles`) while their Slack account is in that public channel;
   - `classic`, always.
-- **Default:** `classic`. Once `CARD_THEME_YEAR_DEFAULTS` is on, the "member since" year's theme (or `classic` if that year has none). A subgroup theme is never a default.
-- **Choosing:** members on their card page; admins on the member's admin page. `CARD_THEME_CHOICE` sets who may choose. Choices are kept apart from the rebuilt membership (`member_card_themes`).
-- **Losing access:** a choice no longer allowed (e.g. after leaving the Slack channel) falls back to the default, and comes back if access does. Installed passes update either way.
+- **Default:** `classic`. Once `CARD_THEME_YEAR_DEFAULTS` is on, the "member since" year's theme (or `classic` if that
+  year has none). A subgroup theme is never a default.
+- **Choosing:** members on their card page; admins on the member's admin page. `CARD_THEME_CHOICE` sets who may choose.
+  Choices are kept apart from the rebuilt membership (`member_card_themes`).
+- **Losing access:** a choice no longer allowed (e.g. after leaving the Slack channel) falls back to the default, and
+  comes back if access does. Installed passes update either way.
 - **Audit:** an admin's choice is logged; a member's own is not.
 - **In production today:** only admins may choose, year defaults are off, and the poster layout is off.
 
@@ -188,8 +195,8 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 
 - **Order-derived date:** The timestamp of the earliest qualifying order on file.
 - **Legacy import:** Historical dates imported from the legacy site. Required to correctly represent some older orders.
-- **Manual override:** Administrative entry via the admin dashboard (with optional note). An override replaces any
-  prior value.
+- **Manual override:** Administrative entry via the admin dashboard (with optional note). An override replaces any prior
+  value.
 
 ---
 
@@ -225,11 +232,13 @@ sync passes.
 
 How a person reaches their card. None of it changes who is a member.
 
-- **Sign-in:** with Google or Apple. The account's email finds the membership under that address (`findMembershipsForUser()` in `src/member/portal.tsx`).
+- **Sign-in:** with Google or Apple. The account's email finds the membership under that address
+  (`findMembershipsForUser()` in `src/member/portal.tsx`).
 - **Bought under another address** (e.g. Apple's Hide My Email): the member can claim it. A link is mailed to the
   membership's address, and following it while signed in links the two (`members.user_id`,
   `src/member/claimMembership.tsx`).
-- **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says whether an address belongs to a member.
+- **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says
+  whether an address belongs to a member.
 - **Store accounts (#38):** a member can connect their store account once, while signed in to both in the same browser.
   After that, "Membership card" in the store's header and account menu signs them straight in, and their store account
   pages show their card.
@@ -291,8 +300,8 @@ Administrative interventions are permanently recorded in the audit log (`/admin/
   and previous/new values.
 - **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
   CSV exports of the audit log generate an audit event noting actor and exported row count.
-- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled
-  sync runs, pass re-renders) are omitted.
+- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled sync
+  runs, pass re-renders) are omitted.
 
 ---
 
