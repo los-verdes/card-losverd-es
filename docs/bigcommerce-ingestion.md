@@ -267,8 +267,8 @@ one is implemented fully:
   `map_customer_to_user_by_store_id`). Still a stub. In the legacy app this
   job is also what re-pointed a member at their current storefront email;
   here that role belongs to `membership_orders.member_email`, which an
-  admin re-points by attributing the order (see the provenance document,
-  "Gift purchases and re-attributed orders").
+  admin re-points by attributing the order (the provenance document covers
+  gifts and re-attribution).
 * **Each order's MiniBC subscription.** MiniBC writes a `minibc` metafield,
   `subscription_id`, onto every order it creates, the first and each renewal,
   a few minutes after the order itself. Whenever a membership order is

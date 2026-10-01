@@ -62,9 +62,9 @@ In practice:
   change makes several documents disagree, make the provenance document
   correct first and bring the others into line with it.
 - It is not purely descriptive. It records what the code does today *and*
-  exists to invite feedback and proposals to change that, which is what the
-  "Decisions worth confirming" section is for. Do not trim the open questions
-  out of it for not being implementation.
+  exists to invite feedback and proposals to change that, which is what its
+  section of open policy questions is for. Do not trim those questions out of
+  it for not being implementation.
 - Its diagrams keep labels to a few words per line on purpose. Mermaid no
   longer grows a box to fit its text (mermaid-js/mermaid#7354), so a long
   label is silently clipped when GitHub renders it; detail goes in the prose.

@@ -242,8 +242,8 @@ export class BigCommerceClient {
  * The storefront is configured so this is always 1, and much of this system
  * assumes it: `membership_orders` is keyed on the order id, so an order has
  * one row and one membership to give. Counting it is what turns that from an
- * assumption into something we would notice being broken -- see the "One
- * order, one membership" section of docs/membership-card-provenance.md.
+ * assumption into something we would notice being broken -- see what
+ * docs/membership-card-provenance.md says about one membership per order.
  *
  * Only line items whose SKU is a membership count. Everything else the store
  * sells is ignored here exactly as it is everywhere else.
