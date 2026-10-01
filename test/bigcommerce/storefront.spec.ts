@@ -257,6 +257,10 @@ describe("the card on the store (Phase 2)", () => {
       ["Save to Google Wallet", CURRENT.member!.googleWalletUrl],
     ]);
     expect(panel.textContent).toContain("Change the name or theme, or email yourself the card");
+    // Centred on the page, card and all.
+    expect(panel.getAttribute("style")).toContain("margin: 1.5rem auto");
+    expect(panel.getAttribute("style")).toContain("text-align: center");
+    expect(image.getAttribute("style")).toContain("margin: 0 auto");
   });
 
   it("replaces the membership page's line with the card itself", async () => {
