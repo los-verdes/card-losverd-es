@@ -258,20 +258,24 @@ How a person reaches their card. None of it changes who is a member.
 6. **What restrictions apply to display names?**
    - Current: Unrestricted free-text up to 64 characters.
    - Alternatives: Add profanity filters, require admin approval, or lock to billing names.
+   - Deciders?: Membership Committee
 7. **Is email address the proper member identifier?**
    - Current: Yes; one email equals one membership entity.
    - Alternatives: Support multi-email linking or separate member accounts.
 8. **How should sanctions be structured?**
    - Current: Binary revocation (card) and expulsion (email).
    - Alternatives: Introduce temporary suspensions, disciplinary tiers, or appeal logs.
+   - Deciders?: Membership Committee
 9. **Should archived orders confer membership?**
    - Current: Yes; archived orders continue counting.
    - Alternatives: Treat archived orders as cancelled or route to an admin review queue.
+   - Deciders?: Merch team
 10. **Should a membership that renews automatically stay current while its renewal is being charged?**
     - Current: No grace period; runs strictly 365 days, which can cause a 1-day lapse during leap years (Feb 29) or
       temporary lapses during failed payment retries.
     - Alternatives: Introduce a multi-day grace window for active subscriptions, balanced against conferring unearned
       access if renewal fails.
+    - Deciders?: Merch team w/ Membership Committee
 
 ---
 
