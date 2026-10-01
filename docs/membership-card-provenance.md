@@ -297,8 +297,8 @@ Administrative interventions are permanently recorded in the audit log (`/admin/
 - **Logged actions:** Card name modifications, "Member since" overrides, order re-attributions, card email dispatches,
   revocations / expulsions (and lifting either), card themes set or cleared by an admin, store accounts connected or
   disconnected, admin access granted or removed.
-- **Entry schema:** Timestamp, target user, actor (admin username, `site automation`, or `command line`), action type,
-  and previous/new values.
+- **Entry schema:** Timestamp, target user, actor (admin username, `site automation`, `command line`, `previous site
+  import`, or `database migration`), action type, and previous/new values.
 - **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
   CSV exports of the audit log generate an audit event noting actor and exported row count.
 - **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled sync
