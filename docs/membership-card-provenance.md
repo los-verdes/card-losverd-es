@@ -10,7 +10,7 @@ primary audiences are:
 
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
 specifies the current implementation and outlines open policy choices in the [Appendix - Decisions worth
-confirming](appendix-decisions-worth-confirming) (this bit in particular would greatly benefit from discussion and
+confirming](#appendix-decisions-worth-confirming) (this bit in particular would greatly benefit from discussion and
 feedback.)
 
 ---
