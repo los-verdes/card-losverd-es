@@ -286,7 +286,7 @@ How a person reaches their card. None of it changes who is a member.
       temporary lapses during failed payment retries.
     - Alternatives: Introduce a multi-day grace window for active subscriptions, balanced against conferring unearned
       access if renewal fails.
-    - Deciders?: Merch team w/ Membership Committee
+    - Deciders?: Merch Team w/ Membership Committee
 
 ---
 
