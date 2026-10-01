@@ -159,7 +159,8 @@ parity between the formats and that is tracked in this table:
 - **Losing access:** a theme choice no longer allowed (e.g. after leaving the associated Slack channel) falls back to
   the default, and comes back if access does.
 - **Audit:** an admin's choice is logged; a member's own is not.
-- **In production today:** only admins may choose, year defaults are off, and the poster layout is off.
+- **In production today:** only admins may choose, year defaults are off, and the iOS 27 poster layout (scarf art
+  behind the whole Apple pass, `APPLE_POSTER_PASSES`) is off.
 
 ---
 
