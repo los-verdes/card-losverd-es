@@ -368,12 +368,8 @@ reports.get("/", async (c) => {
     <AdminPage title="Membership reports">
       <ul>
         <li>
-          <a href="/admin/reports/active">Active memberships</a>: every active membership order today, or on
-          any past date.
-        </li>
-        <li>
-          <a href="/admin/reports/expired">Expired memberships</a>: members whose most recent membership has
-          lapsed.
+          <a href="/admin/reports/memberships">Active and expired memberships</a>: every active membership order,
+          and each lapsed member's most recent one, today or on any past date.
         </li>
         <li>
           <a href="/admin/reports/over-time">Membership over time</a>: active members and membership orders,
@@ -408,55 +404,66 @@ reports.get("/", async (c) => {
   );
 });
 
-reports.get("/active", async (c) => {
-  const path = "/admin/reports/active";
-  const req = parseReportRequest(c.req.query(), new Date());
-  if (req.csv) {
-    const { rows } = await activeMemberships(c.env.DB, req.asOf, req.filters);
-    return csvResponse("active-memberships", req, rows);
-  }
-  const [result, channels] = await Promise.all([
-    activeMemberships(c.env.DB, req.asOf, req.filters),
-    listChannels(c.env.DB),
-  ]);
-  return c.html(
-    <AdminPage title="Active memberships">
-      <p>Membership orders active at the chosen moment. Unpaid, cancelled, refunded, and test orders are left out.</p>
-      <FilterForm path={path} req={req} channels={channels} />
-      <p>
-        <strong>{result.totalMembers}</strong> members holding <strong>{result.totalOrders}</strong> orders, as of{" "}
-        {req.asOf}.
-      </p>
-      <OrdersTable rows={result.rows} csvHref={withParams(path, req, { format: "csv" })} total={result.totalOrders} />
-    </AdminPage>,
-  );
-});
+const MEMBERSHIPS_PATH = "/admin/reports/memberships";
 
-reports.get("/expired", async (c) => {
-  const path = "/admin/reports/expired";
+/** The page's two tables, each its own CSV (`?format=csv&table=`). */
+const MEMBERSHIP_TABLES = ["active", "expired"] as const;
+type MembershipTable = (typeof MEMBERSHIP_TABLES)[number];
+
+/**
+ * Active and expired memberships, on one page: the same date and channel
+ * answer both, and an admin asking one question usually wants the other's
+ * count beside it. They were separate pages, and the old addresses redirect
+ * here (below), so bookmarks and CSV links keep working.
+ */
+reports.get("/memberships", async (c) => {
   const req = parseReportRequest(c.req.query(), new Date());
   if (req.csv) {
-    const { rows } = await expiredMemberships(c.env.DB, req.asOf, req.filters);
-    return csvResponse("expired-memberships", req, rows);
+    const table = c.req.query("table");
+    if (table === "active") return csvResponse("active-memberships", req, (await activeMemberships(c.env.DB, req.asOf, req.filters)).rows);
+    if (table === "expired") return csvResponse("expired-memberships", req, (await expiredMemberships(c.env.DB, req.asOf, req.filters)).rows);
+    throw new BadRequest(`table must be one of ${MEMBERSHIP_TABLES.join(", ")}`);
   }
-  const [result, channels] = await Promise.all([
+  const [active, expired, channels] = await Promise.all([
+    activeMemberships(c.env.DB, req.asOf, req.filters),
     expiredMemberships(c.env.DB, req.asOf, req.filters),
     listChannels(c.env.DB),
   ]);
+  const csvHref = (table: MembershipTable) => withParams(MEMBERSHIPS_PATH, req, { format: "csv", table });
   return c.html(
-    <AdminPage title="Expired memberships">
+    <AdminPage title="Active and expired memberships">
+      <p>
+        Unpaid, cancelled, refunded, and test orders are left out of both. <a href="#active">Active</a>:{" "}
+        <strong>{active.totalMembers}</strong> members holding <strong>{active.totalOrders}</strong> orders.{" "}
+        <a href="#expired">Expired</a>: <strong>{expired.total}</strong> lapsed members. As of {req.asOf}.
+      </p>
+      <FilterForm path={MEMBERSHIPS_PATH} req={req} channels={channels} />
+      <h2 id="active">Active</h2>
+      <p>Membership orders active at the chosen moment.</p>
+      <OrdersTable rows={active.rows} csvHref={csvHref("active")} total={active.totalOrders} />
+      <h2 id="expired">Expired</h2>
       <p>
         Members whose most recent membership had expired at the chosen moment, shown by that most recent order. A
         member who renewed under a different email address is not listed.
       </p>
-      <FilterForm path={path} req={req} channels={channels} />
-      <p>
-        <strong>{result.total}</strong> lapsed members, as of {req.asOf}.
-      </p>
-      <OrdersTable rows={result.rows} csvHref={withParams(path, req, { format: "csv" })} total={result.total} />
+      <OrdersTable rows={expired.rows} csvHref={csvHref("expired")} total={expired.total} />
     </AdminPage>,
   );
 });
+
+/**
+ * The two pages the one above replaced. A CSV download from either still
+ * downloads the same table; anything else lands on that table's section.
+ */
+for (const table of MEMBERSHIP_TABLES) {
+  reports.get(`/${table}`, (c) => {
+    const params = new URLSearchParams(c.req.query());
+    const csv = params.get("format") === "csv";
+    if (csv) params.set("table", table);
+    const query = params.toString();
+    return c.redirect(`${MEMBERSHIPS_PATH}${query ? `?${query}` : ""}${csv ? "" : `#${table}`}`, 301);
+  });
+}
 
 const OVER_TIME_PATH = "/admin/reports/over-time";
 
@@ -633,7 +640,7 @@ reports.get("/over-time", async (c) => {
 
       <h2>Active members</h2>
       <p class="muted">
-        Each day counted as the <a href="/admin/reports/active">Active memberships</a> report counts that day.
+        Each day counted as the <a href="/admin/reports/memberships#active">Active memberships</a> report counts that day.
       </p>
       <LineChart
         series={memberLines}

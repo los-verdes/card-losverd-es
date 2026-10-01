@@ -390,7 +390,7 @@ nav.admin-nav .nav-group {
 
 /*
  * Small and quiet: it labels the group rather than competing with the links
- * inside it, and it is not itself a destination.
+ * inside it.
  */
 nav.admin-nav .nav-label {
   font-size: 0.75rem;
@@ -401,6 +401,12 @@ nav.admin-nav .nav-label {
 
 nav.admin-nav a {
   white-space: nowrap;
+}
+
+/* A label that is also a page (the index of reports): the same small
+   capitals, in the link colour so it reads as somewhere to go. */
+nav.admin-nav a.nav-label {
+  color: var(--verde-ink);
 }
 
 /* Every page that is not production (#338). Across the top of the page's own

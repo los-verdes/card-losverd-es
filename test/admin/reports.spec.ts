@@ -26,6 +26,14 @@ async function get(path: string, loggedInAs: number | null = ADMIN_ID) {
   );
 }
 
+/** One table's part of the memberships page, from its heading to the next (or the end). */
+function section(body: string, id: "active" | "expired"): string {
+  const start = body.indexOf(`<h2 id="${id}">`);
+  expect(start, `the page should have a ${id} section`).toBeGreaterThan(-1);
+  const next = body.indexOf("<h2", start + 1);
+  return body.slice(start, next === -1 ? undefined : next);
+}
+
 beforeEach(async () => {
   env.SESSION_SIGNING_KEY = SESSION_KEY;
   await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (?, 'admin@example.com', 1)").bind(ADMIN_ID).run();
@@ -43,7 +51,7 @@ afterEach(async () => {
 });
 
 describe("access control", () => {
-  const PATHS = ["/admin/reports", "/admin/reports/active", "/admin/reports/expired", "/admin/reports/slack", "/admin/reports/consolidations", "/admin/reports/missing", "/admin/reports/over-time"];
+  const PATHS = ["/admin/reports", "/admin/reports/memberships", "/admin/reports/slack", "/admin/reports/consolidations", "/admin/reports/missing", "/admin/reports/over-time"];
 
   it.each(PATHS)("%s sends an anonymous visitor to log in", async (path) => {
     const res = await get(path, null);
@@ -67,7 +75,7 @@ describe("access control", () => {
   });
 });
 
-describe("GET /admin/reports/active", () => {
+describe("GET /admin/reports/memberships: active", () => {
   beforeEach(async () => {
     await insertOrder({ id: "1", email: "current@example.com", first: "Cur", last: "Rent", created: "2026-01-10T00:00:00Z" });
     await insertOrder({ id: "2", email: "old.address@example.com", memberEmail: "moved@example.com", created: "2024-02-01T00:00:00Z", channel: "bigcommerce_iphone" });
@@ -75,25 +83,25 @@ describe("GET /admin/reports/active", () => {
   });
 
   it("defaults to right now", async () => {
-    const body = await (await get("/admin/reports/active")).text();
+    const body = await (await get("/admin/reports/memberships")).text();
 
-    expect(body).toContain("as of 2026-06-01T12:00:00Z");
+    expect(body).toContain("As of 2026-06-01T12:00:00Z");
     expect(body).toContain("<strong>1</strong> members holding <strong>1</strong> orders");
-    expect(body).toContain("current@example.com");
-    expect(body).not.toContain("moved@example.com");
+    expect(section(body, "active")).toContain("current@example.com");
+    expect(section(body, "active")).not.toContain("moved@example.com");
   });
 
   it("answers for a past date, through the end of that day, and shows a differing member email", async () => {
-    const body = await (await get("/admin/reports/active?as_of=2024-02-01")).text();
+    const body = await (await get("/admin/reports/memberships?as_of=2024-02-01")).text();
 
-    expect(body).toContain("as of 2024-02-01T23:59:59Z");
-    expect(body).toContain("old.address@example.com");
-    expect(body).toContain("moved@example.com");
+    expect(body).toContain("As of 2024-02-01T23:59:59Z");
+    expect(section(body, "active")).toContain("old.address@example.com");
+    expect(section(body, "active")).toContain("moved@example.com");
     expect(body).toContain('value="2024-02-01"');
   });
 
   it("offers the channels as a filter, keeping the chosen one selected", async () => {
-    const body = await (await get("/admin/reports/active?as_of=2024-06-01&channel=bigcommerce_iphone")).text();
+    const body = await (await get("/admin/reports/memberships?as_of=2024-06-01&channel=bigcommerce_iphone")).text();
 
     expect(body).toMatch(/<option value="bigcommerce_iphone" selected[^>]*>bigcommerce_iphone<\/option>/);
     expect(body).toContain('<option value="bigcommerce_www">');
@@ -101,7 +109,7 @@ describe("GET /admin/reports/active", () => {
   });
 
   it("ignores a name search from an old bookmark: the table's own filter box does that now", async () => {
-    const body = await (await get(`/admin/reports/active?q=${encodeURIComponent('"><script>x</script>')}`)).text();
+    const body = await (await get(`/admin/reports/memberships?q=${encodeURIComponent('"><script>x</script>')}`)).text();
 
     expect(body).not.toContain("<script>x</script>");
     expect(body).not.toContain('name="q"');
@@ -111,7 +119,7 @@ describe("GET /admin/reports/active", () => {
   it("escapes member-provided text in the table", async () => {
     await insertOrder({ id: "3", email: "xss@example.com", first: "<img src=x>", created: "2026-03-01T00:00:00Z" });
 
-    const body = await (await get("/admin/reports/active")).text();
+    const body = await (await get("/admin/reports/memberships")).text();
 
     expect(body).not.toContain("<img src=x>");
     expect(body).toContain("&lt;img src=x&gt;");
@@ -124,7 +132,7 @@ describe("GET /admin/reports/active", () => {
                '2026-04-01T00:00:00Z', '2027-04-01T00:00:00Z', 'legacy_postgres', 1)`,
     ).run();
 
-    const body = await (await get("/admin/reports/active")).text();
+    const body = await (await get("/admin/reports/memberships")).text();
 
     // Shortened, so it does not widen the column; the whole id is in the
     // tooltip and behind the link.
@@ -138,7 +146,7 @@ describe("GET /admin/reports/active", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(env.DB, "batch").mockRejectedValue(new Error("D1 is down"));
 
-    const res = await get("/admin/reports/active");
+    const res = await get("/admin/reports/memberships");
 
     expect(res.status).toBe(500);
     expect(await res.text()).not.toContain("D1 is down");
@@ -151,13 +159,13 @@ describe("GET /admin/reports/active", () => {
     }
 
     // A page number from an old bookmark is ignored rather than refused.
-    const body = await (await get("/admin/reports/active?page=2")).text();
+    const body = await (await get("/admin/reports/memberships?page=2")).text();
 
     // Each address links to its member.
     expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
     // The bulk orders and the one current order from beforeEach.
-    const csvLink = body.indexOf(`href="/admin/reports/active?format=csv">Download all ${MANY + 1} as CSV`);
+    const csvLink = body.indexOf(`href="/admin/reports/memberships?format=csv&amp;table=active">Download all ${MANY + 1} as CSV`);
     expect(csvLink).toBeGreaterThan(-1);
     expect(csvLink).toBeLessThan(body.indexOf("<table"));
     expect(body).not.toContain("Page 1 of");
@@ -166,7 +174,7 @@ describe("GET /admin/reports/active", () => {
   it("offers a box that narrows the table by any column, shown only once its script runs", async () => {
     await insertOrder({ id: "filter-1", email: "filter@example.com", created: "2026-02-01T00:00:00Z" });
 
-    const body = await (await get("/admin/reports/active")).text();
+    const body = await (await get("/admin/reports/memberships")).text();
 
     const scope = body.search(/<div data-table-filter[ =>]/);
     const box = body.search(/<p class="table-filter" data-filter-control[^>]* hidden[ =>]/);
@@ -191,7 +199,7 @@ describe("GET /admin/reports/active", () => {
       await insertOrder({ id: `bulk-${i}`, email: `bulk${i}@example.com`, created: "2026-02-01T00:00:00Z" });
     }
 
-    const res = await get("/admin/reports/active?format=csv");
+    const res = await get("/admin/reports/memberships?format=csv&table=active");
 
     expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="active-memberships-2026-06-01.csv"');
@@ -205,37 +213,63 @@ describe("GET /admin/reports/active", () => {
     ["as_of=yesterday", "as_of"],
     ["as_of=2026-02-30", "as_of"],
   ])("rejects %s", async (query, field) => {
-    const res = await get(`/admin/reports/active?${query}`);
+    const res = await get(`/admin/reports/memberships?${query}`);
 
     expect(res.status).toBe(400);
     expect(await res.text()).toContain(field);
   });
 });
 
-describe("GET /admin/reports/expired", () => {
+describe("GET /admin/reports/memberships: expired", () => {
   beforeEach(async () => {
     await insertOrder({ id: "1", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
     await insertOrder({ id: "2", email: "current@example.com", created: "2026-01-10T00:00:00Z" });
     vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
   });
 
-  it("lists lapsed members only", async () => {
-    const body = await (await get("/admin/reports/expired")).text();
+  it("lists lapsed members only, below the active ones", async () => {
+    const body = await (await get("/admin/reports/memberships")).text();
 
-    expect(body).toContain("<strong>1</strong> lapsed members, as of 2026-06-01T12:00:00Z");
-    expect(body).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
-    expect(body).not.toContain("current@example.com");
+    expect(body).toContain("<strong>1</strong> lapsed members. As of 2026-06-01T12:00:00Z");
+    expect(section(body, "expired")).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
+    expect(section(body, "expired")).not.toContain("current@example.com");
+    expect(section(body, "active")).toContain("current@example.com");
+    expect(section(body, "active")).not.toContain("lapsed@example.com");
   });
 
   it("downloads as CSV, named for the chosen date", async () => {
-    const res = await get("/admin/reports/expired?as_of=2025-12-31&format=csv");
+    const body = await (await get("/admin/reports/memberships?as_of=2025-12-31")).text();
+    expect(body).toContain('href="/admin/reports/memberships?as_of=2025-12-31&amp;format=csv&amp;table=expired"');
+
+    const res = await get("/admin/reports/memberships?as_of=2025-12-31&format=csv&table=expired");
 
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="expired-memberships-2025-12-31.csv"');
     expect(await res.text()).toContain("lapsed@example.com");
   });
 
+  it("refuses a CSV download that names no table", async () => {
+    const res = await get("/admin/reports/memberships?format=csv");
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("table");
+  });
+
   it("rejects a bad date", async () => {
-    expect((await get("/admin/reports/expired?as_of=nope")).status).toBe(400);
+    expect((await get("/admin/reports/memberships?as_of=nope")).status).toBe(400);
+  });
+});
+
+describe("the pages the memberships report replaced", () => {
+  it.each([
+    ["/admin/reports/active", "/admin/reports/memberships#active"],
+    ["/admin/reports/expired?as_of=2025-12-31&channel=bigcommerce_www", "/admin/reports/memberships?as_of=2025-12-31&channel=bigcommerce_www#expired"],
+    ["/admin/reports/active?as_of=2025-12-31&format=csv", "/admin/reports/memberships?as_of=2025-12-31&format=csv&table=active"],
+    ["/admin/reports/expired?format=csv", "/admin/reports/memberships?format=csv&table=expired"],
+  ])("%s redirects to %s", async (from, to) => {
+    const res = await get(from);
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe(to);
   });
 });
 
@@ -557,7 +591,7 @@ describe("the reports index, for the reports of things wanting action", () => {
 
     expect(body).not.toContain('href="/admin/reports/missing"');
     expect(body).not.toContain('href="/admin/reports/extra-memberships"');
-    expect(body).toContain('<a href="/admin/reports/active">Active memberships</a>');
+    expect(body).toContain('<a href="/admin/reports/memberships">Active and expired memberships</a>');
   });
 
   it("lists one as soon as it has something in it", async () => {

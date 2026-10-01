@@ -8,7 +8,9 @@
  *
  * Grouped rather than listed: eleven links in one row read as a wall, and
  * each group carries the shared word so the links inside it only have to say
- * what makes them different.
+ * what makes them different. A group whose word names a page of its own --
+ * "Reports", over the index of every report -- links it from the label, so
+ * the page does not also take a place among the links it lists.
  */
 
 import { tryGetContext } from "hono/context-storage";
@@ -33,16 +35,17 @@ interface NavLink {
 
 export interface NavGroup {
   label: string;
+  /** The page the label itself links to, when the group has one. */
+  href?: string;
   links: NavLink[];
 }
 
 export const ADMIN_NAV: NavGroup[] = [
   {
     label: "Reports",
+    href: "/admin/reports",
     links: [
-      { href: "/admin/reports", label: "All" },
-      { href: "/admin/reports/active", label: "Active" },
-      { href: "/admin/reports/expired", label: "Expired" },
+      { href: "/admin/reports/memberships", label: "Active & expired" },
       { href: "/admin/reports/over-time", label: "Over time" },
       { href: "/admin/reports/renewals", label: "Renewals" },
       { href: "/admin/reports/slack", label: "Slack" },
@@ -152,6 +155,23 @@ export function isQuietGroup(group: NavGroup, counts: AttentionCounts | null): b
   return group.links.every((link) => link.attention !== undefined && counts[link.attention] === 0);
 }
 
+/** A group's label: a link when the group has a page of its own and it is not this one. */
+const NavLabel: FC<{ group: NavGroup; current?: string }> = ({ group, current }) => {
+  if (!group.href) return <span class="nav-label">{group.label}</span>;
+  if (group.href === current) {
+    return (
+      <span class="nav-label" aria-current="page">
+        {group.label}
+      </span>
+    );
+  }
+  return (
+    <a href={group.href} class="nav-label">
+      {group.label}
+    </a>
+  );
+};
+
 /**
  * `current` marks the page being read, which matters more here than on the
  * admin pages: the member's own card is in this nav, so without it an admin
@@ -165,7 +185,7 @@ export const AdminNav: FC<{ current?: string }> = async ({ current }) => {
       <ProductionLabel />
       {ADMIN_NAV.filter((group) => !isQuietGroup(group, counts)).map((group) => (
         <span class="nav-group">
-          <span class="nav-label">{group.label}</span>
+          <NavLabel group={group} current={current} />
           {group.links.filter((link) => !isHiddenLink(link, counts)).map((link) =>
             link.href === current ? (
               <span class="nav-here" aria-current="page">
