@@ -284,7 +284,7 @@ How a person reaches their card. None of it changes who is a member.
 Administrative interventions are permanently recorded in the audit log (`/admin/audit`).
 
 - **Logged actions:** Card name modifications, "Member since" overrides, order re-attributions, card email dispatches,
-  revocations, and expulsions.
+  revocations / expulsions, card theme selection, granting admin access.
 - **Entry schema:** Timestamp, target user, actor (admin username, `site automation`, or `command line`), action type,
   and previous/new values.
 - **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
