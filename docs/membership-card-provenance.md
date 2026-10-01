@@ -139,7 +139,7 @@ parity between the formats and that is tracked in this table:
   - The card number is not derived from the store customer ID because guest checkouts share ID 0 and gifted orders
     retain the buyer’s customer ID.
   - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
-  "Not a current membership"); but certain lapse or revocation states aren't displayed without signed-in admin access
+    "Not a current membership"); whether one lapsed or was revoked is shown only to a signed-in admin.
   - Cards issued by the old site still scan: their serial is looked up (`legacy_membership_cards`) and the holder's
     current membership is shown.
 
