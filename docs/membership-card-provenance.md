@@ -126,10 +126,12 @@ this table:
   the purchaser’s billing name, which can result in a gifted card displaying the buyer's name (see Section 8).
 - **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
   all qualifying orders. Terms do not accumulate consecutively.
-- **Card Number & QR Code:** Uses a persistent UUID generated upon initial record creation. The card number is not
-  derived from the store customer ID because guest checkouts share ID 0 and gifted orders retain the buyer’s customer
-  ID. The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
+- **Card Number & QR Code:** Uses a persistent UUID generated upon initial record creation.
+  - The card number is not derived from the store customer ID because guest checkouts share ID 0 and gifted orders
+    retain the buyer’s customer ID.
+  - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
   "Not a current membership"); specific lapse or revocation states require signed-in admin access.
+  - Cards issued by the old site still scan: their serial is looked up (legacy_membership_cards) and the holder's current membership is shown.
 
 ### Card Themes
 
