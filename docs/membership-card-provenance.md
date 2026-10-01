@@ -8,11 +8,8 @@ primary audiences are:
   disciplinary processes.
 
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
-specifies the current implementation and outlines open policy choices in **Section 9**.
-
-The last section, [Decisions worth confirming](#10-decisions-worth-confirming), gathers the places where the app had to
-pick a rule and where a different policy would be equally easy to implement. This section in particular is seeking
-feedback from any interested folks.
+specifies the current implementation and outlines open policy choices in [**Section 10** - Decisions worth
+confirming](#10-decisions-worth-confirming). (Section 10 in particular is seeking feedback from any interested folks.)
 
 ---
 
