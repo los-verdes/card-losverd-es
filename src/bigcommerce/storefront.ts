@@ -4,13 +4,12 @@
  * Manager. Its contents live here, so changing it is a deploy of this site,
  * never an edit in the store's control panel.
  *
- * It adds "Membership card" in three places, using the theme's own classes
+ * It adds "Membership card" in two places, using the theme's own classes
  * (the store's theme is Cornerstone-based) so it looks like the rest of the
  * store:
  *
  * - the header, next to Sign in / Account, and the same in the mobile menu;
- * - the account pages' navigation, beside Orders and Addresses;
- * - the membership category page, under its heading.
+ * - the account pages' navigation, beside Orders and Addresses.
  *
  * Choosing it asks the store who is signed in (`current.jwt`) and submits
  * that to the card site's `/store-handoff` (src/bigcommerce/storeHandoff.tsx).
@@ -25,11 +24,12 @@
  * page first finds the customer signed in: at once if they already were, or
  * after they sign in to the store.
  *
- * On the account pages and the membership page it also shows the member's
- * card itself (Phase 2): it asks `/store/member` with the store's token, and
- * draws the card with its wallet buttons, or says the membership ran out, or,
- * on the account pages, offers to connect the store account. Changing the
- * name or theme, or emailing the card, links through to the card site.
+ * On the account pages it also shows the member's card itself (Phase 2): it
+ * asks `/store/member` with the store's token, and draws the card with its
+ * wallet buttons, or says the membership ran out, or offers to connect the
+ * store account. Changing the name or theme, or emailing the card, links
+ * through to the card site. The membership category page is left as the
+ * store has it.
  *
  * Wherever the markup it expects is missing, it adds nothing: a theme change
  * can hide the links, but not break a page.
@@ -170,19 +170,6 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   const accountNav = doc.querySelector(".navBar--account .navBar-section");
   if (accountNav) accountNav.appendChild(listItem("navBar-item", cardLink("navBar-action", label)));
 
-  // The membership category page, under its heading.
-  const onMembershipPage = /^\/membership\/?$/.test(win.location.pathname);
-  let membershipLine: HTMLParagraphElement | null = null;
-  if (onMembershipPage) {
-    const heading = doc.querySelector(".page-heading");
-    if (heading && heading.parentNode) {
-      membershipLine = doc.createElement("p");
-      membershipLine.appendChild(doc.createTextNode("Already a member? "));
-      membershipLine.appendChild(cardLink("", "Open your membership card"));
-      heading.parentNode.insertBefore(membershipLine, heading.nextSibling);
-    }
-  }
-
   // Sent by the card page's "Connect" button (`?lv_connect=1` is the link it
   // gave before the fragment, still honoured).
   const asked = /^#lv-connect$/.test(win.location.hash) || /[?&]lv_connect=1(&|$)/.test(win.location.search);
@@ -193,7 +180,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     return;
   }
 
-  // The card itself, on the account pages and the membership page.
+  // The card itself, on the account pages.
   function element(tag: string, attributes: Record<string, string>, text?: string): HTMLElement {
     const node = doc.createElement(tag);
     for (const name of Object.keys(attributes)) node.setAttribute(name, attributes[name]);
@@ -206,7 +193,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
       ? iso
       : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   }
-  async function showCard(after: Element, onMembership: boolean): Promise<void> {
+  async function showCard(after: Element): Promise<void> {
     const token = await storeToken();
     if (!token) return;
     let data: StoreMemberResponse;
@@ -217,17 +204,14 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     } catch {
       return;
     }
-    // Centred, and no wider than the card: the pages it sits on are laid out
-    // for a full-width product grid, and a card hugging the left edge of one
-    // looked lost.
+    // Centred, and no wider than the card: a card hugging the left edge of the
+    // page looked lost.
     const panel = element("section", {
       class: "lv-card-panel",
       style: "margin: 1.5rem auto; max-width: 420px; text-align: center",
     });
     panel.appendChild(element("h3", {}, "Your membership card"));
     if (!data.connected || !data.member) {
-      // The membership page already offers the way in; a store account page is where to explain it.
-      if (onMembership) return;
       const line = element(
         "p",
         {},
@@ -243,10 +227,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
         {},
         data.member.goodThrough ? "Your membership ran out on " + showDate(data.member.goodThrough) + ". " : "Your membership isn't current. ",
       );
-      if (!onMembership) {
-        const renew = element("a", { href: "/membership/" }, "Renew it");
-        line.appendChild(renew);
-      }
+      line.appendChild(element("a", { href: "/membership/" }, "Renew it"));
       panel.appendChild(line);
     } else {
       const member = data.member;
@@ -268,15 +249,12 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
       const more = element("p", {});
       more.appendChild(cardLink("", "Change the name or theme, or email yourself the card"));
       panel.appendChild(more);
-      // The card is here now; the line offering to open it is not needed.
-      if (membershipLine) membershipLine.setAttribute("hidden", "");
     }
     if (after.parentNode) after.parentNode.insertBefore(panel, after.nextSibling);
   }
 
   const accountBar = doc.querySelector(".navBar--account");
-  if (accountBar) void showCard(accountBar, false);
-  else if (membershipLine) void showCard(membershipLine, true);
+  if (accountBar) void showCard(accountBar);
 }
 
 /**
