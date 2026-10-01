@@ -238,7 +238,8 @@ Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updat
 installed wallet passes. The `member_email` field is protected against automated overwrite during routine BigCommerce
 sync passes.
 
-This feature would be used if someone orders a membership with the intention of someone else receiving / using it.
+This is used for gifts (someone orders a membership for somebody else), and for a member whose older orders carry an
+address they no longer use.
 
 ---
 
