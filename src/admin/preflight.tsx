@@ -20,6 +20,7 @@ import type { FC } from "hono/jsx";
 import type { Env } from "../index";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage } from "./layout";
+import { When } from "./when";
 import {
   DEVICE_REPORT_WINDOW_DAYS,
   recentDeviceReports,
@@ -90,7 +91,7 @@ const DeviceReports: FC<{ groups: DeviceReportGroup[] }> = ({ groups }) => (
             <tr>
               <td style={rowStyle}>{group.count}</td>
               <td style={rowStyle} data-sort={String(group.lastSeen)}>
-                {new Date(group.lastSeen).toISOString().replace("T", " ").slice(0, 16)}
+                <When at={group.lastSeen} />
               </td>
               <td style={`${rowStyle}; font-family: ui-monospace, monospace; font-size: 0.85em`}>{group.shape}</td>
             </tr>

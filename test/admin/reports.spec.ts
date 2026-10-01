@@ -85,7 +85,7 @@ describe("GET /admin/reports/memberships: active", () => {
   it("defaults to right now", async () => {
     const body = await (await get("/admin/reports/memberships")).text();
 
-    expect(body).toContain("As of 2026-06-01T12:00:00Z");
+    expect(body).toContain('As of <time datetime="2026-06-01T12:00:00Z" title="2026-06-01 12:00:00 UTC">Jun 1, 2026, 7:00 AM CDT</time>.');
     expect(body).toContain("<strong>1</strong> members holding <strong>1</strong> orders");
     expect(section(body, "active")).toContain("current@example.com");
     expect(section(body, "active")).not.toContain("moved@example.com");
@@ -94,7 +94,7 @@ describe("GET /admin/reports/memberships: active", () => {
   it("answers for a past date, through the end of that day, and shows a differing member email", async () => {
     const body = await (await get("/admin/reports/memberships?as_of=2024-02-01")).text();
 
-    expect(body).toContain("As of 2024-02-01T23:59:59Z");
+    expect(body).toContain("As of the end of Feb 1, 2024 (UTC).");
     expect(section(body, "active")).toContain("old.address@example.com");
     expect(section(body, "active")).toContain("moved@example.com");
     expect(body).toContain('value="2024-02-01"');
@@ -230,7 +230,7 @@ describe("GET /admin/reports/memberships: expired", () => {
   it("lists lapsed members only, below the active ones", async () => {
     const body = await (await get("/admin/reports/memberships")).text();
 
-    expect(body).toContain("<strong>1</strong> lapsed members. As of 2026-06-01T12:00:00Z");
+    expect(body).toContain("<strong>1</strong> lapsed members. As of <time datetime=\"2026-06-01T12:00:00Z\"");
     expect(section(body, "expired")).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
     expect(section(body, "expired")).not.toContain("current@example.com");
     expect(section(body, "active")).toContain("current@example.com");
@@ -296,8 +296,8 @@ describe("GET /admin/reports/slack", () => {
   it("shows all four tables, with counts, dates as days, and the last sync time", async () => {
     const body = await (await get("/admin/reports/slack")).text();
 
-    expect(body).toContain("as of 2026-06-01T12:00:00Z");
-    expect(body).toContain("Slack accounts last synced 2026-06-01T00:00:00Z.");
+    expect(body).toContain("as of <time datetime=\"2026-06-01T12:00:00Z\"");
+    expect(body).toMatch(/Slack accounts last synced <time datetime="2026-06-01T00:00:00Z"[^>]*>12 hours ago \(May 31, 2026, 7:00 PM CDT\)<\/time>\./);
     expect(body).toContain("Current members in Slack (1)");
     expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com">joined@example\.com<\/a><\/td><td[^>]*>Jo<\/td><td[^>]*>Ined<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
     expect(body).toContain("Current members not in Slack (1)");
@@ -394,7 +394,7 @@ describe("GET /admin/reports/consolidations", () => {
     expect(body).toContain("Card names set by hand (2)");
     const pat = body.slice(body.indexOf("Card names set by hand"));
     expect(pat).toMatch(
-      /<a href="\/admin\/members\?q=pat%40example\.com">pat@example\.com<\/a><\/td><td[^>]*>P\. Lee<\/td><td[^>]*>Pat Lee<\/td><td[^>]*>differs<\/td><td[^>]*>admin@example\.com<\/td><td[^>]*>2023-11-14 22:13<\/td><td[^>]*>asked<\/td><td[^>]*><a href="\/admin\/orders\/11">11<\/a><\/td>/,
+      /<a href="\/admin\/members\?q=pat%40example\.com">pat@example\.com<\/a><\/td><td[^>]*>P\. Lee<\/td><td[^>]*>Pat Lee<\/td><td[^>]*>differs<\/td><td[^>]*>admin@example\.com<\/td><td[^>]*data-sort="2023-11-14T22:13:20Z"[^>]*><time[^>]*>Nov 14, 2023, 4:13 PM CST<\/time><\/td><td[^>]*>asked<\/td><td[^>]*><a href="\/admin\/orders\/11">11<\/a><\/td>/,
     );
     // A member who set their own name, with no card here: nothing to compare.
     expect(pat).toMatch(/>Sam<\/td><td[^>]*><\/td><td[^>]*>no card<\/td><td[^>]*>the member<\/td>/);
@@ -813,7 +813,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
   it("sorts each subscription into what needs a look, with the read's time and counts", async () => {
     const body = await (await get("/admin/reports/renewals")).text();
 
-    expect(body).toContain("6 subscriptions as of 2026-10-01T00:40:00Z: 5 active, 1 cancelled.");
+    expect(body).toContain("6 subscriptions as of <time datetime=\"2026-10-01T00:40:00Z\" title=\"2026-10-01 00:40:00 UTC\">11 hours ago (Sep 30, 2026, 7:40 PM CDT)</time>: 5 active, 1 cancelled.");
     expect(section(body, "Card ran out, automatic renewal still on")).toContain("lapsed@example.com");
     expect(section(body, "Renews after the card runs out")).toContain("late@example.com");
     expect(section(body, "Renews after the card runs out")).toContain("31 days after the card runs out");

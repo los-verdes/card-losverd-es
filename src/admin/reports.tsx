@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { toIsoSeconds } from "../bigcommerce/orders";
 import { MEMBERSHIP_PRODUCTS } from "../bigcommerce/sync";
-import { parseIsoDate } from "../lib/dateFormat";
+import { formatShortDate, parseIsoDate } from "../lib/dateFormat";
 import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
@@ -19,6 +19,7 @@ import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
+import { When, sortKey } from "./when";
 import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
 import {
   activeMemberships,
@@ -116,14 +117,14 @@ const CONSOLIDATION_TABLES: {
     field: "attributed",
     title: "Orders attributed to another address",
     columns: ["order_id", "first_name", "last_name", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
-    headings: ["Order", "First name", "Last name", "Order email", "Attributed to", "Started", "Changed (UTC)", "Changed by", "Note"],
+    headings: ["Order", "First name", "Last name", "Order email", "Attributed to", "Started", "Changed", "Changed by", "Note"],
   },
   {
     key: "card-names",
     field: "cardNames",
     title: "Card names set by hand",
     columns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_at", "note", "order_id"],
-    headings: ["Member", "Card shows", "Name from orders", "Compared", "Set by", "Set (UTC)", "Note", "Latest order"],
+    headings: ["Member", "Card shows", "Name from orders", "Compared", "Set by", "Set", "Note", "Latest order"],
     csvColumns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
   },
   {
@@ -131,7 +132,7 @@ const CONSOLIDATION_TABLES: {
     field: "memberSince",
     title: "\u201cMember since\u201d corrections",
     columns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_at", "note", "order_id"],
-    headings: ["Member", "Card shows", "Date from orders", "Compared", "Set by", "Set (UTC)", "Note", "Earliest order"],
+    headings: ["Member", "Card shows", "Date from orders", "Compared", "Set by", "Set", "Note", "Earliest order"],
     csvColumns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
   },
 ];
@@ -182,6 +183,10 @@ function withParams(
   }
   return `${path}?${params.toString()}`;
 }
+
+/** What a report is "as of": the end of a chosen day (UTC, as the form says), or the moment it was drawn. */
+const AsOf: FC<{ req: ReportRequest }> = ({ req }) =>
+  req.asOfDate ? <>the end of {formatShortDate(req.asOfDate)} (UTC)</> : <When at={req.asOf} />;
 
 const FilterForm: FC<{ path: string; req: ReportRequest; channels: string[] }> = ({
   path,
@@ -307,10 +312,8 @@ function csvResponse(name: string, req: ReportRequest, rows: MembershipOrderRow[
   });
 }
 
-/** Epoch ms as `YYYY-MM-DD HH:MM` (UTC). */
-function minuteText(ms: unknown): string {
-  return new Date(Number(ms)).toISOString().slice(0, 16).replace("T", " ");
-}
+/** The consolidations columns holding a moment (epoch ms), shown with `When` and sorted by `sortKey`. */
+const MOMENT_COLUMNS = new Set(["attributed_at", "set_at"]);
 
 /**
  * Who set an override, in one cell: the member themselves, the admin who did
@@ -336,8 +339,8 @@ function consolidationCell(row: ConsolidationRow, column: string) {
   if ((column === "order_email" || column === "member_email") && typeof value === "string") {
     return <MemberLink email={value} />;
   }
-  if (column === "attributed_at") return value === null ? "legacy import" : minuteText(value);
-  if (column === "set_at") return minuteText(value);
+  if (column === "attributed_at" && value === null) return "legacy import";
+  if (MOMENT_COLUMNS.has(column)) return <When at={Number(value)} />;
   if (column === "source") return overrideSetBy(row as CardNameOverrideRow | MemberSinceOverrideRow);
   if (column === "same_as_orders") return value === null ? "no card" : value ? "same" : "differs";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
@@ -435,7 +438,7 @@ reports.get("/memberships", async (c) => {
       <p>
         Unpaid, cancelled, refunded, and test orders are left out of both. <a href="#active">Active</a>:{" "}
         <strong>{active.totalMembers}</strong> members holding <strong>{active.totalOrders}</strong> orders.{" "}
-        <a href="#expired">Expired</a>: <strong>{expired.total}</strong> lapsed members. As of {req.asOf}.
+        <a href="#expired">Expired</a>: <strong>{expired.total}</strong> lapsed members. As of <AsOf req={req} />.
       </p>
       <FilterForm path={MEMBERSHIPS_PATH} req={req} channels={channels} />
       <h2 id="active">Active</h2>
@@ -780,14 +783,18 @@ reports.get("/slack", async (c) => {
   return c.html(
     <AdminPage title="Slack cross-reference">
       <p>
-        Members matched to Slack accounts by email, as of {asOf}. Unpaid, cancelled, refunded, and test orders are left out;
+        Members matched to Slack accounts by email, as of <When at={asOf} />. Unpaid, cancelled, refunded, and test orders are left out;
         so are deactivated Slack accounts, bots, and accounts without an email. A member who joined Slack under a
         different address shows as not in Slack.
       </p>
       <p>
-        {result.slackSyncedAt === null
-          ? "The Slack sync has not run yet, so nobody shows as in Slack."
-          : `Slack accounts last synced ${toIsoSeconds(new Date(result.slackSyncedAt))}.`}
+        {result.slackSyncedAt === null ? (
+          "The Slack sync has not run yet, so nobody shows as in Slack."
+        ) : (
+          <>
+            Slack accounts last synced <When at={result.slackSyncedAt} ago />.
+          </>
+        )}
       </p>
       {SLACK_TABLES.map((table) => {
         const rows = result[table.field];
@@ -925,7 +932,7 @@ reports.get("/renewals", async (c) => {
             "MiniBC has not been read here yet; it is read twice a day."
           ) : (
             <>
-              {rows.length} subscriptions as of {toIsoSeconds(new Date(lastRead))}:{" "}
+              {rows.length} subscriptions as of <When at={lastRead} ago />:{" "}
               {[...counts].map(([status, n]) => `${n} ${status === "inactive" ? "cancelled" : status}`).join(", ")}. Read twice a
               day.
             </>
@@ -1029,7 +1036,12 @@ reports.get("/consolidations", async (c) => {
                 {rows.map((row) => (
                   <tr>
                     {table.columns.map((column) => (
-                      <td style={cellStyle}>{consolidationCell(row, column)}</td>
+                      <td
+                        style={cellStyle}
+                        data-sort={MOMENT_COLUMNS.has(column) && row[column] !== null ? sortKey(Number(row[column])) : undefined}
+                      >
+                        {consolidationCell(row, column)}
+                      </td>
                     ))}
                   </tr>
                 ))}
