@@ -5,6 +5,7 @@ import { EnvironmentBanner, titlePrefix } from "../environment";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
+import { memberNames } from "./memberNames";
 import { AdminNav } from "./nav";
 import { TABLE_FILTER_SCRIPT } from "./tableFilter";
 import { TABLE_SORT_SCRIPT } from "./tableSort";
@@ -16,10 +17,24 @@ export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bott
  * an address with none, the orders it holds (#320). Admin tables that list
  * members by address link them this way. The path is spelled out because
  * the members page imports the pages that use this.
+ *
+ * The name on the member's card leads, with the address beneath it
+ * (src/admin/memberNames.ts): a name is what an admin scans a table for.
+ * `plain` leaves the name off where the row already shows one for the same
+ * person, and an address with no member shows alone. `href` points somewhere
+ * else on the member's page, as the audit log does.
  */
-export const MemberLink: FC<{ email: string }> = ({ email }) => (
-  <a href={`/admin/members?q=${encodeURIComponent(email)}`}>{email}</a>
-);
+export const MemberLink: FC<{ email: string; plain?: boolean; href?: string }> = async ({ email, plain, href }) => {
+  const name = plain ? undefined : (await memberNames())?.get(email);
+  const to = href ?? `/admin/members?q=${encodeURIComponent(email)}`;
+  if (!name) return <a href={to}>{email}</a>;
+  return (
+    <a href={to} class="member-link">
+      {name}
+      <span class="member-email">{email}</span>
+    </a>
+  );
+};
 
 export const AdminPage: FC<PropsWithChildren<{ title: string }>> = ({ title, children }) => (
   <html lang="en">

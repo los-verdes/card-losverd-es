@@ -34,7 +34,7 @@ import {
 } from "../audit/log";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
-import { AdminPage, cellStyle } from "./layout";
+import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { When } from "./when";
 
 export const AUDIT_PATH = "/admin/audit";
@@ -79,7 +79,7 @@ const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubje
     <td style={cellStyle}>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
     {showSubject && (
       <td style={cellStyle}>
-        {entry.subject_email ? <a href={memberHistoryHref(entry.subject_email)}>{entry.subject_email}</a> : ""}
+        {entry.subject_email ? <MemberLink email={entry.subject_email} href={memberHistoryHref(entry.subject_email)} /> : ""}
       </td>
     )}
     <td style={detailCellStyle}>{entry.detail}</td>

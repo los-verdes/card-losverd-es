@@ -158,7 +158,10 @@ describe("reading it back", () => {
     const body = await (await get("/admin/audit")).text();
 
     expect(body).toContain("Who it was about");
-    expect(body).toContain(`<a href="/admin/members?q=${encodeURIComponent(EMAIL)}#history">${EMAIL}</a>`);
+    // Named as their card names them, with the address beneath.
+    expect(body).toContain(
+      `<a href="/admin/members?q=${encodeURIComponent(EMAIL)}#history" class="member-link">Jane Doe<span class="member-email">${EMAIL}</span></a>`,
+    );
   });
 
   it("wraps a long detail within a width, rather than pushing the other columns off the page", async () => {
