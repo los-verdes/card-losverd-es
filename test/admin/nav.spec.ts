@@ -74,6 +74,20 @@ describe("the admin navigation", () => {
     expect(labels).toEqual(["Reports", "Needs a look", "Members", "This environment"]);
   });
 
+  it("links the index of reports from the group's own label, not as one more link in it", async () => {
+    const html = await (await get("/admin/members")).text();
+
+    expect(html).toContain('<a href="/admin/reports" class="nav-label">Reports</a>');
+    expect(navLinks(html).filter((href) => href === "/admin/reports")).toHaveLength(1);
+  });
+
+  it("marks the label, rather than linking it, on the page it names", async () => {
+    const html = String(await AdminNav({ current: "/admin/reports" }));
+
+    expect(html).toContain('<span class="nav-label" aria-current="page">Reports</span>');
+    expect(html).not.toContain('href="/admin/reports"');
+  });
+
   it("is on every admin page, not just the reports index", async () => {
     for (const path of ["/admin/members", "/admin/member-since", "/admin/revocations"]) {
       const html = await (await get(path)).text();

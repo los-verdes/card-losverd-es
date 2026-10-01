@@ -143,7 +143,7 @@ describe("GET /admin/orders/:orderId", () => {
   });
 
   it("is linked from the report tables", async () => {
-    const body = await (await request("/admin/reports/active?as_of=2026-12-01")).text();
+    const body = await (await request("/admin/reports/memberships?as_of=2026-12-01")).text();
 
     expect(body).toContain('<a href="/admin/orders/1001">1001</a>');
   });
