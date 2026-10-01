@@ -89,8 +89,7 @@ than the store:
 - **Re-reading is idempotent:** Processing an order overwrites the local row by ID; multiple passes produce no duplicate
   state.
 - **Direct overwrite:** Ingested store fields replace local copies rather than merging.
-- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sweep
-  (`sync_subscriptions_etl`) runs weekly early Sunday morning.
+- **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sweep runs weekly early Sunday morning.
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
   than deleted, preserving current cards.
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
@@ -104,11 +103,12 @@ than the store:
   requires updating `MEMBERSHIP_SKUS` in code.
 - **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not currently
    use this information directly when considering membership.
+
 ---
 
 ## 4. Card Fields & Verification
 
-All formats (Apple Wallet, Google Wallet, card images, and QR verification pages) resolve through a shared query
+All card formats resolve through a shared query
 (`MEMBER_SELECT` in `src/member/artifacts.ts`). We attempt to keep parity between the formats and that is tracked in
 this table:
 
@@ -164,7 +164,7 @@ merchandise was refunded.
 
 ### Revocations & Expulsions
 
-Disciplinary actions supersede order status and require Membership Committee execution:
+Disciplinary actions supersede order status and come from a Membership Committee decision (which an admin then records)
 
 - **Revocation (`revoked_cards`):** Invalidates a specific card record without deleting underlying order data.
 - **Expulsion (`expelled_people`):** Disables member login and blocks future cards issued to that email address.
@@ -182,8 +182,8 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 *(Implemented via `COALESCE` in `src/member/artifacts.ts`).*
 
 - **Order-derived date:** The timestamp of the earliest qualifying order on file.
-- **Legacy import:** Historical dates imported from Squarespace/Postgres records (pre-February 2023).
-- **Manual override:** Administrative entry via the admin dashboard, requiring an audit note. An override replaces any
+- **Legacy import:** Historical dates imported from the legacy site. Required to correctly represent some older orders.
+- **Manual override:** Administrative entry via the admin dashboard (with optional note). An override replaces any
   prior value.
 
 ---
@@ -265,7 +265,7 @@ How a person reaches their card. None of it changes who is a member.
    - Current: Yes; archived orders continue counting.
    - Alternatives: Treat archived orders as cancelled or route to an admin review queue.
 10. **Should a membership that renews automatically stay current while its renewal is being charged?**
-    - Current: No grace period; runs strictly 365 days, which can cause a 1-day lapse during leap years (Feb 29\) or
+    - Current: No grace period; runs strictly 365 days, which can cause a 1-day lapse during leap years (Feb 29) or
       temporary lapses during failed payment retries.
     - Alternatives: Introduce a multi-day grace window for active subscriptions, balanced against conferring unearned
       access if renewal fails.
@@ -287,12 +287,11 @@ Administrative interventions are permanently recorded in the audit log (`/admin/
 
 ---
 
-## Appendix: Legacy Orders (Pre-February 2023\)
+## Appendix: Legacy Orders (Pre-February 2023)
 
-Orders imported from Squarespace (prior to February 2023\) use static, precomputed verdicts stored in
+Orders imported from Squarespace (prior to February 2023) use static, precomputed verdicts stored in
 `membership_orders.frozen_counts`.
 
 - **Qualification rule:** Counted unless status was explicitly `canceled`, `cancelled`, `refunded`, or `declined`.
   (Squarespace marked paid, unshipped orders as `PENDING`, whereas BigCommerce uses `Pending` for unpaid transactions).
-- **Scope:** Legacy Squarespace orders establish historical "Member since" dates and resolve legacy card QR scans via
-  `legacy_membership_cards`. They cannot confer active membership today.
+- **Scope:** Legacy Squarespace orders establish historical "Member since" dates.
