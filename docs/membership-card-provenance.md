@@ -280,7 +280,7 @@ How a person reaches their card. None of it changes who is a member.
 9. **Should archived orders confer membership?**
    - Current: Yes; archived orders continue counting.
    - Alternatives: Treat archived orders as cancelled or route to an admin review queue.
-   - Deciders?: Merch team
+   - Deciders?: Merch Team
 10. **Should a membership that renews automatically stay current while its renewal is being charged?**
     - Current: No grace period; runs strictly 365 days, which can cause a 1-day lapse during leap years (Feb 29) or
       temporary lapses during failed payment retries.
