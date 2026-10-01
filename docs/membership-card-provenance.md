@@ -10,7 +10,7 @@ primary audiences are:
 
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
 specifies the current implementation and outlines open policy choices in the [Appendix - Decisions worth
-confirming](#appendix-decisions-worth-confirming) (this bit in particular would greatly benefit from discussion and
+confirming](#appendix-decisions-worth-confirming) (this last bit in particular would greatly benefit from discussion and
 feedback.)
 
 ---
@@ -49,18 +49,131 @@ flowchart TD
 
 ---
 
-## 2. System Architecture
+## 2. Membership Qualification Rules
 
-The card site is configured to receive order update events via BigCommerce webhooks and runs periodic resyncs to catch
-missed deliveries.
+A person holds current membership if their furthest qualifying order expiry is today or later and the record has no
+active revocation or expulsion flag (`isMembershipCurrent()`).
 
-Qualifying orders are grouped by member email. A single function (`refreshMemberFromOrders()` in
-`src/bigcommerce/sync.ts`) recalculates the full membership state whenever an order updates, a scheduled sync executes,
-or an order is manually re-attributed.
+### Qualifying Statuses
+
+Orders must carry an explicit paid status (`PAID_BIGCOMMERCE_STATUSES`) to grant membership:
+
+- **Qualifying:** `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`, `Shipped`, `Completed`.
+- **Non-Qualifying:** `Incomplete`, `Pending`, `Awaiting Payment`, `Refunded`, `Partially Refunded`, `Cancelled`,
+  `Declined`, `Disputed`.
+
+*Note on partial refunds:* Partially Refunded orders do not grant membership because the system cannot verify which line
+item was refunded. This policy should be monitored, as it risks revoking membership for multi-item orders where only
+merchandise was refunded.
+
+### Membership Lifecycle
+
+Membership is tracked according to these principles:
+
+- **Non-accumulating terms:** Membership expirations do not stack. Renewing 30 days prior to expiration sets the new
+  term to `purchase_date + 365 days`, shortening the overall coverage window by 30 days.
+- **Persistent identities:** Lapsed members retain their UUID (`member_id`), push tokens, and pass configurations
+  indefinitely with an empty expiry. A subsequent renewal re-activates the existing card.
+- **Decoupled data models:** Orders remain the sole historical logs; memberships are computed snapshots. (i.e., orders
+  and memberships are tracked separately)
+
+#### Revocations & Expulsions
+
+While not common, disciplinary actions supersede order status and come from a Membership Committee decision (which an
+admin then records)
+
+- **Revocation:** Invalidates a specific card record without deleting underlying order data.
+- **Expulsion:** Disables member login and blocks future cards issued to that email address. (i,e., an indefinite
+  membership suspension)
 
 ---
 
-## 3. Order Processing & Synchronization
+## 3. Membership Card Fields & Verification
+
+Membership cards are available in multiple formats. We attempt to keep the same fields present between these formats and
+that is tracked in the table below:
+
+| | Apple Wallet pass | Google Wallet card | Emailed card image |
+| :--- | :--- | :--- | :--- |
+| Holder's name | yes | yes | yes |
+| Member since | yes | yes | yes |
+| Good through | yes | yes | yes |
+| Card number | on the back | as QR alt text | under the QR code |
+| Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
+| Card theme's name | on the back | among the details | not shown (the card is drawn in it) |
+
+### Field Details
+
+- **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin may set a
+  custom display name (up to 64 characters). A member who updates their billing name at checkout will see it reflected
+  on their next membership purchase; however, an attributed gift order retains the purchaser’s billing name, which can
+  result in a gifted card displaying the buyer's name. (Some of these values were imported from the old site and don't
+  map directly to an order.)
+- **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
+  all qualifying orders. Terms do not accumulate consecutively.
+- **Card Number & QR Code:** Can be scanned to independently validate a membership card. This code uses a persistent
+  UUID generated at membership card creation.
+
+### "Member Since" Precedence
+
+Given that folks are passionate about their "member since" dates, we have options for adjusting this value. When
+determining the "Member Since" date, the uses this precedence order:
+
+1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
+2. `Legacy Import Override` - Historical dates imported from the legacy site. Required to correctly represent some older
+   orders.
+3. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
+   options don't fit
+
+Only a manual override can be removed; an imported date can be corrected over but not removed.
+
+### Card Themes
+
+Members can select different themes to change their membership cards' appearance.
+
+Themes are selected by members on their card page and by admins on the member's admin page (an admin's choice is logged;
+a member's own is not).
+
+---
+
+## 4. Signing In & the Store
+
+This section describes the ways a member reaches their card, including linking it to their LV store account. None of it
+changes who is a member.
+
+- **Sign-in:** with Google or Apple. The account's email finds the membership under that address
+- **Bought under another address** (e.g. if someone logs in with Apple's Hide My Email feature): the member can claim
+  it. A link is mailed to the membership's address, and following it while signed in links the two.
+- **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says
+  whether an address belongs to a member.
+- **Store accounts (see: [#38](https://github.com/los-verdes/card-losverd-es/issues/38)):** a member can connect their
+  store account once, while signed in to both in the same browser. After that, a "Membership card" link in the store's
+  top navbar / account menu signs them straight in to the card site, and their store account pages show their card.
+  - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
+    never the recipient's. The store's email appears on the sign-in page only as a hint.
+  - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
+  - **Status:** live on staging; off in production until released.
+
+---
+
+## 5. Gifts & Order Re-Attribution
+
+Orders maintain two email fields:
+
+- `order_email`: The billing email on the store transaction.
+- `member_email`: The address to which membership entitlement is assigned.
+
+Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updates `member_email`, records an entry in
+`membership_order_attributions`, recalculates the membership records for both donor and recipient, and pushes updates to
+installed wallet passes. The `member_email` field is protected against automated overwrite during routine BigCommerce
+sync passes.
+
+This is used for gifts (someone orders a membership for somebody else), and for a member whose older orders carry an
+address they no longer use. (Ideally folks purchase memberships under their own store account \ email address though.)
+
+---
+
+## 6. Order Processing & Synchronization
 
 ### Membership Order Criteria
 
@@ -87,6 +200,19 @@ than the store:
 - `membership_orders.missing_since`: Flag set when an order ceases to return from the store API. (not expected to happen
   typically; noted for completeness)
 
+The card site is configured to receive order update events via BigCommerce webhooks and runs periodic resyncs to catch
+missed deliveries.
+
+Qualifying orders are grouped by member email. A single function (`refreshMemberFromOrders()` in
+`src/bigcommerce/sync.ts`) recalculates the full membership state whenever an order updates, a scheduled sync executes,
+or an order is manually re-attributed.
+
+Here is generally how we map membership orders to members:
+
+1. Read in all qualifying orders matching the email address.
+2. Derive card attributes from these orders via `deriveMembershipState()`.
+3. Update or create the member record in `members`.
+
 ### Sync Strategy
 
 This is how we ensure our accounting of membership reflects the authoritative source / LV store:
@@ -112,160 +238,7 @@ This is how we ensure our accounting of membership reflects the authoritative so
 
 ---
 
-## 4. Card Fields & Verification
-
-All card formats resolve through a shared query (`MEMBER_SELECT` in `src/member/artifacts.ts`). We attempt to keep
-parity between the formats and that is tracked in this table:
-
-| | Apple Wallet pass | Google Wallet card | Emailed card image |
-| :--- | :--- | :--- | :--- |
-| Holder's name | yes | yes | yes |
-| Member since | yes | yes | yes |
-| Good through | yes | yes | yes |
-| Card number | on the back | as QR alt text | under the QR code |
-| Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
-| Card theme's name | on the back | among the details | not shown (the card is drawn in it) |
-
-### Field Details
-
-- **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin may set a
-  custom display name (up to 64 characters via `member_display_names`). A member who updates their billing name at
-  checkout will see it reflected on their next membership purchase; however, an attributed gift order retains the
-  purchaser’s billing name, which can result in a gifted card displaying the buyer's name. (Some of these values were
-  imported from the old site and don't map directly to an order.)
-- **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
-  all qualifying orders. Terms do not accumulate consecutively.
-- **Card Number & QR Code:** Uses a persistent UUID generated upon initial record creation.
-  - The card number is not derived from the store customer ID because guest checkouts share ID 0 and gifted orders
-    retain the buyer’s customer ID.
-  - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
-    "Not a current membership"); whether one lapsed or was revoked is shown only to a signed-in admin.
-  - Cards issued by the old site still scan: their serial is looked up (`legacy_membership_cards`) and the holder's
-    current membership is shown.
-
-### Card Themes
-
-- **What a theme is:** color plus artwork from a membership year's scarf (`CARD_THEMES` in `src/themes/cardTheme.ts`).
-  Year themes exist (e.g., 2020, 2021, etc.) and `classic` is the original look and the fallback.
-- **Who can use which** (`src/themes/eligibility.ts`):
-  - the year of each membership order they placed;
-  - their "member since" year;
-  - a subgroup's theme (e.g. `#los-pringles`) while their Slack account is in that public channel;
-  - folks can always use `classic`
-- **Default:** `classic`. Once `CARD_THEME_YEAR_DEFAULTS` is on, the "member since" year's theme (or `classic` if that
-  year has none). A subgroup theme is never a default.
-- **Choosing:** members on their card page; admins on the member's admin page. `CARD_THEME_CHOICE` sets who may choose.
-  Choices are kept tracked per member / separate from any orders (`member_card_themes`).
-- **Losing access:** a theme choice no longer allowed (e.g. after leaving the associated Slack channel) falls back to
-  the default, and comes back if access does.
-- **Audit:** an admin's choice is logged; a member's own is not.
-- **In production today:** only admins may choose, year defaults are off, and the iOS 27 poster layout (scarf art
-  behind the whole Apple pass, `APPLE_POSTER_PASSES`) is off.
-
----
-
-## 5. Membership Qualification Rules
-
-A person holds current membership if their furthest qualifying order expiry is today or later and the record has no
-active revocation or expulsion flag (`isMembershipCurrent()`).
-
-### Qualifying Statuses
-
-Orders must carry an explicit paid status (`PAID_BIGCOMMERCE_STATUSES`) to grant membership:
-
-- **Qualifying:** `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`, `Shipped`, `Completed`.
-- **Non-Qualifying:** `Incomplete`, `Pending`, `Awaiting Payment`, `Refunded`, `Partially Refunded`, `Cancelled`,
-  `Declined`, `Disputed`.
-
-*Note on partial refunds:* Partially Refunded orders do not grant membership because the system cannot verify which line
-item was refunded. This policy should be monitored, as it risks revoking membership for multi-item orders where only
-merchandise was refunded.
-
-### Revocations & Expulsions
-
-Disciplinary actions supersede order status and come from a Membership Committee decision (which an admin then records)
-
-- **Revocation (`revoked_cards`):** Invalidates a specific card record without deleting underlying order data.
-- **Expulsion (`expelled_people`):** Disables member login and blocks future cards issued to that email address.
-
----
-
-## 6. "Member Since" Precedence
-
-When determining the "Member Since" date, the system evaluates sources in the following precedence order:
-
-1. `Manual Admin Override` (`member_since_overrides`, `source = 'manual'`)
-2. `Legacy Import Override` (`member_since_overrides`, `source = 'legacy_postgres'`)
-3. `Earliest Counted Order` (`members.member_since`)
-
-*(Implemented via `COALESCE` in `src/member/artifacts.ts`).*
-
-- **Order-derived date:** The timestamp of the earliest qualifying order on file.
-- **Legacy import:** Historical dates imported from the legacy site. Required to correctly represent some older orders.
-- **Manual override:** Administrative entry via the admin dashboard (with optional note). An override replaces any prior
-  value. Only a manual override can be removed; an imported date can be corrected over but not removed.
-
----
-
-## 7. Aggregation & Lifecycle
-
-Here is generally how we map membership orders to members:
-
-1. Read in all qualifying orders matching the email address.
-2. Derive card attributes from these orders via `deriveMembershipState()`.
-3. Update or create the member record in `members`.
-
-The overall design follows these properties:
-
-- **Decoupled data models:** Orders remain historical logs; memberships are computed snapshots. (i.e., orders and
-  memberships are tracked separately)
-- **Non-accumulating terms:** Expirations do not stack. Renewing 30 days prior to expiration sets the new term to
-  `purchase_date + 365 days`, shortening the overall coverage window by 30 days.
-- **Persistent identities:** Lapsed members retain their UUID (`member_id`), push tokens, and pass configurations
-  indefinitely with an empty expiry. A subsequent renewal re-activates the existing card.
-
----
-
-## 8. Gifts & Order Re-Attribution
-
-Orders maintain two email fields:
-
-- `order_email`: The billing email on the store transaction.
-- `member_email`: The address to which membership entitlement is assigned.
-
-Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updates `member_email`, records an entry in
-`membership_order_attributions`, recalculates the membership records for both donor and recipient, and pushes updates to
-installed wallet passes. The `member_email` field is protected against automated overwrite during routine BigCommerce
-sync passes.
-
-This is used for gifts (someone orders a membership for somebody else), and for a member whose older orders carry an
-address they no longer use.
-
----
-
-## 9. Signing In & the Store
-
-This section describes the ways a member reaches their card, including linking it to their LV store account. None of
-it changes who is a member.
-
-- **Sign-in:** with Google or Apple. The account's email finds the membership under that address
-  (`findMembershipsForUser()` in `src/member/portal.tsx`).
-- **Bought under another address** (e.g. Apple's Hide My Email): the member can claim it. A link is mailed to the
-  membership's address, and following it while signed in links the two (`members.user_id`,
-  `src/member/claimMembership.tsx`).
-- **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says
-  whether an address belongs to a member.
-- **Store accounts (see: [#38](https://github.com/los-verdes/card-losverd-es/issues/38)):** a member can connect their
-  store account once, while signed in to both in the same browser. After that, a "Membership card" link in the store's
-  top navbar / account menu signs them straight in to the card site, and their store account pages show their card.
-  - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
-    never the recipient's. The store's email appears on the sign-in page only as a hint.
-  - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
-  - **Status:** live on staging; off in production until released.
-
----
-
-## 10. Audit Logging
+## 7. Audit Logging
 
 Administrative interventions are permanently recorded in the audit log (`/admin/audit`).
 
