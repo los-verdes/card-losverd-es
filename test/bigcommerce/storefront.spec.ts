@@ -97,16 +97,14 @@ describe("the storefront script", () => {
     expect(doc.querySelector(".navBar--account .navBar-section")!.children.map((li) => li.textContent)).toEqual(["Orders", "Membership card"]);
   });
 
-  it("adds a line under the membership page's heading, and only on that page", () => {
+  it("leaves the membership category page as the store has it", async () => {
     const membership = storePage({ heading: "Membership" });
-    run(membership, storeWindow({ pathname: "/membership/" }).win);
-    const container = membership.querySelector(".container")!;
-    expect(container.children.map((child) => child.tagName)).toEqual(["h1", "p", "div"]);
-    expect(container.children[1].textContent).toBe("Already a member? Open your membership card");
+    const { win, fetch } = storeWindow({ pathname: "/membership/", member: { connected: true, member: null } });
+    run(membership, win);
+    await settle();
 
-    const other = storePage({ heading: "Scarves" });
-    run(other, storeWindow({ pathname: "/scarves/" }).win);
-    expect(other.querySelector(".container")!.children.map((child) => child.tagName)).toEqual(["h1", "div"]);
+    expect(membership.querySelector(".container")!.children.map((child) => child.tagName)).toEqual(["h1", "div"]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("adds nothing where the theme's markup is missing, and nothing twice", () => {
@@ -263,27 +261,11 @@ describe("the card on the store (Phase 2)", () => {
     expect(image.getAttribute("style")).toContain("margin: 0 auto");
   });
 
-  it("replaces the membership page's line with the card itself", async () => {
-    const doc = storePage({ heading: "Membership" });
-    run(doc, storeWindow({ pathname: "/membership/", member: CURRENT }).win);
-    await settle();
-
-    const container = doc.querySelector(".container")!;
-    expect(container.children.map((child) => child.tagName)).toEqual(["h1", "p", "section", "div"]);
-    expect(container.children[1].hasAttribute("hidden")).toBe(true);
-  });
-
-  it("offers to connect an unconnected store account on the account pages, and leaves the membership page's line to do it", async () => {
+  it("offers to connect an unconnected store account", async () => {
     const account = storePage({ accountNav: true });
     run(account, storeWindow({ pathname: "/account.php", member: { connected: false } }).win);
     await settle();
     expect(panelIn(account)!.textContent).toContain("Connect your store account to see your Los Verdes membership card here. Connect it");
-
-    const membership = storePage({ heading: "Membership" });
-    run(membership, storeWindow({ pathname: "/membership/", member: { connected: false } }).win);
-    await settle();
-    expect(panelIn(membership)).toBeNull();
-    expect(membership.querySelector(".container")!.children[1].hasAttribute("hidden")).toBe(false);
   });
 
   it("says when a connected account has no membership yet", async () => {
@@ -293,17 +275,12 @@ describe("the card on the store (Phase 2)", () => {
     expect(panelIn(doc)!.textContent).toContain("there's no Los Verdes membership on it yet");
   });
 
-  it("says when the membership ran out, offering to renew from the account pages", async () => {
+  it("says when the membership ran out, offering to renew", async () => {
     const account = storePage({ accountNav: true });
     run(account, storeWindow({ pathname: "/account.php", member: LAPSED }).win);
     await settle();
     expect(panelIn(account)!.textContent).toContain("Your membership ran out on Feb 14, 2026. Renew it");
     expect(panelIn(account)!.querySelectorAll("img")).toEqual([]);
-
-    const membership = storePage({ heading: "Membership" });
-    run(membership, storeWindow({ pathname: "/membership/", member: LAPSED }).win);
-    await settle();
-    expect(panelIn(membership)!.textContent).not.toContain("Renew it");
   });
 
   it("shows nothing for a guest, a failed request, or while Connect is carrying on", async () => {
