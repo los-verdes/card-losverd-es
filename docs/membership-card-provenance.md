@@ -244,8 +244,8 @@ This feature would be used if someone orders a membership with the intention of 
 
 ## 9. Signing In & the Store
 
-This sections describes the various way a members accesses their card. This includes linking their membership card
-directly with their LV store account.
+This section describes the ways a member reaches their card, including linking it to their LV store account. None of
+it changes who is a member.
 
 - **Sign-in:** with Google or Apple. The account's email finds the membership under that address
   (`findMembershipsForUser()` in `src/member/portal.tsx`).
