@@ -59,7 +59,7 @@ One rule, over the stores' own statuses (`src/lib/membershipOrders.ts`):
   imported (`frozen_counts`): they counted unless cancelled, refunded or
   declined, because Squarespace's `PENDING` meant paid. A report on one of
   those years therefore cannot change when the paid list does. The
-  provenance document's appendix has the reasoning.
+  provenance document covers Squarespace-era orders.
 
 Membership cards use the same rule as the reports: the `members` sync derives
 each card from the member's counted orders (see
