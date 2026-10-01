@@ -132,7 +132,7 @@ parity between the formats and that is tracked in this table:
     retain the buyer’s customer ID.
   - The QR code encodes a signed URL to `src/member/verify-pass.tsx`. Public scans return binary validity ("Valid" or
   "Not a current membership"); specific lapse or revocation states require signed-in admin access.
-  - Cards issued by the old site still scan: their serial is looked up (legacy_membership_cards) and the holder's
+  - Cards issued by the old site still scan: their serial is looked up (`legacy_membership_cards`) and the holder's
     current membership is shown.
 
 ### Card Themes
