@@ -10,7 +10,7 @@ primary audiences are:
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
 specifies the current implementation and outlines open policy choices in **Section 9**.
 
-The last section, [Decisions worth confirming](#9-decisions-worth-confirming), gathers the places where the app had to
+The last section, [Decisions worth confirming](#10-decisions-worth-confirming), gathers the places where the app had to
 pick a rule and where a different policy would be equally easy to implement. This section in particular is seeking
 feedback from any interested folks.
 
@@ -216,7 +216,26 @@ sync passes.
 
 ---
 
-## 9. Decisions worth confirming
+## 9. Signing In & the Store
+
+How a person reaches their card. None of it changes who is a member.
+
+- **Sign-in:** with Google or Apple. The account's email finds the membership under that address (`findMembershipsForUser()` in `src/member/portal.tsx`).
+- **Bought under another address** (e.g. Apple's Hide My Email): the member can claim it. A link is mailed to the
+  membership's address, and following it while signed in links the two (`members.user_id`,
+  `src/member/claimMembership.tsx`).
+- **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says whether an address belongs to a member.
+- **Store accounts (#38):** a member can connect their store account once, while signed in to both in the same browser.
+  After that, "Membership card" in the store's header and account menu signs them straight in, and their store account
+  pages show their card.
+  - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
+    never the recipient's. The store's email appears on the sign-in page only as a hint.
+  - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
+  - **Status:** live on staging; off in production until released.
+
+---
+
+## 10. Decisions worth confirming
 
 1. **When does membership activate?**
    - Current: Immediately upon payment (`Awaiting Fulfillment`).
@@ -253,7 +272,7 @@ sync passes.
 
 ---
 
-## 10\. Audit Logging
+## 11. Audit Logging
 
 Administrative interventions are permanently recorded in the audit log (`/admin/audit`).
 
