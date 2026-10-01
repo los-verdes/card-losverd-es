@@ -196,7 +196,7 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 - **Order-derived date:** The timestamp of the earliest qualifying order on file.
 - **Legacy import:** Historical dates imported from the legacy site. Required to correctly represent some older orders.
 - **Manual override:** Administrative entry via the admin dashboard (with optional note). An override replaces any prior
-  value.
+  value. Only a manual override can be removed; an imported date can be corrected over but not removed.
 
 ---
 
