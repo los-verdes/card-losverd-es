@@ -8,8 +8,9 @@ primary audiences are:
   disciplinary processes.
 
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
-specifies the current implementation and outlines open policy choices in [**Section 10** - Decisions worth
-confirming](#10-decisions-worth-confirming). (Section 10 in particular is seeking feedback from any interested folks.)
+specifies the current implementation and outlines open policy choices in the [Appendix - Decisions worth
+confirming](appendix-decisions-worth-confirming) (this bit in particular would greatly benefit from discussion and
+feedback.)
 
 ---
 
@@ -249,7 +250,23 @@ How a person reaches their card. None of it changes who is a member.
 
 ---
 
-## 10. Decisions worth confirming
+## 10. Audit Logging
+
+Administrative interventions are permanently recorded in the audit log (`/admin/audit`).
+
+- **Logged actions:** Card name modifications, "Member since" overrides, order re-attributions, card email dispatches,
+  revocations / expulsions (and lifting either), card themes set or cleared by an admin, store accounts connected or
+  disconnected, admin access granted or removed.
+- **Entry schema:** Timestamp, target user, actor (admin username, `site automation`, `command line`, `previous site
+  import`, or `database migration`), action type, and previous/new values.
+- **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
+  CSV exports of the audit log generate an audit event noting actor and exported row count.
+- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled sync
+  runs, pass re-renders) are omitted.
+
+---
+
+## Appendix: Decisions worth confirming
 
 1. **When does membership activate?**
    - Current: Immediately upon payment (`Awaiting Fulfillment`).
@@ -288,22 +305,6 @@ How a person reaches their card. None of it changes who is a member.
     - Alternatives: Introduce a multi-day grace window for active subscriptions, balanced against conferring unearned
       access if renewal fails.
     - Deciders?: Merch Team w/ Membership Committee
-
----
-
-## 11. Audit Logging
-
-Administrative interventions are permanently recorded in the audit log (`/admin/audit`).
-
-- **Logged actions:** Card name modifications, "Member since" overrides, order re-attributions, card email dispatches,
-  revocations / expulsions (and lifting either), card themes set or cleared by an admin, store accounts connected or
-  disconnected, admin access granted or removed.
-- **Entry schema:** Timestamp, target user, actor (admin username, `site automation`, `command line`, `previous site
-  import`, or `database migration`), action type, and previous/new values.
-- **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
-  CSV exports of the audit log generate an audit event noting actor and exported row count.
-- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled sync
-  runs, pass re-renders) are omitted.
 
 ---
 
