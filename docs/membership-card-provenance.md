@@ -106,27 +106,24 @@ than the store:
    use this information directly when considering membership.
 ---
 
-## 4\. Card Fields & Verification
+## 4. Card Fields & Verification
 
 All formats (Apple Wallet, Google Wallet, card images, and QR verification pages) resolve through a shared query
-(`MEMBER_SELECT` in `src/member/artifacts.ts`).
+(`MEMBER_SELECT` in `src/member/artifacts.ts`). We attempt to keep parity between the formats and that is tracked in
+this table:
 
-### Field Comparison
-
-- **Holder Name:** Available on Apple Wallet (front), Google Wallet (front), Emailed Card Image (front). Sourced from
-  display name override, else latest order billing name (`deriveMembershipState()`).
-- **Member Since:** Available on Apple Wallet (front), Google Wallet (front), Emailed Card Image (front). Sourced from
-  override table date, else earliest qualifying order (`formatMonthYear()`).
-- **Good Through:** Available on Apple Wallet (front), Google Wallet (front), Emailed Card Image (front). Sourced from
-  furthest single-order expiry date (`formatShortDate()`).
-- **Card Number:** Apple Wallet (back), Google Wallet (QR alt text), Emailed Card Image (below QR). Immutable UUID
-  format: `LV-<uuid>` (`members.member_id`).
-- **Status Note:** Apple Wallet (back, if lapsed), Google Wallet (wallet state), Emailed Card Image (omitted). Derived
-  at request time (`effectiveStatus()`).
+| | Apple Wallet pass | Google Wallet card | Emailed card image |
+| :--- | :--- | :--- | :--- |
+| Holder's name | yes | yes | yes |
+| Member since | yes | yes | yes |
+| Good through | yes | yes | yes |
+| Card number | on the back | as QR alt text | under the QR code |
+| Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
+| Card theme's name | on the back | among the details | not shown (the card is drawn in it) |
 
 ### Field Details
 
-- **Holder's Name:** Defaults to the first and last billing name on the most recent counted order. A member or an admin
+- **Holder's Name:** Defaults to the billing name on the most recent counted order. A member or an admin
   may set a custom display name (up to 64 characters via `member_display_names`). A member who updates their billing
   name at checkout will see it reflected on their next membership purchase; however, an attributed gift order retains
   the purchaser’s billing name, which can result in a gifted card displaying the buyer's name (see Section 8).
@@ -148,7 +145,7 @@ All formats (Apple Wallet, Google Wallet, card images, and QR verification pages
 
 ---
 
-## 5\. Membership Qualification Rules
+## 5. Membership Qualification Rules
 
 A person holds current membership if their furthest qualifying order expiry is today or later and the record has no
 active revocation or expulsion flag (`isMembershipCurrent()`).
@@ -174,7 +171,7 @@ Disciplinary actions supersede order status and require Membership Committee exe
 
 ---
 
-## 6\. "Member Since" Precedence
+## 6. "Member Since" Precedence
 
 When determining the "Member Since" date, the system evaluates sources in the following precedence order:
 
@@ -191,13 +188,13 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 
 ---
 
-## 7\. Aggregation & Lifecycle
+## 7. Aggregation & Lifecycle
 
 1. Ingest all qualifying orders matching the email address.
 2. Reduce rows to card attributes via `deriveMembershipState()`.
 3. Update or create the member record in `members`.
 
-- **Decoupled data models:** Orders remain immutable historical logs; memberships are computed snapshots.
+- **Decoupled data models:** Orders remain historical logs; memberships are computed snapshots.
 - **Non-accumulating terms:** Expirations do not stack. Renewing 30 days prior to expiration sets the new term to
   `purchase_date + 365 days`, shortening the overall coverage window by 30 days.
 - **Persistent identities:** Lapsed members retain their UUID (`member_id`), push tokens, and pass configurations
@@ -205,11 +202,11 @@ When determining the "Member Since" date, the system evaluates sources in the fo
 
 ---
 
-## 8\. Gifts & Order Re-Attribution
+## 8. Gifts & Order Re-Attribution
 
 Orders maintain two email fields:
 
-- `order_email`: The billing email on the transaction (immutable).
+- `order_email`: The billing email on the store transaction.
 - `member_email`: The address to which membership entitlement is assigned.
 
 Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updates `member_email`, records an entry in
@@ -219,7 +216,7 @@ sync passes.
 
 ---
 
-## 9\. Policy Decisions & Implementation Options
+## 9. Decisions worth confirming
 
 1. **When does membership activate?**
    - Current: Immediately upon payment (`Awaiting Fulfillment`).
@@ -266,7 +263,7 @@ Administrative interventions are permanently recorded in the audit log (`/admin/
   and previous/new values.
 - **Data retention:** Audit records are immutable and persist when state tables are modified or cleared. Administrative
   CSV exports of the audit log generate an audit event noting actor and exported row count.
-- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, daily scheduled
+- **Excluded events:** High-frequency, deterministic automated events (standard order webhook ingestion, scheduled
   sync runs, pass re-renders) are omitted.
 
 ---
@@ -278,5 +275,5 @@ Orders imported from Squarespace (prior to February 2023\) use static, precomput
 
 - **Qualification rule:** Counted unless status was explicitly `canceled`, `cancelled`, `refunded`, or `declined`.
   (Squarespace marked paid, unshipped orders as `PENDING`, whereas BigCommerce uses `Pending` for unpaid transactions).
-- **Scope:** Legacy orders establish historical "Member since" dates and resolve physical legacy card QR scans via
+- **Scope:** Legacy Squarespace orders establish historical "Member since" dates and resolve legacy card QR scans via
   `legacy_membership_cards`. They cannot confer active membership today.
