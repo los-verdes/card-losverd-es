@@ -35,6 +35,7 @@ import {
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { When } from "./when";
 
 export const AUDIT_PATH = "/admin/audit";
 
@@ -49,11 +50,6 @@ audit.use("*", async (c, next) => {
   await next();
   c.header("Cache-Control", "no-store");
 });
-
-/** Date and time, because two entries on one day is the case worth ordering. */
-function formatWhen(epochMs: number): string {
-  return new Date(epochMs).toISOString().replace("T", " ").slice(0, 16) + "Z";
-}
 
 /** Where one person's history is: the section of that name on their member page. */
 export function memberHistoryHref(email: string): string {
@@ -76,7 +72,10 @@ const detailCellStyle = `${cellStyle}; white-space: normal; min-width: 14rem; ma
 const Row: FC<{ entry: AuditEntry; showSubject: boolean }> = ({ entry, showSubject }) => (
   // Top-aligned, so the other cells sit level with a wrapped detail's first line.
   <tr style="vertical-align: top">
-    <td style={cellStyle}>{formatWhen(entry.created_at)}</td>
+    {/* Date and time, because two entries on one day is the case worth ordering. */}
+    <td style={cellStyle}>
+      <When at={entry.created_at} />
+    </td>
     <td style={cellStyle}>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
     {showSubject && (
       <td style={cellStyle}>
@@ -104,7 +103,7 @@ const Actor: FC<{ entry: AuditEntry }> = ({ entry }) => {
   return entry.actor_name ? <span title={actor.text}>{label}</span> : <>{label}</>;
 };
 
-const HISTORY_HEADINGS = ["When (UTC)", "What", "Detail", "Who did it"];
+const HISTORY_HEADINGS = ["When", "What", "Detail", "Who did it"];
 
 /**
  * One person's whole history, newest first, for their member page: every
@@ -196,7 +195,7 @@ audit.get("/", async (c) => {
   const entries = fetched.slice(0, AUDIT_PAGE_SIZE);
   const olderHref =
     fetched.length > AUDIT_PAGE_SIZE ? auditHref(null, { before: String(entries[entries.length - 1].id) }) : null;
-  const headings = ["When (UTC)", "What", "Who it was about", "Detail", "Who did it"];
+  const headings = ["When", "What", "Who it was about", "Detail", "Who did it"];
 
   return c.html(
     <AdminPage title="Audit log">

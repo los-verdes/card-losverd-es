@@ -179,7 +179,8 @@ describe("GET /admin/orders/:orderId", () => {
     const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toContain("No longer returned by the store");
-    expect(body).toContain("2026-09-17");
+    // Midnight UTC is the evening before in Austin, which is the day shown.
+    expect(body).toContain("first noticed Sep 16, 2026.");
     expect(body).toContain("It still counts");
   });
 

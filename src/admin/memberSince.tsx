@@ -30,6 +30,7 @@ import { formatShortDate, parseIsoDate } from "../lib/dateFormat";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { dayText } from "./when";
 import { actorEmail, recordAuditEvent } from "../audit/log";
 
 export const MEMBER_SINCE_PATH = "/admin/member-since";
@@ -173,7 +174,7 @@ const Subject: FC<{ subject: MemberSinceSubject; today: string; error?: string }
               <th style={cellStyle}>Correction on file</th>
               <td style={cellStyle}>
                 {formatShortDate(override.member_since)} — set{" "}
-                {new Date(override.updated_at).toISOString().slice(0, 10)}
+                {dayText(override.updated_at)}
                 {override.source === "legacy_postgres" ? ", imported from the old site" : ""}
                 {override.set_by_email ? ` by ${override.set_by_email}` : ""}
                 {override.note ? ` — ${override.note}` : ""}

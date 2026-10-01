@@ -66,6 +66,7 @@ import { emailFootprint, type EmailFootprint } from "./attribution";
 import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { dayText } from "./when";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
 import { renewalState, renewalText, renewalsForMember, type RenewalRow } from "../minibc/renewals";
 
@@ -326,7 +327,7 @@ const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null
   store?.customerId ? (
     <form method="post" action={MEMBERS_PATH} style="margin: 0">
       Customer {store.customerId}
-      {store.linkedAt ? `, connected ${new Date(store.linkedAt).toISOString().slice(0, 10)}` : ""}{" "}
+      {store.linkedAt ? `, connected ${dayText(store.linkedAt)}` : ""}{" "}
       <input type="hidden" name="email" value={member.email} />
       <input type="hidden" name="action" value="store-unlink" />
       <input type="hidden" name="user_id" value={String(store.userId)} />

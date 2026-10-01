@@ -31,6 +31,7 @@ import {
   type EmailFootprint,
 } from "./attribution";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
+import { When, dayText } from "./when";
 
 const MAX_NOTE_LENGTH = 500;
 
@@ -157,7 +158,7 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
             ? ([
                 [
                   "In BigCommerce",
-                  `No longer returned by the store, first noticed ${new Date(order.missing_since).toISOString().slice(0, 10)}. It still counts; see the "Missing from BigCommerce" report.`,
+                  `No longer returned by the store, first noticed ${dayText(order.missing_since)}. It still counts; see the "Missing from BigCommerce" report.`,
                 ],
               ] as const)
             : []),
@@ -179,7 +180,7 @@ const History: FC<{ records: AttributionRecord[] }> = ({ records }) =>
     <table style="border-collapse: collapse; font-size: 0.9rem">
       <thead>
         <tr>
-          {["When (UTC)", "From", "To", "By", "Note"].map((heading) => (
+          {["When", "From", "To", "By", "Note"].map((heading) => (
             <th style={cellStyle}>{heading}</th>
           ))}
         </tr>
@@ -187,7 +188,9 @@ const History: FC<{ records: AttributionRecord[] }> = ({ records }) =>
       <tbody>
         {records.map((record) => (
           <tr>
-            <td style={cellStyle}>{new Date(record.created_at).toISOString().slice(0, 16).replace("T", " ")}</td>
+            <td style={cellStyle}>
+              <When at={record.created_at} />
+            </td>
             <td style={cellStyle}>
               <MemberLink email={record.previous_member_email} />
             </td>
