@@ -28,6 +28,26 @@ feedback from any interested folks.
   - "Member since" displays the earliest qualifying order date (unless overridden).
   - Only orders containing explicitly configured membership SKUs are recorded.
 
+```mermaid
+%% Keep every label to a few words a line. Mermaid no longer grows a box to
+%% fit its text (mermaid-js/mermaid#7354), so a long label is silently clipped
+%% when this renders on GitHub. Detail belongs in the prose, not in the boxes.
+flowchart TD
+    BC["BigCommerce order<br/>webhook or resync"] --> HIST
+    SQ["Pre-2023 order<br/>imported once"] --> HIST
+    HIST["Order history<br/>membership_orders"]
+    HIST --> COUNT{"Does this<br/>order count?"}
+    COUNT -->|"paid"| KEEP
+    COUNT -->|"pre-2023:<br/>not cancelled"| KEEP
+    COUNT -->|"unpaid, refunded,<br/>cancelled, declined"| DROP["Ignored"]
+    KEEP["Counted orders,<br/>grouped by member"]
+    KEEP --> CARD["One membership,<br/>one card"]
+    CARD --> F1["Holder's name<br/>latest counted order"]
+    CARD --> F2["Member since<br/>earliest counted order,<br/>or an override"]
+    CARD --> F3["Good through<br/>furthest expiry"]
+    CARD --> F4["Card number<br/>assigned once"]
+```
+
 ---
 
 ## 2. System Architecture
