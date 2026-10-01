@@ -79,7 +79,8 @@ const BROWSER_COOKIE = "lv_store_browser";
 /** Long enough to sign in with Google or Apple, short enough not to linger. */
 const PENDING_TTL_SECONDS = 10 * 60;
 
-async function hmac(key: string, message: string): Promise<string> {
+/** An HMAC-SHA256, base64url, as the pending cookie and the store's signed links (src/bigcommerce/storeMember.tsx) use. */
+export async function hmac(key: string, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message)));
   return btoa(String.fromCharCode(...signature)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -188,7 +189,7 @@ async function connectStoreAccount(c: HandoffContext, userId: number, customerId
 }
 
 /** The store's origin, or null when this environment has none configured. */
-function storefrontOrigin(env: Env): string | null {
+export function storefrontOrigin(env: Env): string | null {
   try {
     return env.BIGCOMMERCE_STOREFRONT_URL ? new URL(env.BIGCOMMERCE_STOREFRONT_URL).origin : null;
   } catch {

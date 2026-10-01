@@ -56,7 +56,12 @@ export class FakeElement extends FakeNode {
   hasAttribute(name: string) {
     return this.attributes.has(name);
   }
+  getAttribute(name: string) {
+    return this.attributes.get(name) ?? null;
+  }
   setAttribute(name: string, value: string) {
+    // As a browser does: `class` is the same thing as `className`.
+    if (name === "class") this.className = value;
     this.attributes.set(name, value);
   }
   appendChild<T extends FakeNode>(child: T): T {
