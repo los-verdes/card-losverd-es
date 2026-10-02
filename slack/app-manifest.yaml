@@ -31,6 +31,8 @@ oauth_config:
       # are posted to (src/slack/alert.ts). The webhook URL is produced at
       # install time and is a separate secret from the bot token.
       - incoming-webhook
+      # for theme selection purposes:
+      - channels:read
 
 settings:
   org_deploy_enabled: false
