@@ -122,7 +122,7 @@ determining the "Member Since" date, the site uses this order:
 
 1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
 2. `Legacy Import Override` - Historical join dates imported from the old site. Those that matched the member's
-   orders, or belonged to someone with no Squarespace-era order, have been removed: on 2026-09-29 that was every one.
+   orders, or belonged to someone with no Squarespace-era order, have been removed: on 2026-10-02 that was every one.
 3. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
    options don't fit
 
