@@ -139,19 +139,28 @@ export const CLASSIC_THEME: CardTheme = {
   artwork: {},
 };
 
+/** What sets one year's theme apart; `yearTheme()` fills in the rest. */
+interface YearThemeSpec {
+  year: number;
+  label: string;
+  colors: CardThemeColors;
+  /** `CardTheme.version`; 2 unless this year's own art or colours have changed since. */
+  version?: number;
+}
+
 /**
  * A year's theme, from that year's membership scarf. It keeps classic's crest
  * and pass images, and has artwork on every surface under
  * `templates/themes/<year>/` (how each was made: assets/templates/themes/README.md).
  */
-function yearTheme(year: number, label: string, colors: CardThemeColors): CardTheme {
+function yearTheme({ year, label, colors, version = 2 }: YearThemeSpec): CardTheme {
   const prefix = `templates/themes/${year}/`;
   return {
     id: String(year),
     label,
     year,
     // 2: poster art for Apple, and Google's hero at its 2026 size (#384).
-    version: 2,
+    version,
     colors,
     assets: CLASSIC_THEME.assets,
     artwork: {
@@ -166,68 +175,98 @@ function yearTheme(year: number, label: string, colors: CardThemeColors): CardTh
 /** The year themes, one per scarf design. */
 export const YEAR_THEMES: readonly CardTheme[] = [
   // Serape stripes, darkened so the card's white text reads over them.
-  yearTheme(2020, "2020: MMXX", {
-    background: "#111111",
-    border: "#000000",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2020,
+    label: "2020: MMXX",
+    colors: {
+      background: "#111111",
+      border: "#000000",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The inaugural season: the skull and rings from the scarf's back.
-  yearTheme(2021, "2021: Inaugural season", {
-    background: "#020202",
-    border: "#09ad4e",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2021,
+    label: "2021: Inaugural season",
+    colors: {
+      background: "#020202",
+      border: "#09ad4e",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // "Verde hasta la muerte": the doodle pattern, from its print file, darkened.
-  yearTheme(2022, "2022: Verde hasta la muerte", {
-    background: "#040a07",
-    border: "#198e3c",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2022,
+    label: "2022: Verde hasta la muerte",
+    colors: {
+      background: "#040a07",
+      border: "#198e3c",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The scarf's papel picado flags, spelling out Los Verdes, on the mint of its
   // "i love you verde" side. The one light theme, so its text is dark.
-  yearTheme(2023, "2023: I love you verde", {
-    background: "#8fddb3",
-    border: "#00b140",
-    text: "#000000",
-    secondaryText: "#0b3d20",
-    qrLabel: "#046a29",
-    passText: "#000000",
+  yearTheme({
+    year: 2023,
+    label: "2023: I love you verde",
+    colors: {
+      background: "#8fddb3",
+      border: "#00b140",
+      text: "#000000",
+      secondaryText: "#0b3d20",
+      qrLabel: "#046a29",
+      passText: "#000000",
+    },
   }),
   // The floral side's bat and sugar skull, from the mockup render of the scarf.
-  yearTheme(2024, "2024: MMXXIV", {
-    background: "#121212",
-    border: "#1ee85a",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2024,
+    label: "2024: MMXXIV",
+    colors: {
+      background: "#121212",
+      border: "#1ee85a",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
-  // "Cinco Uno Dos": the skeleton hand and UNO, and the LOS VERDES roundel.
-  yearTheme(2025, "2025: Cinco Uno Dos", {
-    background: "#221e1f",
-    border: "#00a550",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  // "Cinco Uno Dos": the three skeleton hands, and the LOS VERDES roundel.
+  yearTheme({
+    year: 2025,
+    label: "2025: Cinco Uno Dos",
+    // 3: the card's art, from UNO alone to all three hands.
+    version: 3,
+    colors: {
+      background: "#221e1f",
+      border: "#00a550",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The skull gaiter: the 2026 kit's skull and lettering.
-  yearTheme(2026, "2026: Skull Gaiter", {
-    background: "#1d2429",
-    border: "#00a843",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2026,
+    label: "2026: Skull Gaiter",
+    colors: {
+      background: "#1d2429",
+      border: "#00a843",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
 ];
 

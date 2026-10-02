@@ -63,8 +63,9 @@ side. So the art's subject belongs in the top half, clear of the sides.
   skull in its sunburst from the LOS VERDES side. Worth replacing from the
   print file if one turns up.
 - **2025 ("Cinco Uno Dos").** From the scarf's vector print file, rendered at
-  200 dpi. The card is the skeleton hand and UNO from the green side,
-  darkened 64%. The poster, hero and thumbnail are the LOS VERDES roundel
+  200 dpi. The card is the green side's three skeleton hands, five, one and
+  two, each cut out from the letter behind it, standing on the scarf's green
+  between its paisley borders, darkened 58%. The poster, hero and thumbnail are the LOS VERDES roundel
   from the black side: on the poster with the confetti around it, faded into
   the scarf's black.
 - **2026 ("Skull Gaiter").** No scarf print file was to hand, so this year
