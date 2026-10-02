@@ -413,6 +413,24 @@ describe("GET /admin/reports/consolidations", () => {
     expect(body).toMatch(/>2018-06-01<\/td><td[^>]*>2026-01-15<\/td><td[^>]*>differs<\/td><td[^>]*>previous site<\/td>/);
   });
 
+  it("lists card names the old site carried over apart from names somebody set, so that table stays short", async () => {
+    await insertCardName({ email: "old@example.com", name: "Google Profile Name", source: "legacy_postgres", at: 1500000000000 });
+
+    const body = await (await get("/admin/reports/consolidations")).text();
+    const section = (title: string) => {
+      const start = body.indexOf(`<h2>${title}`);
+      expect(start, `the page should have "${title}"`).toBeGreaterThan(-1);
+      return body.slice(start, body.indexOf("</section>", start));
+    };
+
+    // Card names a member or admin set stay apart from the imported ones, which say where they came from.
+    expect(section("Card names set by hand (2)")).not.toContain("Google Profile Name");
+    const imported = section("Card names carried over from the old site (1)");
+    expect(imported).toContain("Google Profile Name");
+    expect(imported).toContain("Google or Apple profile");
+    expect(imported).not.toContain(">Set by</th>");
+  });
+
   it("marks an attribution the legacy import made, rather than an admin", async () => {
     await env.DB.exec("DELETE FROM membership_order_attributions");
 
@@ -439,7 +457,7 @@ describe("GET /admin/reports/consolidations", () => {
 
     const bad = await get("/admin/reports/consolidations?table=duplicate-names&format=csv");
     expect(bad.status).toBe(400);
-    expect(await bad.text()).toContain("table must be one of attributed-orders, card-names, member-since");
+    expect(await bad.text()).toContain("table must be one of attributed-orders, card-names, member-since, card-names-imported");
   });
 
   it("shows every row of a long table, with the full count in the CSV link above it", async () => {

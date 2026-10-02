@@ -137,17 +137,28 @@ function slackTables(result: SlackCrossReference, lapsed: LapsedByRenewal | null
 type ConsolidationRow = AttributedOrderRow | CardNameOverrideRow | MemberSinceOverrideRow;
 
 /**
- * The consolidations page's three tables. `key` names each one's CSV
- * download; `columns` are the page's, and `csvColumns` the download's where
- * they differ (the page folds who set an override into one "Set by" cell).
+ * The consolidations page's tables. `key` names each one's CSV download;
+ * `columns` are the page's, and `csvColumns` the download's where they differ
+ * (the page folds who set an override into one "Set by" cell).
+ *
+ * `imported` splits the card names in two: what a member or an admin set, and
+ * what the one-time import carried over from the previous site
+ * (`source = 'legacy_postgres'`). The old site set a card's name from the
+ * member's first order or their Google or Apple profile, overwriting it at
+ * every sign-in, so few of the names it left were chosen by anyone; listed
+ * among the names set by hand they made that table hundreds of rows long,
+ * where admins expect a handful.
  */
 const CONSOLIDATION_TABLES: {
   key: string;
   field: keyof Consolidations;
   title: string;
+  /** A line under the title, for a table whose rows need explaining. */
+  about?: string;
   columns: readonly string[];
   headings: readonly string[];
   csvColumns?: readonly string[];
+  imported?: boolean;
 }[] = [
   {
     key: "attributed-orders",
@@ -163,6 +174,7 @@ const CONSOLIDATION_TABLES: {
     columns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_at", "note", "order_id"],
     headings: ["Member", "Card shows", "Name from orders", "Compared", "Set by", "Set", "Note", "Latest order"],
     csvColumns: ["member_email", "display_name", "order_name", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
+    imported: false,
   },
   {
     key: "member-since",
@@ -171,6 +183,17 @@ const CONSOLIDATION_TABLES: {
     columns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_at", "note", "order_id"],
     headings: ["Member", "Card shows", "Date from orders", "Compared", "Set by", "Set", "Note", "Earliest order"],
     csvColumns: ["member_email", "member_since", "order_member_since", "same_as_orders", "source", "set_by", "set_at", "note", "order_id"],
+  },
+  {
+    key: "card-names-imported",
+    field: "cardNames",
+    title: "Card names carried over from the old site",
+    about:
+      "Not chosen by hand, mostly: the old site named a card after the member's first order or their Google or Apple profile, and replaced it at every sign-in. Members and admins can change any of them.",
+    columns: ["member_email", "display_name", "order_name", "same_as_orders", "note", "order_id"],
+    headings: ["Member", "Card shows", "Name from orders", "Compared", "Note", "Latest order"],
+    csvColumns: ["member_email", "display_name", "order_name", "same_as_orders", "set_at", "note", "order_id"],
+    imported: true,
   },
 ];
 
@@ -424,8 +447,8 @@ reports.get("/", async (c) => {
           coming up.
         </li>
         <li>
-          <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
-          card names and "member since" dates set by hand.
+          <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address,
+          card names and "member since" dates set by hand, and the card names the old site carried over.
         </li>
         <li>
           <a href="/admin/reports/slack">Slack cross-reference</a>: current and lapsed members with and without
@@ -1071,7 +1094,10 @@ reports.get("/consolidations", async (c) => {
     throw new BadRequest(`table must be one of ${CONSOLIDATION_TABLES.map((table) => table.key).join(", ")}`);
   }
   const result = await consolidations(c.env.DB);
-  const rowsFor = (table: (typeof CONSOLIDATION_TABLES)[number]): ConsolidationRow[] => result[table.field];
+  const rowsFor = (table: (typeof CONSOLIDATION_TABLES)[number]): ConsolidationRow[] =>
+    (result[table.field] as ConsolidationRow[]).filter(
+      (row) => table.imported === undefined || (row.source === "legacy_postgres") === table.imported,
+    );
   if (csvTable) {
     return new Response(toCsv([...(csvTable.csvColumns ?? csvTable.columns)], rowsFor(csvTable)), {
       headers: {
@@ -1083,10 +1109,10 @@ reports.get("/consolidations", async (c) => {
   return c.html(
     <AdminPage title="Consolidations">
       <p>
-        Where a card says something other than its orders would, because somebody chose that: a membership attributed
-        to another address, a name set by hand, or a corrected &ldquo;member since&rdquo;. The last two sit beside
-        what the orders alone would give; one marked &ldquo;same&rdquo; has come to match them and changes nothing.
-        Follow an order to change who it is attributed to, or a member to change their card.
+        Where a card says something other than its orders would: a membership attributed to another address, a name
+        set by hand, or a corrected &ldquo;member since&rdquo;, then the card names the old site carried over. Names and dates
+        sit beside what the orders alone would give; one marked &ldquo;same&rdquo; has come to match them and changes
+        nothing. Follow an order to change who it is attributed to, or a member to change their card.
       </p>
       {CONSOLIDATION_TABLES.map((table) => {
         const rows = rowsFor(table);
@@ -1095,6 +1121,7 @@ reports.get("/consolidations", async (c) => {
             <h2>
               {table.title} ({rows.length})
             </h2>
+            {table.about && <p class="muted">{table.about}</p>}
             <ReportTable
               headings={table.headings}
               csvHref={`/admin/reports/consolidations?table=${table.key}&format=csv`}
