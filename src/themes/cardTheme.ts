@@ -210,7 +210,7 @@ export const YEAR_THEMES: readonly CardTheme[] = [
  */
 export const GROUP_THEMES: readonly CardTheme[] = [
   // The all-seeing Pringle from the back of the Los Pringles scarf, on black.
-  // The scarf's end panels are left out: one carries people's names.
+  // The scarf's end panels, with their names of honour and barcodes, are left out.
   {
     id: "los-pringles",
     label: "Los Pringles",
@@ -230,6 +230,30 @@ export const GROUP_THEMES: readonly CardTheme[] = [
       appleThumbnailPrefix: "templates/themes/los-pringles/apple/",
       applePosterPrefix: "templates/themes/los-pringles/apple-poster/",
       googleHero: "templates/themes/los-pringles/google-hero.png",
+    },
+  },
+  // The VERDIROJAS side of the Verdirojas scarf on the card, its watermelon
+  // slice as the thumbnail, and the raised fist from the Refugees Welcome
+  // scarf's print file on the poster and hero.
+  {
+    id: "verdirojas",
+    label: "Verdirojas",
+    group: "verdirojas",
+    version: 1,
+    colors: {
+      background: "#000000",
+      border: "#c33e46",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
+    assets: CLASSIC_THEME.assets,
+    artwork: {
+      cardBackground: "templates/themes/verdirojas/card-background.png",
+      appleThumbnailPrefix: "templates/themes/verdirojas/apple/",
+      applePosterPrefix: "templates/themes/verdirojas/apple-poster/",
+      googleHero: "templates/themes/verdirojas/google-hero.png",
     },
   },
 ];

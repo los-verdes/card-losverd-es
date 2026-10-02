@@ -61,11 +61,18 @@ id here rather than a year.
 
 - **Los Pringles (`los-pringles/`).** The centre of the back of the Los
   Pringles scarf, the all-seeing Pringle on black, with the flying Pringles
-  either side. The scarf's end panels are left out: one carries lettering of
-  people's names, and both carry barcodes. The emblem itself is laid over
+  either side. The scarf's end panels, with their lettered names of honour
+  and their barcodes, are left out. The emblem itself is laid over
   the scarf's copy from a separate, sharper source file of it (about 1,230
   pixels across), so it stays crisp where the scarf image is soft. Darkened
   35% on the card.
+- **Verdirojas (`verdirojas/`).** From two scarves. The card is the
+  VERDIROJAS side of the Verdirojas scarf, from flatbed scans stitched
+  together: the watermelon slice between VERDI and ROJAS, on the keffiyeh
+  net, darkened 58%. The thumbnail is the watermelon slice. The
+  poster and hero are the raised fist from the end of the Refugees Welcome
+  scarf, rendered from its vector print file: upright on the poster (darkened
+  25%), across the hero as the scarf runs. The border is the watermelon's red.
 
 ## Adding a year
 
