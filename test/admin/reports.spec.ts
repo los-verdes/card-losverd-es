@@ -847,3 +847,77 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(body).toContain('<a href="/admin/reports/renewals">Renewals</a>');
   });
 });
+
+describe("GET /admin/reports/slack, with MiniBC's renewals read", () => {
+  // Three lapsed members still in Slack: one whose renewal is still on, one
+  // who cancelled it, and one who never had it.
+  beforeEach(async () => {
+    await insertOrder({ id: "2", email: "lapsed@example.com", created: "2024-03-01T00:00:00Z" });
+    await insertOrder({ id: "6", email: "quit@example.com", created: "2024-04-01T00:00:00Z" });
+    await insertOrder({ id: "7", email: "never@example.com", created: "2024-05-01T00:00:00Z" });
+    for (const [id, email] of [["U02", "lapsed@example.com"], ["U06", "quit@example.com"], ["U07", "never@example.com"]]) {
+      await insertSlackUser({ id, email });
+    }
+    const subscription = (id: number, orderId: number, status: string, next: string | null, cancelled: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO minibc_subscriptions (subscription_id, order_id, sku, status, next_payment_on, cancelled_on, seen_at) VALUES (?, ?, 'LOSV-MEM-0001', ?, ?, ?, 1)",
+      )
+        .bind(id, orderId, status, next, cancelled)
+        .run();
+    await subscription(21, 2, "active", "2026-06-05", null);
+    await subscription(26, 6, "inactive", null, "2025-03-20");
+    await env.DB.prepare("INSERT INTO etl_sync_state (job_name, last_run_at, updated_at) VALUES ('sync_minibc_subscriptions_etl', 1, 1)").run();
+    env.MINIBC_API_KEY = "test-minibc-key";
+    vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00Z"), toFake: ["Date"] });
+  });
+
+  afterEach(async () => {
+    env.MINIBC_API_KEY = undefined;
+    await env.DB.exec("DELETE FROM minibc_subscriptions");
+    await env.DB.exec("DELETE FROM etl_sync_state");
+    await env.DB.exec("DELETE FROM slack_users");
+  });
+
+  /** One table's section of the page, from its heading to the next. */
+  const section = (body: string, title: string) => {
+    const start = body.indexOf(`<h2>${title}`);
+    expect(start, `the page should have "${title}"`).toBeGreaterThan(-1);
+    return body.slice(start, body.indexOf("</section>", start));
+  };
+
+  it("splits the lapsed members by what MiniBC says about their renewal", async () => {
+    const body = await (await get("/admin/reports/slack")).text();
+
+    expect(body).not.toContain("<h2>Lapsed members in Slack (");
+    const on = section(body, "Lapsed members in Slack, automatic renewal still on (1)");
+    expect(on).toContain("lapsed@example.com");
+    expect(on).toContain("Automatic renewal</th>");
+    expect(on).toContain("automatic renewal is still on: MiniBC next charges on Jun 5, 2026");
+    const off = section(body, "Lapsed members in Slack, automatic renewal cancelled or paused (1)");
+    expect(off).toContain("quit@example.com");
+    expect(off).toContain("Automatic renewal cancelled on Mar 20, 2025");
+    const never = section(body, "Lapsed members in Slack, never renewed automatically (1)");
+    expect(never).toContain("never@example.com");
+    // Nothing to say about a renewal that doesn't exist.
+    expect(never).not.toContain("Automatic renewal</th>");
+  });
+
+  it("downloads each group, and still the whole lapsed list an older link asks for", async () => {
+    const group = (await (await get("/admin/reports/slack?table=lapsed-in-slack-renewal-on&format=csv")).text()).trimEnd().split("\r\n");
+    expect(group[0]).toBe("email,first_name,last_name,expires_on,slack_id,slack_name,renewal");
+    expect(group).toHaveLength(2);
+    expect(group[1]).toContain("lapsed@example.com");
+
+    const all = (await (await get("/admin/reports/slack?table=lapsed-in-slack&format=csv")).text()).trimEnd().split("\r\n");
+    expect(all).toHaveLength(4);
+  });
+
+  it("keeps one lapsed table until MiniBC has been read, rather than calling everyone never-renewed", async () => {
+    await env.DB.exec("DELETE FROM etl_sync_state");
+
+    const body = await (await get("/admin/reports/slack")).text();
+
+    expect(body).toContain("<h2>Lapsed members in Slack (3)");
+    expect(body).not.toContain("never renewed automatically");
+  });
+});

@@ -20,6 +20,7 @@ import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
 import { When, sortKey } from "./when";
+import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
 import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
 import {
   activeMemberships,
@@ -71,6 +72,7 @@ const SLACK_COLUMN_HEADINGS = {
   expires_on: "Membership expires",
   slack_id: "Slack ID",
   slack_name: "Slack name",
+  renewal: "Automatic renewal",
 };
 
 type SlackColumn = keyof typeof SLACK_COLUMN_HEADINGS;
@@ -82,7 +84,9 @@ const SLACK_COLUMNS: SlackColumn[] = ["slack_id", "slack_name"];
  * The Slack page's four tables; `key` names each one's CSV download.
  * `members` says whether its addresses belong to members, and so link to
  * them; the last table's are Slack accounts with no orders, which the
- * members page would only report as unknown.
+ * members page would only report as unknown. Where MiniBC is read, the
+ * lapsed table is shown split three ways (`LAPSED_BY_RENEWAL`), and its own
+ * download still has all of them.
  */
 const SLACK_TABLES: {
   key: string;
@@ -96,6 +100,37 @@ const SLACK_TABLES: {
   { key: "lapsed-in-slack", field: "lapsedInSlack", title: "Lapsed members in Slack", columns: [...MEMBER_COLUMNS, ...SLACK_COLUMNS], members: true },
   { key: "users-without-orders", field: "slackWithoutOrders", title: "Slack users with no membership orders", columns: ["email", ...SLACK_COLUMNS], members: false },
 ];
+
+/** "Lapsed members in Slack", by what MiniBC says about their renewal (src/admin/slackRenewals.ts). */
+const LAPSED_BY_RENEWAL: { key: string; field: keyof LapsedByRenewal; title: string }[] = [
+  { key: "lapsed-in-slack-renewal-on", field: "renewalOn", title: "Lapsed members in Slack, automatic renewal still on" },
+  { key: "lapsed-in-slack-renewal-off", field: "renewalOff", title: "Lapsed members in Slack, automatic renewal cancelled or paused" },
+  { key: "lapsed-in-slack-no-renewal", field: "noRenewal", title: "Lapsed members in Slack, never renewed automatically" },
+];
+
+interface ShownSlackTable {
+  key: string;
+  title: string;
+  columns: SlackColumn[];
+  members: boolean;
+  rows: Record<string, string | null>[];
+}
+
+/** The tables the page shows, in order: the lapsed one split when MiniBC's renewals are known. */
+function slackTables(result: SlackCrossReference, lapsed: LapsedByRenewal | null): ShownSlackTable[] {
+  return SLACK_TABLES.flatMap((table): ShownSlackTable[] => {
+    if (table.field === "lapsedInSlack" && lapsed) {
+      return LAPSED_BY_RENEWAL.map((group) => ({
+        key: group.key,
+        title: group.title,
+        columns: [...table.columns, ...(group.field === "noRenewal" ? [] : (["renewal"] as SlackColumn[]))],
+        members: true,
+        rows: lapsed[group.field] as unknown as Record<string, string | null>[],
+      }));
+    }
+    return [{ ...table, rows: result[table.field] as unknown as Record<string, string | null>[] }];
+  });
+}
 
 type ConsolidationRow = AttributedOrderRow | CardNameOverrideRow | MemberSinceOverrideRow;
 
@@ -770,13 +805,24 @@ reports.get("/orders", (c) => {
 reports.get("/slack", async (c) => {
   const asOf = toIsoSeconds(new Date());
   const format = c.req.query("format");
-  const csvTable = format === "csv" ? SLACK_TABLES.find((t) => t.key === c.req.query("table")) : undefined;
+  // Split only where MiniBC is read and has been: with no read yet, every
+  // lapsed member would wrongly show as never having renewed automatically.
+  const [result, renewals] = await Promise.all([
+    slackCrossReference(c.env.DB, asOf),
+    c.env.MINIBC_API_KEY
+      ? lastRenewalsRead(c.env).then((read) => (read === null ? null : allRenewals(c.env)))
+      : Promise.resolve(null),
+  ]);
+  const lapsed = renewals ? splitLapsedByRenewal(result.lapsedInSlack, renewals, asOf.slice(0, 10)) : null;
+  const shown = slackTables(result, lapsed);
+  // Every table shown, plus the whole lapsed list, whose download older links ask for.
+  const downloadable = [...shown, ...slackTables(result, null).filter((table) => !shown.some((each) => each.key === table.key))];
+  const csvTable = format === "csv" ? downloadable.find((t) => t.key === c.req.query("table")) : undefined;
   if (format === "csv" && !csvTable) {
-    throw new BadRequest(`table must be one of ${SLACK_TABLES.map((t) => t.key).join(", ")}`);
+    throw new BadRequest(`table must be one of ${downloadable.map((t) => t.key).join(", ")}`);
   }
-  const result = await slackCrossReference(c.env.DB, asOf);
   if (csvTable) {
-    return new Response(toCsv(csvTable.columns, result[csvTable.field]), {
+    return new Response(toCsv(csvTable.columns, csvTable.rows), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="slack-${csvTable.key}-${asOf.slice(0, 10)}.csv"`,
@@ -799,8 +845,8 @@ reports.get("/slack", async (c) => {
           </>
         )}
       </p>
-      {SLACK_TABLES.map((table) => {
-        const rows = result[table.field];
+      {shown.map((table) => {
+        const rows = table.rows;
         return (
           <section>
             <h2>
