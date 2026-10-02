@@ -31,6 +31,7 @@ import {
   type EmailFootprint,
 } from "./attribution";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
+import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, dayText } from "./when";
 
 const MAX_NOTE_LENGTH = 500;
@@ -125,7 +126,12 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
     <tbody>
       {(
         [
-          ["Order", order.order_id],
+          [
+            "Order",
+            <>
+              {order.order_id} <StoreOrderLink orderId={order.order_id} source={order.source}>Open in BigCommerce</StoreOrderLink>
+            </>,
+          ],
           ["Source", order.source],
           ["Name", `${order.first_name ?? ""} ${order.last_name ?? ""}`.trim()],
           // Linked only when it differs: the same address twice is one member.
@@ -138,6 +144,9 @@ const OrderDetails: FC<{ order: AttributableOrder }> = ({ order }) => (
             ),
           ],
           ["Attributed to", <MemberLink email={order.member_email} />],
+          ...(order.source === "bigcommerce"
+            ? ([["Store customer", order.customer_id ? <StoreCustomerLink customerId={order.customer_id} /> : "a guest checkout"]] as const)
+            : []),
           ["Started", order.created_on.slice(0, 10)],
           ["Expires", order.expires_on.slice(0, 10)],
           ["Status", `${order.status ?? ""}${order.counts ? "" : " (doesn't count as a membership)"}`],
