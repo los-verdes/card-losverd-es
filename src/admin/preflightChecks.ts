@@ -172,6 +172,7 @@ const EXPECTED_TABLES = [
   "devices",
   "etl_sync_state",
   "expelled_people",
+  "full_resyncs",
   "legacy_membership_cards",
   "member_card_themes",
   "member_display_names",

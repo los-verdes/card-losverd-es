@@ -66,6 +66,7 @@ async function memberIdFor(email: string): Promise<string> {
 }
 
 async function clearMembershipTables() {
+  await env.DB.exec("DELETE FROM full_resyncs");
   await env.DB.exec("DELETE FROM membership_orders");
   await env.DB.exec("DELETE FROM members");
 }
@@ -857,6 +858,37 @@ describe("syncSubscriptionsEtl", () => {
       recheckUnlisted: { since: cursor.chainStartedAt, afterId: 0, reread: 0, flagged: 0 },
     });
     expect(await readWatermark()).toBe(cursor.chainStartedAt);
+  });
+
+  it("records a full resync's progress, message by message, for the readiness page", async () => {
+    await env.DB.exec("DELETE FROM full_resyncs");
+    const fullResync = () => env.DB.prepare("SELECT * FROM full_resyncs").all();
+    const chainStartedAt = Date.UTC(2026, 8, 1);
+    mockOrdersApi(() => [makeOrder({ id: 251 }), makeOrder({ id: 252, customer_id: 2, billing_address: { first_name: "Bo", last_name: "Jones", email: "bo.jones@example.com" } })]);
+
+    // Mid-list: totals so far, carried by the chain, and the list not yet read.
+    await syncSubscriptionsEtl(env, { loadAll: true, cursor: { chainStartedAt, afterId: 250, messages: 1, ordersRead: 5, cardsChanged: 1 } });
+    let rows = (await fullResync()).results;
+    expect(rows).toEqual([
+      expect.objectContaining({ started_at: chainStartedAt, orders_read: 7, cards_changed: 3, listed_at: expect.any(Number), rechecked: 0, finished_at: null }),
+    ]);
+
+    // The re-reads of what the list left out end it.
+    await recheckUnlistedOrders(env, { since: chainStartedAt, afterId: 0, reread: 0, flagged: 0 });
+    rows = (await fullResync()).results;
+    expect(rows).toEqual([expect.objectContaining({ rechecked: 0, flagged: 0, finished_at: expect.any(Number) })]);
+  });
+
+  it("marks a full resync still reading the list, and records nothing for an incremental run", async () => {
+    await env.DB.exec("DELETE FROM full_resyncs");
+    mockOrdersApi(() => ordersWithIds(1, ORDERS_PAGE_SIZE), merchandise);
+    await syncSubscriptionsEtl(env, { loadAll: true });
+    expect((await env.DB.prepare("SELECT listed_at, finished_at FROM full_resyncs").all()).results).toEqual([{ listed_at: null, finished_at: null }]);
+
+    await env.DB.exec("DELETE FROM full_resyncs");
+    mockOrdersApi(() => [makeOrder()]);
+    await syncSubscriptionsEtl(env);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM full_resyncs").first<{ n: number }>())!.n).toBe(0);
   });
 
   it("completes a chain whose last page was exactly full on the next, empty, page", async () => {

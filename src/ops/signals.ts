@@ -17,6 +17,7 @@
 import type { Env } from "../index";
 import { countOpsEvents } from "./events";
 import { MINIBC_JOB_NAME } from "../minibc/subscriptions";
+import { agoText } from "../admin/when";
 
 export interface Signal {
   /** Stable across runs: it keys the alert state. */
@@ -74,6 +75,77 @@ function staleness(name: string, hours: number | null, limit: number, cadence: s
   };
 }
 
+/** Weekly, so a day's grace before a missing one is worth saying. */
+export const FULL_RESYNC_STALE_DAYS = 8;
+/** A running resync writes its row with every queue message, minutes apart. */
+export const FULL_RESYNC_STALLED_HOURS = 2;
+
+interface FullResyncRow {
+  started_at: number;
+  orders_read: number;
+  cards_changed: number;
+  listed_at: number | null;
+  rechecked: number | null;
+  flagged: number | null;
+  finished_at: number | null;
+  updated_at: number;
+}
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+
+/** How a finished resync ended. */
+function fullResyncOutcome(row: FullResyncRow, now: number): string {
+  return (
+    `finished ${agoText(row.finished_at!, now)}: ${plural(row.orders_read, "membership order", "membership orders")} read, ` +
+    `${plural(row.cards_changed, "card", "cards")} changed; ` +
+    `${plural(row.rechecked ?? 0, "order", "orders")} the store's list did not return re-read, ${row.flagged ?? 0} newly missing`
+  );
+}
+
+/**
+ * The full resync (src/db/migrations/0017_full_resyncs.sql): how far a
+ * running one has got, or how the last one ended. Firing when a running one
+ * has stopped moving, or none has finished for over a week.
+ */
+async function fullResyncSignal(env: Env, now: Date): Promise<Signal> {
+  const name = "Full resync";
+  const at = now.getTime();
+  const [latest, lastFinished] = await Promise.all([
+    env.DB.prepare("SELECT * FROM full_resyncs ORDER BY started_at DESC LIMIT 1").first<FullResyncRow>(),
+    env.DB.prepare("SELECT * FROM full_resyncs WHERE finished_at IS NOT NULL ORDER BY started_at DESC LIMIT 1").first<FullResyncRow>(),
+  ]);
+  const stale = !lastFinished || at - lastFinished.finished_at! > FULL_RESYNC_STALE_DAYS * 86_400_000;
+  const staleText = " It runs weekly, early on Sunday; either the cron is not enabled or the resync is failing.";
+  if (!latest) {
+    return {
+      name,
+      firing: false,
+      notable: true,
+      detail: "Has never run here since this was recorded. It runs weekly, early on Sunday, or by hand with `just etl-run <env> full-resync`.",
+    };
+  }
+  if (latest.finished_at !== null) {
+    return { name, firing: stale, detail: `The last one ${fullResyncOutcome(latest, at)}.${stale ? staleText : ""}` };
+  }
+
+  const stalled = at - latest.updated_at > FULL_RESYNC_STALLED_HOURS * 3_600_000;
+  const phase =
+    latest.listed_at === null
+      ? `reading the store's order list: ${plural(latest.orders_read, "membership order", "membership orders")} so far, ` +
+        `${plural(latest.cards_changed, "card", "cards")} changed`
+      : `list read (${plural(latest.orders_read, "membership order", "membership orders")}, ${plural(latest.cards_changed, "card", "cards")} changed), ` +
+        `now re-reading orders it did not return: ${(latest.rechecked ?? 0).toLocaleString("en-US")} so far`;
+  return {
+    name,
+    firing: stalled || stale,
+    detail:
+      `Running, started ${agoText(latest.started_at, at)}, ${phase}; last progress ${agoText(latest.updated_at, at)}.` +
+      (stalled ? ` Nothing for over ${FULL_RESYNC_STALLED_HOURS} hours, so it has probably stopped: Workers Logs has why.` : "") +
+      (lastFinished ? ` The previous one ${fullResyncOutcome(lastFinished, at)}.` : "") +
+      (stale && !stalled ? staleText : ""),
+  };
+}
+
 export const UNHANDLED_ERRORS_PER_HOUR = 10;
 export const DEVICE_REPORTS_PER_DAY = 20;
 
@@ -108,6 +180,7 @@ export async function evaluateSignals(env: Env, now: Date = new Date()): Promise
           : `${reports} reports from devices in the last day (alerting above ${DEVICE_REPORTS_PER_DAY}). These are phones telling us their pass could not register or update; "What phones reported" on /admin/preflight groups them by what went wrong.`,
     },
     staleness("Order resync", await hoursSinceJob(env, "sync_subscriptions_etl", now), 12, "six-hourly"),
+    await fullResyncSignal(env, now),
     staleness("Pass expiry sweep", await hoursSinceJob(env, "pass_expiry_sweep", now), 36, "daily"),
     // Only where there is a key to read with: without one it never runs,
     // which is how staging is meant to be rather than something to fix.
