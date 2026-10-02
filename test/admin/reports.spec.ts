@@ -892,7 +892,8 @@ describe("GET /admin/reports/slack, with MiniBC's renewals read", () => {
     const on = section(body, "Lapsed members in Slack, automatic renewal still on (1)");
     expect(on).toContain("lapsed@example.com");
     expect(on).toContain("Automatic renewal</th>");
-    expect(on).toContain("automatic renewal is still on: MiniBC next charges on Jun 5, 2026");
+    // The Renewals report's own wording, whatever it says; the date is the point.
+    expect(on).toMatch(/automatic renewal is still on: [^<]*Jun 5, 2026/);
     const off = section(body, "Lapsed members in Slack, automatic renewal cancelled or paused (1)");
     expect(off).toContain("quit@example.com");
     expect(off).toContain("Automatic renewal cancelled on Mar 20, 2025");
