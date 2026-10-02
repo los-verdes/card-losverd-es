@@ -631,8 +631,13 @@ reports.get("/over-time", async (c) => {
         title: `${MONTH_NAMES[month].slice(0, 3)} ${year}`,
       }))
     : MONTH_NAMES.map((name) => ({ label: name.slice(0, 3), title: name.slice(0, 3) }));
+  // Along the timeline each year is its own series, so its months take that
+  // year's colour, as when years are compared; a year's bars fill only its own months.
   const orderBars: BarSeries[] = timeline
-    ? [{ label: allYears, values: timelineMonths.map(({ year, month }) => ordersIn.get(yearMonth(year, month)) ?? 0) }]
+    ? available.map((year) => ({
+        label: String(year),
+        values: timelineMonths.map((each) => (each.year === year ? (ordersIn.get(yearMonth(year, each.month)) ?? 0) : null)),
+      }))
     : years.map((year) => ({
         label: String(year),
         values: MONTH_NAMES.map((_, month) => (month < monthsOf(year) ? (ordersIn.get(yearMonth(year, month)) ?? 0) : null)),
@@ -716,6 +721,7 @@ reports.get("/over-time", async (c) => {
         series={orderBars}
         unit={["order", "orders"]}
         description={`Membership orders per month ${which}; the table below has each month's figure.`}
+        oneSlot={timeline}
       />
       <ReportTable
         headings={["Month (UTC)", ...years.map(String)]}

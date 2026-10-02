@@ -43,13 +43,19 @@ export const BarChart: FC<{
   /** Singular and plural for the tooltip, e.g. ["order", "orders"]. */
   unit: [string, string];
   description: string;
-}> = ({ groups, series, unit, description }) => {
+  /**
+   * Series that never share a group, such as each year along a timeline of
+   * months: every bar takes the group's whole width, coloured by its series,
+   * rather than standing beside the others.
+   */
+  oneSlot?: boolean;
+}> = ({ groups, series, unit, description, oneSlot = false }) => {
   const max = Math.max(0, ...series.flatMap((each) => each.values.map((value) => value ?? 0)));
   const gridlines = ticks(max);
   const top = gridlines[gridlines.length - 1];
   const y = (value: number) => MARGIN.top + PLOT_HEIGHT - (value / top) * PLOT_HEIGHT;
   const band = PLOT_WIDTH / Math.max(groups.length, 1);
-  const barWidth = (band * GROUP_FILL) / Math.max(series.length, 1);
+  const barWidth = (band * GROUP_FILL) / (oneSlot ? 1 : Math.max(series.length, 1));
   const groupLeft = (g: number) => MARGIN.left + g * band + (band * (1 - GROUP_FILL)) / 2;
 
   return (
@@ -75,12 +81,12 @@ export const BarChart: FC<{
             value === null ? null : (
               <rect
                 class={seriesColour(i, series.length)}
-                x={(groupLeft(g) + i * barWidth).toFixed(1)}
+                x={(groupLeft(g) + (oneSlot ? 0 : i * barWidth)).toFixed(1)}
                 y={y(value).toFixed(1)}
                 width={barWidth.toFixed(1)}
                 height={(MARGIN.top + PLOT_HEIGHT - y(value)).toFixed(1)}
               >
-                <title>{`${groups[g].title}${series.length > 1 ? ` ${each.label}` : ""}: ${value.toLocaleString("en-US")} ${value === 1 ? unit[0] : unit[1]}`}</title>
+                <title>{`${groups[g].title}${series.length > 1 && !oneSlot ? ` ${each.label}` : ""}: ${value.toLocaleString("en-US")} ${value === 1 ? unit[0] : unit[1]}`}</title>
               </rect>
             ),
           ),

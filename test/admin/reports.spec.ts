@@ -719,8 +719,14 @@ describe("GET /admin/reports/over-time", () => {
     const body = await (await get("/admin/reports/over-time?view=timeline")).text();
 
     expect(body.match(/<path class="line /g)).toHaveLength(1);
-    // Every month from January 2024 to this one, labelled at each January.
-    expect(body.match(/<rect class="latest"/g)).toHaveLength(12 + 12 + 6);
+    // Every month from January 2024 to this one, labelled at each January, each
+    // year in its own colour as when years are compared: 2026 verde, then back
+    // through the palette, with a legend.
+    expect(body.match(/<rect class="/g)).toHaveLength(12 + 12 + 6);
+    expect(body.match(/<rect class="latest"/g)).toHaveLength(6);
+    expect(body.match(/<rect class="series-0"/g)).toHaveLength(12);
+    expect(body.match(/<rect class="series-1"/g)).toHaveLength(12);
+    expect(body).toMatch(/<figcaption>[^]*2024[^]*2025[^]*2026[^]*<\/figcaption>/);
     const bars = body.slice(body.indexOf('<figure class="line-chart bar-chart">'));
     expect(bars.match(/<text class="x-label"[^>]*>(\d{4})<\/text>/g)?.map((label) => label.replace(/<[^>]+>/g, ""))).toEqual(["2024", "2025", "2026"]);
     expect(body).toContain("<title>Mar 2024: 1 order</title>");
