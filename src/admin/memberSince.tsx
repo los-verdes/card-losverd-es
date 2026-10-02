@@ -158,10 +158,11 @@ export async function saveMemberSince(
  * Removes an admin's correction, so the card goes back to the date from the
  * orders. False when there was none to remove.
  *
- * Never removes an imported date: that is the only surviving record of a
- * Squarespace-era membership, and the old site is gone. One found to be wrong
- * is corrected over (which makes it manual) or changed by hand in the
- * database (#331).
+ * Never removes an imported date. Those that matched the orders, or covered
+ * no Squarespace-era order, were retired by migration 0015; any left is the
+ * only record of a Squarespace-era membership, and the old site is gone. One
+ * found to be wrong is corrected over (which makes it manual) or changed by
+ * hand in the database (#331).
  */
 export async function clearMemberSince(env: Env, email: string, userId: number): Promise<boolean> {
   const [existing, actor] = await Promise.all([existingCorrection(env, email), actorEmail(env, userId)]);

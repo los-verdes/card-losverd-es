@@ -108,7 +108,7 @@ that is tracked in the table below:
   custom display name (up to 64 characters). A member who updates their billing name at checkout will see it reflected
   on their next membership purchase; however, an attributed gift order retains the purchaser’s billing name, which can
   result in a gifted card displaying the buyer's name. (Some of these values were imported from the old site and don't
-  map directly to an order.)
+  map directly to an order. Imported names that matched the orders' name changed nothing and have been removed.)
 - **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
   all qualifying orders. Terms do not accumulate consecutively.
 - **Card Number & QR Code:** The QR code links to a page that says whether the membership is current right now (a public
@@ -121,11 +121,12 @@ Given that folks are passionate about their "member since" dates, we have option
 determining the "Member Since" date, the site uses this order:
 
 1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
-2. `Legacy Import Override` - Historical join dates imported from the old site
+2. `Legacy Import Override` - Historical join dates imported from the old site. Those that matched the member's
+   orders, or belonged to someone with no Squarespace-era order, have been removed: on 2026-09-29 that was every one.
 3. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
    options don't fit
 
-Only a manual override can be removed; an imported date can be corrected over but not removed.
+Only a manual override can be removed by an admin; an imported date can be corrected over but not removed.
 
 ### Card Themes
 
