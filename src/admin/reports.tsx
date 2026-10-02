@@ -848,13 +848,17 @@ reports.get("/slack", async (c) => {
       </p>
       {shown.map((table) => {
         const rows = table.rows;
+        // On the page a member is one cell, their card's name over their
+        // address (MemberLink), so the order's billing-name columns go; the
+        // download keeps them. Slack's own names stay: a separate record.
+        const columns = table.members ? table.columns.filter((column) => column !== "first_name" && column !== "last_name") : table.columns;
         return (
           <section>
             <h2>
               {table.title} ({rows.length})
             </h2>
             <ReportTable
-              headings={table.columns.map((column) => SLACK_COLUMN_HEADINGS[column])}
+              headings={columns.map((column) => (column === "email" && table.members ? "Member" : SLACK_COLUMN_HEADINGS[column]))}
               csvHref={`/admin/reports/slack?table=${table.key}&format=csv`}
               csvLabel={`Download all ${rows.length} as CSV`}
               rowCount={rows.length}
@@ -862,13 +866,12 @@ reports.get("/slack", async (c) => {
               <tbody>
                 {rows.map((row) => (
                   <tr>
-                    {table.columns.map((column) => {
+                    {columns.map((column) => {
                       const value = row[column];
                       if (column === "email" && table.members && value) {
                         return (
                           <td style={cellStyle}>
-                            {/* The row's own name columns say who it is. */}
-                            <MemberLink email={value} plain />
+                            <MemberLink email={value} />
                           </td>
                         );
                       }
