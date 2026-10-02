@@ -51,10 +51,12 @@ alike:
 One rule, over the stores' own statuses (`src/lib/membershipOrders.ts`):
 
 * **BigCommerce orders** count only when paid: `Awaiting Fulfillment`,
-  `Awaiting Shipment`, `Completed`, `Partially Shipped`, or `Shipped`. An `Incomplete`,
-  `Pending` or `Awaiting Payment` order gets no card and no report row, and
-  neither does a `Refunded`, `Cancelled`, `Declined`, `Disputed` or
-  `Partially Refunded` one.
+  `Awaiting Shipment`, `Completed`, `Partially Shipped`, or `Shipped`, and
+  `Partially Refunded` while its membership line item wasn't the part refunded
+  (`membership_units_refunded`, from BigCommerce's `quantity_refunded`). An
+  `Incomplete`, `Pending` or `Awaiting Payment` order gets no card and no
+  report row, and neither does a `Refunded`, `Cancelled`, `Declined` or
+  `Disputed` one.
 * **Squarespace-era orders** carry the verdict they were given when they were
   imported (`frozen_counts`): they counted unless cancelled, refunded or
   declined, because Squarespace's `PENDING` meant paid. A report on one of
