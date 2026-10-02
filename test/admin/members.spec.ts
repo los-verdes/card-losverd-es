@@ -803,7 +803,10 @@ describe("their store account, on their page", () => {
     await env.DB.prepare("INSERT INTO users (id, email) VALUES (5, ?)").bind(EMAIL).run();
     await linkStoreAccount(env, 5, 4242, 5);
 
-    expect(await page()).toContain("Customer 4242, connected ");
+    // The customer links to the store's own control panel.
+    expect(await page()).toContain(
+      '<a href="https://store-3nco2w7eup.mybigcommerce.com/manage/customers/4242/edit" target="_blank" rel="noopener noreferrer" title="This customer in BigCommerce">Customer 4242 ↗</a>, connected ',
+    );
     const res = await post({ email: EMAIL, action: "store-unlink", user_id: "5" });
 
     expect(res.headers.get("Location")).toContain("saved=store-unlinked");

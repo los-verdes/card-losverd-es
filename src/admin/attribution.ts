@@ -34,6 +34,8 @@ export interface AttributableOrder {
   /** When BigCommerce stopped returning this order, if it has (#105). */
   missing_since: number | null;
   membership_units: number | null;
+  /** The BigCommerce customer who placed it; 0 for a guest checkout, null for an imported order. */
+  customer_id: number | null;
 }
 
 export async function getAttributableOrder(
@@ -43,7 +45,7 @@ export async function getAttributableOrder(
   return db
     .prepare(
       `SELECT order_id, source, order_email, member_email, first_name, last_name, sku, status,
-              created_on, expires_on, missing_since, membership_units, (${COUNTS_AS_MEMBERSHIP}) AS counts
+              created_on, expires_on, missing_since, membership_units, customer_id, (${COUNTS_AS_MEMBERSHIP}) AS counts
        FROM membership_orders WHERE order_id = ?`,
     )
     .bind(orderId)

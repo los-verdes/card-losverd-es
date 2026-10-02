@@ -66,6 +66,7 @@ import { emailFootprint, type EmailFootprint } from "./attribution";
 import { AuditHistory } from "./audit";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, cellStyle } from "./layout";
+import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { dayText } from "./when";
 import {
   MemberSinceSection,
@@ -334,7 +335,7 @@ async function storeAccountForMember(env: Env, member: MemberRecord): Promise<St
 const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null }> = ({ member, store }) =>
   store?.customerId ? (
     <form method="post" action={MEMBERS_PATH} style="margin: 0">
-      Customer {store.customerId}
+      <StoreCustomerLink customerId={store.customerId} />
       {store.linkedAt ? `, connected ${dayText(store.linkedAt)}` : ""}{" "}
       <input type="hidden" name="email" value={member.email} />
       <input type="hidden" name="action" value="store-unlink" />
@@ -551,7 +552,7 @@ const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
       {orders.map((order) => (
         <tr>
           <td style={cellStyle}>
-            <OrderLink orderId={order.order_id} />
+            <OrderLink orderId={order.order_id} /> <StoreOrderLink orderId={order.order_id} source={order.source}>store</StoreOrderLink>
           </td>
           <td style={cellStyle}>{order.product_name ?? ""}</td>
           <td style={cellStyle}>{order.status ?? ""}</td>

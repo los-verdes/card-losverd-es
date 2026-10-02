@@ -20,6 +20,7 @@ import { BarChart, type BarGroup, type BarSeries } from "./barChart";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
+import { StoreOrderLink } from "./storeLinks";
 import { When, sortKey } from "./when";
 import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
 import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
@@ -1024,7 +1025,15 @@ reports.get("/renewals", async (c) => {
                       <td style={cellStyle}>{row.status === "inactive" ? "cancelled" : row.status}</td>
                       <td style={cellStyle}>{row.next_payment_on ?? ""}</td>
                       <td style={cellStyle}>{row.signup_on ?? ""}</td>
-                      <td style={cellStyle}>{row.order_id ?? ""}</td>
+                      <td style={cellStyle}>
+                        {row.order_id === null ? (
+                          ""
+                        ) : (
+                          <>
+                            {String(row.order_id)} <StoreOrderLink orderId={String(row.order_id)}>store</StoreOrderLink>
+                          </>
+                        )}
+                      </td>
                     </tr>
                   ) : (
                     <tr>
