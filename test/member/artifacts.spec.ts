@@ -208,14 +208,15 @@ describe("drawn cards, cached in R2", () => {
     expect(await renderCardImage(env, await member())).not.toEqual(before);
   });
 
-  it("keeps one per theme, and draws again when a theme's version changes", async () => {
+  it("keeps one per theme, and draws again when a theme changes", async () => {
     await renderCardImage(env, await member());
     const other: CardTheme = { ...CLASSIC_THEME, id: "other", colors: { ...CLASSIC_THEME.colors, background: "#123456" } };
 
     expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(true);
     expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(false);
     expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
-    expect(await drew(async () => renderCardImage(env, await member(), { ...other, version: 2 }))).toBe(true);
+    // Its colours, say: the theme's version follows what it is (src/themes/fingerprint.ts).
+    expect(await drew(async () => renderCardImage(env, await member(), { ...other, colors: { ...other.colors, border: "#654321" } }))).toBe(true);
   });
 
   it("draws again for a card cached by an older drawing, or with a QR code for another signing key", async () => {

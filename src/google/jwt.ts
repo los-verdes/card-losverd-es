@@ -69,8 +69,8 @@ export interface GoogleWalletTheme {
 }
 
 /** A card theme as Google needs it, its images resolved against the environment's public origin. */
-export function googleWalletTheme(theme: CardTheme, baseUrl: string): GoogleWalletTheme {
-  const heroPath = googleHeroPath(theme);
+export function googleWalletTheme(theme: CardTheme, baseUrl: string, version: string): GoogleWalletTheme {
+  const heroPath = googleHeroPath(theme, version);
   return {
     hexBackgroundColor: theme.colors.background.toUpperCase(),
     logoUri: new URL(theme.assets.googleLogoPath, baseUrl).toString(),

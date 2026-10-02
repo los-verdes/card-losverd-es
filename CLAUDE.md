@@ -178,9 +178,10 @@ action, or an answer to a question the issue poses.
   A change to how the card image is drawn (`src/cardimage/`) must bump
   `CARD_IMAGE_VERSION` in `src/cardimage/template.ts`, and a change to what a
   pass contains must bump `PASS_CONTENT_VERSION` in
-  `src/passkit/generator.ts`; a theme's own images or colours bump that
-  theme's `version`. Forget, and members whose card or pass is cached keep the
-  old one, with nothing failing to say so.
+  `src/passkit/generator.ts`. Forget, and members whose card or pass is
+  cached keep the old one, with nothing failing to say so. A theme's own art,
+  colours and label need nothing: its version is worked out from them
+  (`src/themes/fingerprint.ts`).
 - `node:fs` does not work in the Workers test pool. To read source in a
   test, use `import.meta.glob("...", { query: "?raw", eager: true })`, which
   Vite inlines at transform time.

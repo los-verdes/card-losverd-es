@@ -11,6 +11,7 @@ import {
   googleHeroFileName,
   googleHeroPath,
   themeCacheTag,
+  themeForHeroFileName,
   type CardTheme,
 } from "../../src/themes/cardTheme";
 import { CARD_HEIGHT, CARD_WIDTH } from "../../src/cardimage/template";
@@ -44,7 +45,6 @@ const ARTWORK_THEME: CardTheme = {
   ...CLASSIC_THEME,
   id: "2026",
   label: "2026",
-  version: 2,
   artwork: {
     cardBackground: "templates/themes/2026/card-background.png",
     appleThumbnailPrefix: "templates/themes/2026/apple/",
@@ -73,7 +73,7 @@ describe("the classic theme", () => {
 
   it("has no artwork, so no surface changes", () => {
     expect(CLASSIC_THEME.artwork).toEqual({});
-    expect(googleHeroPath(CLASSIC_THEME)).toBeNull();
+    expect(googleHeroPath(CLASSIC_THEME, "0a1b2c3d4e5f")).toBeNull();
   });
 
   it("uses only #rrggbb colours, which every surface can take", () => {
@@ -83,8 +83,7 @@ describe("the classic theme", () => {
   });
 
   it("tags a cached pass with its id and version", () => {
-    expect(themeCacheTag(CLASSIC_THEME)).toBe("classic@1");
-    expect(themeCacheTag({ ...CLASSIC_THEME, id: "2026", version: 3 })).toBe("2026@3");
+    expect(themeCacheTag(CLASSIC_THEME, "0a1b2c3d4e5f")).toBe("classic@0a1b2c3d4e5f");
   });
 });
 
@@ -141,9 +140,18 @@ describe("artwork", () => {
   });
 
   it("serves a theme's Google hero image at an address that changes with the theme's version", () => {
-    expect(googleHeroFileName(ARTWORK_THEME)).toBe("hero-2026-2.png");
-    expect(googleHeroPath(ARTWORK_THEME)).toBe("/assets/hero-2026-2.png");
-    expect(googleHeroPath({ ...ARTWORK_THEME, version: 3 })).toBe("/assets/hero-2026-3.png");
+    expect(googleHeroFileName(ARTWORK_THEME, "0a1b2c3d4e5f")).toBe("hero-2026-0a1b2c3d4e5f.png");
+    expect(googleHeroPath(ARTWORK_THEME, "0a1b2c3d4e5f")).toBe("/assets/hero-2026-0a1b2c3d4e5f.png");
+  });
+
+  it("finds the theme a hero address was issued for, at any version", () => {
+    const themes = [CLASSIC_THEME, ARTWORK_THEME, { ...ARTWORK_THEME, id: "los-pringles" }];
+    expect(themeForHeroFileName("hero-2026-0a1b2c3d4e5f.png", themes)?.id).toBe("2026");
+    expect(themeForHeroFileName("hero-2026-2.png", themes)?.id).toBe("2026");
+    expect(themeForHeroFileName("hero-los-pringles-1.png", themes)?.id).toBe("los-pringles");
+    expect(themeForHeroFileName("hero-classic-1.png", themes)).toBeNull();
+    expect(themeForHeroFileName("hero-2026.png", themes)).toBeNull();
+    expect(themeForHeroFileName("crest.png", themes)).toBeNull();
   });
 });
 
