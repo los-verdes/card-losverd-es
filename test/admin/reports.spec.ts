@@ -646,10 +646,15 @@ describe("GET /admin/reports/over-time", () => {
     // 1 Jun 2025: long, and lapsed until a month later.
     expect(body).toContain("<strong>2</strong> active members today, against <strong>2</strong> on this day last year.");
     expect(body).toContain("<strong>2</strong> membership orders so far this year, against <strong>1</strong> by this day last year.");
-    expect(body.match(/<figure class="line-chart">/g)).toHaveLength(2);
-    // One line per year in each chart, the latest in verde.
-    expect(body.match(/<path class="line /g)).toHaveLength(6);
-    expect(body.match(/<path class="line latest"/g)).toHaveLength(2);
+    expect(body.match(/<figure class="line-chart">/g)).toHaveLength(1);
+    expect(body.match(/<figure class="line-chart bar-chart">/g)).toHaveLength(1);
+    // Members: one line per year, the latest in verde.
+    expect(body.match(/<path class="line /g)).toHaveLength(3);
+    expect(body.match(/<path class="line latest"/g)).toHaveLength(1);
+    // Orders: a bar per month per year, none for months still to come, 2026 in verde.
+    expect(body.match(/<rect class="/g)).toHaveLength(12 + 12 + 6);
+    expect(body.match(/<rect class="latest"/g)).toHaveLength(6);
+    expect(body).toContain("<title>Mar 2026: 1 order</title>");
     expect(body).toMatch(/<th[^>]*>On the 1st of<\/th><th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
     expect(body).toMatch(/<input type="checkbox" name="year" value="2024" checked/);
     expect(body.indexOf("<h2>Active members</h2>")).toBeLessThan(body.indexOf("<h2>Membership orders</h2>"));
@@ -663,7 +668,8 @@ describe("GET /admin/reports/over-time", () => {
     expect(members).toMatch(/>January<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td>/);
     // 1 Jul 2025: lapsed has lapsed; 1 Jul 2026 has not happened yet.
     expect(members).toMatch(/>July<\/td><td[^>]*>1<\/td><td[^>]*><\/td>/);
-    expect(body.match(/<path class="line /g)).toHaveLength(4);
+    expect(body.match(/<path class="line /g)).toHaveLength(2);
+    expect(body.match(/<rect class="/g)).toHaveLength(12 + 6);
   });
 
   it("gives orders per month with a total per year, blank for months still to come", async () => {
@@ -709,10 +715,21 @@ describe("GET /admin/reports/over-time", () => {
     ]);
   });
 
-  it("shows every year as one line in each chart", async () => {
+  it("shows every year as one line of members and one run of monthly order bars", async () => {
     const body = await (await get("/admin/reports/over-time?view=timeline")).text();
 
-    expect(body.match(/<path class="line /g)).toHaveLength(2);
+    expect(body.match(/<path class="line /g)).toHaveLength(1);
+    // Every month from January 2024 to this one, labelled at each January, each
+    // year in its own colour as when years are compared: 2026 verde, then back
+    // through the palette, with a legend.
+    expect(body.match(/<rect class="/g)).toHaveLength(12 + 12 + 6);
+    expect(body.match(/<rect class="latest"/g)).toHaveLength(6);
+    expect(body.match(/<rect class="series-0"/g)).toHaveLength(12);
+    expect(body.match(/<rect class="series-1"/g)).toHaveLength(12);
+    expect(body).toMatch(/<figcaption>[^]*2024[^]*2025[^]*2026[^]*<\/figcaption>/);
+    const bars = body.slice(body.indexOf('<figure class="line-chart bar-chart">'));
+    expect(bars.match(/<text class="x-label"[^>]*>(\d{4})<\/text>/g)?.map((label) => label.replace(/<[^>]+>/g, ""))).toEqual(["2024", "2025", "2026"]);
+    expect(body).toContain("<title>Mar 2024: 1 order</title>");
     expect(body).toContain("<title>2024–2026</title>");
     expect(body).toMatch(/<th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th>/);
     expect(body).toContain('<a href="/admin/reports/over-time">Compare years instead</a>');
