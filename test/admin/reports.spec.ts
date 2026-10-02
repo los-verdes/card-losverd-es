@@ -294,14 +294,20 @@ describe("GET /admin/reports/slack", () => {
   });
 
   it("shows all four tables, with counts, dates as days, and the last sync time", async () => {
+    // A card, so the member's cell can name them.
+    await insertMember({ id: "LV-J", email: "joined@example.com", first: "Jo", last: "Ined", memberSince: null });
+
     const body = await (await get("/admin/reports/slack")).text();
 
     expect(body).toContain("as of <time datetime=\"2026-06-01T12:00:00Z\"");
     expect(body).toMatch(/Slack accounts last synced <time datetime="2026-06-01T00:00:00Z"[^>]*>12 hours ago \(May 31, 2026, 7:00 PM CDT\)<\/time>\./);
     expect(body).toContain("Current members in Slack (1)");
-    expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com">joined@example\.com<\/a><\/td><td[^>]*>Jo<\/td><td[^>]*>Ined<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
+    // One cell per member, their card's name over their address; no billing-name columns.
+    expect(body).toMatch(/<th[^>]*>Member<\/th><th[^>]*>Membership expires<\/th><th[^>]*>Slack ID<\/th>/);
+    expect(body).not.toContain(">First name</th>");
+    expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com" class="member-link">Jo Ined<span class="member-email">joined@example\.com<\/span><\/a><\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
     expect(body).toContain("Current members not in Slack (1)");
-    expect(body).toMatch(/nameless@example\.com<\/a><\/td><td[^>]*><\/td><td[^>]*><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
+    expect(body).toMatch(/nameless@example\.com<\/a><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
     expect(body).toContain("Lapsed members in Slack (1)");
     expect(body).toContain("&lt;img src=x&gt;");
     expect(body).not.toContain("<img src=x>");
