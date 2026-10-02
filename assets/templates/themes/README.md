@@ -62,12 +62,12 @@ side. So the art's subject belongs in the top half, clear of the sides.
   its centrepiece, the bat under a sugar skull; the thumbnail the sugar
   skull in its sunburst from the LOS VERDES side. Worth replacing from the
   print file if one turns up.
-- **2025 ("Cinco uno dos").** From the scarf's vector print file, rendered at
+- **2025 ("Cinco Uno Dos").** From the scarf's vector print file, rendered at
   200 dpi. The card is the skeleton hand and UNO from the green side,
   darkened 64%. The poster, hero and thumbnail are the LOS VERDES roundel
   from the black side: on the poster with the confetti around it, faded into
   the scarf's black.
-- **2026 (Verde ATX listos).** No scarf print file was to hand, so this year
+- **2026 ("Skull Gaiter").** No scarf print file was to hand, so this year
   is composed from the 2026 kit's vector art, rendered at 150 dpi: the same
   skull, brush lettering and blackletter the scarf carries, on the kit's
   dark ground. The card is VERDE, ATX and LISTOS, darkened 66%; the poster
