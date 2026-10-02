@@ -20,7 +20,7 @@ import { BarChart, type BarGroup, type BarSeries } from "./barChart";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
-import { StoreOrderLink } from "./storeLinks";
+import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, sortKey } from "./when";
 import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
 import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
@@ -944,14 +944,19 @@ const RENEWAL_SECTIONS: RenewalSection[] = [
     key: "unmatched",
     title: "Not matched to a member",
     about:
-      "No membership order held here started or carries the subscription, and its store customer has no membership order of their own. Usually one bought before these records begin, or under an order since re-attributed.",
+      "No membership order held here started or carries the subscription, and its store customer has no membership order of their own. Usually one bought before these records begin, or under an order since re-attributed. Its order's page here can read that order in from BigCommerce, which matches it if the order carries a membership; its store customer's page in BigCommerce names who pays.",
     pick: (row) => row.member_email === null,
   },
 ];
 
 const RENEWAL_COLUMNS = [
-  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next",
+  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next", "sku", "store_customer_id",
 ] as const;
+
+/** What a subscription is for, from its SKU, saying so when it isn't a membership product this site counts. */
+function subscriptionProduct(sku: string): string {
+  return MEMBERSHIP_PRODUCTS.has(sku) ? productLabel(sku) : `${sku} (not a membership product here)`;
+}
 
 reports.get("/renewals", async (c) => {
   const today = toIsoSeconds(new Date()).slice(0, 10);
@@ -979,6 +984,8 @@ reports.get("/renewals", async (c) => {
       signup_on: row.signup_on,
       order_id: row.order_id === null ? null : String(row.order_id),
       what_next: row.member_email ? renewalText(state) : null,
+      sku: row.sku,
+      store_customer_id: row.store_customer_id,
     }));
     return new Response(toCsv([...RENEWAL_COLUMNS], csvRows), {
       headers: {
@@ -1021,7 +1028,7 @@ reports.get("/renewals", async (c) => {
             </h2>
             <p class="muted">{section.about}</p>
             <ReportTable
-              headings={section.key === "unmatched" ? ["Subscription", "MiniBC", "Next payment", "Signed up", "Started by order"] : ["Member", "Good through", "What next", "Subscription"]}
+              headings={section.key === "unmatched" ? ["Subscription", "For", "MiniBC", "Next payment", "Signed up", "Started by order", "Store customer"] : ["Member", "Good through", "What next", "Subscription"]}
               csvHref={`/admin/reports/renewals?section=${section.key}&format=csv`}
               csvLabel={`Download all ${listed.length} as CSV`}
               empty="None."
@@ -1032,6 +1039,7 @@ reports.get("/renewals", async (c) => {
                   section.key === "unmatched" ? (
                     <tr>
                       <td style={cellStyle}>{row.subscription_id}</td>
+                      <td style={cellStyle}>{subscriptionProduct(row.sku)}</td>
                       <td style={cellStyle}>{row.status === "inactive" ? "cancelled" : row.status}</td>
                       <td style={cellStyle}>{row.next_payment_on ?? ""}</td>
                       <td style={cellStyle}>{row.signup_on ?? ""}</td>
@@ -1040,9 +1048,12 @@ reports.get("/renewals", async (c) => {
                           ""
                         ) : (
                           <>
-                            {String(row.order_id)} <StoreOrderLink orderId={String(row.order_id)}>store</StoreOrderLink>
+                            <OrderLink orderId={String(row.order_id)} /> <StoreOrderLink orderId={String(row.order_id)}>store</StoreOrderLink>
                           </>
                         )}
+                      </td>
+                      <td style={cellStyle}>
+                        {row.store_customer_id ? <StoreCustomerLink customerId={row.store_customer_id} /> : "a guest checkout"}
                       </td>
                     </tr>
                   ) : (

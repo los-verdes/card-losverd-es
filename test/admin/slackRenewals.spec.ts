@@ -20,6 +20,7 @@ const subscription = (id: number, email: string, fields: Partial<RenewalRow>): R
   cancelled_on: null,
   order_id: null,
   store_customer_id: null,
+  sku: "LOSV-MEM-0001",
   member_email: email,
   member_id: "LV-1",
   first_name: null,

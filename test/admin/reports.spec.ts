@@ -867,11 +867,33 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(section(body, "Not matched to a member")).toMatch(/>16<\/td>/);
   });
 
+  it("says what an unmatched subscription is for, and links its order and who pays", async () => {
+    await env.DB.prepare(
+      "INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, sku, status, next_payment_on, seen_at) VALUES (17, 9998, 5594, 'LOSV-MEM-0002', 'active', '2027-02-01', 1)",
+    ).run();
+
+    const unmatched = section(await (await get("/admin/reports/renewals")).text(), "Not matched to a member");
+
+    // A membership product, and one this site doesn't count.
+    expect(unmatched).toContain("Membership pack (LOSV-MEM-0001)");
+    expect(unmatched).toContain("LOSV-MEM-0002 (not a membership product here)");
+    // The order's page here, which offers to read an unheld order in.
+    expect(unmatched).toContain('<a href="/admin/orders/9999"');
+    // The store customer behind it, in BigCommerce; a guest checkout has none.
+    expect(unmatched).toContain('href="https://store-3nco2w7eup.mybigcommerce.com/manage/customers/5594/edit"');
+    expect(unmatched).toContain("a guest checkout");
+
+    const csv = (await (await get("/admin/reports/renewals?section=unmatched&format=csv")).text()).trimEnd().split("\r\n");
+    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594");
+  });
+
   it("downloads a section as CSV, and refuses one that doesn't exist", async () => {
     const res = await get("/admin/reports/renewals?section=overdue&format=csv");
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="renewals-overdue-2026-10-01.csv"');
     const lines = (await res.text()).trimEnd().split("\r\n");
-    expect(lines[0]).toBe("subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next");
+    expect(lines[0]).toBe(
+      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id",
+    );
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("lapsed@example.com");
 

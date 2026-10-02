@@ -33,6 +33,8 @@ export interface RenewalRow {
   cancelled_on: string | null;
   order_id: number | null;
   store_customer_id: number | null;
+  /** The SKU MiniBC lists it under, which says what it is for. */
+  sku: string;
   member_email: string | null;
   member_id: string | null;
   first_name: string | null;
@@ -58,7 +60,7 @@ const RENEWALS_SQL = `
     WHERE s.missing_since IS NULL
   )
   SELECT m.subscription_id, m.status, m.signup_on, m.next_payment_on, m.paused_on, m.cancelled_on,
-         m.order_id, m.store_customer_id, m.matched_email AS member_email,
+         m.order_id, m.store_customer_id, m.sku, m.matched_email AS member_email,
          mem.member_id, mem.first_name, mem.last_name, dn.display_name, mem.expiration_date
     FROM matched m
     LEFT JOIN members mem ON mem.email = m.matched_email
