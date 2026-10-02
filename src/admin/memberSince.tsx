@@ -159,7 +159,7 @@ export async function saveMemberSince(
  * orders. False when there was none to remove.
  *
  * Never removes an imported date. Those that matched the orders, or covered
- * no Squarespace-era order, were retired by migration 0015; any left is the
+ * no Squarespace-era order, were retired by migration 0016; any left is the
  * only record of a Squarespace-era membership, and the old site is gone. One
  * found to be wrong is corrected over (which makes it manual) or changed by
  * hand in the database (#331).

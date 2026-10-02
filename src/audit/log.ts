@@ -139,7 +139,7 @@ export async function recordAuditEventBestEffort(
  *   letter the previous site lost (src/db/migrations/0007_*.sql).
  * - A card name or "member since" cleared with no actor was cleared by a
  *   database migration retiring what the previous site left that changes
- *   nothing (src/db/migrations/0015_*.sql): an admin or member clearing one
+ *   nothing (src/db/migrations/0016_*.sql): an admin or member clearing one
  *   is always signed in.
  *
  * Anything else with no actor stays blank rather than claiming a cause

@@ -7,7 +7,7 @@ import { insertCardName, insertMember, insertMemberSince, insertOrder } from "..
 // The migration already ran, on empty tables, when the database was set up;
 // these run its statements again over rows that exercise each rule.
 const MIGRATION = Object.values(
-  import.meta.glob("../../src/db/migrations/0015_*.sql", { query: "?raw", import: "default", eager: true }),
+  import.meta.glob("../../src/db/migrations/0016_drop_redundant_legacy_overrides.sql", { query: "?raw", import: "default", eager: true }),
 )[0] as string;
 
 const STATEMENTS = MIGRATION.split("\n")
@@ -53,7 +53,9 @@ afterEach(async () => {
 });
 
 it("spells out the same rule for what counts as a membership as the code does", () => {
-  const unqualified = MIGRATION.replaceAll("x.frozen_counts", "frozen_counts").replaceAll("lower(x.status)", "lower(status)");
+  const unqualified = MIGRATION.replaceAll("x.frozen_counts", "frozen_counts")
+    .replaceAll("lower(x.status)", "lower(status)")
+    .replaceAll("x.membership_units", "membership_units");
 
   expect(unqualified).toContain(COUNTS_AS_MEMBERSHIP);
 });
@@ -168,5 +170,24 @@ describe("previous-site card names", () => {
         detail: "Removed 3 card name(s) carried over from the previous site that matched the name the person's orders give, so changed nothing",
       },
     ]);
+  });
+
+  it("counts a partially refunded order while its membership wasn't refunded, as the code does", async () => {
+    // No card yet, so the latest counted order names them. Partially refunded
+    // with the membership kept, it counts, and the imported name matches it.
+    await insertOrder({ id: "4", email: "kept@example.com", first: "Kim", last: "Old", created: "2023-02-01T00:00:00Z" });
+    await insertOrder({ id: "5", email: "kept@example.com", first: "Kim", last: "Park", created: "2024-02-01T00:00:00Z", status: "Partially Refunded" });
+    await insertCardName({ email: "kept@example.com", name: "Kim Park", source: "legacy_postgres", at: 1 });
+    // With the membership itself refunded it does not count, so the name
+    // comes from the earlier order, and the imported one differs and stays.
+    await insertOrder({ id: "6", email: "refunded@example.com", first: "Lee", last: "Old", created: "2023-02-01T00:00:00Z" });
+    await insertOrder({ id: "7", email: "refunded@example.com", first: "Lee", last: "New", created: "2024-02-01T00:00:00Z", status: "Partially Refunded" });
+    await insertCardName({ email: "refunded@example.com", name: "Lee New", source: "legacy_postgres", at: 1 });
+    await env.DB.exec("UPDATE membership_orders SET membership_units = 1, membership_units_refunded = 0 WHERE order_id = '5'");
+    await env.DB.exec("UPDATE membership_orders SET membership_units = 1, membership_units_refunded = 1 WHERE order_id = '7'");
+
+    await migrate();
+
+    expect(await remainingNames()).toEqual(["chosen@example.com", "own@example.com", "refunded@example.com"]);
   });
 });
