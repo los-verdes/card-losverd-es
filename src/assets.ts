@@ -21,11 +21,12 @@ import { siteEnvironment } from "./environment";
 import type { Env } from "./index";
 import { APP_CSS, STYLESHEET_PATH, VERDE } from "./styles";
 import { fetchTemplate } from "./templates";
-import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTheme";
+import { themeForHeroFileName } from "./themes/cardTheme";
 
 /**
- * Public file name -> template key: the logo Google shows on the pass, and each
- * theme's Google hero image, which Google fetches the same way.
+ * Public file name -> template key: the logo Google shows on the pass. Each
+ * theme's Google hero image, which Google fetches the same way, is served by
+ * name too (`hero-<theme>-<version>.png`, `themeForHeroFileName()`).
  *
  * `google-logo-2.png` is the crest at 1200 x 1200, above Google's minimum
  * of 660 x 660. It fills the square edge to edge, as other passes' logos do:
@@ -38,20 +39,11 @@ import { CARD_THEMES, googleHeroFileName, type CardTheme } from "./themes/cardTh
  * `google-logo.png` (the crest with that margin, briefly) and `crest.png`
  * (the card image's 256px crest, named before 2026-09-29).
  */
-export function publicAssets(themes: readonly CardTheme[]): Record<string, string> {
-  return {
-    "crest.png": "templates/card/crest.png",
-    "google-logo.png": "templates/google/logo.png",
-    "google-logo-2.png": "templates/google/logo.png",
-    ...Object.fromEntries(
-      themes.flatMap((theme) =>
-        theme.artwork.googleHero ? [[googleHeroFileName(theme), theme.artwork.googleHero]] : [],
-      ),
-    ),
-  };
-}
-
-export const PUBLIC_ASSETS = publicAssets(CARD_THEMES);
+export const PUBLIC_ASSETS: Record<string, string> = {
+  "crest.png": "templates/card/crest.png",
+  "google-logo.png": "templates/google/logo.png",
+  "google-logo-2.png": "templates/google/logo.png",
+};
 
 /**
  * A day. These images change only when the branding does, and Google caches
@@ -149,7 +141,8 @@ assets.get("/favicon.svg", (c) =>
 );
 
 assets.get("/:name", async (c) => {
-  const key = PUBLIC_ASSETS[c.req.param("name")];
+  const name = c.req.param("name");
+  const key = PUBLIC_ASSETS[name] ?? themeForHeroFileName(name)?.artwork.googleHero;
   if (!key) {
     return c.notFound();
   }

@@ -271,7 +271,7 @@ describe("the card theme on a Google pass (#333)", () => {
   };
 
   it("resolves the theme's logo against the environment's public origin", () => {
-    expect(googleWalletTheme(THEME, "https://stagingcard.losverd.es")).toEqual({
+    expect(googleWalletTheme(THEME, "https://stagingcard.losverd.es", "0a1b2c3d4e5f")).toEqual({
       hexBackgroundColor: "#123ABC",
       logoUri: "https://stagingcard.losverd.es/assets/themes/2026/logo.png",
       label: THEME.label,
@@ -279,14 +279,14 @@ describe("the card theme on a Google pass (#333)", () => {
   });
 
   it("puts the theme's colour and logo on the member's object", () => {
-    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es"));
+    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es", "0a1b2c3d4e5f"));
 
     expect(object.hexBackgroundColor).toBe("#123ABC");
     expect(object.logo?.sourceUri.uri).toBe("https://card.losverd.es/assets/themes/2026/logo.png");
   });
 
   it("matches the environment's classic branding for the classic theme", () => {
-    expect(googleWalletTheme(CLASSIC_THEME, "https://card.losverd.es")).toEqual({
+    expect(googleWalletTheme(CLASSIC_THEME, "https://card.losverd.es", "0a1b2c3d4e5f")).toEqual({
       hexBackgroundColor: CONFIG.hexBackgroundColor,
       logoUri: CONFIG.logoUri,
       label: "Classic",
@@ -294,7 +294,7 @@ describe("the card theme on a Google pass (#333)", () => {
   });
 
   it("names the theme among the pass's details, before the card version", () => {
-    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es"));
+    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es", "0a1b2c3d4e5f"));
     const ids = object.textModulesData.map((module) => module.id);
 
     expect(object.textModulesData).toContainEqual({ id: "card_theme", header: "Card theme", body: THEME.label });
@@ -310,24 +310,23 @@ describe("the card theme on a Google pass (#333)", () => {
     const withHero = {
       ...THEME,
       label: "2026",
-      version: 2,
       artwork: { googleHero: "templates/themes/2026/google-hero.png" },
     };
-    const theme = googleWalletTheme(withHero, "https://card.losverd.es");
+    const theme = googleWalletTheme(withHero, "https://card.losverd.es", "0a1b2c3d4e5f");
     expect(theme.heroImage).toEqual({
-      uri: "https://card.losverd.es/assets/hero-2026-2.png",
+      uri: "https://card.losverd.es/assets/hero-2026-0a1b2c3d4e5f.png",
       description: "2026",
     });
 
     const object = buildGenericObject(makeMember(), CONFIG, theme);
     expect(object.heroImage).toEqual({
-      sourceUri: { uri: "https://card.losverd.es/assets/hero-2026-2.png" },
+      sourceUri: { uri: "https://card.losverd.es/assets/hero-2026-0a1b2c3d4e5f.png" },
       contentDescription: { defaultValue: { language: "en-US", value: "2026" } },
     });
   });
 
   it("leaves the hero image off a theme without one", () => {
-    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es"));
+    const object = buildGenericObject(makeMember(), CONFIG, googleWalletTheme(THEME, "https://card.losverd.es", "0a1b2c3d4e5f"));
     expect(object).not.toHaveProperty("heroImage");
   });
 });

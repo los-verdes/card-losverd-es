@@ -200,6 +200,16 @@ describe("drawn cards, cached in R2", () => {
     expect((await env.ASSETS.head(KEY))?.httpMetadata?.contentType).toBe("image/png");
   });
 
+  it("keeps every theme's card when the record moves without the card changing, as choosing a theme moves it", async () => {
+    await renderCardImage(env, await member());
+    const other: CardTheme = { ...CLASSIC_THEME, id: "other", colors: { ...CLASSIC_THEME.colors, background: "#123456" } };
+    await renderCardImage(env, await member(), other);
+    await env.DB.prepare("UPDATE members SET last_updated_at = 99 WHERE member_id = 'BC-1'").run();
+
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
+    expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(false);
+  });
+
   it("draws it again once the member has changed", async () => {
     const before = await renderCardImage(env, await member());
     await env.DB.prepare("UPDATE members SET first_name = 'Janet', last_updated_at = 2 WHERE member_id = 'BC-1'").run();
@@ -208,14 +218,15 @@ describe("drawn cards, cached in R2", () => {
     expect(await renderCardImage(env, await member())).not.toEqual(before);
   });
 
-  it("keeps one per theme, and draws again when a theme's version changes", async () => {
+  it("keeps one per theme, and draws again when a theme changes", async () => {
     await renderCardImage(env, await member());
     const other: CardTheme = { ...CLASSIC_THEME, id: "other", colors: { ...CLASSIC_THEME.colors, background: "#123456" } };
 
     expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(true);
     expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(false);
     expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
-    expect(await drew(async () => renderCardImage(env, await member(), { ...other, version: 2 }))).toBe(true);
+    // Its colours, say: the theme's version follows what it is (src/themes/fingerprint.ts).
+    expect(await drew(async () => renderCardImage(env, await member(), { ...other, colors: { ...other.colors, border: "#654321" } }))).toBe(true);
   });
 
   it("draws again for a card cached by an older drawing, or with a QR code for another signing key", async () => {

@@ -51,7 +51,7 @@ import {
   normalizeDisplayName,
   setDisplayName,
 } from "./displayName";
-import type { CardTheme } from "../themes/cardTheme";
+import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
   ThemeNotAllowed,
@@ -676,13 +676,15 @@ portal.post(THEME_PATH, requireCurrentMember, csrf(), async (c) => {
   const form = await c.req.formData();
 
   if (form.get("clear")) {
-    await clearCardTheme(c.env, member.email, "member", userId);
+    await clearCardTheme(c.env, member.email, "member", userId, CARD_THEMES, (work) => c.executionCtx.waitUntil(work));
     recordOutcome("card_theme.saved", { result: "cleared" });
     return c.redirect(`${THEME_PATH}?saved=1`, 303);
   }
 
   try {
-    await setCardTheme(c.env, member, String(form.get("theme") ?? ""), "member", userId);
+    await setCardTheme(c.env, member, String(form.get("theme") ?? ""), "member", userId, CARD_THEMES, (work) =>
+      c.executionCtx.waitUntil(work),
+    );
   } catch (err) {
     if (!(err instanceof ThemeNotAllowed)) throw err;
     recordOutcome("card_theme.saved", { result: "rejected" });

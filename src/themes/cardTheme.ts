@@ -108,12 +108,6 @@ export interface CardTheme {
    * src/themes/groups.ts); absent for any other theme.
    */
   group?: string;
-  /**
-   * Bump when this theme's colours or images change. Cached Apple passes are
-   * tagged with it, so a changed theme is not served from an old cache (the
-   * same discipline as `PASS_CONTENT_VERSION`, for one theme rather than all).
-   */
-  version: number;
   colors: CardThemeColors;
   assets: CardThemeAssets;
   artwork: CardThemeArtwork;
@@ -122,7 +116,6 @@ export interface CardTheme {
 export const CLASSIC_THEME: CardTheme = {
   id: "classic",
   label: "Classic",
-  version: 1,
   colors: {
     background: "#00b140",
     border: "#046a29",
@@ -139,19 +132,24 @@ export const CLASSIC_THEME: CardTheme = {
   artwork: {},
 };
 
+/** What sets one year's theme apart; `yearTheme()` fills in the rest. */
+interface YearThemeSpec {
+  year: number;
+  label: string;
+  colors: CardThemeColors;
+}
+
 /**
  * A year's theme, from that year's membership scarf. It keeps classic's crest
  * and pass images, and has artwork on every surface under
  * `templates/themes/<year>/` (how each was made: assets/templates/themes/README.md).
  */
-function yearTheme(year: number, label: string, colors: CardThemeColors): CardTheme {
+function yearTheme({ year, label, colors }: YearThemeSpec): CardTheme {
   const prefix = `templates/themes/${year}/`;
   return {
     id: String(year),
     label,
     year,
-    // 2: poster art for Apple, and Google's hero at its 2026 size (#384).
-    version: 2,
     colors,
     assets: CLASSIC_THEME.assets,
     artwork: {
@@ -166,68 +164,96 @@ function yearTheme(year: number, label: string, colors: CardThemeColors): CardTh
 /** The year themes, one per scarf design. */
 export const YEAR_THEMES: readonly CardTheme[] = [
   // Serape stripes, darkened so the card's white text reads over them.
-  yearTheme(2020, "2020: MMXX", {
-    background: "#111111",
-    border: "#000000",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2020,
+    label: "2020: MMXX",
+    colors: {
+      background: "#111111",
+      border: "#000000",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The inaugural season: the skull and rings from the scarf's back.
-  yearTheme(2021, "2021: Inaugural season", {
-    background: "#020202",
-    border: "#09ad4e",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2021,
+    label: "2021: Inaugural season",
+    colors: {
+      background: "#020202",
+      border: "#09ad4e",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // "Verde hasta la muerte": the doodle pattern, from its print file, darkened.
-  yearTheme(2022, "2022: Verde hasta la muerte", {
-    background: "#040a07",
-    border: "#198e3c",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2022,
+    label: "2022: Verde hasta la muerte",
+    colors: {
+      background: "#040a07",
+      border: "#198e3c",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The scarf's papel picado flags, spelling out Los Verdes, on the mint of its
   // "i love you verde" side. The one light theme, so its text is dark.
-  yearTheme(2023, "2023: I love you verde", {
-    background: "#8fddb3",
-    border: "#00b140",
-    text: "#000000",
-    secondaryText: "#0b3d20",
-    qrLabel: "#046a29",
-    passText: "#000000",
+  yearTheme({
+    year: 2023,
+    label: "2023: I love you verde",
+    colors: {
+      background: "#8fddb3",
+      border: "#00b140",
+      text: "#000000",
+      secondaryText: "#0b3d20",
+      qrLabel: "#046a29",
+      passText: "#000000",
+    },
   }),
   // The floral side's bat and sugar skull, from the mockup render of the scarf.
-  yearTheme(2024, "2024: MMXXIV", {
-    background: "#121212",
-    border: "#1ee85a",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2024,
+    label: "2024: MMXXIV",
+    colors: {
+      background: "#121212",
+      border: "#1ee85a",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
-  // "Cinco Uno Dos": the skeleton hand and UNO, and the LOS VERDES roundel.
-  yearTheme(2025, "2025: Cinco Uno Dos", {
-    background: "#221e1f",
-    border: "#00a550",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  // "Cinco Uno Dos": the three skeleton hands, and the LOS VERDES roundel.
+  yearTheme({
+    year: 2025,
+    label: "2025: Cinco Uno Dos",
+    colors: {
+      background: "#221e1f",
+      border: "#00a550",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
   // The skull gaiter: the 2026 kit's skull and lettering.
-  yearTheme(2026, "2026: Skull Gaiter", {
-    background: "#1d2429",
-    border: "#00a843",
-    text: "#ffffff",
-    secondaryText: "#d8f5e4",
-    qrLabel: "#046a29",
-    passText: "#ffffff",
+  yearTheme({
+    year: 2026,
+    label: "2026: Skull Gaiter",
+    colors: {
+      background: "#1d2429",
+      border: "#00a843",
+      text: "#ffffff",
+      secondaryText: "#d8f5e4",
+      qrLabel: "#046a29",
+      passText: "#ffffff",
+    },
   }),
 ];
 
@@ -242,7 +268,6 @@ export const GROUP_THEMES: readonly CardTheme[] = [
     id: "los-pringles",
     label: "Los Pringles",
     group: "los-pringles",
-    version: 1,
     colors: {
       background: "#000000",
       border: "#1ac64a",
@@ -266,7 +291,6 @@ export const GROUP_THEMES: readonly CardTheme[] = [
     id: "verdirojas",
     label: "Verdirojas",
     group: "verdirojas",
-    version: 1,
     colors: {
       background: "#000000",
       border: "#c33e46",
@@ -290,21 +314,32 @@ export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES,
 
 /**
  * The public file name of a theme's Google hero image, served by
- * `src/assets.ts`. It carries the theme's version, because Google keeps its
- * own copy of an image and fetches it again only when the address changes.
+ * `src/assets.ts`. It carries the theme's version (`themeVersion()` in
+ * src/themes/fingerprint.ts), because Google keeps its own copy of an image
+ * and fetches it again only when the address changes.
  */
-export function googleHeroFileName(theme: CardTheme): string {
-  return `hero-${theme.id}-${theme.version}.png`;
+export function googleHeroFileName(theme: CardTheme, version: string): string {
+  return `hero-${theme.id}-${version}.png`;
 }
 
 /** The public path of a theme's Google hero image, or `null` for a theme without one. */
-export function googleHeroPath(theme: CardTheme): string | null {
-  return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme)}` : null;
+export function googleHeroPath(theme: CardTheme, version: string): string | null {
+  return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme, version)}` : null;
 }
 
-/** Tags a cached pass with the theme it was built in; see `CardTheme.version`. */
-export function themeCacheTag(theme: CardTheme): string {
-  return `${theme.id}@${theme.version}`;
+/**
+ * The theme a hero file name was issued for: any version, since Google may
+ * hold an address from before the art last changed, and the current hero is
+ * the right answer to it.
+ */
+export function themeForHeroFileName(name: string, themes: readonly CardTheme[] = CARD_THEMES): CardTheme | null {
+  const match = /^hero-(.+)-[0-9a-z]+\.png$/.exec(name);
+  return (match && themes.find((theme) => theme.id === match[1] && theme.artwork.googleHero)) || null;
+}
+
+/** Tags a cached pass or card with the theme it was built in, at its version (`themeVersion()`). */
+export function themeCacheTag(theme: CardTheme, version: string): string {
+  return `${theme.id}@${version}`;
 }
 
 /** `#rrggbb` as Apple's `rgb(r, g, b)`, the only colour form a pass accepts. */

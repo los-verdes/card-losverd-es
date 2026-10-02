@@ -30,7 +30,7 @@ const ARTWORK_FILES = ["artwork.png", "artwork@2x.png", "artwork@3x.png"] as con
  * with each theme's poster art: the same mark, light over dark art and dark
  * over light, since it sits straight on the art.
  */
-const PRIMARY_LOGO_FILES = ["primaryLogo.png", "primaryLogo@2x.png", "primaryLogo@3x.png"] as const;
+export const PRIMARY_LOGO_FILES = ["primaryLogo.png", "primaryLogo@2x.png", "primaryLogo@3x.png"] as const;
 
 /**
  * The files a pass needs for the poster layout, or `null` when it does not
