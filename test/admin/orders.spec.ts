@@ -537,10 +537,116 @@ describe("POST /admin/orders/:orderId/reread", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("is a 404 for an order we do not hold", async () => {
+  it("is a 404 for an id that can't be a BigCommerce order", async () => {
     forbidFetch();
 
-    expect((await post("/admin/orders/9999/reread", {})).status).toBe(404);
+    expect((await post("/admin/orders/nope/reread", {})).status).toBe(404);
+  });
+});
+
+describe("reading in an order this site has never held", () => {
+  const PRODUCTS = [{ id: 1, product_id: 101, sku: "LOSV-DIGI-5000", name: "Los Verdes Annual Membership (No Swag)", quantity: 1 }];
+
+  /** BigCommerce holding order 2002 (or not, for null), with `products`. */
+  function mockStore(found: boolean, products: object[] = PRODUCTS) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/metafields")) return Response.json({ data: [] });
+      if (url.endsWith("/orders/2002/products")) return Response.json(products);
+      if (url.endsWith("/orders/2002")) {
+        if (!found) return new Response("", { status: 404 });
+        return Response.json({
+          id: 2002,
+          customer_id: 0,
+          status: "Completed",
+          date_created: "2026-09-20T00:00:00.000Z",
+          date_modified: "2026-09-20T00:00:00.000Z",
+          billing_address: { first_name: "New", last_name: "Comer", email: "newcomer@example.com" },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+  }
+
+  beforeEach(() => {
+    env.BIGCOMMERCE_ACCESS_TOKEN = "test-access-token";
+    vi.spyOn(console, "info").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    await env.DB.prepare("DELETE FROM membership_orders WHERE order_id = '2002'").run();
+    await env.DB.prepare("DELETE FROM members WHERE email = 'newcomer@example.com'").run();
+  });
+
+  it("offers to read it in from its not-found page, for an id BigCommerce could have", async () => {
+    const body = await (await request("/admin/orders/2002")).text();
+    expect(body).toContain('action="/admin/orders/2002/reread"');
+    expect(body).toContain("Read order 2002 from BigCommerce");
+
+    expect(await (await request("/admin/orders/nope")).text()).not.toContain("/reread");
+  });
+
+  it("adds it as a sync would, gives it a card, and emails nobody", async () => {
+    env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    env.CARD_EMAIL_NEW_ORDERS_SINCE = "2000-01-01";
+    email = fakeEmailBinding();
+    env.EMAIL = email;
+    try {
+      mockStore(true);
+
+      const res = await post("/admin/orders/2002/reread", { from: "order" });
+
+      expect(res.headers.get("Location")).toBe("/admin/orders/2002?reread=added");
+      expect(sentTo()).toEqual([]);
+      const member = await env.DB.prepare("SELECT member_id FROM members WHERE email = 'newcomer@example.com'").first();
+      expect(member).not.toBeNull();
+      const page = await request("/admin/orders/2002?reread=added");
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain("Read from BigCommerce and added. Nobody was emailed");
+    } finally {
+      env.EMAIL = undefined;
+      env.CARD_EMAIL_NEW_ORDERS_SINCE = "";
+    }
+  });
+
+  it("says so when BigCommerce has no such order, and holds nothing", async () => {
+    mockStore(false);
+
+    expect((await post("/admin/orders/2002/reread", {})).headers.get("Location")).toBe("/admin/orders/2002?reread=not-in-store");
+    expect(await env.DB.prepare("SELECT 1 FROM membership_orders WHERE order_id = '2002'").first()).toBeNull();
+    expect(await (await request("/admin/orders/2002?reread=not-in-store")).text()).toContain("BigCommerce has no order with this id.");
+  });
+
+  it("names the SKUs an order carries when none is a membership", async () => {
+    mockStore(true, [
+      { id: 1, product_id: 7, sku: "SCARF", name: "Scarf", quantity: 1 },
+      { id: 2, product_id: 8, sku: "LOSV-MEM-0002", name: "Something else", quantity: 1 },
+      { id: 3, product_id: 9, sku: "", name: "No SKU", quantity: 1 },
+    ]);
+
+    const res = await post("/admin/orders/2002/reread", {});
+
+    expect(res.headers.get("Location")).toBe("/admin/orders/2002?reread=no-membership&skus=SCARF%2CLOSV-MEM-0002");
+    expect(await env.DB.prepare("SELECT 1 FROM membership_orders WHERE order_id = '2002'").first()).toBeNull();
+    const body = await (await request(res.headers.get("Location")!)).text();
+    expect(body).toContain("carries no membership, so nothing was changed. Its SKUs: SCARF, LOSV-MEM-0002.");
+    expect(await (await request("/admin/orders/2002?reread=no-membership&skus=")).text()).toContain("It has no line items with a SKU.");
+  });
+
+  it("reports a store it could not reach", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("nope", { status: 401 }));
+
+    expect((await post("/admin/orders/2002/reread", {})).headers.get("Location")).toBe("/admin/orders/2002?reread=unreachable");
+  });
+
+  it("is reached from a lookup form, which goes to the order's page", async () => {
+    const form = await (await request("/admin/orders")).text();
+    expect(form).toContain('<form method="get" action="/admin/orders"');
+
+    const res = await request("/admin/orders?id=%202002%20");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("/admin/orders/2002");
   });
 });
 

@@ -78,6 +78,7 @@ describe("the admin navigation", () => {
     const hrefs = (label: string) => ADMIN_NAV.find((group) => group.label === label)!.links.map((link) => link.href);
 
     expect(hrefs("Members")).toContain("/admin/reports/consolidations");
+    expect(hrefs("Members")).toContain("/admin/orders");
     expect(hrefs("Reports")).not.toContain("/admin/reports/consolidations");
   });
 

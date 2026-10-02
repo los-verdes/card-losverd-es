@@ -736,7 +736,8 @@ export async function flagOrderMissingFromStore(
 export type OrderReadOutcome =
   | { kind: "applied"; order: BigCommerceOrder; memberEmail: string }
   | { kind: "missing"; flagged: MissingOrderOutcome }
-  | { kind: "no-membership" };
+  /** `skus`: what the order does carry, so an admin can see why it isn't one. */
+  | { kind: "no-membership"; skus: string[] };
 
 /**
  * Fetches one order and applies it exactly as a sync would: recorded,
@@ -773,7 +774,7 @@ async function readOrder(
     console.info(
       `readOrderFromStore(${orderId}): no membership SKU found in order line items, skipping`,
     );
-    return { kind: "no-membership" };
+    return { kind: "no-membership", skus: [...new Set(products.map((product) => product.sku).filter(Boolean))] };
   }
 
   const { memberEmail } = await applyMembershipOrder(
