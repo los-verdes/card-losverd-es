@@ -16,8 +16,8 @@ describe("the message handed to the binding", () => {
       email: "a@example.test",
       name: "Los Verdes",
     });
-    // No name is no `name` key, rather than an empty one to be rendered.
-    expect(toBindingAddress({ email: "a@example.test" })).toEqual({ email: "a@example.test" });
+    // No name is a bare address: the binding refuses an address object without one.
+    expect(toBindingAddress({ email: "a@example.test" })).toBe("a@example.test");
   });
 
   it("passes a name with parentheses through untouched", () => {
