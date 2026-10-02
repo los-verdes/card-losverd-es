@@ -167,7 +167,7 @@ Orders maintain two email fields:
 - `member_email`: The address to which membership entitlement is assigned.
 
 An admin re-attributes an order from its page: both people's cards are recalculated, their wallet passes update, the
-change is logged, and syncs never undo it."
+change is logged, and syncs never undo it.
 
 This is used for gifts (someone orders a membership for somebody else), and for a member whose older orders carry an
 address they no longer use. (Ideally folks purchase memberships under their own store account / email address though.)
