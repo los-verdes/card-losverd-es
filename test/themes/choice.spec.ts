@@ -92,8 +92,8 @@ describe("who may choose", () => {
     expect([await mayChooseTheme(env, true), await mayChooseTheme(env, false)]).toEqual([false, false]);
   });
 
-  it("is open to admins only, in both environments, while the picker is tried out", () => {
-    expect(wranglerToml.match(/^CARD_THEME_CHOICE = "admins"$/gm)).toHaveLength(2);
+  it("is open to everyone, in both environments", () => {
+    expect(wranglerToml.match(/^CARD_THEME_CHOICE = "everyone"$/gm)).toHaveLength(2);
   });
 });
 

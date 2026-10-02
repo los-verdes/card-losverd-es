@@ -32,9 +32,9 @@ describe("applePosterMode", () => {
     expect(applePosterMode({ APPLE_POSTER_PASSES: value })).toBe(mode);
   });
 
-  it("is off in production and on in staging, where the posters are checked first", () => {
+  it("is on in both environments", () => {
     expect(wranglerToml.match(/^APPLE_POSTER_PASSES = "(\w+)"$/gm)).toEqual([
-      'APPLE_POSTER_PASSES = "off"',
+      'APPLE_POSTER_PASSES = "on"',
       'APPLE_POSTER_PASSES = "on"',
     ]);
   });

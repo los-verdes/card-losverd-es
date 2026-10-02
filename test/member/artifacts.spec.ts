@@ -24,6 +24,19 @@ import { named, recordSpans } from "../fixtures/spans";
 import { forgetDrawnCards } from "../setup/templateCache";
 import { useTemplates } from "../fixtures/templates";
 
+// Stated, not inherited: wrangler.toml switches year themes by default and
+// Apple's poster layout per environment, and these tests are about cards with
+// neither unless they say so.
+const configuredSwitches = { years: env.CARD_THEME_YEAR_DEFAULTS, posters: env.APPLE_POSTER_PASSES };
+beforeEach(() => {
+  env.CARD_THEME_YEAR_DEFAULTS = "false";
+  env.APPLE_POSTER_PASSES = "off";
+});
+afterEach(() => {
+  env.CARD_THEME_YEAR_DEFAULTS = configuredSwitches.years;
+  env.APPLE_POSTER_PASSES = configuredSwitches.posters;
+});
+
 const PASS_KEY = "test-pass-signature-key".repeat(5);
 
 beforeEach(() => {
