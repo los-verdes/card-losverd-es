@@ -869,7 +869,7 @@ describe("their renewal, on their page (#397)", () => {
     await env.DB.prepare("UPDATE members SET expiration_date = '2020-02-14' WHERE email = ?").bind(EMAIL).run();
     await subscribe("active", "2099-03-01");
 
-    expect(await page()).toMatch(/color: var\(--danger\)">Card ran out on Feb 14, 2020, but automatic renewal is still on/);
+    expect(await page()).toMatch(/color: var\(--danger\)">Membership card ran out on Feb 14, 2020, but automatic renewal is still on/);
   });
 
   it("says when they cancelled", async () => {

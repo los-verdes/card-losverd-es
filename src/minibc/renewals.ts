@@ -128,10 +128,10 @@ export function renewalText(state: RenewalState): string {
     case "renews":
       return `Renews automatically on ${date(state.on)}`;
     case "renews-late":
-      return `Renews automatically on ${date(state.on)}, ${state.daysAfter} days after the card runs out on ${date(state.cardEnds)}`;
+      return `Renews automatically on ${date(state.on)}, ${state.daysAfter} days after the membership card runs out on ${date(state.cardEnds)}`;
     case "overdue":
-      return `${state.cardEnded ? `Card ran out on ${date(state.cardEnded)}` : "No current card"}, but automatic renewal is still on: ${
-        state.nextTry ? `MiniBC next charges on ${date(state.nextTry)}` : "MiniBC has no next charge date"
+      return `${state.cardEnded ? `Membership card ran out on ${date(state.cardEnded)}` : "No current membership card"}, but automatic renewal is still on: ${
+        state.nextTry ? `MiniBC's next payment is on ${date(state.nextTry)}` : "MiniBC has no next payment date"
       }`;
     case "paused":
       return `Automatic renewal paused${state.since ? ` since ${date(state.since)}` : ""}`;

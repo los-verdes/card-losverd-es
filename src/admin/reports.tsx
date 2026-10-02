@@ -418,7 +418,8 @@ reports.get("/", async (c) => {
         </li>
         <li>
           <a href="/admin/reports/renewals">Renewals</a>: what MiniBC says about members' automatic renewals --
-          cards that ran out with a renewal still on, renewals due after the card runs out, and those coming up.
+          membership cards that ran out with a renewal still on, renewals due after the membership card runs out, and those
+          coming up.
         </li>
         <li>
           <a href="/admin/reports/consolidations">Consolidations</a>: memberships attributed to another address, and
@@ -896,25 +897,25 @@ interface RenewalSection {
 const RENEWAL_SECTIONS: RenewalSection[] = [
   {
     key: "overdue",
-    title: "Card ran out, automatic renewal still on",
-    about: "The renewal failed, or is still to be tried: the member has no current card until it goes through.",
+    title: "Membership card ran out, automatic renewal still on",
+    about: "The renewal payment failed, or is still to be tried: the member has no current membership card until it goes through.",
     pick: (row, state) => row.member_email !== null && state.kind === "overdue",
   },
   {
     key: "late",
-    title: "Renews after the card runs out",
-    about: "MiniBC next charges more than a day after the card's last day, most often after an earlier failed charge, so the card lapses in between.",
+    title: "Renews after the membership card runs out",
+    about: "MiniBC's next payment is more than a day after the membership card's last day, most often after an earlier failed payment, so the membership lapses in between.",
     pick: (row, state) => row.member_email !== null && state.kind === "renews-late",
   },
   {
     key: "soon",
     title: "Renewing in the next 30 days",
-    about: "On time: MiniBC charges on or just after the card's last day.",
+    about: "On time: MiniBC's next payment is on or just after the membership card's last day.",
     pick: (row, state, _today, soon) => row.member_email !== null && state.kind === "renews" && state.on <= soon,
   },
   {
     key: "stopped",
-    title: "Cancelled or paused, card still current",
+    title: "Cancelled or paused, membership card still current",
     about: "These won't renew by themselves; the member would need to buy again.",
     pick: (row, state, today) =>
       row.member_email !== null && (state.kind === "cancelled" || state.kind === "paused") && (row.expiration_date ?? "") >= today,
@@ -972,7 +973,7 @@ reports.get("/renewals", async (c) => {
   return c.html(
     <AdminPage title="Renewals">
       <p>
-        What MiniBC, which runs the store's automatic renewals, says about each member's. It changes no card: a renewal
+        What MiniBC, which runs the store's automatic renewals, says about each member's. It changes no membership card: a renewal
         counts once its BigCommerce order is paid, like any other. Subscriptions are matched to members through their
         orders, never an address.
       </p>
@@ -1000,7 +1001,7 @@ reports.get("/renewals", async (c) => {
             </h2>
             <p class="muted">{section.about}</p>
             <ReportTable
-              headings={section.key === "unmatched" ? ["Subscription", "MiniBC", "Next charge", "Signed up", "Started by order"] : ["Member", "Good through", "What next", "Subscription"]}
+              headings={section.key === "unmatched" ? ["Subscription", "MiniBC", "Next payment", "Signed up", "Started by order"] : ["Member", "Good through", "What next", "Subscription"]}
               csvHref={`/admin/reports/renewals?section=${section.key}&format=csv`}
               csvLabel={`Download all ${listed.length} as CSV`}
               empty="None."

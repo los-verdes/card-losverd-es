@@ -135,9 +135,9 @@ describe("what a subscription means for the card", () => {
 
   it.each([
     [{ kind: "renews", on: "2027-02-14" } as const, "Renews automatically on Feb 14, 2027"],
-    [{ kind: "renews-late", on: "2027-03-14", cardEnds: "2027-02-14", daysAfter: 28 } as const, "Renews automatically on Mar 14, 2027, 28 days after the card runs out on Feb 14, 2027"],
-    [{ kind: "overdue", cardEnded: "2026-09-14", nextTry: "2026-11-01" } as const, "Card ran out on Sep 14, 2026, but automatic renewal is still on: MiniBC next charges on Nov 1, 2026"],
-    [{ kind: "overdue", cardEnded: null, nextTry: null } as const, "No current card, but automatic renewal is still on: MiniBC has no next charge date"],
+    [{ kind: "renews-late", on: "2027-03-14", cardEnds: "2027-02-14", daysAfter: 28 } as const, "Renews automatically on Mar 14, 2027, 28 days after the membership card runs out on Feb 14, 2027"],
+    [{ kind: "overdue", cardEnded: "2026-09-14", nextTry: "2026-11-01" } as const, "Membership card ran out on Sep 14, 2026, but automatic renewal is still on: MiniBC's next payment is on Nov 1, 2026"],
+    [{ kind: "overdue", cardEnded: null, nextTry: null } as const, "No current membership card, but automatic renewal is still on: MiniBC has no next payment date"],
     [{ kind: "paused", since: "2026-05-01" } as const, "Automatic renewal paused since May 1, 2026"],
     [{ kind: "paused", since: null } as const, "Automatic renewal paused"],
     [{ kind: "cancelled", on: "2026-06-01" } as const, "Automatic renewal cancelled on Jun 1, 2026"],
