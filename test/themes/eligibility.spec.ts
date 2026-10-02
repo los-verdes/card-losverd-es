@@ -90,10 +90,10 @@ describe("themeOptions", () => {
   });
 
   it("offers the real registry's theme for a year bought in, and nothing for a year with no design yet", () => {
-    // 2021 has a scarf design; 2024's is still to come.
-    const options = themeOptions(history, true);
+    // 2021 and 2024 have scarf designs; 2027's is still to come.
+    const options = themeOptions({ ...history, orders: [...history.orders, order("2027-03-01", "2028-03-01")] }, true);
 
-    expect(ids(options.themes)).toEqual(["classic", "2021"]);
+    expect(ids(options.themes)).toEqual(["classic", "2021", "2024"]);
     expect(options.defaultTheme.id).toBe("2021");
   });
 });

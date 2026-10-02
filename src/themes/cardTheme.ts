@@ -163,7 +163,7 @@ function yearTheme(year: number, label: string, colors: CardThemeColors): CardTh
   };
 }
 
-/** The year themes, one per scarf design so far. Designs for 2024 onwards are still to come (#333). */
+/** The year themes, one per scarf design. */
 export const YEAR_THEMES: readonly CardTheme[] = [
   // Serape stripes, darkened so the card's white text reads over them.
   yearTheme(2020, "2020: MMXX", {
@@ -201,6 +201,33 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     secondaryText: "#0b3d20",
     qrLabel: "#046a29",
     passText: "#000000",
+  }),
+  // The floral side's bat and sugar skull, from the mockup render of the scarf.
+  yearTheme(2024, "2024: MMXXIV", {
+    background: "#121212",
+    border: "#1ee85a",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
+  }),
+  // "Cinco uno dos": the skeleton hand and UNO, and the LOS VERDES roundel.
+  yearTheme(2025, "2025: Cinco uno dos", {
+    background: "#221e1f",
+    border: "#00a550",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
+  }),
+  // The 2026 kit's skull and lettering, which its scarf carries.
+  yearTheme(2026, "2026: Verde ATX listos", {
+    background: "#1d2429",
+    border: "#00a843",
+    text: "#ffffff",
+    secondaryText: "#d8f5e4",
+    qrLabel: "#046a29",
+    passText: "#ffffff",
   }),
 ];
 
