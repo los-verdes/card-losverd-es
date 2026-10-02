@@ -10,6 +10,7 @@ import {
 import type { BindingMessage } from "../../src/email/cloudflare";
 import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import worker from "../../src/index";
+import { recipientRateLimit } from "../../src/member/claimMembership";
 import {
   CLAIM_TOKEN_TTL_SECONDS,
   issueClaimToken,
@@ -333,19 +334,38 @@ describe("requesting a claim link", () => {
     expect(statuses.filter((s) => s === 429).length).toBeGreaterThan(0);
   });
 
-  it("stops one address being mailed repeatedly, without saying so", async () => {
+  it("stops one address being mailed repeatedly, and says so, the same for a member's address as anyone's", async () => {
     forbidFetch();
 
-    const responses = [];
-    for (const userId of [USER_ID, OTHER_USER_ID, USER_ID, OTHER_USER_ID]) {
-      responses.push(await submit("jane@example.com", userId));
-    }
+    const statuses = async (email: string) => {
+      const seen = [];
+      for (const userId of [USER_ID, OTHER_USER_ID, USER_ID, OTHER_USER_ID]) {
+        const res = await submit(email, userId);
+        seen.push(res.status);
+        if (res.status === 429) expect(res.body).toContain("sent several links today already");
+      }
+      return seen;
+    };
 
-    // Three sends allowed, the fourth silently dropped -- and every response
-    // identical, since the limit is about the inbox, not the visitor.
+    // Three a day per address, whoever asks; the fourth is told why nothing more is coming.
+    expect(await statuses("jane@example.com")).toEqual([200, 200, 200, 429]);
     expect(mail.sent).toHaveLength(3);
-    expect(new Set(responses.map((r) => r.body)).size).toBe(1);
-    expect(new Set(responses.map((r) => r.status))).toEqual(new Set([200]));
+    // Counted before anything is looked up, so an address with no membership
+    // reaches it the same way, and the message says nothing about a membership.
+    expect(await statuses("nobody@example.com")).toEqual([200, 200, 200, 429]);
+  });
+
+  it("takes its daily limit per address from the environment, so staging can test against its own mailboxes", () => {
+    expect(recipientRateLimit({ CLAIM_RECIPIENT_DAILY_LIMIT: "25" }).limit).toBe(25);
+    expect(recipientRateLimit({ CLAIM_RECIPIENT_DAILY_LIMIT: undefined }).limit).toBe(3);
+    expect(recipientRateLimit({ CLAIM_RECIPIENT_DAILY_LIMIT: "none" }).limit).toBe(3);
+  });
+
+  it("hands the binding a bare address, since the email carries no name for its recipient", async () => {
+    await submit("jane@example.com");
+
+    // An address object without a name is what the real binding refused on staging (2026-10-02).
+    expect(mail.sent[0].to).toBe("jane@example.com");
   });
 
   it("survives the binding rejecting the message, without telling the visitor anything different", async () => {

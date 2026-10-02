@@ -51,10 +51,14 @@ interface BindingAttachment {
 }
 
 /** The binding's own address shape; a bare string is also accepted. */
-export interface BindingAddress {
-  email: string;
-  name?: string;
-}
+/**
+ * An address as the binding takes it: a bare address, or an address with a
+ * display name. Never an object without a name -- the binding rejects that
+ * ("Incorrect type for the 'name' field on 'EmailAddress'"), which is how
+ * the claim link, the one email sent without a name, failed on staging
+ * (2026-10-02).
+ */
+export type BindingAddress = string | { email: string; name: string };
 
 export interface BindingMessage {
   from: BindingAddress;
@@ -65,9 +69,9 @@ export interface BindingMessage {
   attachments?: BindingAttachment[];
 }
 
-/** The address as the binding takes it, with `name` left off when there is none. */
+/** The address as the binding takes it: with its name when it has one, otherwise bare. */
 export function toBindingAddress(address: EmailAddress): BindingAddress {
-  return address.name ? { email: address.email, name: address.name } : { email: address.email };
+  return address.name ? { email: address.email, name: address.name } : address.email;
 }
 
 export function buildBindingMessage(message: EmailMessage): BindingMessage {

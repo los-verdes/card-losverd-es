@@ -160,6 +160,8 @@ export interface Env {
    * every environment; production carries `*` explicitly.
    */
   EMAIL_RECIPIENT_ALLOWLIST: string;
+  /** Claim links one address may be asked for a day (src/member/claimMembership.ts); 3 when unset. */
+  CLAIM_RECIPIENT_DAILY_LIMIT?: string;
   EMAIL_FROM_ADDRESS: string;
   EMAIL_FROM_NAME: string;
   // Secret -- Slack bot token (`xoxb-...`, scopes `users:read` and

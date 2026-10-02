@@ -39,9 +39,17 @@ export function fakeEmailBinding(options: { failWith?: string; suppressed?: bool
     }
     if (options.failWith) throw new Error(options.failWith);
     // The real binding refuses anything but a bare address in `email`, and
-    // says so in these words. Refusing it here too is what would have caught
-    // a display name folded into the address before a real send did.
-    for (const { email } of [message.from, message.to]) {
+    // an address object without a string `name`, and says so in these
+    // words. Refusing them here too is what would have caught a display name
+    // folded into the address, and a claim link sent to `{ email }` alone,
+    // before a real send did.
+    for (const address of [message.from, message.to]) {
+      if (typeof address === "object" && typeof address.name !== "string") {
+        throw new TypeError(
+          "Incorrect type for the 'name' field on 'EmailAddress': the provided value is not of type 'string'.",
+        );
+      }
+      const email = typeof address === "string" ? address : address.email;
       if (!/^[^\s<>()]+@[^\s<>()]+$/.test(email)) {
         throw new Error("Invalid email address: Invalid email user");
       }
@@ -58,5 +66,5 @@ export function fakeEmailBinding(options: { failWith?: string; suppressed?: bool
 
 /** The bare address a message went to, whether or not a name was attached. */
 export function recipientOf(message: BindingMessage): string {
-  return message.to.email;
+  return typeof message.to === "string" ? message.to : message.to.email;
 }

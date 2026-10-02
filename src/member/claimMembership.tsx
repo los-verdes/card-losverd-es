@@ -16,7 +16,9 @@
  * response is the same page whether or not it belongs to a member, and the
  * lookup runs inside `waitUntil` so neither the body nor its timing gives it
  * away. Signing in first narrows who can probe but doesn't remove the need --
- * an account is cheap.
+ * an account is cheap. The one thing said about an address is that it has
+ * been asked for too often today, and that is counted for every request,
+ * member or not, so it says nothing about a membership.
  *
  * No Turnstile here, unlike `/email-card`: that form is open to the world,
  * this one is behind a login, and the rate limits below are what a signed-in
@@ -54,15 +56,21 @@ export const USER_RATE_LIMIT: RateLimitRule = {
 };
 
 /**
- * Per address, so a member's inbox can't be flooded from several accounts.
- * Enforced silently inside `waitUntil`, keeping the response identical
- * whether or not the address belongs to anyone.
+ * Per address, so a member's inbox can't be flooded from several accounts:
+ * `CLAIM_RECIPIENT_DAILY_LIMIT` a day, 3 unless set. Counted on every
+ * request for the address, member or not, before anything is looked up, so
+ * reaching it can be said out loud without saying whether anyone holds a
+ * membership there. Said, because a silent limit left someone waiting for
+ * an email that was never going to come (2026-10-02).
  */
-export const RECIPIENT_RATE_LIMIT: RateLimitRule = {
-  name: "claim-membership:recipient",
-  limit: 3,
-  windowSeconds: 24 * 60 * 60,
-};
+export function recipientRateLimit(env: Pick<Env, "CLAIM_RECIPIENT_DAILY_LIMIT">): RateLimitRule {
+  const configured = Number.parseInt(env.CLAIM_RECIPIENT_DAILY_LIMIT ?? "", 10);
+  return {
+    name: "claim-membership:recipient",
+    limit: Number.isInteger(configured) && configured > 0 ? configured : 3,
+    windowSeconds: 24 * 60 * 60,
+  };
+}
 
 const ClaimForm: FC<{ error?: string; signedInWithRelay?: boolean }> = ({
   error,
@@ -157,17 +165,7 @@ export async function sendClaimLink(
   userId: number,
 ): Promise<void> {
   try {
-    await purgeExpiredRateLimits(env.DB, 2 * RECIPIENT_RATE_LIMIT.windowSeconds);
-    const limit = await consumeRateLimit(
-      env.DB,
-      RECIPIENT_RATE_LIMIT,
-      email.toLowerCase(),
-    );
-    if (!limit.allowed) {
-      console.warn("Claim membership: recipient rate limit reached; not sending");
-      recordOutcome("claim.requested", { result: "recipient_rate_limited" });
-      return;
-    }
+    await purgeExpiredRateLimits(env.DB, 2 * recipientRateLimit(env).windowSeconds);
     const member = await getMemberByEmail(env, email);
     if (!member || !isMembershipCurrent(member)) {
       recordOutcome("claim.requested", { result: member ? "not_current" : "not_a_member" });
@@ -216,6 +214,14 @@ claim.post("/", requireAuth, csrf(), async (c) => {
   const email = typeof form.email === "string" ? form.email.trim() : "";
   if (!isWellFormedEmail(email)) {
     return c.html(<ClaimForm error="That doesn't look like an email address." />, 400);
+  }
+  const recipient = await consumeRateLimit(c.env.DB, recipientRateLimit(c.env), email.toLowerCase());
+  if (!recipient.allowed) {
+    recordOutcome("claim.requested", { result: "recipient_rate_limited" });
+    return c.html(
+      <ClaimForm error="That address has been sent several links today already. Check its inbox, and its spam folder, or try again tomorrow." />,
+      429,
+    );
   }
 
   c.executionCtx.waitUntil(sendClaimLink(c.env, email, userId));
