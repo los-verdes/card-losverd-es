@@ -408,6 +408,7 @@ Two pairings to keep in mind when reviewing, because the tests will tell you but
 - [`docs/migration-plan.md`](docs/migration-plan.md): the phase index the code's `Phase N` comments refer to -- a record of how the rewrite was built, kept because those comments cite it
 - [`docs/architecture-decisions.md`](docs/architecture-decisions.md): why Cloudflare, why TypeScript, why one DNS cutover, and the non-profit context those rest on
 - [`docs/cutover.md`](docs/cutover.md): the record of how `card.losverd.es` moved over, with the follow-ups still open from it
+- [`docs/rollout.md`](docs/rollout.md): turning on theme choice, year themes by default, and the store connection in production -- the order, the steps, and how to turn each back off
 - [`docs/membership-card-provenance.md`](docs/membership-card-provenance.md): **the specification** ([above](#start-here)). `just provenance-gdoc` prepares a copy for Google Docs, for the people who would rather comment there; the repository's copy stays the source of truth
 - [`docs/reporting.md`](docs/reporting.md): admin reports, the order history behind them, and the Slack sync
 - [`docs/bigcommerce-ingestion.md`](docs/bigcommerce-ingestion.md): webhook verification, the order-to-member mapping, scheduled resync

@@ -139,6 +139,8 @@ Members can choose a theme to change how their card looks: the colours and scarf
 - **Losing access** (e.g. leaving the Slack channel): the card falls back to the default theme.
 - **Choosing:** members on their card page; admins on the member's admin page (an admin's choice is logged; a member's
   own is not).
+- **Status:** choosing is open to admins only, and cards stay `classic` until chosen, in production and on staging; the
+  [rollout plan](rollout.md) covers opening choice to everyone and the "member since" default.
 
 ---
 
@@ -158,7 +160,7 @@ changes who is a member.
   - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
     never the recipient's. The store's email appears on the sign-in page only as a hint.
   - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
-  - **Status:** live on staging; off in production until released.
+  - **Status:** live on staging; off in production until released ([rollout plan](rollout.md)).
 
 ---
 
