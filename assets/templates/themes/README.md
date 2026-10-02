@@ -39,8 +39,8 @@ side. So the art's subject belongs in the top half, clear of the sides.
 ## How each year was made
 
 - **2020 (MMXX).** One column of pixels through the scarf's serape stripes.
-  Left running across, as the scarf hangs, and stretched to each shape: the
-  card (darkened 58%), the poster (darkened 35%) and the hero.
+  Left running across, as the scarf hangs, for the card (darkened 58%) and
+  the poster (darkened 35%); turned upright and stretched for the hero.
 - **2021 (inaugural season).** The scarf's back: the skull and its rings on
   black, darkened 45% on the card. The poster and hero show the skull and its
   rays at the top and middle respectively.
