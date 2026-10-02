@@ -93,10 +93,11 @@ id here rather than a year.
 - **Verdirojas (`verdirojas/`).** From two scarves. The card, poster and
   hero come from the Refugees Welcome scarf's vector print file. The card is
   the flower between REFUGEES and WELCOME, alone on black, darkened 40%. The
-  poster and hero are the raised fist from the scarf's end: upright on the
-  poster (darkened 25%), across the hero as the scarf runs. The thumbnail is
-  the watermelon slice between VERDI and ROJAS on the Verdirojas scarf, from
-  flatbed scans stitched together. The border is the watermelon's red.
+  poster and hero are the raised fist from the scarf's end, upright on both:
+  on the poster darkened 25%, on the hero the fist and forearm across the
+  scarf's full width. The thumbnail is the watermelon slice between VERDI
+  and ROJAS on the Verdirojas scarf, from flatbed scans stitched together.
+  The border is the watermelon's red.
 
 ## Adding a year
 
