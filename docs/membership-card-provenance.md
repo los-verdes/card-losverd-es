@@ -128,7 +128,8 @@ Only a manual override can be removed; an imported date can be corrected over bu
 
 ### Card Themes
 
-Members can choose a theme to change how their card looks.
+Members can choose a theme to change how their card looks: the colours and scarf artwork of a membership year, or
+`classic` (the original look).
 
 - **Who can use which:** the year of each membership they bought, their "member since" year, a subgroup's theme (e.g.
   Los Pringles) while they're in its Slack channel, and `classic`.
