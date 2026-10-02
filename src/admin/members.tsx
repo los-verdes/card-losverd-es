@@ -117,7 +117,7 @@ export function classify(raw: string): Lookup {
 }
 
 const SearchForm: FC<{ q: string }> = ({ q }) => (
-  <form method="get" action={MEMBERS_PATH} class="search">
+  <form method="get" action={MEMBERS_PATH}>
     <label for="q">Card number, email address, or order number</label>
     <input id="q" name="q" type="text" value={q} autocomplete="off" placeholder="LV-..." />
     <button type="submit">Find</button>
@@ -150,7 +150,7 @@ export function parseNameSearch(raw: string): NameSearch {
 }
 
 const NameSearchForm: FC<{ name: string }> = ({ name }) => (
-  <form method="get" action={MEMBERS_PATH} class="search">
+  <form method="get" action={MEMBERS_PATH}>
     <label for="name">Part of a name, or a Slack @handle</label>
     <input id="name" name="name" type="text" value={name} autocomplete="off" placeholder="@..." />
     <button type="submit">Find</button>

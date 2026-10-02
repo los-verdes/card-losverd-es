@@ -567,23 +567,6 @@ textarea:focus-visible {
 form:not(.inline, .order) button {
   margin-top: 0.75rem;
 }
-/* A search: its field and button on one row. */
-form.search {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-form.search label {
-  flex-basis: 100%;
-  margin: 0;
-}
-form.search input {
-  flex: 1 1 14rem;
-}
-form.search button {
-  margin-top: 0;
-}
 /* What takes a card or a sign-in away is in the danger colour. Revoking and
    expelling sit behind a disclosure, and ask once more on a page of their
    own before they happen. */
