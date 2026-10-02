@@ -24,6 +24,7 @@ const CONFIG: PassKitConfig = {
   teamIdentifier: "TEAMID1234",
   organizationName: "Los Verdes",
   webServiceURL: "https://card.losverd.es/passkit",
+  siteUrl: "https://card.losverd.es",
 };
 
 function makeMember(overrides: Partial<MemberPassInput> = {}): MemberPassInput {
@@ -377,6 +378,32 @@ describe("pass cache (R2)", () => {
     expect(
       await getCachedPass(env.ASSETS, "pass.es.losverd.membership", "LV-10023", 1000),
     ).toBeNull();
+  });
+});
+
+describe("the links on the back", () => {
+  it("links to this site and the group's, after what describes the card and before what to ask for", () => {
+    const back = JSON.parse(new TextDecoder().decode(buildPassJson(makeMember({ status: "expired" }), CONFIG))).generic.backFields;
+    const keys = back.map((f: { key: string }) => f.key);
+
+    expect(back.filter((f: { key: string }) => f.key === "card_site" || f.key === "los_verdes")).toEqual([
+      {
+        key: "card_site",
+        label: "Your membership card",
+        value: "card.losverd.es",
+        attributedValue: '<a href="https://card.losverd.es/">card.losverd.es</a>',
+        textAlignment: "PKTextAlignmentLeft",
+      },
+      {
+        key: "los_verdes",
+        label: "Los Verdes",
+        value: "www.losverdesatx.org",
+        attributedValue: '<a href="https://www.losverdesatx.org/">www.losverdesatx.org</a>',
+        textAlignment: "PKTextAlignmentLeft",
+      },
+    ]);
+    expect(keys.indexOf("card_site")).toBe(keys.indexOf("status") + 1);
+    expect(keys.indexOf("los_verdes")).toBe(keys.indexOf("card_version") - 1);
   });
 });
 

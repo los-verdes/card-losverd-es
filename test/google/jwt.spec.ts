@@ -20,6 +20,7 @@ const CONFIG: GoogleWalletConfig = {
   cardTitle: "Los Verdes",
   hexBackgroundColor: "#00B140",
   logoUri: "https://card.losverd.es/assets/google-logo-2.png",
+  siteUrl: "https://card.losverd.es",
 };
 
 function makeMember(overrides: Partial<MemberWalletInput> = {}): MemberWalletInput {
@@ -84,6 +85,7 @@ describe("googleWalletConfig", () => {
       cardTitle: "Los Verdes",
       hexBackgroundColor: "#00B140",
       logoUri: "https://staging.example.test/assets/google-logo-2.png",
+      siteUrl: "https://staging.example.test",
     });
   });
 
@@ -299,6 +301,15 @@ describe("the card theme on a Google pass (#333)", () => {
 
     expect(object.textModulesData).toContainEqual({ id: "card_theme", header: "Card theme", body: THEME.label });
     expect(ids.indexOf("card_theme")).toBe(ids.indexOf("card_version") - 1);
+  });
+
+  it("links to this site and the group's", () => {
+    expect(buildGenericObject(makeMember(), CONFIG).linksModuleData).toEqual({
+      uris: [
+        { id: "card_site", uri: "https://card.losverd.es/", description: "Your membership card" },
+        { id: "los_verdes", uri: "https://www.losverdesatx.org/", description: "Los Verdes" },
+      ],
+    });
   });
 
   it("leaves the theme out when it is not given one", () => {
