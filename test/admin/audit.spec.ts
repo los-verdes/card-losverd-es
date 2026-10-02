@@ -210,6 +210,7 @@ describe("reading it back", () => {
       ["card.suppressed", "Suppressed", "site automation"],
       ["admin.granted", "From the command line", "command line"],
       ["display_name.set", "Imported", "previous site import"],
+      ["member_since.cleared", "Removed by migration", "database migration"],
     ] as const;
     for (const [action, detail] of unnamed) {
       await recordAuditEvent(env, { action, subjectEmail: EMAIL, actorEmail: null, detail });

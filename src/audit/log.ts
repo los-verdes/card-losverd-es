@@ -137,6 +137,10 @@ export async function recordAuditEventBestEffort(
  *   members had set on the previous site (src/member/displayName.ts).
  * - A card name is only ever "repaired" by a database migration restoring a
  *   letter the previous site lost (src/db/migrations/0007_*.sql).
+ * - A card name or "member since" cleared with no actor was cleared by a
+ *   database migration retiring what the previous site left that changes
+ *   nothing (src/db/migrations/0016_*.sql): an admin or member clearing one
+ *   is always signed in.
  *
  * Anything else with no actor stays blank rather than claiming a cause
  * nobody recorded. Shown and exported as written here; the stored column
@@ -149,6 +153,8 @@ const UNNAMED_ACTORS: Partial<Record<AuditAction, string>> = {
   "admin.revoked": "command line",
   "display_name.set": "previous site import",
   "display_name.repaired": "database migration",
+  "display_name.cleared": "database migration",
+  "member_since.cleared": "database migration",
 };
 
 /** Who did it: the admin's or member's address, or what acted when no person did. */
