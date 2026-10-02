@@ -814,13 +814,13 @@ describe("GET /admin/reports/renewals (#397)", () => {
     const body = await (await get("/admin/reports/renewals")).text();
 
     expect(body).toContain("6 subscriptions as of <time datetime=\"2026-10-01T00:40:00Z\" title=\"2026-10-01 00:40:00 UTC\">11 hours ago (Sep 30, 2026, 7:40 PM CDT)</time>: 5 active, 1 cancelled.");
-    expect(section(body, "Card ran out, automatic renewal still on")).toContain("lapsed@example.com");
-    expect(section(body, "Renews after the card runs out")).toContain("late@example.com");
-    expect(section(body, "Renews after the card runs out")).toContain("31 days after the card runs out");
+    expect(section(body, "Membership card ran out, automatic renewal still on")).toContain("lapsed@example.com");
+    expect(section(body, "Renews after the membership card runs out")).toContain("late@example.com");
+    expect(section(body, "Renews after the membership card runs out")).toContain("31 days after the membership card runs out");
     const soon = section(body, "Renewing in the next 30 days");
     expect(soon).toContain("soon@example.com");
     expect(soon).not.toContain("later@example.com");
-    expect(section(body, "Cancelled or paused, card still current")).toContain("stopped@example.com");
+    expect(section(body, "Cancelled or paused, membership card still current")).toContain("stopped@example.com");
     expect(section(body, "Not matched to a member")).toMatch(/>16<\/td>/);
   });
 
