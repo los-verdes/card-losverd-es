@@ -117,7 +117,7 @@ that is tracked in the table below:
 ### "Member Since" Precedence
 
 Given that folks are passionate about their "member since" dates, we have options for adjusting this value. When
-determining the "Member Since" date, the uses this order:
+determining the "Member Since" date, the site uses this order:
 
 1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
 2. `Legacy Import Override` - Historical join dates imported from the old site
