@@ -22,6 +22,7 @@ export interface CardGroup {
 
 export const CARD_GROUPS: readonly CardGroup[] = [
   { id: "los-pringles", label: "Los Pringles", slackChannel: "los-pringles" },
+  { id: "verdirojas", label: "Verdirojas", slackChannel: "verdirojas" },
 ];
 
 /**
