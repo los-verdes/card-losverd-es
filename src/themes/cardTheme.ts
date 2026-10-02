@@ -211,8 +211,8 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     qrLabel: "#046a29",
     passText: "#ffffff",
   }),
-  // "Cinco uno dos": the skeleton hand and UNO, and the LOS VERDES roundel.
-  yearTheme(2025, "2025: Cinco uno dos", {
+  // "Cinco Uno Dos": the skeleton hand and UNO, and the LOS VERDES roundel.
+  yearTheme(2025, "2025: Cinco Uno Dos", {
     background: "#221e1f",
     border: "#00a550",
     text: "#ffffff",
@@ -220,8 +220,8 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     qrLabel: "#046a29",
     passText: "#ffffff",
   }),
-  // The 2026 kit's skull and lettering, which its scarf carries.
-  yearTheme(2026, "2026: Verde ATX listos", {
+  // The skull gaiter: the 2026 kit's skull and lettering.
+  yearTheme(2026, "2026: Skull Gaiter", {
     background: "#1d2429",
     border: "#00a843",
     text: "#ffffff",
