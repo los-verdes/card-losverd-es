@@ -812,8 +812,9 @@ const DEFAULT_LOOKBACK_HOURS = 12;
 // MiniBC subscription UPDATE while that is unsettled (#397), the member's
 // counted-orders SELECT, members SELECT, members UPDATE/INSERT,
 // notifyPassUpdated's devices SELECT) plus one DELETE per device APNs reports
-// unregistered, so a message makes at most ~120*6 + 2 watermark queries =
-// ~722 D1 queries against D1's 1,000 per Worker invocation
+// unregistered, so a message makes at most ~120*6 + 2 watermark queries + 1
+// for a full resync's progress (full_resyncs) = ~723 D1 queries against D1's
+// 1,000 per Worker invocation
 // (https://developers.cloudflare.com/d1/platform/limits/), leaving ~280 for
 // device DELETEs. Subrequests (1 list + <= 250 products calls + <= 120
 // metafield calls + D1 + APNs pushes + 1 queue send) stay far under Workers
@@ -988,7 +989,9 @@ export async function syncSubscriptionsEtl(
   };
 
   // A short page is the last one.
-  if (!sliceFull && orders.length < ORDERS_PAGE_SIZE) {
+  const lastPage = !sliceFull && orders.length < ORDERS_PAGE_SIZE;
+  if (fullResync) await recordFullResyncListing(env, cursor.chainStartedAt, totals, lastPage);
+  if (lastPage) {
     await setWatermark(env, SUBSCRIPTIONS_ETL_JOB_NAME, cursor.chainStartedAt);
     if (!fullResync) return { ordersProcessed };
     await reportFullResync(env, totals);
@@ -1033,6 +1036,41 @@ async function reportFullResync(
       `so ${one ? "that card had" : "those cards had"} drifted from ${one ? "its" : "their"} orders. ` +
       `Workers Logs has ${one ? "which" : "which ones"}: search for "Full resync: order".`,
   );
+}
+
+/**
+ * A full resync's progress through the store's order list, in its row of
+ * `full_resyncs` (src/db/migrations/0017_full_resyncs.sql), so the readiness
+ * page can show it. Totals so far, as the chain carries them; `done` marks
+ * the list read to its end, and the re-reads of what it left out starting.
+ */
+async function recordFullResyncListing(
+  env: Env,
+  startedAt: number,
+  totals: { ordersRead: number; cardsChanged: number },
+  done: boolean,
+): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO full_resyncs (started_at, orders_read, cards_changed, listed_at, rechecked, flagged, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)
+     ON CONFLICT (started_at) DO UPDATE SET
+       orders_read = excluded.orders_read, cards_changed = excluded.cards_changed,
+       listed_at = excluded.listed_at, rechecked = excluded.rechecked, flagged = excluded.flagged,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(startedAt, totals.ordersRead, totals.cardsChanged, done ? now : null, done ? 0 : null, now)
+    .run();
+}
+
+/** The re-reads' progress in the same row; `done` ends the resync. */
+async function recordFullResyncRecheck(env: Env, cursor: UnlistedRecheckCursor, done: boolean): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    "UPDATE full_resyncs SET rechecked = ?, flagged = ?, finished_at = ?, updated_at = ? WHERE started_at = ?",
+  )
+    .bind(cursor.reread, cursor.flagged, done ? now : null, now, cursor.since)
+    .run();
 }
 
 /** Progress through the orders a full resync did not see. */
@@ -1093,7 +1131,9 @@ export async function recheckUnlistedOrders(
   }
 
   const progress = { ...cursor, afterId, reread, flagged };
-  if (results.length === MAX_UNLISTED_RECHECKS_PER_MESSAGE) return { next: progress };
+  const done = results.length < MAX_UNLISTED_RECHECKS_PER_MESSAGE;
+  await recordFullResyncRecheck(env, progress, done);
+  if (!done) return { next: progress };
 
   console.info(`Full resync: re-read ${reread} orders the store's list did not return; ${flagged} newly flagged missing`);
   if (reread > 0) {

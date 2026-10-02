@@ -256,7 +256,13 @@ one is implemented fully:
     as missing. Each goes through
     `readOrderFromStore`, which flags an order the store no longer has
     (`flagOrderMissingFromStore`) and never emails anyone; the webhook path
-    that can email is not reachable from here.
+    that can email is not reachable from here;
+  * every message of both parts updates the run's row in `full_resyncs`
+    (migration `0017`): orders read and cards changed so far, then the
+    re-reads, then when it finished. The readiness page's "Full resync"
+    signal reads it, showing a running one's progress or how the last one
+    ended, and fires when a running one has made no progress for two hours,
+    or none has finished for eight days.
 
   Start a full resync by hand with `just etl-run <env> full-resync`, which
   enqueues `{ "type": "sync_subscriptions_etl", "loadAll": true }`.

@@ -1,7 +1,13 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEVICE_REPORTS_PER_DAY, UNHANDLED_ERRORS_PER_HOUR, evaluateSignals } from "../../src/ops/signals";
+import {
+  DEVICE_REPORTS_PER_DAY,
+  FULL_RESYNC_STALE_DAYS,
+  FULL_RESYNC_STALLED_HOURS,
+  UNHANDLED_ERRORS_PER_HOUR,
+  evaluateSignals,
+} from "../../src/ops/signals";
 import { REMINDER_AFTER_HOURS, RUNS_BEFORE_ALERTING, runOpsWatch } from "../../src/ops/watch";
 
 const NOW = new Date("2026-09-22T12:10:00Z");
@@ -50,13 +56,79 @@ afterEach(async () => {
   await env.DB.exec("DELETE FROM ops_alert_state");
   await env.DB.exec("DELETE FROM etl_sync_state");
   await env.DB.exec("DELETE FROM pass_device_logs");
+  await env.DB.exec("DELETE FROM full_resyncs");
 });
+
+/** A row of `full_resyncs`, times in hours before NOW; null leaves a step undone. */
+async function fullResync(row: {
+  started: number;
+  updated: number;
+  ordersRead?: number;
+  cardsChanged?: number;
+  listed?: number | null;
+  rechecked?: number | null;
+  flagged?: number | null;
+  finished?: number | null;
+}) {
+  const at = (hours: number | null | undefined) => (hours === null || hours === undefined ? null : NOW.getTime() - hours * HOUR);
+  await env.DB.prepare(
+    `INSERT INTO full_resyncs (started_at, orders_read, cards_changed, listed_at, rechecked, flagged, finished_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(at(row.started), row.ordersRead ?? 0, row.cardsChanged ?? 0, at(row.listed), row.rechecked ?? null, row.flagged ?? null, at(row.finished), at(row.updated))
+    .run();
+}
 
 describe("the signals", () => {
   it("are all quiet when nothing is wrong", async () => {
     const signals = await evaluateSignals(env, NOW);
 
-    expect(signals.map((s) => s.firing)).toEqual([false, false, false, false]);
+    expect(signals.map((s) => s.firing)).toEqual([false, false, false, false, false]);
+  });
+
+  describe("for the full resync", () => {
+    const signal = async () => (await evaluateSignals(env, NOW)).find((s) => s.name === "Full resync")!;
+
+    it("say it has never run, without firing, before one has", async () => {
+      expect(await signal()).toMatchObject({ firing: false, notable: true, detail: expect.stringContaining("Has never run here") });
+    });
+
+    it("say how the last one ended", async () => {
+      await fullResync({ started: 9, listed: 8, finished: 7, updated: 7, ordersRead: 2410, cardsChanged: 3, rechecked: 12, flagged: 1 });
+
+      expect(await signal()).toEqual({
+        name: "Full resync",
+        firing: false,
+        detail:
+          "The last one finished 7 hours ago: 2,410 membership orders read, 3 cards changed; 12 orders the store's list did not return re-read, 1 newly missing.",
+      });
+    });
+
+    it("show a running one's progress through the list, then through the re-reads, with the one before", async () => {
+      await fullResync({ started: 24 * 7, listed: 24 * 7, finished: 24 * 7 - 1, updated: 24 * 7 - 1, ordersRead: 2400, rechecked: 10, flagged: 0 });
+      await fullResync({ started: 1, updated: 0.1, ordersRead: 600, cardsChanged: 1 });
+
+      const listing = await signal();
+      expect(listing.firing).toBe(false);
+      expect(listing.detail).toContain("Running, started 1 hour ago, reading the store's order list: 600 membership orders so far, 1 card changed;");
+      expect(listing.detail).toContain("The previous one finished 7 days ago: 2,400 membership orders read");
+
+      await env.DB.prepare("UPDATE full_resyncs SET listed_at = ?, rechecked = 30 WHERE orders_read = 600").bind(NOW.getTime() - HOUR / 2).run();
+      expect((await signal()).detail).toContain("list read (600 membership orders, 1 card changed), now re-reading orders it did not return: 30 so far");
+    });
+
+    it("fire on a running one that has stopped moving", async () => {
+      await fullResync({ started: FULL_RESYNC_STALLED_HOURS + 3, updated: FULL_RESYNC_STALLED_HOURS + 1, ordersRead: 120 });
+
+      expect(await signal()).toMatchObject({ firing: true, detail: expect.stringContaining("it has probably stopped") });
+    });
+
+    it("fire when none has finished for over a week", async () => {
+      const old = FULL_RESYNC_STALE_DAYS * 24 + 1;
+      await fullResync({ started: old + 1, listed: old + 1, finished: old, updated: old, rechecked: 0, flagged: 0 });
+
+      expect(await signal()).toMatchObject({ firing: true, detail: expect.stringContaining("either the cron is not enabled") });
+    });
   });
 
   it("watch the MiniBC read only where there is a key to read with", async () => {
