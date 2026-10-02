@@ -80,13 +80,16 @@ A subgroup theme (`GROUP_THEMES`) is for the members of one subgroup
 (`CARD_GROUPS` in `src/themes/groups.ts`), and keeps its files under its own
 id here rather than a year.
 
-- **Los Pringles (`los-pringles/`).** The centre of the back of the Los
-  Pringles scarf, the all-seeing Pringle on black, with the flying Pringles
-  either side. The scarf's end panels, with their lettered names of honour
-  and their barcodes, are left out. The emblem itself is laid over
-  the scarf's copy from a separate, sharper source file of it (about 1,230
-  pixels across), so it stays crisp where the scarf image is soft. Darkened
-  35% on the card.
+- **Los Pringles (`los-pringles/`).** The back of the Los Pringles scarf,
+  from flatbed scans stitched together: the all-seeing Pringle at the centre
+  of its starfield, with all eight flying Pringles (mask, chef, money,
+  rainbow, cowboy, pirate, crown, agent) feathered in from both sides as on
+  the scarf. The emblem is laid over the scarf's copy from a separate,
+  sharper source file of it (about 1,230 pixels across), and the scan's dark
+  grey taken down to black to match it. The poster and hero add "if you
+  pring, you pring" in green, set in Yellowtail, a script close to the
+  scarf's own lettering. Darkened 35% on the card; the thumbnail is the
+  emblem.
 - **Verdirojas (`verdirojas/`).** From two scarves. The card is the
   VERDIROJAS side of the Verdirojas scarf, from flatbed scans stitched
   together: the watermelon slice between VERDI and ROJAS, on the keffiyeh
