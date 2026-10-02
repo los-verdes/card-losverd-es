@@ -14,6 +14,7 @@ import {
   ORDERS_PAGE_SIZE,
   minibcSubscriptionSettled,
   countMembershipUnits,
+  countRefundedMembershipUnits,
   deriveMembershipState,
   refreshMemberFromOrders,
   syncBigCommerceOrder,
@@ -1687,5 +1688,74 @@ describe("the MiniBC subscription behind an order (#397)", () => {
   it("has a client that reads no subscription from an empty answer", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
     expect(await new BigCommerceClient("store123", "token").getOrderSubscriptionId(1001)).toBeNull();
+  });
+});
+
+describe("countRefundedMembershipUnits", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("adds up what was refunded from membership line items only", () => {
+    // A refunded scarf is not a refunded membership.
+    expect(
+      countRefundedMembershipUnits(
+        makeProducts([
+          { quantity_refunded: 0 },
+          { sku: "SOME-OTHER-SKU", name: "Scarf", quantity_refunded: 2 },
+        ]),
+      ),
+    ).toBe(0);
+    expect(countRefundedMembershipUnits(makeProducts([{ quantity_refunded: "1" }, { quantity_refunded: 1 }]))).toBe(2);
+  });
+
+  it("is zero for an order with no membership on it", () => {
+    expect(countRefundedMembershipUnits(makeProducts([{ sku: "SOME-OTHER-SKU", quantity_refunded: 1 }]))).toBe(0);
+  });
+
+  it.each([[undefined], ["abc" as const], [-1], [0.5]])("is unknown, not zero, for a refunded quantity of %j", (quantityRefunded) => {
+    // "Didn't say" must not read as "nothing refunded": that would hand a
+    // partially refunded order a card on a guess.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(countRefundedMembershipUnits(makeProducts([{ quantity_refunded: quantityRefunded }]))).toBeNull();
+  });
+});
+
+describe("a Partially Refunded order", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await env.DB.exec("DELETE FROM membership_orders");
+    await env.DB.exec("DELETE FROM members");
+  });
+
+  const sync = async (membershipRefunded: number | undefined) => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const order = makeOrder({ status: "Partially Refunded" });
+    mockBigCommerceOrderFetch(
+      order,
+      makeProducts([
+        { quantity: 1, quantity_refunded: membershipRefunded },
+        { sku: "SOME-OTHER-SKU", name: "Scarf", quantity: 1, quantity_refunded: 1 },
+      ]),
+    );
+    await syncBigCommerceOrder(env, "store123", order.id);
+    return getMemberByEmail("jane.doe@example.com");
+  };
+
+  it("still counts when what was refunded was something else on it", async () => {
+    const member = await sync(0);
+
+    expect(member?.expiration_date).toBe("2027-01-15");
+    const row = await env.DB.prepare("SELECT membership_units_refunded FROM membership_orders").first<{ membership_units_refunded: number }>();
+    expect(row?.membership_units_refunded).toBe(0);
+  });
+
+  it("stops counting once its membership was refunded", async () => {
+    expect((await sync(1))?.expiration_date ?? null).toBeNull();
+  });
+
+  it("doesn't count while the refund is unknown", async () => {
+    expect((await sync(undefined))?.expiration_date ?? null).toBeNull();
   });
 });

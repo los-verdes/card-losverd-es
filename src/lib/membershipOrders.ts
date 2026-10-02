@@ -86,4 +86,21 @@ export const MEMBER_IN_GOOD_STANDING = `NOT EXISTS (
      WHERE bp.email = membership_orders.member_email
   )`;
 
-export const COUNTS_AS_MEMBERSHIP = `COALESCE(frozen_counts, lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)}), 0)`;
+/**
+ * A paid order that has had part of its value refunded since. It still
+ * counts while it still holds a membership: BigCommerce reports each line
+ * item's `quantity_refunded`, and ingestion stores how many of the order's
+ * memberships were refunded (`membership_units_refunded`). What a membership
+ * order loses is nearly always merchandise -- on 2026-10-02, three orders
+ * checked by hand had all kept their memberships -- and leaving every
+ * partially refunded order out had cost those members a year of their
+ * history. An order whose refund is unknown (recorded before the column
+ * existed, until its next read) doesn't count, as before.
+ *
+ * Not in `PAID_BIGCOMMERCE_STATUSES`, which the new-order card email reads
+ * on its own: a partially refunded order was paid, and emailed about, before
+ * anything was refunded.
+ */
+export const PARTIALLY_REFUNDED_STATUS = "partially refunded";
+
+export const COUNTS_AS_MEMBERSHIP = `COALESCE(frozen_counts, (lower(status) IN (${list(PAID_BIGCOMMERCE_STATUSES)}) OR (lower(status) = '${PARTIALLY_REFUNDED_STATUS}' AND membership_units > membership_units_refunded)), 0)`;
