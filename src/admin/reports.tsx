@@ -16,6 +16,7 @@ import type { Env } from "../index";
 import { toCsv } from "../lib/csv";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { AdminPage, MemberLink, cellStyle } from "./layout";
+import { BarChart, type BarGroup, type BarSeries } from "./barChart";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
 import { OrderLink } from "./orders";
@@ -619,24 +620,22 @@ reports.get("/over-time", async (c) => {
           .filter((point) => point.day.startsWith(`${year}-`))
           .map((point) => ({ x: Math.min((Date.parse(point.day) - yearStart(year)) / YEAR_MS, 1), value: point.members })),
       }));
-  // Orders are counted per month, so each is placed mid-month.
+  // Orders are counts per month, so they are bars: grouped by month, one
+  // per year compared, or one per month across the whole timeline, labelled
+  // at each January. A month still to come has no bar.
   const midMonth = (year: number, month: number) => Date.UTC(year, month, 15);
-  const orderLines: LineSeries[] = timeline
-    ? [{
-        label: allYears,
-        points: available.flatMap((year) =>
-          Array.from({ length: monthsOf(year) }, (_, month) => ({
-            x: Math.min(Math.max(throughHistory(midMonth(year, month)), 0), 1),
-            value: ordersIn.get(yearMonth(year, month)) ?? 0,
-          })),
-        ),
-      }]
+  const timelineMonths = available.flatMap((year) => Array.from({ length: monthsOf(year) }, (_, month) => ({ year, month })));
+  const orderGroups: BarGroup[] = timeline
+    ? timelineMonths.map(({ year, month }) => ({
+        label: month === 0 ? String(year) : "",
+        title: `${MONTH_NAMES[month].slice(0, 3)} ${year}`,
+      }))
+    : MONTH_NAMES.map((name) => ({ label: name.slice(0, 3), title: name.slice(0, 3) }));
+  const orderBars: BarSeries[] = timeline
+    ? [{ label: allYears, values: timelineMonths.map(({ year, month }) => ordersIn.get(yearMonth(year, month)) ?? 0) }]
     : years.map((year) => ({
         label: String(year),
-        points: Array.from({ length: monthsOf(year) }, (_, month) => ({
-          x: (midMonth(2025, month) - yearStart(2025)) / YEAR_MS,
-          value: ordersIn.get(yearMonth(year, month)) ?? 0,
-        })),
+        values: MONTH_NAMES.map((_, month) => (month < monthsOf(year) ? (ordersIn.get(yearMonth(year, month)) ?? 0) : null)),
       }));
   const xLabels = timeline
     ? available.map((year) => ({ x: throughHistory(yearStart(year)), text: String(year) })).filter((label) => label.x >= 0)
@@ -712,9 +711,10 @@ reports.get("/over-time", async (c) => {
 
       <h2>Membership orders</h2>
       <p class="muted">Orders that count towards a membership, in the month they were placed (UTC).</p>
-      <LineChart
-        series={orderLines}
-        xLabels={xLabels}
+      <BarChart
+        groups={orderGroups}
+        series={orderBars}
+        unit={["order", "orders"]}
         description={`Membership orders per month ${which}; the table below has each month's figure.`}
       />
       <ReportTable

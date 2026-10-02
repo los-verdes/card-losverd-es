@@ -224,6 +224,15 @@ table[data-sortable] th[aria-sort="descending"] button.sort::after {
 .line-chart .series-4 { stroke: #14b8a6; background: #14b8a6; }
 .line-chart .series-5 { stroke: #8b8b8b; background: #8b8b8b; }
 
+/* The orders chart's bars (src/admin/barChart.tsx), in the same colours. */
+.bar-chart rect.latest { fill: var(--verde-ink); stroke: none; }
+.bar-chart rect.series-0 { fill: #3b82f6; stroke: none; }
+.bar-chart rect.series-1 { fill: #f59e0b; stroke: none; }
+.bar-chart rect.series-2 { fill: #a855f7; stroke: none; }
+.bar-chart rect.series-3 { fill: #ef4444; stroke: none; }
+.bar-chart rect.series-4 { fill: #14b8a6; stroke: none; }
+.bar-chart rect.series-5 { fill: #8b8b8b; stroke: none; }
+
 /* No image, whatever its intrinsic size, may be wider than what holds it.
    The card carries its own sizing inline as well; this is the net for
    anything added later that forgets. */

@@ -50,6 +50,15 @@ export function ticks(max: number): number[] {
 /** Colours for the lines, oldest first; the last series is always verde. */
 const PALETTE_SIZE = 6;
 
+/**
+ * The colour class for series `i` of `count`: the latest is verde, earlier
+ * ones walk back through the palette. Shared with the bar chart
+ * (src/admin/barChart.tsx), so a year is the same colour on both charts.
+ */
+export function seriesColour(i: number, count: number): string {
+  return i === count - 1 ? "latest" : `series-${(count - 2 - i) % PALETTE_SIZE}`;
+}
+
 export const LineChart: FC<{
   series: LineSeries[];
   xLabels: { x: number; text: string }[];
@@ -60,8 +69,7 @@ export const LineChart: FC<{
   const top = gridlines[gridlines.length - 1];
   const x = (fraction: number) => MARGIN.left + fraction * PLOT_WIDTH;
   const y = (value: number) => MARGIN.top + PLOT_HEIGHT - (value / top) * PLOT_HEIGHT;
-  const colour = (i: number) =>
-    i === series.length - 1 ? "latest" : `series-${(series.length - 2 - i) % PALETTE_SIZE}`;
+  const colour = (i: number) => seriesColour(i, series.length);
 
   return (
     <figure class="line-chart">
