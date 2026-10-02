@@ -144,14 +144,15 @@ export const CLASSIC_THEME: CardTheme = {
  * and pass images, and has artwork on every surface under
  * `templates/themes/<year>/` (how each was made: assets/templates/themes/README.md).
  */
-function yearTheme(year: number, label: string, colors: CardThemeColors): CardTheme {
+function yearTheme(year: number, label: string, colors: CardThemeColors, version = 2): CardTheme {
   const prefix = `templates/themes/${year}/`;
   return {
     id: String(year),
     label,
     year,
     // 2: poster art for Apple, and Google's hero at its 2026 size (#384).
-    version: 2,
+    // A year whose own art changes since passes its own.
+    version,
     colors,
     assets: CLASSIC_THEME.assets,
     artwork: {
@@ -211,7 +212,8 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     qrLabel: "#046a29",
     passText: "#ffffff",
   }),
-  // "Cinco Uno Dos": the skeleton hand and UNO, and the LOS VERDES roundel.
+  // "Cinco Uno Dos": the three skeleton hands, and the LOS VERDES roundel.
+  // 3: the card's art, from UNO alone to all three hands.
   yearTheme(2025, "2025: Cinco Uno Dos", {
     background: "#221e1f",
     border: "#00a550",
@@ -219,7 +221,7 @@ export const YEAR_THEMES: readonly CardTheme[] = [
     secondaryText: "#d8f5e4",
     qrLabel: "#046a29",
     passText: "#ffffff",
-  }),
+  }, 3),
   // The skull gaiter: the 2026 kit's skull and lettering.
   yearTheme(2026, "2026: Skull Gaiter", {
     background: "#1d2429",
