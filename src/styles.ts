@@ -512,6 +512,12 @@ body.member form:not(.inline, .order) {
   margin-inline: auto;
   text-align: left;
 }
+/* A form that is only a button (disconnect the store account, log out, go
+   back to the default theme) has no fields to line up, so it stays centred
+   like the rest of the column. */
+body.member form:not(.inline, .order):not(:has(label)) {
+  text-align: center;
+}
 form:not(.inline, .order) label {
   display: block;
   font-weight: 600;
