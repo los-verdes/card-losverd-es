@@ -229,7 +229,9 @@ export const MemberSinceSection: FC<{ subject: MemberSinceSubject; today: string
           max={today}
           required
         />
-        <label for="member_since_note">Why (optional, kept on the record)</label>
+        <label for="member_since_note">
+          Why<span class="hint">Optional · Kept on the record</span>
+        </label>
         <input id="member_since_note" type="text" name="note" maxlength={MAX_NOTE_LENGTH} autocomplete="off" />
         <button type="submit">Save correction</button>
       </form>

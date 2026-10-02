@@ -512,8 +512,37 @@ describe("revoking and expelling from the member page", () => {
     expect(body).toContain("Expel this person from the group");
   });
 
-  it("revokes a membership, with the reason kept", async () => {
+  it("asks once more before revoking, saying what it does, with the reason carried over", async () => {
     const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct" });
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(await isRevoked(env, CARD)).toBe(false);
+    expect(body).toContain("Revoke this membership?");
+    expect(body).toContain("stops counting as current");
+    expect(body).toContain('name="confirmed" value="1"');
+    expect(body).toContain('value="conduct"');
+    expect(body).toContain(`href="/admin/members?q=jane%40example.com">Cancel</a>`);
+  });
+
+  it("asks once more before expelling, too", async () => {
+    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason" });
+
+    expect(res.status).toBe(200);
+    expect(await isExpelled(env, EMAIL)).toBe(false);
+    expect(await res.text()).toContain("can no longer sign in here");
+  });
+
+  it("puts both behind a disclosure on the member page, in the danger colour", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body.match(/<details class="danger-zone">/g)).toHaveLength(2);
+    expect(body).toContain('<button type="submit" class="danger">Revoke this membership</button>');
+    expect(body).not.toContain('name="confirmed"');
+  });
+
+  it("revokes a membership, with the reason kept", async () => {
+    const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct", confirmed: "1" });
 
     expect(res.status).toBe(303);
     expect(await isRevoked(env, CARD)).toBe(true);
@@ -543,7 +572,7 @@ describe("revoking and expelling from the member page", () => {
   });
 
   it("expels a person, with the reason kept", async () => {
-    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason" });
+    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason", confirmed: "1" });
 
     expect(res.headers.get("Location")).toContain("saved=expelled");
     expect(await isExpelled(env, EMAIL)).toBe(true);
