@@ -57,6 +57,12 @@ export interface BigCommerceOrderProduct {
    * thing that fills it, and a response without it must not read as zero.
    */
   quantity?: number | string;
+  /**
+   * How many of this line item have been refunded. Read for membership line
+   * items only, to tell a partially refunded order that kept its membership
+   * from one that lost it. Optional for the same reason as `quantity`.
+   */
+  quantity_refunded?: number | string;
 }
 
 // BigCommerce's maximum `limit` for list endpoints
@@ -292,6 +298,34 @@ function membershipLineItemQuantity(
     return 1;
   }
   return quantity;
+}
+
+/**
+ * How many of an order's memberships have been refunded, across every
+ * membership line item, from BigCommerce's own `quantity_refunded`. What
+ * lets a `Partially Refunded` order keep counting while the refund was of
+ * something else (`COUNTS_AS_MEMBERSHIP`).
+ *
+ * Null when any membership line item doesn't say, or says something
+ * unreadable: "don't know" is not "none refunded", and the rule treats it
+ * as not counting. The opposite of `quantity`'s reading, because there a
+ * wrong guess fills a report and here it would hand out a card.
+ */
+export function countRefundedMembershipUnits(products: BigCommerceOrderProduct[]): number | null {
+  let refunded = 0;
+  for (const product of products) {
+    if (!MEMBERSHIP_SKUS.has(product.sku)) continue;
+    const raw = product.quantity_refunded;
+    const quantity = typeof raw === "number" ? raw : raw === undefined ? NaN : Number(String(raw).trim());
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      console.warn(
+        `countRefundedMembershipUnits(): membership line item ${product.id} has no readable quantity_refunded ${JSON.stringify(raw)}, treating the refund as unknown`,
+      );
+      return null;
+    }
+    refunded += quantity;
+  }
+  return refunded;
 }
 
 /** The order's first membership line item, if it has one. */
@@ -614,6 +648,7 @@ async function applyMembershipOrder(
   order: BigCommerceOrder,
   membership: BigCommerceOrderProduct,
   membershipUnits: number,
+  refundedUnits: number | null,
 ): Promise<AppliedOrder> {
   if (membershipUnits > 1) {
     await alertOnNewExtraMemberships(env, order.id, membershipUnits);
@@ -623,6 +658,7 @@ async function applyMembershipOrder(
     order,
     membership,
     membershipUnits,
+    refundedUnits,
   );
   const { memberEmail } = recorded;
   await recordOrderSubscription(env, client, order, recorded);
@@ -746,6 +782,7 @@ async function readOrder(
     order,
     membership,
     countMembershipUnits(products),
+    countRefundedMembershipUnits(products),
   );
   return { kind: "applied", order, memberEmail };
 }
@@ -925,7 +962,7 @@ export async function syncSubscriptionsEtl(
       const products = await client.getOrderProducts(order.id);
       const membership = resolveMembership(products);
       return membership
-        ? applyMembershipOrder(env, client, order, membership, countMembershipUnits(products))
+        ? applyMembershipOrder(env, client, order, membership, countMembershipUnits(products), countRefundedMembershipUnits(products))
         : null;
     });
     if (applied) {

@@ -58,13 +58,14 @@ active revocation or expulsion flag (`isMembershipCurrent()`).
 
 Orders must carry an explicit paid status (`PAID_BIGCOMMERCE_STATUSES`) to grant membership:
 
-- **Qualifying:** `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`, `Shipped`, `Completed`.
-- **Non-Qualifying:** `Incomplete`, `Pending`, `Awaiting Payment`, `Refunded`, `Partially Refunded`, `Cancelled`,
-  `Declined`, `Disputed`.
+- **Qualifying:** `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`, `Shipped`, `Completed`, and
+  `Partially Refunded` while the membership itself wasn't refunded.
+- **Non-Qualifying:** `Incomplete`, `Pending`, `Awaiting Payment`, `Refunded`, `Cancelled`, `Declined`, `Disputed`.
 
-*Note on partial refunds:* Partially Refunded orders do not grant membership because the system cannot verify which line
-item was refunded. This policy should be monitored, as it risks revoking membership for multi-item orders where only
-merchandise was refunded.
+*Note on partial refunds:* the store reports how much of each line item was refunded, so a Partially Refunded order
+counts while its membership wasn't refunded (a refunded scarf leaves the membership in place) and stops counting once it
+was. Until an order is next read from the store, which the weekly full sync does for every order, its refund is unknown
+and it doesn't count.
 
 ### Membership Lifecycle
 
@@ -263,8 +264,9 @@ Administrative interventions are permanently recorded in the audit log (`/admin/
    - Alternatives: Delay activation until processed (`Shipped` or `Completed` statuses). A no-merch order has nothing to
      ship, so it would activate only once marked `Completed`.
 2. **Do refunds revoke membership retroactively?**
-   - Current: Yes; order stops counting immediately upon refund status.
-   - Alternatives: Retain active status through the season for partial refunds.
+   - Current: Yes, when the membership is what was refunded: the order stops counting at once. Refunds of other items on
+     the order leave it counting.
+   - Alternatives: Keep a refunded membership current for the rest of its year.
 3. **How should early renewals extend terms?**
    - Current: 365 days from the purchase date (losing overlapping days).
    - Alternatives: Add 365 days to the previous `expires_on` date.
