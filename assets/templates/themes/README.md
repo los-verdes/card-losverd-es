@@ -100,5 +100,6 @@ id here rather than a year.
 A pull request with that year's files here and an entry in `YEAR_THEMES`:
 its label, and colours whose text passes the contrast check. The Apple and
 Google passes use the theme's background colour as it is, so pick it from the
-artwork's own ground. Bump a theme's `version` whenever its images or
-colours change, so cached passes are rebuilt and Google fetches the new hero.
+artwork's own ground. Nothing needs bumping when a theme's images or
+colours change: its version is a hash of them (`src/themes/fingerprint.ts`),
+so cached passes are rebuilt and Google fetches the new hero by themselves.

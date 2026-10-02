@@ -1,7 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
-import { PUBLIC_ASSETS, publicAssets } from "../src/assets";
+import { PUBLIC_ASSETS } from "../src/assets";
 import { CLASSIC_THEME, GROUP_THEMES, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
@@ -63,19 +63,27 @@ describe("GET /assets/:name", () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining(CREST_KEY));
   });
 
-  it("lists the Google logo, the crest older passes name, and each theme's hero image", () => {
+  it("lists the Google logo and the crest older passes name", () => {
     expect(PUBLIC_ASSETS).toEqual({
       "crest.png": CREST_KEY,
       "google-logo.png": "templates/google/logo.png",
       "google-logo-2.png": "templates/google/logo.png",
-      ...Object.fromEntries(
-        [...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [`hero-${theme.id}-${theme.version}.png`, theme.artwork.googleHero]),
-      ),
     });
   });
 
+  it("serves each theme's hero at any version, since Google may hold an address from before its art changed", async () => {
+    for (const theme of [...YEAR_THEMES, ...GROUP_THEMES]) {
+      const res = await get(`/assets/hero-${theme.id}-0a1b2c3d4e5f.png`);
+      expect(res.status, theme.id).toBe(200);
+      await res.body?.cancel();
+    }
+    expect((await get("/assets/hero-2025-2.png")).status).toBe(200);
+    expect((await get("/assets/hero-classic-0a1b2c3d4e5f.png")).status).toBe(404);
+    expect((await get("/assets/hero-nope-0a1b2c3d4e5f.png")).status).toBe(404);
+  });
+
   it("serves a year theme's hero image, which Google fetches for the pass", async () => {
-    const res = await get(googleHeroPath(YEAR_THEMES[0])!);
+    const res = await get(googleHeroPath(YEAR_THEMES[0], "0a1b2c3d4e5f")!);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("image/png");
@@ -229,28 +237,3 @@ describe("the Google pass logo", () => {
   });
 });
 
-describe("publicAssets", () => {
-  it("publishes only the logos when no theme has a hero image", () => {
-    expect(publicAssets([CLASSIC_THEME])).toEqual({
-      "crest.png": "templates/card/crest.png",
-      "google-logo.png": "templates/google/logo.png",
-      "google-logo-2.png": "templates/google/logo.png",
-    });
-  });
-
-  it("publishes each theme's Google hero image under its versioned name", () => {
-    const theme = {
-      ...CLASSIC_THEME,
-      id: "2026",
-      version: 2,
-      artwork: { googleHero: "templates/themes/2026/google-hero.png" },
-    };
-
-    expect(publicAssets([CLASSIC_THEME, theme])).toEqual({
-      "crest.png": "templates/card/crest.png",
-      "google-logo.png": "templates/google/logo.png",
-      "google-logo-2.png": "templates/google/logo.png",
-      "hero-2026-2.png": "templates/themes/2026/google-hero.png",
-    });
-  });
-});

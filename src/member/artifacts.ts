@@ -24,6 +24,7 @@ import { CARD_IMAGE_VERSION } from "../cardimage/template";
 import type { Env } from "../index";
 import { fetchTemplate } from "../templates";
 import { resolveCardTheme } from "../themes/choice";
+import { themeVersion } from "../themes/fingerprint";
 import { applePosterMode, posterAssets } from "../passkit/poster";
 import { buildVerifyPassUrl } from "../lib/passSignature";
 import {
@@ -307,7 +308,8 @@ export async function getApplePassBundle(
   // as the theme, so the cache tag carries it: switching the setting must not
   // serve passes built before the switch.
   const posterMode = applePosterMode(env);
-  const cacheTag = posterMode === "off" ? themeCacheTag(theme) : `${themeCacheTag(theme)}+poster-${posterMode}`;
+  const themeTag = themeCacheTag(theme, await themeVersion(env, theme));
+  const cacheTag = posterMode === "off" ? themeTag : `${themeTag}+poster-${posterMode}`;
   const cached = await getCachedPass(
     env.ASSETS,
     passTypeIdentifier,
@@ -375,6 +377,11 @@ export async function getApplePassBundle(
   return bundle;
 }
 
+/** A theme's Google branding, its hero addressed by the theme's current version. */
+async function googleWalletThemeFor(env: Env, theme: CardTheme) {
+  return googleWalletTheme(theme, env.PUBLIC_BASE_URL, await themeVersion(env, theme));
+}
+
 /** Where a member's drawn card is cached in R2, one per theme it has been drawn in. */
 function cardCacheKey(memberId: string, themeId: string): string {
   return `cache/card/${memberId}/${themeId}.png`;
@@ -385,10 +392,10 @@ function cardCacheKey(memberId: string, themeId: string): string {
  * (`last_updated_at`): the drawing's version, the theme's, and a fingerprint
  * of the QR code's link, which changes if the key that signs it does.
  */
-async function cardCacheTag(theme: CardTheme, qrUrl: string): Promise<string> {
+async function cardCacheTag(env: Env, theme: CardTheme, qrUrl: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(qrUrl)));
   const fingerprint = [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${CARD_IMAGE_VERSION}|${themeCacheTag(theme)}|${fingerprint}`;
+  return `${CARD_IMAGE_VERSION}|${themeCacheTag(theme, await themeVersion(env, theme))}|${fingerprint}`;
 }
 
 /**
@@ -412,7 +419,7 @@ export async function renderCardImage(
   const theme = requestedTheme ?? (await resolveCardTheme(env, member));
   const qrUrl = await verifyUrl(env, member);
   const key = cardCacheKey(member.member_id, theme.id);
-  const tag = await cardCacheTag(theme, qrUrl);
+  const tag = await cardCacheTag(env, theme, qrUrl);
   try {
     const cached = await env.ASSETS.get(key);
     if (cached?.customMetadata?.lastUpdatedAt === String(member.last_updated_at) && cached.customMetadata?.tag === tag) {
@@ -505,7 +512,7 @@ async function googleWalletObjectFor(
       verifyUrl: await verifyUrl(env, member),
     },
     config,
-    googleWalletTheme(await resolveCardTheme(env, member), env.PUBLIC_BASE_URL),
+    await googleWalletThemeFor(env, await resolveCardTheme(env, member)),
   );
   return { config, credentials, object };
 }

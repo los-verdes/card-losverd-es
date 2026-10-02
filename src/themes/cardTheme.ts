@@ -108,12 +108,6 @@ export interface CardTheme {
    * src/themes/groups.ts); absent for any other theme.
    */
   group?: string;
-  /**
-   * Bump when this theme's colours or images change. Cached Apple passes are
-   * tagged with it, so a changed theme is not served from an old cache (the
-   * same discipline as `PASS_CONTENT_VERSION`, for one theme rather than all).
-   */
-  version: number;
   colors: CardThemeColors;
   assets: CardThemeAssets;
   artwork: CardThemeArtwork;
@@ -122,7 +116,6 @@ export interface CardTheme {
 export const CLASSIC_THEME: CardTheme = {
   id: "classic",
   label: "Classic",
-  version: 1,
   colors: {
     background: "#00b140",
     border: "#046a29",
@@ -144,8 +137,6 @@ interface YearThemeSpec {
   year: number;
   label: string;
   colors: CardThemeColors;
-  /** `CardTheme.version`; 2 unless this year's own art or colours have changed since. */
-  version?: number;
 }
 
 /**
@@ -153,14 +144,12 @@ interface YearThemeSpec {
  * and pass images, and has artwork on every surface under
  * `templates/themes/<year>/` (how each was made: assets/templates/themes/README.md).
  */
-function yearTheme({ year, label, colors, version = 2 }: YearThemeSpec): CardTheme {
+function yearTheme({ year, label, colors }: YearThemeSpec): CardTheme {
   const prefix = `templates/themes/${year}/`;
   return {
     id: String(year),
     label,
     year,
-    // 2: poster art for Apple, and Google's hero at its 2026 size (#384).
-    version,
     colors,
     assets: CLASSIC_THEME.assets,
     artwork: {
@@ -244,8 +233,6 @@ export const YEAR_THEMES: readonly CardTheme[] = [
   yearTheme({
     year: 2025,
     label: "2025: Cinco Uno Dos",
-    // 3: the card's art, from UNO alone to all three hands.
-    version: 3,
     colors: {
       background: "#221e1f",
       border: "#00a550",
@@ -281,7 +268,6 @@ export const GROUP_THEMES: readonly CardTheme[] = [
     id: "los-pringles",
     label: "Los Pringles",
     group: "los-pringles",
-    version: 1,
     colors: {
       background: "#000000",
       border: "#1ac64a",
@@ -305,7 +291,6 @@ export const GROUP_THEMES: readonly CardTheme[] = [
     id: "verdirojas",
     label: "Verdirojas",
     group: "verdirojas",
-    version: 1,
     colors: {
       background: "#000000",
       border: "#c33e46",
@@ -329,21 +314,32 @@ export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES,
 
 /**
  * The public file name of a theme's Google hero image, served by
- * `src/assets.ts`. It carries the theme's version, because Google keeps its
- * own copy of an image and fetches it again only when the address changes.
+ * `src/assets.ts`. It carries the theme's version (`themeVersion()` in
+ * src/themes/fingerprint.ts), because Google keeps its own copy of an image
+ * and fetches it again only when the address changes.
  */
-export function googleHeroFileName(theme: CardTheme): string {
-  return `hero-${theme.id}-${theme.version}.png`;
+export function googleHeroFileName(theme: CardTheme, version: string): string {
+  return `hero-${theme.id}-${version}.png`;
 }
 
 /** The public path of a theme's Google hero image, or `null` for a theme without one. */
-export function googleHeroPath(theme: CardTheme): string | null {
-  return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme)}` : null;
+export function googleHeroPath(theme: CardTheme, version: string): string | null {
+  return theme.artwork.googleHero ? `/assets/${googleHeroFileName(theme, version)}` : null;
 }
 
-/** Tags a cached pass with the theme it was built in; see `CardTheme.version`. */
-export function themeCacheTag(theme: CardTheme): string {
-  return `${theme.id}@${theme.version}`;
+/**
+ * The theme a hero file name was issued for: any version, since Google may
+ * hold an address from before the art last changed, and the current hero is
+ * the right answer to it.
+ */
+export function themeForHeroFileName(name: string, themes: readonly CardTheme[] = CARD_THEMES): CardTheme | null {
+  const match = /^hero-(.+)-[0-9a-z]+\.png$/.exec(name);
+  return (match && themes.find((theme) => theme.id === match[1] && theme.artwork.googleHero)) || null;
+}
+
+/** Tags a cached pass or card with the theme it was built in, at its version (`themeVersion()`). */
+export function themeCacheTag(theme: CardTheme, version: string): string {
+  return `${theme.id}@${version}`;
 }
 
 /** `#rrggbb` as Apple's `rgb(r, g, b)`, the only colour form a pass accepts. */
