@@ -200,6 +200,16 @@ describe("drawn cards, cached in R2", () => {
     expect((await env.ASSETS.head(KEY))?.httpMetadata?.contentType).toBe("image/png");
   });
 
+  it("keeps every theme's card when the record moves without the card changing, as choosing a theme moves it", async () => {
+    await renderCardImage(env, await member());
+    const other: CardTheme = { ...CLASSIC_THEME, id: "other", colors: { ...CLASSIC_THEME.colors, background: "#123456" } };
+    await renderCardImage(env, await member(), other);
+    await env.DB.prepare("UPDATE members SET last_updated_at = 99 WHERE member_id = 'BC-1'").run();
+
+    expect(await drew(async () => renderCardImage(env, await member()))).toBe(false);
+    expect(await drew(async () => renderCardImage(env, await member(), other))).toBe(false);
+  });
+
   it("draws it again once the member has changed", async () => {
     const before = await renderCardImage(env, await member());
     await env.DB.prepare("UPDATE members SET first_name = 'Janet', last_updated_at = 2 WHERE member_id = 'BC-1'").run();

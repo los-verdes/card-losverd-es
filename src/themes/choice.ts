@@ -82,6 +82,7 @@ export async function setCardTheme(
   source: ThemeChoiceSource,
   setBy: number | null,
   themes: readonly CardTheme[] = CARD_THEMES,
+  defer?: Defer,
 ): Promise<void> {
   const options = await getThemeOptions(env, member, themes);
   if (!options.themes.some((theme) => theme.id === themeId)) {
@@ -108,7 +109,7 @@ export async function setCardTheme(
       detail: `"${label(themeId, themes)}"` + (previous ? ` (was "${label(previous.theme_id, themes)}")` : ""),
     });
   }
-  await touchAndNotify(env, key);
+  await touchAndNotify(env, key, defer);
 }
 
 /**
@@ -121,6 +122,7 @@ export async function clearCardTheme(
   source: ThemeChoiceSource,
   clearedBy: number | null,
   themes: readonly CardTheme[] = CARD_THEMES,
+  defer?: Defer,
 ): Promise<void> {
   const key = email.trim().toLowerCase();
   const previous = await getCardThemeChoice(env, key);
@@ -133,7 +135,7 @@ export async function clearCardTheme(
       detail: previous ? `Was "${label(previous.theme_id, themes)}"` : "Card theme cleared",
     });
   }
-  await touchAndNotify(env, key);
+  await touchAndNotify(env, key, defer);
 }
 
 /**
@@ -155,16 +157,29 @@ export function effectiveTheme(options: ThemeOptions, choice: string | null | un
 }
 
 /**
+ * Hands work to the runtime to finish after the response (`waitUntil`), so a
+ * member is not kept waiting on it.
+ */
+export type Defer = (work: Promise<unknown>) => void;
+
+/**
  * Tells installed passes the card changed. The choice lives outside
  * `members`, so nothing else moves `last_updated_at`, which is what Apple's
  * polling compares against. Also used when a card's theme changes without a
  * choice changing: somebody leaving the subgroup whose theme they had chosen
  * (src/slack/channelMembers.ts).
+ *
+ * The record is touched before returning; telling the passes, an APNs push
+ * and a call to Google that took over two seconds of a member's save
+ * (2026-10-02), is left to `defer` when given one.
  */
-export async function touchAndNotify(env: Env, email: string): Promise<void> {
+export async function touchAndNotify(env: Env, email: string, defer?: Defer): Promise<void> {
   await env.DB.prepare("UPDATE members SET last_updated_at = unixepoch('subsec') * 1000 WHERE email = ?")
     .bind(email)
     .run();
   const member = await getMemberByEmail(env, email);
-  if (member) await notifyWalletsUpdated(env, member.member_id);
+  if (!member) return;
+  const notify = notifyWalletsUpdated(env, member.member_id);
+  if (defer) defer(notify.catch((error) => console.error("Telling passes of a theme change failed", { error: String(error) })));
+  else await notify;
 }
