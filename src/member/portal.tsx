@@ -254,7 +254,9 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
           Connected. "Membership card" on the Los Verdes store brings you straight here, without signing in again.
         </p>
         <form method="post" action={STORE_DISCONNECT_PATH}>
-          <button type="submit">Disconnect my store account</button>
+          <button type="submit" class="quiet danger">
+            Disconnect my store account
+          </button>
         </form>
       </>
     ) : (

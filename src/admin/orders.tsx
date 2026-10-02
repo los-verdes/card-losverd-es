@@ -82,7 +82,7 @@ export const RereadButton: FC<{ orderId: string; from: "member" | "order"; label
   from,
   label = "Re-read from BigCommerce",
 }) => (
-  <form method="post" action={`${orderPath(orderId)}/reread`} style="display: inline">
+  <form method="post" action={`${orderPath(orderId)}/reread`} class="inline">
     <input type="hidden" name="from" value={from} />
     <button type="submit" data-busy-label="Reading…">
       {label}
@@ -248,12 +248,9 @@ orders.get("/", (c) => {
         Any order, by its id. One that isn't here yet, such as an order the store's notifications and the resyncs both
         missed, can be read in from BigCommerce on its page.
       </p>
-      <form method="get" action="/admin/orders" style="display: flex; gap: 0.5rem; align-items: end">
-        <label>
-          Order id
-          <br />
-          <input type="text" name="id" inputmode="numeric" required autocomplete="off" />
-        </label>
+      <form method="get" action="/admin/orders" class="search">
+        <label for="id">Order id</label>
+        <input id="id" type="text" name="id" inputmode="numeric" required autocomplete="off" />
         <button type="submit">Find</button>
       </form>
     </AdminPage>,
@@ -331,18 +328,12 @@ orders.get("/:orderId", async (c) => {
       ) : (
         <form method="get" action={path}>
           {proposed && "error" in proposed && <p style="color: var(--danger)">{proposed.error}</p>}
-          <label>
-            Member email
-            <br />
-            <input type="email" name="email" required value={c.req.query("email") ?? ""} />
+          <label for="attribute_email">Member email</label>
+          <input id="attribute_email" type="email" name="email" required value={c.req.query("email") ?? ""} />
+          <label for="attribute_note">
+            Note<span class="hint">Optional · e.g. "gift from the purchaser"</span>
           </label>
-          <br />
-          <label>
-            Note (optional, e.g. "gift from the purchaser")
-            <br />
-            <input type="text" name="note" maxlength={MAX_NOTE_LENGTH} value={c.req.query("note") ?? ""} style="width: 30rem; max-width: 100%" />
-          </label>
-          <br />
+          <input id="attribute_note" type="text" name="note" maxlength={MAX_NOTE_LENGTH} value={c.req.query("note") ?? ""} />
           <button type="submit">Review</button>
         </form>
       )}
