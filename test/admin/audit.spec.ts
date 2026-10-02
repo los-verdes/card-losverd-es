@@ -291,12 +291,6 @@ describe("reading it back", () => {
     expect(unknown).toContain("No membership is held under that address, and no orders either.");
   });
 
-  it("is pointed to from the top of the member's own page", async () => {
-    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
-
-    expect(body).toContain('<a href="#history">Everything that has been done to this membership</a>');
-  });
-
   it("is admin-only, and never cached", async () => {
     await env.DB.prepare("INSERT INTO users (id, email, is_admin) VALUES (9, ?, 0)")
       .bind("member@example.com")

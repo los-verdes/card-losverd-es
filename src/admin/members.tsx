@@ -601,9 +601,6 @@ const Summary: FC<{
         <StandingForm action="expel" email={member.email} note="" />
       </details>
     )}
-    <p class="muted">
-      <a href="#history">Everything that has been done to this membership</a>, below their orders.
-    </p>
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
