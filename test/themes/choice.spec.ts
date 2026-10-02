@@ -148,6 +148,17 @@ describe("choosing a theme", () => {
 
     expect(await audit()).toEqual([]);
   });
+
+  it("marks the card at once, and hands telling its passes to `defer` when given one", async () => {
+    const deferred: Promise<unknown>[] = [];
+
+    await setCardTheme(env, await member(), "2024", "member", null, THEMES, (work) => deferred.push(work));
+    await clearCardTheme(env, EMAIL, "member", null, THEMES, (work) => deferred.push(work));
+
+    expect(deferred).toHaveLength(2);
+    expect((await member()).last_updated_at).toBeGreaterThan(1);
+    await Promise.all(deferred);
+  });
 });
 
 describe("the theme a card is drawn in", () => {
