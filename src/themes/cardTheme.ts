@@ -284,9 +284,9 @@ export const GROUP_THEMES: readonly CardTheme[] = [
       googleHero: "templates/themes/los-pringles/google-hero.png",
     },
   },
-  // The VERDIROJAS side of the Verdirojas scarf on the card, its watermelon
-  // slice as the thumbnail, and the raised fist from the Refugees Welcome
-  // scarf's print file on the poster and hero.
+  // From the Refugees Welcome scarf's print file: the flower between its words
+  // on the card, and the raised fist on the poster and hero. The thumbnail is
+  // the watermelon slice from the Verdirojas scarf.
   {
     id: "verdirojas",
     label: "Verdirojas",

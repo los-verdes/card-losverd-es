@@ -90,13 +90,13 @@ id here rather than a year.
   pring, you pring" in green, set in Yellowtail, a script close to the
   scarf's own lettering. Darkened 35% on the card; the thumbnail is the
   emblem.
-- **Verdirojas (`verdirojas/`).** From two scarves. The card is the
-  VERDIROJAS side of the Verdirojas scarf, from flatbed scans stitched
-  together: the watermelon slice between VERDI and ROJAS, on the keffiyeh
-  net, darkened 58%. The thumbnail is the watermelon slice. The
-  poster and hero are the raised fist from the end of the Refugees Welcome
-  scarf, rendered from its vector print file: upright on the poster (darkened
-  25%), across the hero as the scarf runs. The border is the watermelon's red.
+- **Verdirojas (`verdirojas/`).** From two scarves. The card, poster and
+  hero come from the Refugees Welcome scarf's vector print file. The card is
+  the flower between REFUGEES and WELCOME, alone on black, darkened 40%. The
+  poster and hero are the raised fist from the scarf's end: upright on the
+  poster (darkened 25%), across the hero as the scarf runs. The thumbnail is
+  the watermelon slice between VERDI and ROJAS on the Verdirojas scarf, from
+  flatbed scans stitched together. The border is the watermelon's red.
 
 ## Adding a year
 
