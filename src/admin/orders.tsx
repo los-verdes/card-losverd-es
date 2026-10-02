@@ -248,7 +248,7 @@ orders.get("/", (c) => {
         Any order, by its id. One that isn't here yet, such as an order the store's notifications and the resyncs both
         missed, can be read in from BigCommerce on its page.
       </p>
-      <form method="get" action="/admin/orders" class="search">
+      <form method="get" action="/admin/orders">
         <label for="id">Order id</label>
         <input id="id" type="text" name="id" inputmode="numeric" required autocomplete="off" />
         <button type="submit">Find</button>
