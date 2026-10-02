@@ -228,7 +228,9 @@ This is how we ensure our accounting of membership reflects the authoritative so
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
   than deleted, preserving current cards. (Again, this isn't expected to happen.)
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
-  without notifying (i.e., without emailing) the associated member.
+  without notifying (i.e., without emailing) the associated member. That includes an order the card site hasn't seen
+  yet: **Find an order** takes any order ID, and reading it in records it as a sync would. If the order carries no
+  membership, the page lists the SKUs it does carry.
 
 ### Known Edge Cases
 

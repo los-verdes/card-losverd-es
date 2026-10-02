@@ -19,6 +19,7 @@ import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { emailMemberCard } from "../email/card";
 import { readOrderFromStore } from "../bigcommerce/sync";
+import { isValidOrderId } from "../bigcommerce/routes";
 import { recordOutcome } from "../lib/outcome";
 import { toIsoSeconds } from "../bigcommerce/orders";
 import {
@@ -51,9 +52,13 @@ export const OrderLink: FC<{ orderId: string }> = ({ orderId }) => (
  * Re-reading one order from BigCommerce (#294). Rarely needed -- the order
  * webhook brings changes in within seconds, and the resync catches what it
  * misses -- but there for an admin who wants to be sure, or whose member's
- * record looks wrong. What the admin is told afterwards, by outcome.
+ * record looks wrong. It also reads in an order this site has never held,
+ * by its id, which is how one the webhook and the resyncs both missed is
+ * brought in. What the admin is told afterwards, by outcome.
  */
 export const REREAD_MESSAGES = {
+  added: "Read from BigCommerce and added. Nobody was emailed; the member's page can send their card.",
+  "not-in-store": "BigCommerce has no order with this id.",
   updated: "Re-read from BigCommerce. It had changed, and the membership is now up to date.",
   unchanged: "Re-read from BigCommerce. Nothing had changed.",
   missing: 'BigCommerce no longer returns this order. It still counts, and is listed under "Missing from BigCommerce".',
@@ -63,16 +68,24 @@ export const REREAD_MESSAGES = {
 
 export type RereadResult = keyof typeof REREAD_MESSAGES;
 
-export function rereadMessage(value: string | undefined): string | null {
-  return value !== undefined && value in REREAD_MESSAGES ? REREAD_MESSAGES[value as RereadResult] : null;
+/** `skus`: what a membership-less order carries instead, as the re-read found it. */
+export function rereadMessage(value: string | undefined, skus?: string): string | null {
+  if (value === undefined || !(value in REREAD_MESSAGES)) return null;
+  const message = REREAD_MESSAGES[value as RereadResult];
+  if (value !== "no-membership" || skus === undefined) return message;
+  return `${message} ${skus ? `Its SKUs: ${skus.split(",").join(", ")}.` : "It has no line items with a SKU."}`;
 }
 
 /** Only BigCommerce orders have a store to re-read; Squarespace-era ones carry a stored verdict. */
-export const RereadButton: FC<{ orderId: string; from: "member" | "order" }> = ({ orderId, from }) => (
+export const RereadButton: FC<{ orderId: string; from: "member" | "order"; label?: string }> = ({
+  orderId,
+  from,
+  label = "Re-read from BigCommerce",
+}) => (
   <form method="post" action={`${orderPath(orderId)}/reread`} style="display: inline">
     <input type="hidden" name="from" value={from} />
-    <button type="submit" data-busy-label="Re-reading…">
-      Re-read from BigCommerce
+    <button type="submit" data-busy-label="Reading…">
+      {label}
     </button>
   </form>
 );
@@ -222,13 +235,46 @@ orders.use("*", async (c, next) => {
   c.header("Cache-Control", "no-store");
 });
 
+/**
+ * Finding an order by its id, including one this site has never held: its
+ * page then offers to read it in from BigCommerce.
+ */
+orders.get("/", (c) => {
+  const id = c.req.query("id")?.trim();
+  if (id) return c.redirect(orderPath(id), 303);
+  return c.html(
+    <AdminPage title="Find an order">
+      <p>
+        Any order, by its id. One that isn't here yet, such as an order the store's notifications and the resyncs both
+        missed, can be read in from BigCommerce on its page.
+      </p>
+      <form method="get" action="/admin/orders" style="display: flex; gap: 0.5rem; align-items: end">
+        <label>
+          Order id
+          <br />
+          <input type="text" name="id" inputmode="numeric" required autocomplete="off" />
+        </label>
+        <button type="submit">Find</button>
+      </form>
+    </AdminPage>,
+  );
+});
+
 orders.get("/:orderId", async (c) => {
   const orderId = c.req.param("orderId");
   const order = await getAttributableOrder(c.env.DB, orderId);
   if (!order) {
+    const message = rereadMessage(c.req.query("reread"), c.req.query("skus"));
     return c.html(
       <AdminPage title="Order not found">
+        {message && <p class="muted">{message}</p>}
         <p>No membership order has the id {orderId}.</p>
+        {isValidOrderId(orderId) && (
+          <p>
+            If BigCommerce has it, reading it in adds it here as a sync would, without emailing anyone:{" "}
+            <RereadButton orderId={orderId} from="order" label={`Read order ${orderId} from BigCommerce`} />
+          </p>
+        )}
       </AdminPage>,
       404,
     );
@@ -255,7 +301,9 @@ orders.get("/:orderId", async (c) => {
           <Footprint email={done.previous} footprint={done.previousFootprint} />
         </section>
       )}
-      {rereadMessage(c.req.query("reread")) && <p class="muted">{rereadMessage(c.req.query("reread"))}</p>}
+      {rereadMessage(c.req.query("reread"), c.req.query("skus")) && (
+        <p class="muted">{rereadMessage(c.req.query("reread"), c.req.query("skus"))}</p>
+      )}
       <OrderDetails order={order} />
       {order.source === "bigcommerce" && (
         <p>
@@ -344,9 +392,11 @@ async function orderSnapshot(db: D1Database, orderId: string): Promise<string | 
  * that is the point of calling it rather than `syncBigCommerceOrder`.
  */
 orders.post("/:orderId/reread", csrf(), async (c) => {
-  const order = await getAttributableOrder(c.env.DB, c.req.param("orderId"));
+  const orderId = c.req.param("orderId");
+  const order = await getAttributableOrder(c.env.DB, orderId);
   if (!order) {
-    return c.text("Not Found", 404);
+    if (!isValidOrderId(orderId)) return c.text("Not Found", 404);
+    return readInNewOrder(c.env, orderId).then((query) => c.redirect(`${orderPath(orderId)}?${query}`, 303));
   }
   if (order.source !== "bigcommerce") {
     return c.text("Bad Request: only BigCommerce orders can be re-read from the store", 400);
@@ -374,5 +424,30 @@ orders.post("/:orderId/reread", csrf(), async (c) => {
   }
   return c.redirect(`${orderPath(order.order_id)}?${new URLSearchParams({ reread: result })}`, 303);
 });
+
+/**
+ * Reads in an order this site has never held. Added, it is an order like
+ * any other, and its page now shows it; otherwise the not-found page says
+ * why, with the SKUs it carries if none is a membership.
+ */
+async function readInNewOrder(env: Env, orderId: string): Promise<URLSearchParams> {
+  let result: RereadResult;
+  let skus: string[] | null = null;
+  try {
+    const outcome = await readOrderFromStore(env, env.BIGCOMMERCE_STORE_HASH, orderId);
+    if (outcome.kind === "missing") result = "not-in-store";
+    else if (outcome.kind === "no-membership") {
+      result = "no-membership";
+      skus = outcome.skus;
+    } else result = "added";
+  } catch (error) {
+    console.error("admin order read-in failed", { error: String(error) });
+    result = "unreachable";
+  }
+  recordOutcome("order.reread", { result });
+  const query = new URLSearchParams({ reread: result });
+  if (skus) query.set("skus", skus.join(","));
+  return query;
+}
 
 export default orders;
