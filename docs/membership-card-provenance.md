@@ -10,7 +10,7 @@ primary audiences are:
 
 Deciding membership card attributes is functionally identical to establishing active membership status. This document
 specifies the current implementation and outlines open policy choices in the [Appendix - Decisions worth
-confirming](#appendix-decisions-worth-confirming) (this last bit in particular would greatly benefit from discussion and
+confirming](#appendix-decisions-worth-confirming) (this appendix in particular would greatly benefit from discussion and
 feedback.)
 
 ---
@@ -74,17 +74,16 @@ Membership is tracked according to these principles:
   term to `purchase_date + 365 days`, shortening the overall coverage window by 30 days.
 - **Persistent identities:** Lapsed members retain their UUID (`member_id`), push tokens, and pass configurations
   indefinitely with an empty expiry. A subsequent renewal re-activates the existing card.
-- **Decoupled data models:** Orders remain the sole historical logs; memberships are computed snapshots. (i.e., orders
-  and memberships are tracked separately)
+- **Decoupled data models:** Orders are the history; memberships are computed snapshots. (i.e., orders and memberships
+  are tracked separately)
 
 #### Revocations & Expulsions
 
 While not common, disciplinary actions supersede order status and come from a Membership Committee decision (which an
-admin then records)
+admin then records).
 
 - **Revocation:** Invalidates a specific card record without deleting underlying order data.
-- **Expulsion:** Disables member login and blocks future cards issued to that email address. (i,e., an indefinite
-  membership suspension)
+- **Expulsion:** Disables member login and blocks future cards issued to that email address.
 
 ---
 
@@ -111,17 +110,17 @@ that is tracked in the table below:
   map directly to an order.)
 - **Good Through:** Calculated as `order_date + 365 days` per qualifying order. The displayed date is the latest among
   all qualifying orders. Terms do not accumulate consecutively.
-- **Card Number & QR Code:** Can be scanned to independently validate a membership card. This code uses a persistent
-  UUID generated at membership card creation.
+- **Card Number & QR Code:** The QR code links to a page that says whether the membership is current right now (a public
+  scan sees only "Valid" or "Not a current membership"). Cards issued by the old site still scan. The card number is
+  assigned once and never changes.
 
 ### "Member Since" Precedence
 
 Given that folks are passionate about their "member since" dates, we have options for adjusting this value. When
-determining the "Member Since" date, the uses this precedence order:
+determining the "Member Since" date, the uses this order:
 
 1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
-2. `Legacy Import Override` - Historical dates imported from the legacy site. Required to correctly represent some older
-   orders.
+2. `Legacy Import Override` - Historical join dates imported from the old site
 3. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
    options don't fit
 
@@ -129,10 +128,14 @@ Only a manual override can be removed; an imported date can be corrected over bu
 
 ### Card Themes
 
-Members can select different themes to change their membership cards' appearance.
+Members can choose a theme to change how their card looks.
 
-Themes are selected by members on their card page and by admins on the member's admin page (an admin's choice is logged;
-a member's own is not).
+- **Who can use which:** the year of each membership they bought, their "member since" year, a subgroup's theme (e.g.
+  Los Pringles) while they're in its Slack channel, and `classic`.
+- **Default theme:** each member's "member since" year.
+- **Losing access** (e.g. leaving the Slack channel): the card falls back to the default theme.
+- **Choosing:** members on their card page; admins on the member's admin page (an admin's choice is logged; a member's
+  own is not).
 
 ---
 
@@ -141,7 +144,7 @@ a member's own is not).
 This section describes the ways a member reaches their card, including linking it to their LV store account. None of it
 changes who is a member.
 
-- **Sign-in:** with Google or Apple. The account's email finds the membership under that address
+- **Sign-in:** with Google or Apple. The account's email finds the membership under that address.
 - **Bought under another address** (e.g. if someone logs in with Apple's Hide My Email feature): the member can claim
   it. A link is mailed to the membership's address, and following it while signed in links the two.
 - **Without signing in:** `/email-card` mails a current card to the membership's own address. The page never says
@@ -163,13 +166,11 @@ Orders maintain two email fields:
 - `order_email`: The billing email on the store transaction.
 - `member_email`: The address to which membership entitlement is assigned.
 
-Re-attributing an order (`attributeOrder()` in `src/admin/attribution.ts`) updates `member_email`, records an entry in
-`membership_order_attributions`, recalculates the membership records for both donor and recipient, and pushes updates to
-installed wallet passes. The `member_email` field is protected against automated overwrite during routine BigCommerce
-sync passes.
+An admin re-attributes an order from its page: both people's cards are recalculated, their wallet passes update, the
+change is logged, and syncs never undo it."
 
 This is used for gifts (someone orders a membership for somebody else), and for a member whose older orders carry an
-address they no longer use. (Ideally folks purchase memberships under their own store account \ email address though.)
+address they no longer use. (Ideally folks purchase memberships under their own store account / email address though.)
 
 ---
 
