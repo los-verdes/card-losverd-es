@@ -134,7 +134,7 @@ describe("reading MiniBC's membership subscriptions", () => {
       ].sort(),
     );
     // The email is the one contact detail kept (#470): no names, card or address.
-    const { customer_email: _email, ...rest } = row as Record<string, unknown>;
+    const rest = Object.fromEntries(Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "customer_email"));
     expect(JSON.stringify(rest)).not.toMatch(/example\.com|Test|Member|Visa|4242|Example St/);
   });
 
