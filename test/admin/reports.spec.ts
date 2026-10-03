@@ -721,14 +721,16 @@ describe("GET /admin/reports/over-time", () => {
     const body = await (await get("/admin/reports/over-time?year=2026")).text();
     const products = body.slice(body.indexOf("<h2>Orders by product</h2>"));
 
-    expect(products).toMatch(
-      /<th[^>]*>Year \(UTC\)<\/th><th[^>]*>Squarespace \(before BigCommerce\)<\/th><th[^>]*>Membership pack \(LOSV-MEM-0001\)<\/th><th[^>]*>Membership without merchandise \(LOSV-DIGI-5000\)<\/th><th[^>]*>LOSV-OLD-0001<\/th><th[^>]*>No SKU recorded<\/th><th[^>]*>Total<\/th>/,
-    );
-    // 2024: one Squarespace order, one without a SKU; 2026: the refund does not count.
-    expect(products).toMatch(/>2024<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>2<\/td><th[^>]*>3<\/th>/);
-    expect(products).toMatch(/>2025<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>1<\/th>/);
-    expect(products).toMatch(/>2026<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><th[^>]*>3<\/th>/);
-    expect(products).toMatch(/Total<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>1<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>7<\/th>/);
+    // A product to a row, a year to a column: product names are the long ones.
+    expect(products).toMatch(/<th[^>]*>Product<\/th><th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th><th[^>]*>Total<\/th>/);
+    // 2024: one Squarespace order, two without a SKU; 2026: the refund does not count.
+    expect(products).toMatch(/>Squarespace \(before BigCommerce\)<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>Membership pack \(LOSV-MEM-0001\)<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><th[^>]*>2<\/th>/);
+    expect(products).toMatch(/>Membership without merchandise \(LOSV-DIGI-5000\)<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>LOSV-OLD-0001<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>No SKU recorded<\/td><td[^>]*>2<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>2<\/th>/);
+    expect(products.indexOf(">Squarespace (before BigCommerce)<")).toBeLessThan(products.indexOf(">No SKU recorded<"));
+    expect(products).toMatch(/Total<\/th><th[^>]*>3<\/th><th[^>]*>1<\/th><th[^>]*>3<\/th><th[^>]*>7<\/th>/);
 
     const csv = await get("/admin/reports/over-time?table=products&format=csv");
     expect(csv.headers.get("Content-Disposition")).toBe('attachment; filename="membership-orders-by-product-2026-06-01.csv"');

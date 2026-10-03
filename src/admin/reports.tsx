@@ -786,32 +786,32 @@ reports.get("/over-time", async (c) => {
 
       <h2>Orders by product</h2>
       <p class="muted">
-        The same orders, each year, by which membership product was bought. Every year is shown, whichever are
-        compared above.
+        The same orders, by which membership product was bought, one column per year (in UTC). Every year is shown,
+        whichever are compared above.
       </p>
       <ReportTable
-        headings={["Year (UTC)", ...products.map(productLabel), "Total"]}
+        headings={["Product", ...available.map(String), "Total"]}
         csvHref={`${OVER_TIME_PATH}?table=products&format=csv`}
         csvLabel="Download as CSV"
         empty="No membership orders yet."
         rowCount={byProduct.length}
       >
         <tbody>
-          {available.map((year) => (
+          {products.map((product) => (
             <tr>
-              <td style={cellStyle}>{year}</td>
-              {products.map((product) => (
+              <td style={cellStyle}>{productLabel(product)}</td>
+              {available.map((year) => (
                 <td style={cellStyle}>{count(ordersFor(year, product))}</td>
               ))}
-              <th style={cellStyle}>{count(products.reduce((sum, product) => sum + ordersFor(year, product), 0))}</th>
+              <th style={cellStyle}>{count(available.reduce((sum, year) => sum + ordersFor(year, product), 0))}</th>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <th style={cellStyle}>Total</th>
-            {products.map((product) => (
-              <th style={cellStyle}>{count(available.reduce((sum, year) => sum + ordersFor(year, product), 0))}</th>
+            {available.map((year) => (
+              <th style={cellStyle}>{count(products.reduce((sum, product) => sum + ordersFor(year, product), 0))}</th>
             ))}
             <th style={cellStyle}>{count(byProduct.reduce((sum, row) => sum + row.orders, 0))}</th>
           </tr>
