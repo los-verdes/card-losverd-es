@@ -1,7 +1,7 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
+import { CLASSIC_THEME, SEASONAL_THEMES, type CardTheme } from "../../src/themes/cardTheme";
 import {
   getThemeOptions,
   purchaseYears,
@@ -9,6 +9,7 @@ import {
   themeYearDefaultsEnabled,
 } from "../../src/themes/eligibility";
 import { groupsFor } from "../../src/themes/groups";
+import { effectiveTheme } from "../../src/themes/choice";
 
 function yearTheme(year: number): CardTheme {
   return { ...CLASSIC_THEME, id: String(year), label: String(year), year };
@@ -93,7 +94,7 @@ describe("themeOptions", () => {
     // 2021 and 2024 have scarf designs; 2027's is still to come.
     const options = themeOptions({ ...history, orders: [...history.orders, order("2027-03-01", "2028-03-01")] }, true);
 
-    expect(ids(options.themes)).toEqual(["classic", "2021", "2024"]);
+    expect(ids(options.themes)).toEqual(["classic", "2021", "2024", ...SEASONAL_THEMES.map((theme) => theme.id)]);
     expect(options.defaultTheme.id).toBe("2021");
   });
 });
@@ -159,7 +160,7 @@ describe("getThemeOptions", () => {
 
   it("offers the real registry by default", async () => {
     // Member since 2021, which has a published theme.
-    expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021"]);
+    expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021", ...SEASONAL_THEMES.map((theme) => theme.id)]);
   });
 });
 
@@ -185,6 +186,29 @@ describe("group themes", () => {
     expect(themeOptions({ orders: [], memberSince: null, groups: new Set(["los-pringles"]) }, true, WITH_GROUP).defaultTheme).toBe(
       CLASSIC_THEME,
     );
+  });
+});
+
+describe("seasonal themes", () => {
+  const SEASONAL: CardTheme = { ...CLASSIC_THEME, id: "a-season", label: "A season", seasonal: true };
+  const PRINGLES: CardTheme = { ...CLASSIC_THEME, id: "los-pringles", label: "Los Pringles", group: "los-pringles" };
+  const WITH_SEASONAL = [...THEMES, SEASONAL, PRINGLES];
+
+  it("are offered to everyone, last, whatever their orders or groups", () => {
+    expect(ids(themeOptions({ orders: [], memberSince: null }, false, WITH_SEASONAL).themes)).toEqual(["classic", "a-season"]);
+    expect(
+      ids(themeOptions({ orders: [order("2021-07-04", "2022-07-04")], memberSince: "2021-07-04", groups: new Set(["los-pringles"]) }, false, WITH_SEASONAL).themes),
+    ).toEqual(["classic", "2021", "los-pringles", "a-season"]);
+  });
+
+  it("are never anyone's default", () => {
+    expect(themeOptions({ orders: [], memberSince: null }, true, WITH_SEASONAL).defaultTheme).toBe(CLASSIC_THEME);
+    expect(themeOptions({ orders: [order("2021-07-04", "2022-07-04")], memberSince: "2021-07-04" }, true, WITH_SEASONAL).defaultTheme.id).toBe("2021");
+  });
+
+  it("leave a card in its default once retired, if it was the one chosen", () => {
+    const retired = themeOptions({ orders: [], memberSince: null }, false, THEMES);
+    expect(effectiveTheme(retired, "a-season")).toBe(CLASSIC_THEME);
   });
 });
 

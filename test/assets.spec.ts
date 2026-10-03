@@ -2,7 +2,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { APP_CSS, STYLESHEET_PATH, VERDE, stylesheetPathFor } from "../src/styles";
 import { PUBLIC_ASSETS } from "../src/assets";
-import { CLASSIC_THEME, GROUP_THEMES, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
+import { CLASSIC_THEME, GROUP_THEMES, SEASONAL_THEMES, YEAR_THEMES, googleHeroPath } from "../src/themes/cardTheme";
 import { googleWalletConfig } from "../src/google/jwt";
 import worker from "../src/index";
 import GOOGLE_LOGO from "../assets/templates/google/logo.png";
@@ -72,7 +72,7 @@ describe("GET /assets/:name", () => {
   });
 
   it("serves each theme's hero at any version, since Google may hold an address from before its art changed", async () => {
-    for (const theme of [...YEAR_THEMES, ...GROUP_THEMES]) {
+    for (const theme of [...YEAR_THEMES, ...GROUP_THEMES, ...SEASONAL_THEMES]) {
       const res = await get(`/assets/hero-${theme.id}-0a1b2c3d4e5f.png`);
       expect(res.status, theme.id).toBe(200);
       await res.body?.cancel();

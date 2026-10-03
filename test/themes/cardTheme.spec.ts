@@ -7,6 +7,7 @@ import {
   CLASSIC_THEME,
   YEAR_THEMES,
   GROUP_THEMES,
+  SEASONAL_THEMES,
   appleRgb,
   googleHeroFileName,
   googleHeroPath,
@@ -163,7 +164,7 @@ describe("the year themes", () => {
     expect(years).toEqual([...years].sort());
   });
 
-  it.each([...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
+  it.each([...YEAR_THEMES, ...GROUP_THEMES, ...SEASONAL_THEMES].map((theme) => [theme.id, theme] as const))("%s fills every artwork slot, at the size each surface needs", (_, theme) => {
     const { cardBackground, appleThumbnailPrefix, googleHero } = theme.artwork;
     expect(theme.artwork.applePosterPrefix).toBeDefined();
 
@@ -186,7 +187,7 @@ describe("the year themes", () => {
   // under dark text. The card's title and name are large text (3:1); the rest
   // is small (4.5:1). Classic predates the check, and its white on verde falls
   // short of 3:1, so it is left as every card has always been.
-  it.each([...YEAR_THEMES, ...GROUP_THEMES].map((theme) => [theme.id, theme.colors] as const))("%s keeps its text legible", (_, colors) => {
+  it.each([...YEAR_THEMES, ...GROUP_THEMES, ...SEASONAL_THEMES].map((theme) => [theme.id, theme.colors] as const))("%s keeps its text legible", (_, colors) => {
     expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.secondaryText, colors.background)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.passText, colors.background)).toBeGreaterThanOrEqual(4.5);
@@ -195,9 +196,20 @@ describe("the year themes", () => {
   });
 });
 
+describe("the seasonal themes", () => {
+  it("come last, each for everyone: neither a year's nor a group's", () => {
+    expect(CARD_THEMES.slice(1 + YEAR_THEMES.length + GROUP_THEMES.length)).toEqual(SEASONAL_THEMES);
+    for (const theme of SEASONAL_THEMES) {
+      expect(theme.seasonal).toBe(true);
+      expect(theme.year).toBeUndefined();
+      expect(theme.group).toBeUndefined();
+    }
+  });
+});
+
 describe("the group themes", () => {
   it("follow the year themes, each for a subgroup that exists, and none also a year's", () => {
-    expect(CARD_THEMES.slice(1 + YEAR_THEMES.length)).toEqual(GROUP_THEMES);
+    expect(CARD_THEMES.slice(1 + YEAR_THEMES.length, 1 + YEAR_THEMES.length + GROUP_THEMES.length)).toEqual(GROUP_THEMES);
     for (const theme of GROUP_THEMES) {
       expect(CARD_GROUPS.map((group) => group.id)).toContain(theme.group);
       expect(theme.year).toBeUndefined();
