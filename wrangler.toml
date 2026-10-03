@@ -167,18 +167,18 @@ CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
 # theme in its "member since" year's theme; otherwise they stay classic.
 # Turning it on changes cards already on phones, so it goes out together
 # with a refresh of every pass (src/themes/eligibility.ts).
-CARD_THEME_YEAR_DEFAULTS = "false"
+CARD_THEME_YEAR_DEFAULTS = "true"
 
 # Who may choose their card's theme (#333): "admins" while the picker is
 # tried on real cards, then "everyone"; anything else, nobody. It governs
 # choosing, not drawing a choice already made (src/themes/choice.ts).
-CARD_THEME_CHOICE = "admins"
+CARD_THEME_CHOICE = "everyone"
 
 # Apple's iOS 27 poster layout for passes (#384): "on" gives a pass the
 # poster layout, with its theme's art behind it, when the theme has poster
 # art; anything else, none. Older iOS versions keep the pass as it is either
 # way, and passes already installed switch on their next update.
-APPLE_POSTER_PASSES = "off"
+APPLE_POSTER_PASSES = "on"
 
 # Queue names src/queues/index.ts routes batches by (they differ per
 # environment -- queue names are account-wide).
@@ -298,8 +298,8 @@ TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 # above keeps it to test mailboxes; the date is the day it was switched on,
 # as the production comment requires.
 CARD_EMAIL_NEW_ORDERS_SINCE = "2026-09-21"
-CARD_THEME_YEAR_DEFAULTS = "false"
-CARD_THEME_CHOICE = "admins"
+CARD_THEME_YEAR_DEFAULTS = "true"
+CARD_THEME_CHOICE = "everyone"
 # On here first, so the posters can be checked on a phone (#384).
 APPLE_POSTER_PASSES = "on"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"

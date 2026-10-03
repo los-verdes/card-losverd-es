@@ -100,12 +100,13 @@ describe("themeOptions", () => {
 });
 
 describe("themeYearDefaultsEnabled", () => {
+  const configured = env.CARD_THEME_YEAR_DEFAULTS;
   afterEach(() => {
-    env.CARD_THEME_YEAR_DEFAULTS = "false";
+    env.CARD_THEME_YEAR_DEFAULTS = configured;
   });
 
-  it("is off as configured in wrangler.toml", async () => {
-    expect(await themeYearDefaultsEnabled(env)).toBe(false);
+  it("is on as configured in wrangler.toml", async () => {
+    expect(await themeYearDefaultsEnabled(env)).toBe(true);
   });
 
   it.each(["true", " TRUE ", "True"])("is on for %j", async (value) => {

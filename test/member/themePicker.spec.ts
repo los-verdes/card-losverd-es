@@ -9,6 +9,19 @@ import { YEAR_THEMES } from "../../src/themes/cardTheme";
 import { getCardThemeChoice, setCardTheme } from "../../src/themes/choice";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 
+// Stated, not inherited: wrangler.toml switches year themes by default and
+// Apple's poster layout per environment, and these tests are about cards with
+// neither unless they say so.
+const configuredSwitches = { years: env.CARD_THEME_YEAR_DEFAULTS, posters: env.APPLE_POSTER_PASSES };
+beforeEach(() => {
+  env.CARD_THEME_YEAR_DEFAULTS = "false";
+  env.APPLE_POSTER_PASSES = "off";
+});
+afterEach(() => {
+  env.CARD_THEME_YEAR_DEFAULTS = configuredSwitches.years;
+  env.APPLE_POSTER_PASSES = configuredSwitches.posters;
+});
+
 const SESSION_KEY = "test-session-signing-key-0123456789";
 const USER_ID = 7;
 const EMAIL = "jane@example.com";
