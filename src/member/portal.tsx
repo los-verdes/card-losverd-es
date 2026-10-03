@@ -598,6 +598,10 @@ const ThemeForm: FC<{
   saved?: boolean;
 }> = ({ options, current, chosen, error, saved }) => (
   <Page title="How your card looks">
+    {/* At the top as well as the foot: the previews make this a long page. */}
+    <p class="muted" style="margin: 0 0 0.5rem">
+      <a href="/">&larr; Back to your card</a>
+    </p>
     <h1>How your card looks</h1>
     {saved && (
       <p style="color: var(--success)">Saved. Any passes you have installed will catch up shortly.</p>

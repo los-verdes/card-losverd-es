@@ -88,6 +88,15 @@ describe("the theme page", () => {
     expect(body).not.toContain("Go back to the default");
   });
 
+  it("leads back to the card from the top, before the previews, as well as from the foot", async () => {
+    const body = await (await request(THEME_PATH)).text();
+    const top = body.indexOf('<a href="/">← Back to your card</a>');
+
+    expect(top).toBeGreaterThan(-1);
+    expect(top).toBeLessThan(body.indexOf("<h1>"));
+    expect(body).toContain('<a href="/">Back to your card</a>');
+  });
+
   it("lists the theme the card is in now first, the rest in their usual order", async () => {
     const before = await (await request(THEME_PATH)).text();
     expect(before.indexOf("theme=classic")).toBeLessThan(before.indexOf("theme=2021"));
