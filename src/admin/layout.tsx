@@ -26,7 +26,8 @@ export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bott
  *
  * `name` puts another name over the address instead of the card's: an order's
  * own name, in tables of orders, where the address is the one the order was
- * placed under. An empty one leaves the address alone.
+ * placed under (and `href` leads to the order). An empty one leaves the
+ * address alone.
  */
 export const MemberLink: FC<{ email: string; plain?: boolean; href?: string; name?: string }> = async ({
   email,

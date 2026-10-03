@@ -19,7 +19,7 @@ import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { BarChart, type BarGroup, type BarSeries } from "./barChart";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
-import { OrderLink } from "./orders";
+import { OrderLink, orderPath } from "./orders";
 import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, sortKey } from "./when";
 import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
@@ -356,8 +356,8 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
             <OrderLink orderId={row.order_id} />
           </td>
           <td style={cellStyle}>
-            {/* The order's own name over its address, like a member's; a different member is named beside it. */}
-            <MemberLink email={row.order_email} name={orderName(row)} />
+            {/* The order's own name over its address, leading to the order; a different member is named beside it. */}
+            <MemberLink email={row.order_email} name={orderName(row)} href={orderPath(row.order_id)} />
           </td>
           <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
@@ -405,8 +405,14 @@ function consolidationCell(row: ConsolidationRow, column: string) {
   const value = row[column];
   if (column === "order_id") return value === null ? "" : <OrderLink orderId={String(value)} />;
   if (column === "order_email" && typeof value === "string") {
-    // The order's own name, over the address it was placed under.
-    return <MemberLink email={value} name={orderName(row as { first_name?: string | null; last_name?: string | null })} />;
+    // The order's own name, over the address it was placed under, leading to the order.
+    return (
+      <MemberLink
+        email={value}
+        name={orderName(row as { first_name?: string | null; last_name?: string | null })}
+        href={row.order_id === null ? undefined : orderPath(String(row.order_id))}
+      />
+    );
   }
   if (column === "member_email" && typeof value === "string") {
     // Named unless the row shows the card's name already ("Card shows").
