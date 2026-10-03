@@ -750,7 +750,7 @@ members.get("/card.png", async (c) => {
       ? undefined
       : (await getThemeOptions(c.env, member)).themes.find((option) => option.id === themeId);
   if (themeId !== undefined && !theme) return c.text("That is not a theme this card can use.", 404);
-  const png = await renderCardImage(c.env, member, theme);
+  const png = await renderCardImage(c.env, member, theme, (work) => c.executionCtx.waitUntil(work));
   // See sha1Hex in src/passkit/generator.ts for why this narrowing is needed.
   return new Response(png as Uint8Array<ArrayBuffer>, {
     headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },

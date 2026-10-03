@@ -734,7 +734,7 @@ portal.get("/card.png", requireCurrentMember, async (c) => {
       : undefined;
     if (!theme) return c.text("No such theme for this card.", 404);
   }
-  const png = await renderCardImage(c.env, member, theme);
+  const png = await renderCardImage(c.env, member, theme, (work) => c.executionCtx.waitUntil(work));
   // See sha1Hex in src/passkit/generator.ts for why this narrowing is needed.
   return new Response(png as Uint8Array<ArrayBuffer>, {
     headers: {
