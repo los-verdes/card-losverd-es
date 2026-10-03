@@ -627,6 +627,7 @@ const ThemeForm: FC<{
       {chosen ? ", which you chose." : ", the default."} You can use the theme of
       any year you bought a membership, and of any subgroup you belong to, as
       well as the classic look.
+      {options.themes.some((theme) => theme.seasonal) && " Seasonal themes are open to every member, while they last."}
     </p>
     {currentFirst(options.themes, current).map((theme) => (
       <form method="post" action={THEME_PATH} class="order">
@@ -644,6 +645,7 @@ const ThemeForm: FC<{
         <p style="margin: 0.5rem 0">
           <strong>{theme.label}</strong>
           {theme === options.defaultTheme ? " (the default)" : ""}
+          {theme.seasonal ? " (seasonal)" : ""}
         </p>
         {theme.id === current.id ? (
           <p class="muted">Your card looks like this now.</p>

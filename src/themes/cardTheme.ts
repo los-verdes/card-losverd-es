@@ -108,6 +108,11 @@ export interface CardTheme {
    * src/themes/groups.ts); absent for any other theme.
    */
   group?: string;
+  /**
+   * A seasonal theme: anyone may use it while it is listed in
+   * `SEASONAL_THEMES`, and it is never a default.
+   */
+  seasonal?: true;
   colors: CardThemeColors;
   assets: CardThemeAssets;
   artwork: CardThemeArtwork;
@@ -309,8 +314,15 @@ export const GROUP_THEMES: readonly CardTheme[] = [
   },
 ];
 
+/**
+ * The seasonal themes, each open to every member for as long as it is listed
+ * here. Retiring one is removing it: whoever chose it is drawn in their
+ * default again (`effectiveTheme`), and sees it once their passes refresh.
+ */
+export const SEASONAL_THEMES: readonly CardTheme[] = [];
+
 /** Every theme there is. Classic stays first: it is the fallback. */
-export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES, ...GROUP_THEMES];
+export const CARD_THEMES: readonly CardTheme[] = [CLASSIC_THEME, ...YEAR_THEMES, ...GROUP_THEMES, ...SEASONAL_THEMES];
 
 /**
  * The public file name of a theme's Google hero image, served by
