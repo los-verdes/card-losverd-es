@@ -767,7 +767,7 @@ describe("their card's theme, on their page", () => {
   it("says what their card is drawn in and why, and offers only the themes they may use", async () => {
     const body = await page();
 
-    expect(body).toContain("Drawn in <strong>Classic</strong>, the default, as nobody has chosen one.");
+    expect(body).toContain("Drawn in <strong>Classic</strong>, their default, as nobody has chosen one.");
     // Seasonal themes are everyone's, so they follow.
     expect(body).toContain(`They may use ${["Classic", "2021: Inaugural season", ...SEASONAL_THEMES.map((theme) => theme.label)].join(", ")}.`);
     expect(body).toContain('<option value="2021">2021: Inaugural season</option>');
@@ -796,7 +796,7 @@ describe("their card's theme, on their page", () => {
     await env.DB.prepare("INSERT INTO member_card_themes (email, theme_id, source) VALUES (?, '2022', 'member')").bind(EMAIL).run();
 
     expect(await page()).toContain(
-      "Drawn in <strong>Classic</strong>, the default: &quot;2022: Verde hasta la muerte&quot; was chosen, but it is not one they can use any more.",
+      "Drawn in <strong>Classic</strong>, their default: &quot;2022: Verde hasta la muerte&quot; was chosen, but it is not one they can use any more.",
     );
   });
 
