@@ -101,6 +101,7 @@ that is tracked in the table below:
 | Card number | on the back | as QR alt text | under the QR code |
 | Status note | on the back, only when not active | pass state (active / expired / inactive) | not shown |
 | Card theme's name | on the back | among the details | not shown (the card is drawn in it) |
+| Links to the card site and the Los Verdes site | on the back | among the links | not shown |
 
 ### Field Details
 
@@ -135,10 +136,12 @@ Members can choose a theme to change how their card looks: the colours and scarf
 
 - **Who can use which:** the year of each membership they bought, their "member since" year, a subgroup's theme (e.g.
   Los Pringles) while they're in its Slack channel, and `classic`.
-- **Default theme:** each member's "member since" year.
+- **Default theme:** each member's "member since" year, or `classic` when that year has no theme.
 - **Losing access** (e.g. leaving the Slack channel): the card falls back to the default theme.
 - **Choosing:** members on their card page; admins on the member's admin page (an admin's choice is logged; a member's
   own is not).
+- **On the passes:** Apple Wallet on iOS 27 shows the theme's artwork as poster art behind the pass; Google Wallet shows
+  it as an image across the pass. Passes already installed update themselves when the theme changes.
 
 ---
 
@@ -159,7 +162,11 @@ changes who is a member.
     never the recipient's. The store's email is only ever shown back to the member: as a hint on the sign-in page,
     and on their card page with the connected account's customer number, so they can tell which account it is.
   - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
-  - **Status:** live on staging; off in production until released.
+  - **The store's header link** appears only to somebody signed in to the store; a guest or signed-out visitor has no
+    store account for it to use.
+  - **Coming from the store:** every page of the card site offers a way back to the store for the rest of that browser
+    session, and the card page names the connected store account (its email, customer number, and since when).
+  - **Status:** live in production and on staging since 2026-10-03.
 
 ---
 
