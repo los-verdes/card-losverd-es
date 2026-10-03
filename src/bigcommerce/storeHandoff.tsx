@@ -36,6 +36,7 @@ import type { Env } from "../index";
 import { LOGIN_PATH, EXPELLED_REASON, requireAuth, type AuthEnv } from "../middleware/auth";
 import { isUserExpelled } from "../member/expulsion";
 import { Page, SUPPORT_EMAIL } from "../member/layout";
+import { markArrivedFromStore } from "../member/storeReturn";
 import { recordOutcome } from "../lib/outcome";
 import { issueSessionToken, readSessionCookie, setSessionCookie, verifySessionToken } from "../auth/session";
 import { AppJwtRejected, appConfig, verifyCurrentCustomer } from "./appJwt";
@@ -250,6 +251,9 @@ handoff.post(STORE_HANDOFF_PATH, async (c) => {
 });
 
 handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
+  // Whatever happens next, they came from the store: every member page
+  // offers the way back (src/member/storeReturn.tsx).
+  markArrivedFromStore(c);
   const pending = await readPendingLink(c, { allowSpent: true });
   if (pending === null) return c.redirect("/");
   const { customerId } = pending;

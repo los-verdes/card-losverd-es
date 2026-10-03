@@ -1,6 +1,7 @@
 import { getAuthUser, initAuthConfig } from "@hono/auth-js";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
+import { clearArrivedFromStore } from "../member/storeReturn";
 import { csrf } from "hono/csrf";
 import type { Env } from "../index";
 import { EXPELLED_REASON, LOGIN_PATH } from "../middleware/auth";
@@ -135,11 +136,12 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
 
 /**
  * Phase 2.3.1: logout just clears `lv_session` (sessions are stateless, so
- * there's nothing server-side to revoke). POST-only with an Origin check, so
+ * there's nothing server-side to revoke), and the store banner's cookie. POST-only with an Origin check, so
  * another site can't log a member out by embedding a link or form.
  */
 auth.post("/logout", csrf(), (c) => {
   clearSessionCookie(c);
+  clearArrivedFromStore(c);
   return c.redirect("/", 303);
 });
 

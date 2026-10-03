@@ -32,6 +32,12 @@ describe("POST /logout", () => {
     );
   });
 
+  it("clears the store banner's cookie too", async () => {
+    const res = await logout("POST", ORIGIN);
+
+    expect(res.headers.getSetCookie()).toContainEqual(expect.stringMatching(/^lv_from_store=;.*Max-Age=0/));
+  });
+
   it("refuses a cross-site form post (can't be used to log members out from another site)", async () => {
     const res = await logout("POST", "https://evil.example");
 

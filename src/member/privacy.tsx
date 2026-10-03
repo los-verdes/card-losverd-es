@@ -40,7 +40,8 @@ privacy.get("/", (c) =>
       <h2>What we don't do</h2>
       <p>
         No advertising and no tracking. Cookies are used only to sign you in and keep you signed in, for up to 30
-        days. Visit statistics are anonymous and use no cookies.
+        days, and, if you came from the Los Verdes store, to offer you the way back to it until you close your
+        browser. Visit statistics are anonymous and use no cookies.
       </p>
       <h2>Questions, or want your data removed?</h2>
       <p>
