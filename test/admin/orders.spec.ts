@@ -6,6 +6,7 @@ import { getTestCertChain } from "../fixtures/certChain";
 import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import worker from "../../src/index";
+import { OrderLink } from "../../src/admin/orders";
 import { insertOrder } from "./fixtures";
 
 const ORIGIN = "https://card.losverd.es";
@@ -698,5 +699,17 @@ describe("the order page", () => {
     const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toContain("It no longer counts or has expired");
+  });
+});
+
+describe("OrderLink", () => {
+  it("names an order by its id, or by its address with the order's own name over it", () => {
+    expect(String(OrderLink({ orderId: "1001" }))).toBe('<a href="/admin/orders/1001">1001</a>');
+    expect(String(OrderLink({ orderId: "1001", email: "pat@example.com", name: " Pat Buyer " }))).toBe(
+      '<a href="/admin/orders/1001" class="order-link">Pat Buyer<span class="order-email">pat@example.com</span></a>',
+    );
+    expect(String(OrderLink({ orderId: "1001", email: "pat@example.com", name: "" }))).toBe(
+      '<a href="/admin/orders/1001">pat@example.com</a>',
+    );
   });
 });

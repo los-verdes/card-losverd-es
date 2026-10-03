@@ -161,7 +161,13 @@ describe("GET /admin/reports/memberships: active", () => {
     // A page number from an old bookmark is ignored rather than refused.
     const body = await (await get("/admin/reports/memberships?page=2")).text();
 
-    // Each address links to its member.
+    // Each order's address, under the name given on it, leads to the order.
+    expect(
+      body.match(
+        /<td[^>]*><a href="\/admin\/orders\/bulk-\d+" class="order-link">Test Member<span class="order-email">bulk\d+@example\.com<\/span><\/a><\/td>/g,
+      ),
+    ).toHaveLength(MANY);
+    // And the member each counts for, though it is the same address: blank, it read as missing.
     expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
     // The bulk orders and the one current order from beforeEach.
@@ -231,7 +237,9 @@ describe("GET /admin/reports/memberships: expired", () => {
     const body = await (await get("/admin/reports/memberships")).text();
 
     expect(body).toContain("<strong>1</strong> lapsed members. As of <time datetime=\"2026-06-01T12:00:00Z\"");
-    expect(section(body, "expired")).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
+    expect(section(body, "expired")).toContain(
+      '<a href="/admin/orders/1" class="order-link">Test Member<span class="order-email">lapsed@example.com</span></a>',
+    );
     expect(section(body, "expired")).not.toContain("current@example.com");
     expect(section(body, "active")).toContain("current@example.com");
     expect(section(body, "active")).not.toContain("lapsed@example.com");
@@ -386,7 +394,9 @@ describe("GET /admin/reports/consolidations", () => {
 
     expect(body).toContain("Orders attributed to another address (1)");
     expect(body).toContain('<a href="/admin/orders/10">10</a>');
-    expect(body).toContain('<a href="/admin/members?q=buyer%40example.com">buyer@example.com</a>');
+    // The order's own name over the address it was placed under, leading to the order; its name columns stay in the download.
+    expect(body).toContain('<a href="/admin/orders/10" class="order-link">Buy Er<span class="order-email">buyer@example.com</span></a>');
+    expect(body).not.toMatch(/<th[^>]*>First name<\/th>/);
     expect(body).toContain('<a href="/admin/members?q=recipient%40example.com">recipient@example.com</a>');
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
     // Who made the change is an admin, not a member.

@@ -348,8 +348,11 @@ button[aria-disabled="true"]::before {
 }
 
 /* A member in an admin table: their card's name, with the address beneath
-   in smaller, quieter type (MemberLink in src/admin/layout.tsx). */
-a.member-link .member-email {
+   in smaller, quieter type (MemberLink in src/admin/layout.tsx). An order
+   given by its address looks the same, with the order's own name
+   (OrderLink in src/admin/orders.tsx). */
+a.member-link .member-email,
+a.order-link .order-email {
   display: block;
   font-size: 0.8em;
   color: var(--muted);
