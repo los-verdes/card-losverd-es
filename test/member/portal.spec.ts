@@ -305,12 +305,14 @@ describe("the banner back to the store", () => {
 });
 
 describe("GET /", () => {
-  it("leads back to this environment's store, or the store when none is set", async () => {
+  it("leads back to this environment's store, above the card and in the footer, or the store when none is set", async () => {
     await seedCurrentMember();
     const realStore = env.BIGCOMMERCE_STOREFRONT_URL;
     try {
       env.BIGCOMMERCE_STOREFRONT_URL = "https://store.example.com/some/page";
-      expect(await (await get("/")).text()).toContain('<a href="https://store.example.com/">← Back to the Los Verdes store</a>');
+      const card = await (await get("/")).text();
+      expect(card).toContain('<a href="https://store.example.com/">← Back to the Los Verdes store</a>');
+      expect(card).toContain('<a href="https://store.example.com/">Los Verdes store</a>');
 
       for (const unset of [undefined, "not a url"]) {
         env.BIGCOMMERCE_STOREFRONT_URL = unset;

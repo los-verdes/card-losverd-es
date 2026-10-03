@@ -34,6 +34,12 @@ export function storeHomeUrl(env: Env): string {
   return new URL("/", MEMBERSHIP_STORE_URL).toString();
 }
 
+/** The store's home page for the request being rendered, or the store's own outside a request. */
+export function currentStoreHomeUrl(): string {
+  const env = tryGetContext<{ Bindings: Env }>()?.env;
+  return env ? storeHomeUrl(env) : new URL("/", MEMBERSHIP_STORE_URL).toString();
+}
+
 export const FROM_STORE_COOKIE = "lv_from_store";
 
 const COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "Lax", path: "/" } as const;
