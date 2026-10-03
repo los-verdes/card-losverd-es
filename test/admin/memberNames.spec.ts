@@ -128,6 +128,15 @@ describe("a member in an admin table", () => {
     );
   });
 
+  it("puts a given name over the address instead, such as an order's own, and the address alone for an empty one", async () => {
+    expect(String(await MemberLink({ email: "pat@example.com", name: " Pat Buyer " }))).toBe(
+      '<a href="/admin/members?q=pat%40example.com" class="member-link">Pat Buyer<span class="member-email">pat@example.com</span></a>',
+    );
+    expect(String(await MemberLink({ email: "pat@example.com", name: "" }))).toBe(
+      '<a href="/admin/members?q=pat%40example.com">pat@example.com</a>',
+    );
+  });
+
   it("leaves the name off when asked to, where the row already names them", async () => {
     expect(String(await MemberLink({ email: "pat@example.com", plain: true }))).toBe(
       '<a href="/admin/members?q=pat%40example.com">pat@example.com</a>',

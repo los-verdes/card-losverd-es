@@ -164,8 +164,11 @@ const CONSOLIDATION_TABLES: {
     key: "attributed-orders",
     field: "attributed",
     title: "Orders attributed to another address",
-    columns: ["order_id", "first_name", "last_name", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
-    headings: ["Order", "First name", "Last name", "Order email", "Attributed to", "Started", "Changed", "Changed by", "Note"],
+    // The order's own name sits over its address (MemberLink), so its name
+    // columns are left off the page; the download keeps them.
+    columns: ["order_id", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
+    headings: ["Order", "Order email", "Attributed to", "Started", "Changed", "Changed by", "Note"],
+    csvColumns: ["order_id", "first_name", "last_name", "order_email", "member_email", "created_on", "attributed_at", "attributed_by", "note"],
   },
   {
     key: "card-names",
@@ -334,9 +337,14 @@ const ReportTable: FC<
     </div>
   );
 
+/** The name given on an order, as one line; empty when it gave none. */
+function orderName(row: { first_name?: string | null; last_name?: string | null }): string {
+  return `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim();
+}
+
 const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: number }> = ({ rows, csvHref, total }) => (
   <ReportTable
-    headings={["Order", "Name", "Order email", "Member email", "Started", "Expires", "Channel", "Status"]}
+    headings={["Order", "Order email", "Member email", "Started", "Expires", "Channel", "Status"]}
     csvHref={csvHref}
     csvLabel={`Download all ${total} as CSV`}
     rowCount={rows.length}
@@ -347,10 +355,9 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
           <td style={cellStyle}>
             <OrderLink orderId={row.order_id} />
           </td>
-          <td style={cellStyle}>{`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()}</td>
           <td style={cellStyle}>
-            {/* The Name column is this order's; a different member is named. */}
-            <MemberLink email={row.order_email} plain />
+            {/* The order's own name over its address, like a member's; a different member is named beside it. */}
+            <MemberLink email={row.order_email} name={orderName(row)} />
           </td>
           <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
@@ -397,10 +404,13 @@ function overrideSetBy(row: CardNameOverrideRow | MemberSinceOverrideRow): strin
 function consolidationCell(row: ConsolidationRow, column: string) {
   const value = row[column];
   if (column === "order_id") return value === null ? "" : <OrderLink orderId={String(value)} />;
-  if ((column === "order_email" || column === "member_email") && typeof value === "string") {
-    // Named only where the row shows no name for that address already: the
-    // order's own name columns cover its buyer, "Card shows" the card's name.
-    return <MemberLink email={value} plain={column === "order_email" || "display_name" in row} />;
+  if (column === "order_email" && typeof value === "string") {
+    // The order's own name, over the address it was placed under.
+    return <MemberLink email={value} name={orderName(row as { first_name?: string | null; last_name?: string | null })} />;
+  }
+  if (column === "member_email" && typeof value === "string") {
+    // Named unless the row shows the card's name already ("Card shows").
+    return <MemberLink email={value} plain={"display_name" in row} />;
   }
   if (column === "attributed_at" && value === null) return "legacy import";
   if (MOMENT_COLUMNS.has(column)) return <When at={Number(value)} />;

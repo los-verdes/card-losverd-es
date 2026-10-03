@@ -23,9 +23,18 @@ export const cellStyle = "padding: 0.25rem 0.6rem; text-align: left; border-bott
  * `plain` leaves the name off where the row already shows one for the same
  * person, and an address with no member shows alone. `href` points somewhere
  * else on the member's page, as the audit log does.
+ *
+ * `name` puts another name over the address instead of the card's: an order's
+ * own name, in tables of orders, where the address is the one the order was
+ * placed under. An empty one leaves the address alone.
  */
-export const MemberLink: FC<{ email: string; plain?: boolean; href?: string }> = async ({ email, plain, href }) => {
-  const name = plain ? undefined : (await memberNames())?.get(email);
+export const MemberLink: FC<{ email: string; plain?: boolean; href?: string; name?: string }> = async ({
+  email,
+  plain,
+  href,
+  name: given,
+}) => {
+  const name = given !== undefined ? given.trim() : plain ? undefined : (await memberNames())?.get(email);
   const to = href ?? `/admin/members?q=${encodeURIComponent(email)}`;
   if (!name) return <a href={to}>{email}</a>;
   return (
