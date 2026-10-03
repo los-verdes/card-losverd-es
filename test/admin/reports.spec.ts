@@ -164,7 +164,7 @@ describe("GET /admin/reports/memberships: active", () => {
     // Each order's address, under the name given on it, leads to the order.
     expect(
       body.match(
-        /<td[^>]*><a href="\/admin\/orders\/bulk-\d+" class="member-link">Test Member<span class="member-email">bulk\d+@example\.com<\/span><\/a><\/td>/g,
+        /<td[^>]*><a href="\/admin\/orders\/bulk-\d+" class="order-link">Test Member<span class="order-email">bulk\d+@example\.com<\/span><\/a><\/td>/g,
       ),
     ).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
@@ -236,7 +236,7 @@ describe("GET /admin/reports/memberships: expired", () => {
 
     expect(body).toContain("<strong>1</strong> lapsed members. As of <time datetime=\"2026-06-01T12:00:00Z\"");
     expect(section(body, "expired")).toContain(
-      '<a href="/admin/orders/1" class="member-link">Test Member<span class="member-email">lapsed@example.com</span></a>',
+      '<a href="/admin/orders/1" class="order-link">Test Member<span class="order-email">lapsed@example.com</span></a>',
     );
     expect(section(body, "expired")).not.toContain("current@example.com");
     expect(section(body, "active")).toContain("current@example.com");
@@ -393,7 +393,7 @@ describe("GET /admin/reports/consolidations", () => {
     expect(body).toContain("Orders attributed to another address (1)");
     expect(body).toContain('<a href="/admin/orders/10">10</a>');
     // The order's own name over the address it was placed under, leading to the order; its name columns stay in the download.
-    expect(body).toContain('<a href="/admin/orders/10" class="member-link">Buy Er<span class="member-email">buyer@example.com</span></a>');
+    expect(body).toContain('<a href="/admin/orders/10" class="order-link">Buy Er<span class="order-email">buyer@example.com</span></a>');
     expect(body).not.toMatch(/<th[^>]*>First name<\/th>/);
     expect(body).toContain('<a href="/admin/members?q=recipient%40example.com">recipient@example.com</a>');
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms

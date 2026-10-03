@@ -19,7 +19,7 @@ import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { BarChart, type BarGroup, type BarSeries } from "./barChart";
 import { LineChart, type LineSeries } from "./lineChart";
 import { activeMembersByDay } from "./membersOverTime";
-import { OrderLink, orderPath } from "./orders";
+import { OrderLink } from "./orders";
 import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, sortKey } from "./when";
 import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
@@ -357,7 +357,7 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
           </td>
           <td style={cellStyle}>
             {/* The order's own name over its address, leading to the order; a different member is named beside it. */}
-            <MemberLink email={row.order_email} name={orderName(row)} href={orderPath(row.order_id)} />
+            <OrderLink orderId={row.order_id} email={row.order_email} name={orderName(row)} />
           </td>
           <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
@@ -406,11 +406,12 @@ function consolidationCell(row: ConsolidationRow, column: string) {
   if (column === "order_id") return value === null ? "" : <OrderLink orderId={String(value)} />;
   if (column === "order_email" && typeof value === "string") {
     // The order's own name, over the address it was placed under, leading to the order.
+    if (row.order_id === null) return <MemberLink email={value} plain />;
     return (
-      <MemberLink
+      <OrderLink
+        orderId={String(row.order_id)}
         email={value}
         name={orderName(row as { first_name?: string | null; last_name?: string | null })}
-        href={row.order_id === null ? undefined : orderPath(String(row.order_id))}
       />
     );
   }

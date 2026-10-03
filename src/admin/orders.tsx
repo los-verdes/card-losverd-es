@@ -55,12 +55,29 @@ const OrderIntro: FC<{ order: { source: string; member_email: string } }> = ({ o
   </p>
 );
 
-/** An order id as a link to its admin page, shortened if it is a long Squarespace one. */
-export const OrderLink: FC<{ orderId: string }> = ({ orderId }) => (
-  <a href={orderPath(orderId)} title={fullOrderIdTitle(orderId)}>
-    {shortOrderId(orderId)}
-  </a>
-);
+/**
+ * An order as a link to its admin page: by its id, shortened if it is a long
+ * Squarespace one, or, given the address it was placed under, by that, with
+ * the name given on the order over it, as a member link shows a member. An
+ * order that gave no name shows the address alone.
+ */
+export const OrderLink: FC<{ orderId: string; email?: string; name?: string }> = ({ orderId, email, name }) => {
+  if (email === undefined) {
+    return (
+      <a href={orderPath(orderId)} title={fullOrderIdTitle(orderId)}>
+        {shortOrderId(orderId)}
+      </a>
+    );
+  }
+  const shown = name?.trim();
+  if (!shown) return <a href={orderPath(orderId)}>{email}</a>;
+  return (
+    <a href={orderPath(orderId)} class="order-link">
+      {shown}
+      <span class="order-email">{email}</span>
+    </a>
+  );
+};
 
 /**
  * Re-reading one order from BigCommerce (#294). Rarely needed -- the order
