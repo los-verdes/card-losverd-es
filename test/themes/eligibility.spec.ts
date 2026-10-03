@@ -1,7 +1,7 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { CLASSIC_THEME, type CardTheme } from "../../src/themes/cardTheme";
+import { CLASSIC_THEME, SEASONAL_THEMES, type CardTheme } from "../../src/themes/cardTheme";
 import {
   getThemeOptions,
   purchaseYears,
@@ -94,7 +94,7 @@ describe("themeOptions", () => {
     // 2021 and 2024 have scarf designs; 2027's is still to come.
     const options = themeOptions({ ...history, orders: [...history.orders, order("2027-03-01", "2028-03-01")] }, true);
 
-    expect(ids(options.themes)).toEqual(["classic", "2021", "2024"]);
+    expect(ids(options.themes)).toEqual(["classic", "2021", "2024", ...SEASONAL_THEMES.map((theme) => theme.id)]);
     expect(options.defaultTheme.id).toBe("2021");
   });
 });
@@ -160,7 +160,7 @@ describe("getThemeOptions", () => {
 
   it("offers the real registry by default", async () => {
     // Member since 2021, which has a published theme.
-    expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021"]);
+    expect(ids((await getThemeOptions(env, member)).themes)).toEqual(["classic", "2021", ...SEASONAL_THEMES.map((theme) => theme.id)]);
   });
 });
 

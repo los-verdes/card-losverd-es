@@ -97,6 +97,15 @@ describe("the theme page", () => {
     expect(body).toContain('<a href="/">Back to your card</a>');
   });
 
+  it("offers the seasonal themes to everyone, last, marked as seasonal", async () => {
+    const body = await (await request(THEME_PATH)).text();
+
+    expect(body).toContain('src="/card.png?theme=chinga-la-migra"');
+    expect(body).toContain("<strong>Chinga la Migra</strong> (seasonal)");
+    expect(body).toContain("Seasonal themes are open to every member, while they last.");
+    expect(body.indexOf("theme=chinga-la-migra")).toBeGreaterThan(body.indexOf("theme=2021"));
+  });
+
   it("lists the theme the card is in now first, the rest in their usual order", async () => {
     const before = await (await request(THEME_PATH)).text();
     expect(before.indexOf("theme=classic")).toBeLessThan(before.indexOf("theme=2021"));

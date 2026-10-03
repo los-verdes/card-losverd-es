@@ -3,6 +3,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
+import { SEASONAL_THEMES } from "../../src/themes/cardTheme";
 import { NAME_SEARCH_LIMIT, classify, parseNameSearch } from "../../src/admin/members";
 import { getDisplayName, setDisplayName } from "../../src/member/displayName";
 import { isExpelled, expelPerson } from "../../src/member/expulsion";
@@ -754,7 +755,8 @@ describe("their card's theme, on their page", () => {
     const body = await page();
 
     expect(body).toContain("Drawn in <strong>Classic</strong>, the default, as nobody has chosen one.");
-    expect(body).toContain("They may use Classic, 2021: Inaugural season.");
+    // Seasonal themes are everyone's, so they follow.
+    expect(body).toContain(`They may use ${["Classic", "2021: Inaugural season", ...SEASONAL_THEMES.map((theme) => theme.label)].join(", ")}.`);
     expect(body).toContain('<option value="2021">2021: Inaugural season</option>');
     expect(body).not.toContain('value="2022"');
   });
