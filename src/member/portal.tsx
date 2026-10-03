@@ -624,7 +624,7 @@ const ThemeForm: FC<{
     {error && <p style="color: var(--danger)">{error}</p>}
     <p>
       Your card is drawn in <strong>{current.label}</strong>
-      {chosen ? ", which you chose." : ", the default."} You can use the theme of
+      {chosen ? ", which you chose." : ", your default."} You can use the theme of
       any year you bought a membership, and of any subgroup you belong to, as
       well as the classic look.
       {options.themes.some((theme) => theme.seasonal) && " Seasonal themes are open to every member, while they last."}
@@ -644,7 +644,7 @@ const ThemeForm: FC<{
         />
         <p style="margin: 0.5rem 0">
           <strong>{theme.label}</strong>
-          {theme === options.defaultTheme ? " (the default)" : ""}
+          {theme === options.defaultTheme ? " (your default)" : ""}
           {theme.seasonal ? " (seasonal)" : ""}
         </p>
         {theme.id === current.id ? (
@@ -657,7 +657,7 @@ const ThemeForm: FC<{
     {chosen && (
       <form method="post" action={THEME_PATH}>
         <input type="hidden" name="clear" value="1" />
-        <button type="submit">Go back to the default ({options.defaultTheme.label})</button>
+        <button type="submit">Go back to your default ({options.defaultTheme.label})</button>
       </form>
     )}
     <p>

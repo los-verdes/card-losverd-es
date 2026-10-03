@@ -96,9 +96,9 @@ describe("the theme page", () => {
     expect(body).toContain('src="/card.png?theme=classic"');
     expect(body).toContain('src="/card.png?theme=2021"');
     expect(body).not.toContain("theme=2022");
-    expect(body).toContain("Your card is drawn in <strong>Classic</strong>, the default.");
+    expect(body).toContain("Your card is drawn in <strong>Classic</strong>, your default.");
     expect(body.match(/Your card looks like this now\./g)).toHaveLength(1);
-    expect(body).not.toContain("Go back to the default");
+    expect(body).not.toContain("Go back to your default");
   });
 
   it("leads back to the card from the top, before the previews, as well as from the foot", async () => {
@@ -135,7 +135,7 @@ describe("the theme page", () => {
     const body = await (await request(THEME_PATH)).text();
 
     expect(body).toContain("Your card is drawn in <strong>2021: Inaugural season</strong>, which you chose.");
-    expect(body).toContain("Go back to the default (Classic)");
+    expect(body).toContain("Go back to your default (Classic)");
   });
 });
 

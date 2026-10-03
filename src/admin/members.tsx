@@ -268,9 +268,9 @@ function themeLabel(id: string): string {
 const ThemeSection: FC<{ member: MemberRecord; theme: ThemeSummary }> = ({ member, theme }) => {
   const { options, current, choice, open } = theme;
   const why = !choice
-    ? "the default, as nobody has chosen one"
+    ? "their default, as nobody has chosen one"
     : choice.theme_id !== current.id
-      ? `the default: "${themeLabel(choice.theme_id)}" was chosen, but it is not one they can use any more`
+      ? `their default: "${themeLabel(choice.theme_id)}" was chosen, but it is not one they can use any more`
       : choice.source === "member"
         ? "which they chose themselves"
         : `which an admin chose for them${choice.set_by_email ? ` (${choice.set_by_email})` : ""}`;
@@ -300,7 +300,7 @@ const ThemeSection: FC<{ member: MemberRecord; theme: ThemeSummary }> = ({ membe
             <form method="post" action={MEMBERS_PATH}>
               <input type="hidden" name="email" value={member.email} />
               <input type="hidden" name="action" value="theme-clear" />
-              <button type="submit">Go back to the default ({options.defaultTheme.label})</button>
+              <button type="submit">Go back to their default ({options.defaultTheme.label})</button>
             </form>
           )}
         </>
