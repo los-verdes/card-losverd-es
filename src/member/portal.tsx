@@ -41,7 +41,7 @@ import {
 } from "./artifacts";
 import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
 import { appConfig } from "../bigcommerce/appJwt";
-import { storeAccountFor } from "../bigcommerce/storeAccount";
+import { storeAccountFor, type StoreAccountLink } from "../bigcommerce/storeAccount";
 import { STORE_DISCONNECT_PATH } from "../bigcommerce/storeHandoff";
 import { Page, SUPPORT_EMAIL } from "./layout";
 import {
@@ -51,7 +51,8 @@ import {
   normalizeDisplayName,
   setDisplayName,
 } from "./displayName";
-import type { CardTheme } from "../themes/cardTheme";
+import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
+import { MEMBERSHIP_STORE_URL, arrivedFromStore, storeHomeUrl } from "./storeReturn";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
   ThemeNotAllowed,
@@ -60,25 +61,6 @@ import {
   mayChooseTheme,
   setCardTheme,
 } from "../themes/choice";
-
-// The membership store the legacy no-membership page links to.
-export const MEMBERSHIP_STORE_URL =
-  "https://store.losverdesatx.org/membership/";
-
-/**
- * The store's home page, for the card page's way back to it: this
- * environment's own storefront (the sandbox, on staging), or the store.
- * Members arrive from the store's "Membership card" link and may well have
- * shopping to finish.
- */
-export function storeHomeUrl(env: Env): string {
-  try {
-    if (env.BIGCOMMERCE_STOREFRONT_URL) return new URL("/", env.BIGCOMMERCE_STOREFRONT_URL).toString();
-  } catch {
-    // A malformed setting falls back to the store below.
-  }
-  return new URL("/", MEMBERSHIP_STORE_URL).toString();
-}
 
 type CurrentMember = MemberRecord & { expiration_date: string };
 
@@ -228,7 +210,8 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
  * connect through.
  */
 export interface StoreAccountView {
-  connected: boolean;
+  /** The connected store account, or null when there is none. */
+  account: StoreAccountLink | null;
   /** Where "Connect your store account" goes: the store's account page, which runs the handoff. */
   connectHref: string;
   /** What just happened, from the handoff's redirect. */
@@ -244,17 +227,39 @@ const STORE_NOTICES = {
   },
 } as const;
 
+/**
+ * Which store account is connected, so a member with more than one can tell:
+ * its email as the store last stated it, its customer number (what the Merch
+ * Team look it up by), and since when.
+ */
+const StoreAccountDetails: FC<{ account: StoreAccountLink }> = ({ account }) => {
+  const since = account.linkedAt ? `, since ${formatShortDate(new Date(account.linkedAt).toISOString().slice(0, 10))}` : "";
+  return account.email ? (
+    <p>
+      Connected to <strong>{account.email}</strong> on the store (customer #{account.customerId}){since}.
+    </p>
+  ) : (
+    <p>
+      Connected to store customer #{account.customerId}
+      {since}. Its email shows here once you next use "Membership card" on the store.
+    </p>
+  );
+};
+
 const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
   <section style="margin-top: 2rem">
     <h2 style="font-size: 1.1rem">Store account</h2>
     {store.notice && <p style={`color: ${STORE_NOTICES[store.notice].color}`}>{STORE_NOTICES[store.notice].text}</p>}
-    {store.connected ? (
+    {store.account ? (
       <>
+        <StoreAccountDetails account={store.account} />
         <p class="muted">
-          Connected. "Membership card" on the Los Verdes store brings you straight here, without signing in again.
+          "Membership card" on the Los Verdes store brings you straight here, without signing in again.
         </p>
         <form method="post" action={STORE_DISCONNECT_PATH}>
-          <button type="submit">Disconnect my store account</button>
+          <button type="submit" class="quiet danger">
+            Disconnect my store account
+          </button>
         </form>
       </>
     ) : (
@@ -278,7 +283,10 @@ export const MemberCard: FC<{
   canChooseTheme?: boolean;
   /** Their store account, when this environment has a store app. */
   store?: StoreAccountView | null;
-  /** The store's home page (`storeHomeUrl`). */
+  /**
+   * The store's home page (`storeHomeUrl`), for a small link above the card.
+   * Left out for a member who came from the store, whose banner says it.
+   */
   storeUrl?: string;
 }> = ({ member, orders, isAdmin, canChooseTheme = false, store = null, storeUrl }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
@@ -452,7 +460,7 @@ async function storeAccountView(env: Env, userId: number, notice: string | undef
   // (src/bigcommerce/storefront.ts).
   connectHref.hash = "lv-connect";
   return {
-    connected: (await storeAccountFor(env, userId)) !== null,
+    account: await storeAccountFor(env, userId),
     connectHref: connectHref.toString(),
     notice: notice === "connected" || notice === "taken" || notice === "disconnected" ? notice : undefined,
   };
@@ -472,13 +480,24 @@ portal.get("/", requireCurrentMember, async (c) => {
       isAdmin={isAdmin}
       canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
       store={await storeAccountView(c.env, c.get("session").userId, c.req.query("store"))}
-      storeUrl={storeHomeUrl(c.env)}
+      storeUrl={arrivedFromStore(c) ? undefined : storeHomeUrl(c.env)}
     />,
   );
 });
 
 
 export const NAME_PATH = "/name";
+
+/**
+ * The way back to the card, at the top of the pages reached from it, as well
+ * as the link at their foot: a member who changes their mind should not have
+ * to scroll past everything to leave.
+ */
+const BackToCard: FC = () => (
+  <p class="muted" style="margin: 0 0 0.5rem">
+    <a href="/">&larr; Back to your card</a>
+  </p>
+);
 
 const NameForm: FC<{
   member: CurrentMember;
@@ -488,6 +507,7 @@ const NameForm: FC<{
   saved?: boolean;
 }> = ({ member, current, setByAdmin, error, saved }) => (
   <Page title="The name on your card">
+    <BackToCard />
     <h1>The name on your card</h1>
     {saved && <p class="success">Saved. Any passes you have installed will catch up shortly.</p>}
     {error && <p class="danger">{error}</p>}
@@ -596,6 +616,7 @@ const ThemeForm: FC<{
   saved?: boolean;
 }> = ({ options, current, chosen, error, saved }) => (
   <Page title="How your card looks">
+    <BackToCard />
     <h1>How your card looks</h1>
     {saved && (
       <p style="color: var(--success)">Saved. Any passes you have installed will catch up shortly.</p>
@@ -676,13 +697,15 @@ portal.post(THEME_PATH, requireCurrentMember, csrf(), async (c) => {
   const form = await c.req.formData();
 
   if (form.get("clear")) {
-    await clearCardTheme(c.env, member.email, "member", userId);
+    await clearCardTheme(c.env, member.email, "member", userId, CARD_THEMES, (work) => c.executionCtx.waitUntil(work));
     recordOutcome("card_theme.saved", { result: "cleared" });
     return c.redirect(`${THEME_PATH}?saved=1`, 303);
   }
 
   try {
-    await setCardTheme(c.env, member, String(form.get("theme") ?? ""), "member", userId);
+    await setCardTheme(c.env, member, String(form.get("theme") ?? ""), "member", userId, CARD_THEMES, (work) =>
+      c.executionCtx.waitUntil(work),
+    );
   } catch (err) {
     if (!(err instanceof ThemeNotAllowed)) throw err;
     recordOutcome("card_theme.saved", { result: "rejected" });

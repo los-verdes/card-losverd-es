@@ -161,7 +161,13 @@ describe("GET /admin/reports/memberships: active", () => {
     // A page number from an old bookmark is ignored rather than refused.
     const body = await (await get("/admin/reports/memberships?page=2")).text();
 
-    // Each address links to its member.
+    // Each order's address, under the name given on it, leads to the order.
+    expect(
+      body.match(
+        /<td[^>]*><a href="\/admin\/orders\/bulk-\d+" class="order-link">Test Member<span class="order-email">bulk\d+@example\.com<\/span><\/a><\/td>/g,
+      ),
+    ).toHaveLength(MANY);
+    // And the member each counts for, though it is the same address: blank, it read as missing.
     expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
     // The bulk orders and the one current order from beforeEach.
@@ -231,7 +237,9 @@ describe("GET /admin/reports/memberships: expired", () => {
     const body = await (await get("/admin/reports/memberships")).text();
 
     expect(body).toContain("<strong>1</strong> lapsed members. As of <time datetime=\"2026-06-01T12:00:00Z\"");
-    expect(section(body, "expired")).toContain('<a href="/admin/members?q=lapsed%40example.com">lapsed@example.com</a>');
+    expect(section(body, "expired")).toContain(
+      '<a href="/admin/orders/1" class="order-link">Test Member<span class="order-email">lapsed@example.com</span></a>',
+    );
     expect(section(body, "expired")).not.toContain("current@example.com");
     expect(section(body, "active")).toContain("current@example.com");
     expect(section(body, "active")).not.toContain("lapsed@example.com");
@@ -386,7 +394,9 @@ describe("GET /admin/reports/consolidations", () => {
 
     expect(body).toContain("Orders attributed to another address (1)");
     expect(body).toContain('<a href="/admin/orders/10">10</a>');
-    expect(body).toContain('<a href="/admin/members?q=buyer%40example.com">buyer@example.com</a>');
+    // The order's own name over the address it was placed under, leading to the order; its name columns stay in the download.
+    expect(body).toContain('<a href="/admin/orders/10" class="order-link">Buy Er<span class="order-email">buyer@example.com</span></a>');
+    expect(body).not.toMatch(/<th[^>]*>First name<\/th>/);
     expect(body).toContain('<a href="/admin/members?q=recipient%40example.com">recipient@example.com</a>');
     expect(body).toContain("2023-11-14 22"); // 1700000000000 ms
     // Who made the change is an admin, not a member.
@@ -711,14 +721,16 @@ describe("GET /admin/reports/over-time", () => {
     const body = await (await get("/admin/reports/over-time?year=2026")).text();
     const products = body.slice(body.indexOf("<h2>Orders by product</h2>"));
 
-    expect(products).toMatch(
-      /<th[^>]*>Year \(UTC\)<\/th><th[^>]*>Squarespace \(before BigCommerce\)<\/th><th[^>]*>Membership pack \(LOSV-MEM-0001\)<\/th><th[^>]*>Membership without merchandise \(LOSV-DIGI-5000\)<\/th><th[^>]*>LOSV-OLD-0001<\/th><th[^>]*>No SKU recorded<\/th><th[^>]*>Total<\/th>/,
-    );
-    // 2024: one Squarespace order, one without a SKU; 2026: the refund does not count.
-    expect(products).toMatch(/>2024<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>2<\/td><th[^>]*>3<\/th>/);
-    expect(products).toMatch(/>2025<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>1<\/th>/);
-    expect(products).toMatch(/>2026<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><th[^>]*>3<\/th>/);
-    expect(products).toMatch(/Total<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>1<\/th><th[^>]*>1<\/th><th[^>]*>2<\/th><th[^>]*>7<\/th>/);
+    // A product to a row, a year to a column: product names are the long ones.
+    expect(products).toMatch(/<th[^>]*>Product<\/th><th[^>]*>2024<\/th><th[^>]*>2025<\/th><th[^>]*>2026<\/th><th[^>]*>Total<\/th>/);
+    // 2024: one Squarespace order, two without a SKU; 2026: the refund does not count.
+    expect(products).toMatch(/>Squarespace \(before BigCommerce\)<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>Membership pack \(LOSV-MEM-0001\)<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><th[^>]*>2<\/th>/);
+    expect(products).toMatch(/>Membership without merchandise \(LOSV-DIGI-5000\)<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>LOSV-OLD-0001<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><td[^>]*>1<\/td><th[^>]*>1<\/th>/);
+    expect(products).toMatch(/>No SKU recorded<\/td><td[^>]*>2<\/td><td[^>]*>0<\/td><td[^>]*>0<\/td><th[^>]*>2<\/th>/);
+    expect(products.indexOf(">Squarespace (before BigCommerce)<")).toBeLessThan(products.indexOf(">No SKU recorded<"));
+    expect(products).toMatch(/Total<\/th><th[^>]*>3<\/th><th[^>]*>1<\/th><th[^>]*>3<\/th><th[^>]*>7<\/th>/);
 
     const csv = await get("/admin/reports/over-time?table=products&format=csv");
     expect(csv.headers.get("Content-Disposition")).toBe('attachment; filename="membership-orders-by-product-2026-06-01.csv"');
@@ -884,7 +896,32 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(unmatched).toContain("a guest checkout");
 
     const csv = (await (await get("/admin/reports/renewals?section=unmatched&format=csv")).text()).trimEnd().split("\r\n");
-    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594");
+    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594,");
+  });
+
+  it("lists a subscription no order matches but whose address is a member's apart, as a hint (#470)", async () => {
+    // A guest checkout, its starting order not held, under a member's address.
+    await env.DB.prepare(
+      "INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, customer_email, sku, status, next_payment_on, seen_at) VALUES (18, 9997, NULL, 'later@example.com', 'LOSV-MEM-0001', 'active', '2027-05-01', 1)",
+    ).run();
+
+    const body = await (await get("/admin/reports/renewals")).text();
+    const byAddress = section(body, "Same address as a member, no order matches");
+
+    expect(byAddress).toContain("(1)");
+    expect(byAddress).toContain('<a href="/admin/members?q=later%40example.com"');
+    expect(byAddress).toContain("2027-05-01");
+    expect(byAddress).toContain("Renews automatically on May 1, 2027");
+    expect(byAddress).toContain('<a href="/admin/orders/9997"');
+    expect(byAddress).toContain("a guest checkout");
+    // Not matched to anyone, and not their subscription: 16 stays unmatched, 18 moves out.
+    const unmatched = section(body, "Not matched to a member");
+    expect(unmatched).toMatch(/>16<\/td>/);
+    expect(unmatched).not.toMatch(/>18<\/td>/);
+    expect(section(body, "Renewing in the next 30 days")).not.toMatch(/>18<\/td>/);
+
+    const csv = (await (await get("/admin/reports/renewals?section=by-address&format=csv")).text()).trimEnd().split("\r\n");
+    expect(csv[1]).toBe('18,,,,,active,2027-05-01,,,,9997,"Renews automatically on May 1, 2027",LOSV-MEM-0001,,later@example.com');
   });
 
   it("downloads a section as CSV, and refuses one that doesn't exist", async () => {
@@ -892,7 +929,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="renewals-overdue-2026-10-01.csv"');
     const lines = (await res.text()).trimEnd().split("\r\n");
     expect(lines[0]).toBe(
-      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id",
+      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id,address_member_email",
     );
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("lapsed@example.com");

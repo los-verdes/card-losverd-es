@@ -148,6 +148,10 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_RECIPIENT_ALLOWLIST = "*"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot)"
+# How many "find my membership" links one address may be asked for a day
+# (src/member/claimMembership.ts), whoever asks, so one inbox can't be
+# flooded. Staging's is higher, for testing against its own mailboxes.
+CLAIM_RECIPIENT_DAILY_LIMIT = "3"
 # A Turnstile site key is public -- it's rendered into the /email-card form --
 # so it belongs here rather than in the Worker secrets item. Each widget is
 # bound to its own hostnames, so production and staging need separate ones.
@@ -287,6 +291,7 @@ APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
+CLAIM_RECIPIENT_DAILY_LIMIT = "25"
 # Staging's own Turnstile widget, bound to stagingcard.losverd.es.
 TURNSTILE_SITE_KEY = "0x4AAAAAAE-1onLnv0YsYEli"
 # On, so the new-order email runs here ahead of production. The allowlist

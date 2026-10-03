@@ -27,6 +27,8 @@ const subscription = (id: number, email: string, fields: Partial<RenewalRow>): R
   last_name: null,
   display_name: null,
   expiration_date: "2025-05-01",
+  address_member_email: null,
+  address_expiration_date: null,
   ...fields,
 });
 

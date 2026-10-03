@@ -13,7 +13,9 @@
  * - `POST /subscriptions/search` with `product_sku` pages 50 at a time, in id
  *   order, and answers 404 past the last page.
  * - Each subscription carries `next_payment_date` without asking for it, the
- *   order that started it (`order_id`), and `customer.store_customer_id`.
+ *   order that started it (`order_id`), and `customer.store_customer_id` and
+ *   `customer.email`. The email is kept only to hint at the member for a
+ *   subscription no order matches (#470); it never matches anything.
  * - Dates are `YYYY-MM-DD`, an empty string when there is none, and at least
  *   once PHP's zero date (`-0001-11-30`); `last_modified` is epoch seconds.
  * - `periodicity` says one month on every subscription, while both membership
@@ -48,7 +50,7 @@ export interface MinibcSubscription {
   pause_date?: string;
   cancellation_date?: string;
   last_modified?: string | number;
-  customer?: { store_customer_id?: number | string | null };
+  customer?: { store_customer_id?: number | string | null; email?: string | null };
   metadata?: { origin_order_id?: number | string | null } | unknown[] | null;
 }
 
@@ -113,6 +115,12 @@ function positiveInteger(value: unknown): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/** MiniBC's customer email, trimmed and lowercased as every address here is, or null for none. */
+function customerEmail(value: unknown): string | null {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return email.includes("@") ? email : null;
+}
+
 /** A subscription as a `minibc_subscriptions` row, less the columns the walk sets. */
 export function subscriptionRow(subscription: MinibcSubscription) {
   const metadata = subscription.metadata && !Array.isArray(subscription.metadata) ? subscription.metadata : null;
@@ -121,6 +129,7 @@ export function subscriptionRow(subscription: MinibcSubscription) {
     order_id: positiveInteger(subscription.order_id),
     origin_order_id: positiveInteger(metadata?.origin_order_id),
     store_customer_id: positiveInteger(subscription.customer?.store_customer_id),
+    customer_email: customerEmail(subscription.customer?.email),
     status: typeof subscription.status === "string" && subscription.status ? subscription.status : "unknown",
     signup_on: minibcDate(subscription.signup_date),
     next_payment_on: minibcDate(subscription.next_payment_date),
@@ -153,11 +162,12 @@ async function recordPage(env: Env, sku: string, subscriptions: MinibcSubscripti
   if (rows.length === 0) return;
   await env.DB.prepare(
     `INSERT INTO minibc_subscriptions (
-       subscription_id, order_id, origin_order_id, store_customer_id, sku, status,
+       subscription_id, order_id, origin_order_id, store_customer_id, customer_email, sku, status,
        signup_on, next_payment_on, paused_on, cancelled_on, minibc_modified_at, seen_at, missing_since, updated_at
      )
      SELECT json_extract(value, '$.subscription_id'), json_extract(value, '$.order_id'),
             json_extract(value, '$.origin_order_id'), json_extract(value, '$.store_customer_id'),
+            json_extract(value, '$.customer_email'),
             ?2, json_extract(value, '$.status'), json_extract(value, '$.signup_on'),
             json_extract(value, '$.next_payment_on'), json_extract(value, '$.paused_on'),
             json_extract(value, '$.cancelled_on'), json_extract(value, '$.minibc_modified_at'),
@@ -167,6 +177,7 @@ async function recordPage(env: Env, sku: string, subscriptions: MinibcSubscripti
        order_id = excluded.order_id,
        origin_order_id = excluded.origin_order_id,
        store_customer_id = excluded.store_customer_id,
+       customer_email = excluded.customer_email,
        sku = excluded.sku,
        status = excluded.status,
        signup_on = excluded.signup_on,

@@ -37,12 +37,13 @@ async function insertSubscription(s: {
   status?: string;
   next?: string | null;
   missing?: boolean;
+  email?: string | null;
 }) {
   await env.DB.prepare(
-    `INSERT INTO minibc_subscriptions (subscription_id, order_id, origin_order_id, store_customer_id, sku, status, signup_on, next_payment_on, seen_at, missing_since)
-     VALUES (?, ?, ?, ?, 'LOSV-MEM-0001', ?, '2026-02-14', ?, 1, ?)`,
+    `INSERT INTO minibc_subscriptions (subscription_id, order_id, origin_order_id, store_customer_id, sku, status, signup_on, next_payment_on, seen_at, missing_since, customer_email)
+     VALUES (?, ?, ?, ?, 'LOSV-MEM-0001', ?, '2026-02-14', ?, 1, ?, ?)`,
   )
-    .bind(s.id, s.orderId ?? null, s.originOrderId ?? null, s.customerId ?? null, s.status ?? "active", s.next === undefined ? "2027-02-14" : s.next, s.missing ? 5 : null)
+    .bind(s.id, s.orderId ?? null, s.originOrderId ?? null, s.customerId ?? null, s.status ?? "active", s.next === undefined ? "2027-02-14" : s.next, s.missing ? 5 : null, s.email ?? null)
     .run();
 }
 
@@ -79,6 +80,31 @@ describe("matching a subscription to its member", () => {
 
     await insertOrder({ id: "1002", orderEmail: "buyer@example.com", customerId: 77, created: "2026-03-01T00:00:00Z" });
     expect((await allRenewals(env))[0].member_email).toBe("buyer@example.com");
+  });
+
+  it("hints at the member whose address is MiniBC's email only when no order matches, and never matches by it", async () => {
+    await insertMember("BC-1", "jane@example.com", "2027-02-14");
+    await insertMember("BC-2", "pat@example.com", "2026-12-01");
+    await insertOrder({ id: "1001", orderEmail: "pat@example.com" });
+    // A guest checkout whose starting order is not held: only the address points anywhere.
+    await insertSubscription({ id: 1, orderId: 999, email: "jane@example.com" });
+    // An order matches this one, so the address (somebody else's) is no hint at all.
+    await insertSubscription({ id: 2, orderId: 1001, email: "jane@example.com" });
+    // An address no member has.
+    await insertSubscription({ id: 3, orderId: 998, email: "nobody@example.com" });
+
+    const rows = new Map((await allRenewals(env)).map((row) => [row.subscription_id, row]));
+    expect(rows.get(1)).toMatchObject({ member_email: null, member_id: null, address_member_email: "jane@example.com", address_expiration_date: "2027-02-14" });
+    expect(rows.get(2)).toMatchObject({ member_email: "pat@example.com", address_member_email: null });
+    expect(rows.get(3)).toMatchObject({ member_email: null, address_member_email: null });
+
+    // The member's own list has theirs first, then the one only their address points to.
+    await insertOrder({ id: "1002", orderEmail: "jane@example.com" });
+    await insertSubscription({ id: 4, orderId: 1002 });
+    expect((await renewalsForMember(env, "jane@example.com")).map((row) => [row.subscription_id, row.member_email])).toEqual([
+      [4, "jane@example.com"],
+      [1, null],
+    ]);
   });
 
   it("leaves out subscriptions MiniBC no longer lists", async () => {

@@ -39,15 +39,19 @@ side. So the art's subject belongs in the top half, clear of the sides.
 ## How each year was made
 
 - **2020 (MMXX).** One column of pixels through the scarf's serape stripes.
-  Turned upright and stretched for the card (darkened 58%) and the hero; left
-  running across, as the scarf hangs, for the poster (darkened 35%).
+  Left running across, as the scarf hangs, for the card (darkened 58%) and
+  the poster (darkened 35%); turned upright and stretched for the hero.
 - **2021 (inaugural season).** The scarf's back: the skull and its rings on
   black, darkened 45% on the card. The poster and hero show the skull and its
   rays at the top and middle respectively.
-- **2022 ("Verde hasta la muerte").** The doodle pattern from its source image
-  inside the scarf's print file, at the scale and angle (8 degrees) the scarf
-  used and with its lightness -20, so the colours are the printed ones.
-  Darkened 30% on the card and 25% on the poster.
+- **2022 ("Verde hasta la muerte").** The scarf's doodle pattern, from its
+  source tile (`2022-pattern-quarter.png`), at about half the scale the scarf
+  printed it so its small motifs show. The card is set so the Texas outline,
+  ATX and a sugar skull sit in the open space between the crest, the name and
+  the QR code, darkened to the printed green. The poster and hero carry the
+  scarf's own "VERDE HASTA LA MUERTE" and MMXXII lettering, taken from the
+  print file, over the pattern: in three lines in the poster's top half,
+  clear of the QR code, and in two lines across the hero.
 - **2023 ("i love you verde").** The flags from the scarf's papel picado side,
   lifted off their black and set, with a soft shadow, in two rows ("LOS" and
   the skull, then "VERDES") on the mint of the scarf's other side. Faded 68%
@@ -80,20 +84,24 @@ A subgroup theme (`GROUP_THEMES`) is for the members of one subgroup
 (`CARD_GROUPS` in `src/themes/groups.ts`), and keeps its files under its own
 id here rather than a year.
 
-- **Los Pringles (`los-pringles/`).** The centre of the back of the Los
-  Pringles scarf, the all-seeing Pringle on black, with the flying Pringles
-  either side. The scarf's end panels, with their lettered names of honour
-  and their barcodes, are left out. The emblem itself is laid over
-  the scarf's copy from a separate, sharper source file of it (about 1,230
-  pixels across), so it stays crisp where the scarf image is soft. Darkened
-  35% on the card.
-- **Verdirojas (`verdirojas/`).** From two scarves. The card is the
-  VERDIROJAS side of the Verdirojas scarf, from flatbed scans stitched
-  together: the watermelon slice between VERDI and ROJAS, on the keffiyeh
-  net, darkened 58%. The thumbnail is the watermelon slice. The
-  poster and hero are the raised fist from the end of the Refugees Welcome
-  scarf, rendered from its vector print file: upright on the poster (darkened
-  25%), across the hero as the scarf runs. The border is the watermelon's red.
+- **Los Pringles (`los-pringles/`).** The back of the Los Pringles scarf,
+  from flatbed scans stitched together: the all-seeing Pringle at the centre
+  of its starfield, with all eight flying Pringles (mask, chef, money,
+  rainbow, cowboy, pirate, crown, agent) feathered in from both sides as on
+  the scarf. The emblem is laid over the scarf's copy from a separate,
+  sharper source file of it (about 1,230 pixels across), and the scan's dark
+  grey taken down to black to match it. The poster and hero add "if you
+  pring, you pring" in green, set in Yellowtail, a script close to the
+  scarf's own lettering. Darkened 35% on the card; the thumbnail is the
+  emblem.
+- **Verdirojas (`verdirojas/`).** From two scarves. The card, poster and
+  hero come from the Refugees Welcome scarf's vector print file. The card is
+  the flower between REFUGEES and WELCOME, alone on black, darkened 40%. The
+  poster and hero are the raised fist from the scarf's end, upright on both:
+  on the poster darkened 25%, on the hero the fist and forearm across the
+  scarf's full width. The thumbnail is the watermelon slice between VERDI
+  and ROJAS on the Verdirojas scarf, from flatbed scans stitched together.
+  The border is the watermelon's red.
 
 ## Adding a year
 

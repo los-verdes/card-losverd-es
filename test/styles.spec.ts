@@ -154,3 +154,12 @@ describe("pages keep their colours in the stylesheet", () => {
     expect(SOURCES["../src/email/card.tsx"]).toMatch(/#[0-9a-fA-F]{3,6}\b/);
   });
 });
+
+describe("the store banner", () => {
+  it("reads white on verde in both schemes", () => {
+    for (const palette of [LIGHT, DARK]) {
+      expect(palette["--store-banner-bg"]).toBe(VERDE_INK);
+      expect(contrast(palette["--store-banner-ink"], palette["--store-banner-bg"])).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

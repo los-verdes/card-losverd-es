@@ -40,6 +40,7 @@ const CONFIG = {
   teamIdentifier: 'KJHZP635V9',
   organizationName: 'Los Verdes',
   webServiceURL: 'https://card.losverd.es/passkit',
+  siteUrl: 'https://card.losverd.es',
 };
 
 async function main() {

@@ -332,27 +332,112 @@ async function storeAccountForMember(env: Env, member: MemberRecord): Promise<St
   return row ? { userId: row.id, customerId: row.bigcommerce_id, linkedAt: row.bigcommerce_linked_at } : null;
 }
 
+/** What revoking or expelling does, said where it is asked for and again before it happens. */
+const STANDING_ACTIONS = {
+  revoke: {
+    button: "Revoke this membership",
+    question: "Revoke this membership?",
+    field: "revocation_note",
+    label: "Reason for revoking",
+    maxLength: MAX_REVOCATION_NOTE_LENGTH,
+    effect:
+      "Their card stops counting as current straight away, everywhere it is checked, and their installed passes are told. They can still sign in. Their orders are untouched, and it can be restored from their page.",
+  },
+  expel: {
+    button: "Expel this person from the group",
+    question: "Expel this person from the group?",
+    field: "expulsion_note",
+    label: "Reason for expelling",
+    maxLength: MAX_EXPULSION_NOTE_LENGTH,
+    effect:
+      "Their card stops counting as current, and they can no longer sign in here, including on sessions they already have. A new order under this address doesn't bring it back. Their orders are untouched, and it can be lifted from their page.",
+  },
+} as const;
+
+type StandingAction = keyof typeof STANDING_ACTIONS;
+
+/**
+ * Revoking or expelling. From the member page it only asks (the page that
+ * answers says what it does); from that page, with `confirmed`, it acts.
+ */
+const StandingForm: FC<{ action: StandingAction; email: string; note: string; confirmed?: boolean }> = ({
+  action,
+  email,
+  note,
+  confirmed,
+}) => {
+  const what = STANDING_ACTIONS[action];
+  return (
+    <form method="post" action={MEMBERS_PATH}>
+      <input type="hidden" name="email" value={email} />
+      <input type="hidden" name="action" value={action} />
+      {confirmed && <input type="hidden" name="confirmed" value="1" />}
+      <label for={what.field}>
+        {what.label}
+        <span class="hint">Optional · Kept on the record</span>
+      </label>
+      <input id={what.field} name={what.field} type="text" value={note} maxlength={what.maxLength} autocomplete="off" />
+      <button type="submit" class="danger">
+        {what.button}
+      </button>{" "}
+      {confirmed && <a href={`${MEMBERS_PATH}?${new URLSearchParams({ q: email })}`}>Cancel</a>}
+    </form>
+  );
+};
+
+/** The page that asks once more before a revocation or expulsion, saying what it does. */
+const ConfirmStanding: FC<{ action: StandingAction; email: string; name: string; memberId: string | null; note: string }> = ({
+  action,
+  email,
+  name,
+  memberId,
+  note,
+}) => {
+  const what = STANDING_ACTIONS[action];
+  return (
+    <AdminPage title={what.question}>
+      <p>
+        <strong>{name || email}</strong>
+        {name ? ` (${email})` : ""}
+        {memberId ? `, card ${memberId}` : ""}.
+      </p>
+      <p>{what.effect}</p>
+      <p class="muted">The Membership Committee's decision. It is recorded in the audit log, with the reason.</p>
+      <StandingForm action={action} email={email} note={note} confirmed />
+    </AdminPage>
+  );
+};
+
 const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null }> = ({ member, store }) =>
   store?.customerId ? (
-    <form method="post" action={MEMBERS_PATH} style="margin: 0">
+    <form method="post" action={MEMBERS_PATH} class="inline">
       <StoreCustomerLink customerId={store.customerId} />
       {store.linkedAt ? `, connected ${dayText(store.linkedAt)}` : ""}{" "}
       <input type="hidden" name="email" value={member.email} />
       <input type="hidden" name="action" value="store-unlink" />
       <input type="hidden" name="user_id" value={String(store.userId)} />
-      <button type="submit">Disconnect</button>
+      <button type="submit" class="quiet danger">
+        Disconnect
+      </button>
     </form>
   ) : (
     <>{store ? "not connected" : "no account here yet"}</>
   );
 
-/** What MiniBC says about their renewal: one line per subscription, the one that decides it first. */
+/**
+ * What MiniBC says about their renewal: one line per subscription, the one
+ * that decides it first. A subscription only their address points to (#470)
+ * comes last, labelled as such, since no order ties it to them.
+ */
 const RenewalCell: FC<{ member: MemberRecord; renewals: RenewalRow[] }> = ({ member, renewals }) => {
   if (renewals.length === 0) return <>Doesn't renew automatically</>;
+  const matched = renewals.filter((row) => row.member_email !== null);
+  const byAddress = renewals.filter((row) => row.member_email === null);
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
-      {renewals.map((row, i) => {
+      {matched.length === 0 && <div>Doesn't renew automatically</div>}
+      {matched.map((row, i) => {
         const state = renewalState(row, member.expiration_date, today);
         const worrying = state.kind === "overdue" || state.kind === "renews-late";
         return (
@@ -363,6 +448,16 @@ const RenewalCell: FC<{ member: MemberRecord; renewals: RenewalRow[] }> = ({ mem
           </div>
         );
       })}
+      {byAddress.map((row) => (
+        <div>
+          <span class="muted">By address only, no order ties it to them: </span>
+          {renewalText(renewalState(row, member.expiration_date, today))}{" "}
+          <span class="muted">
+            (MiniBC subscription {row.subscription_id}
+            {row.store_customer_id ? "" : ", a guest checkout"})
+          </span>
+        </div>
+      ))}
     </>
   );
 };
@@ -473,7 +568,9 @@ const Summary: FC<{
         placeholder={`${member.first_name} ${member.last_name}`.trim()}
         autocomplete="off"
       />
-      <label for="note">Why (optional, kept for whoever asks later)</label>
+      <label for="note">
+        Why<span class="hint">Optional · Kept for whoever asks later</span>
+      </label>
       <input id="note" name="note" type="text" maxlength={200} autocomplete="off" />
       <button type="submit">Save</button>
     </form>
@@ -501,13 +598,10 @@ const Summary: FC<{
         <button type="submit">Restore this membership</button>
       </form>
     ) : (
-      <form method="post" action={MEMBERS_PATH}>
-        <input type="hidden" name="email" value={member.email} />
-        <input type="hidden" name="action" value="revoke" />
-        <label for="revocation_note">Reason for revoking (optional)</label>
-        <input id="revocation_note" name="revocation_note" type="text" maxlength={MAX_REVOCATION_NOTE_LENGTH} autocomplete="off" />
-        <button type="submit">Revoke this membership</button>
-      </form>
+      <details class="danger-zone">
+        <summary>Revoke this membership…</summary>
+        <StandingForm action="revoke" email={member.email} note="" />
+      </details>
     )}
     {expelled ? (
       <form method="post" action={MEMBERS_PATH}>
@@ -519,17 +613,11 @@ const Summary: FC<{
         <button type="submit">Lift this expulsion</button>
       </form>
     ) : (
-      <form method="post" action={MEMBERS_PATH}>
-        <input type="hidden" name="email" value={member.email} />
-        <input type="hidden" name="action" value="expel" />
-        <label for="expulsion_note">Reason for expelling (optional)</label>
-        <input id="expulsion_note" name="expulsion_note" type="text" maxlength={MAX_EXPULSION_NOTE_LENGTH} autocomplete="off" />
-        <button type="submit">Expel this person from the group</button>
-      </form>
+      <details class="danger-zone">
+        <summary>Expel this person from the group…</summary>
+        <StandingForm action="expel" email={member.email} note="" />
+      </details>
     )}
-    <p class="muted">
-      <a href="#history">Everything that has been done to this membership</a>, below their orders.
-    </p>
     <h3>Their orders</h3>
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
@@ -770,6 +858,13 @@ members.get("/", async (c) => {
 
   return c.html(
     <AdminPage title={title}>
+      {member && (
+        <p class="muted">
+          A member: one person in Los Verdes, and the card they carry. Their card is worked out from all of the
+          membership orders attributed to their address, listed below, together with anything set here by hand. Each
+          order has a page of its own.
+        </p>
+      )}
       {!found && (
         <>
           <p>
@@ -869,6 +964,23 @@ members.post("/", csrf(), async (c) => {
     c.redirect(`${MEMBERS_PATH}?${new URLSearchParams({ q: email, ...params })}`, 303);
 
   if (!email) return back({ error: "No member to set a name for." });
+
+  // Revoking and expelling ask once more first, on a page of their own.
+  if ((form.action === "revoke" || form.action === "expel") && form.confirmed !== "1") {
+    const action: StandingAction = form.action;
+    const member = await getMemberByEmail(c.env, email);
+    if (action === "revoke" && !member) return back({ error: "No membership is held under that address." });
+    const typed = form[STANDING_ACTIONS[action].field];
+    return c.html(
+      <ConfirmStanding
+        action={action}
+        email={email}
+        name={member ? cardNameText(member) : ""}
+        memberId={member?.member_id ?? null}
+        note={typeof typed === "string" ? typed.trim() : ""}
+      />,
+    );
+  }
 
   if (form.action === "expel" || form.action === "readmit") {
     if (form.action === "readmit") {

@@ -28,6 +28,14 @@ privacy.get("/", (c) =>
       <ul style="text-align: left">
         <li>From your membership orders: your name, email address and order dates.</li>
         <li>When you sign in with Google or Apple: your email address and the account ID they give us.</li>
+        <li>
+          If you connect your store account: its customer number and email address, so "Membership card" on the store
+          can bring you here.
+        </li>
+        <li>
+          If your membership renews automatically: the email address on that renewal, to help tell which member it
+          belongs to.
+        </li>
         <li>A name you choose to show on your card, if you set one.</li>
         <li>If you add your card to Apple Wallet: an ID for your device, so your card can be updated.</li>
       </ul>
@@ -40,7 +48,8 @@ privacy.get("/", (c) =>
       <h2>What we don't do</h2>
       <p>
         No advertising and no tracking. Cookies are used only to sign you in and keep you signed in, for up to 30
-        days. Visit statistics are anonymous and use no cookies.
+        days, and, if you came from the Los Verdes store, to offer you the way back to it until you close your
+        browser. Visit statistics are anonymous and use no cookies.
       </p>
       <h2>Questions, or want your data removed?</h2>
       <p>

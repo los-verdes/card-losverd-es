@@ -412,6 +412,7 @@ describe("an address with orders and no membership", () => {
 
     expect(body).toContain("No membership is held under this address");
     expect(body).toContain("Orders attributed to it: 1");
+    expect(body).not.toContain("A member: one person");
     expect(body).toContain("membership: 0");
     expect(body).toContain("None of them counts");
     expect(body).toContain('href="/admin/orders/1001"');
@@ -525,8 +526,37 @@ describe("revoking and expelling from the member page", () => {
     expect(body).toContain("Expel this person from the group");
   });
 
-  it("revokes a membership, with the reason kept", async () => {
+  it("asks once more before revoking, saying what it does, with the reason carried over", async () => {
     const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct" });
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(await isRevoked(env, CARD)).toBe(false);
+    expect(body).toContain("Revoke this membership?");
+    expect(body).toContain("stops counting as current");
+    expect(body).toContain('name="confirmed" value="1"');
+    expect(body).toContain('value="conduct"');
+    expect(body).toContain(`href="/admin/members?q=jane%40example.com">Cancel</a>`);
+  });
+
+  it("asks once more before expelling, too", async () => {
+    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason" });
+
+    expect(res.status).toBe(200);
+    expect(await isExpelled(env, EMAIL)).toBe(false);
+    expect(await res.text()).toContain("can no longer sign in here");
+  });
+
+  it("puts both behind a disclosure on the member page, in the danger colour", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(CARD)}`)).text();
+
+    expect(body.match(/<details class="danger-zone">/g)).toHaveLength(2);
+    expect(body).toContain('<button type="submit" class="danger">Revoke this membership</button>');
+    expect(body).not.toContain('name="confirmed"');
+  });
+
+  it("revokes a membership, with the reason kept", async () => {
+    const res = await post({ email: EMAIL, action: "revoke", revocation_note: "conduct", confirmed: "1" });
 
     expect(res.status).toBe(303);
     expect(await isRevoked(env, CARD)).toBe(true);
@@ -556,7 +586,7 @@ describe("revoking and expelling from the member page", () => {
   });
 
   it("expels a person, with the reason kept", async () => {
-    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason" });
+    const res = await post({ email: EMAIL, action: "expel", expulsion_note: "a recorded reason", confirmed: "1" });
 
     expect(res.headers.get("Location")).toContain("saved=expelled");
     expect(await isExpelled(env, EMAIL)).toBe(true);
@@ -664,6 +694,15 @@ describe("their Slack account on the member page", () => {
 describe("their card, on their page", () => {
   beforeEach(() => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+  });
+
+  it("says under its title that a member is one person, with their card worked out from every order", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+    const intro = body.indexOf("A member: one person in Los Verdes, and the card they carry.");
+
+    expect(intro).toBeGreaterThan(body.indexOf("<h1>"));
+    expect(intro).toBeLessThan(body.indexOf("Their card as it looks to them now."));
+    expect(await (await get("/admin/members")).text()).not.toContain("A member: one person");
   });
 
   it("shows the card beside their details, fetched by card number rather than address", async () => {
@@ -869,6 +908,20 @@ describe("their renewal, on their page (#397)", () => {
 
     env.MINIBC_API_KEY = undefined;
     expect(await page()).not.toContain("Renewal</th>");
+  });
+
+  it("adds a subscription only their address points to, labelled as such, after their own (#470)", async () => {
+    await env.DB.prepare(
+      `INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, customer_email, sku, status, next_payment_on, seen_at)
+       VALUES (62, 9996, NULL, ?, 'LOSV-MEM-0001', 'active', '2027-03-01', 1)`,
+    )
+      .bind(EMAIL)
+      .run();
+
+    const body = await page();
+
+    expect(body).toMatch(/Renewal<\/th><td[^>]*><div>Doesn&#39;t renew automatically<\/div><div><span class="muted">By address only, no order ties it to them: <\/span>Renews automatically on Mar 1, 2027/);
+    expect(body).toContain("(MiniBC subscription 62, a guest checkout)");
   });
 
   it("says when their card renews, and which subscription says so", async () => {

@@ -159,6 +159,26 @@ export function isQuietGroup(group: NavGroup, counts: AttentionCounts | null): b
   return group.links.every((link) => link.attention !== undefined && counts[link.attention] === 0);
 }
 
+/**
+ * The nav entry for a path: the entry whose address it is, or else the
+ * nearest one it sits under. An order's own page (`/admin/orders/1001`) is
+ * under "Find an order", a member's (`/admin/members?q=`, the same address)
+ * is "Find", and a report the nav doesn't list is under "Reports". The card's
+ * own `/` counts only for itself, since every path is under it.
+ */
+export function navHrefFor(path: string): string | undefined {
+  const hrefs = ADMIN_NAV.flatMap((group) => [...(group.href ? [group.href] : []), ...group.links.map((link) => link.href)]);
+  return hrefs
+    .filter((href) => href === path || (href !== "/" && path.startsWith(`${href}/`)))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+/** The nav entry for the page being rendered, from the request's own path; none outside a request. */
+function currentNavHref(): string | undefined {
+  const path = tryGetContext()?.req.path;
+  return path === undefined ? undefined : navHrefFor(path);
+}
+
 /** A group's label: a link when the group has a page of its own and it is not this one. */
 const NavLabel: FC<{ group: NavGroup; current?: string }> = ({ group, current }) => {
   if (!group.href) return <span class="nav-label">{group.label}</span>;
@@ -177,12 +197,14 @@ const NavLabel: FC<{ group: NavGroup; current?: string }> = ({ group, current })
 };
 
 /**
- * `current` marks the page being read, which matters more here than on the
- * admin pages: the member's own card is in this nav, so without it an admin
- * looking at their card sees a link offering to take them where they already
- * are.
+ * The page being read is plain text in its place rather than a link, so the
+ * nav says where an admin is as well as where they can go. It is worked out
+ * from the request's path (`navHrefFor`); `current` names it instead, as the
+ * member's card does for the page that stands in for it when there is no
+ * membership.
  */
-export const AdminNav: FC<{ current?: string }> = async ({ current }) => {
+export const AdminNav: FC<{ current?: string }> = async ({ current: given }) => {
+  const current = given ?? currentNavHref();
   const counts = await currentAttentionCounts();
   return (
     <nav class="admin-nav">

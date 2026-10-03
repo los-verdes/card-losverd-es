@@ -6,6 +6,7 @@ import { getTestCertChain } from "../fixtures/certChain";
 import { fakeEmailBinding, recipientOf, type FakeEmailBinding } from "../fixtures/emailBinding";
 import { refreshMemberFromOrders } from "../../src/bigcommerce/sync";
 import worker from "../../src/index";
+import { OrderLink } from "../../src/admin/orders";
 import { insertOrder } from "./fixtures";
 
 const ORIGIN = "https://card.losverd.es";
@@ -117,6 +118,15 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain("buyer@example.com");
     expect(body).toContain("No attribution changes yet.");
     expect(body).toContain('<form method="get" action="/admin/orders/1001">');
+  });
+
+  it("says under its title that it is one order, and that the member's page brings their orders together", async () => {
+    const body = await (await request("/admin/orders/1001")).text();
+    const intro = body.indexOf("One order from the BigCommerce store that included a membership");
+
+    expect(intro).toBeGreaterThan(body.indexOf("<h1>"));
+    expect(intro).toBeLessThan(body.indexOf("buyer@example.com"));
+    expect(body).toContain('on <a href="/admin/members?q=buyer%40example.com">their member page</a>.');
   });
 
   it("links to the member it is attributed to", async () => {
@@ -689,5 +699,17 @@ describe("the order page", () => {
     const body = await (await request("/admin/orders/1001")).text();
 
     expect(body).toContain("It no longer counts or has expired");
+  });
+});
+
+describe("OrderLink", () => {
+  it("names an order by its id, or by its address with the order's own name over it", () => {
+    expect(String(OrderLink({ orderId: "1001" }))).toBe('<a href="/admin/orders/1001">1001</a>');
+    expect(String(OrderLink({ orderId: "1001", email: "pat@example.com", name: " Pat Buyer " }))).toBe(
+      '<a href="/admin/orders/1001" class="order-link">Pat Buyer<span class="order-email">pat@example.com</span></a>',
+    );
+    expect(String(OrderLink({ orderId: "1001", email: "pat@example.com", name: "" }))).toBe(
+      '<a href="/admin/orders/1001">pat@example.com</a>',
+    );
   });
 });

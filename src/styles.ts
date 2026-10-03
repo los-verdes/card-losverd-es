@@ -60,11 +60,19 @@ export const APP_CSS = `:root {
   --danger: #b00020;
   --success: #137333;
   --warn: #a15c00;
+  /* A form field's edge (#431): firmer than --rule, which is a hairline
+     between table rows, so an empty field still reads as a place to type. */
+  --field-border: #93ab9b;
   /* The staging banner (#338): amber, the one colour nothing else on the
      site uses, with near-black text (9.7:1). The same in both schemes, so
      staging looks the same on every device. */
   --env-banner-bg: #ffb000;
   --env-banner-ink: #14181f;
+  /* The way back to the store, for a member who came from it: the verde
+     that carries text, under white (6.78:1). The same in both schemes, like
+     the staging banner. */
+  --store-banner-bg: ${VERDE_INK};
+  --store-banner-ink: #fff;
 
   /* Lets the browser dark-render what we don't control: form fields, the
      canvas behind a short page, scrollbars. Without it those stay white and
@@ -98,6 +106,7 @@ export const APP_CSS = `:root {
     --danger: #ff9d9d;
     --success: #7fd69a;
     --warn: #e8bd76;
+    --field-border: #56616f;
   }
 }
 
@@ -339,8 +348,11 @@ button[aria-disabled="true"]::before {
 }
 
 /* A member in an admin table: their card's name, with the address beneath
-   in smaller, quieter type (MemberLink in src/admin/layout.tsx). */
-a.member-link .member-email {
+   in smaller, quieter type (MemberLink in src/admin/layout.tsx). An order
+   given by its address looks the same, with the order's own name
+   (OrderLink in src/admin/orders.tsx). */
+a.member-link .member-email,
+a.order-link .order-email {
   display: block;
   font-size: 0.8em;
   color: var(--muted);
@@ -445,6 +457,26 @@ body.admin .env-banner {
   margin-top: -1.5rem;
 }
 
+/* The way back to the store, for a member who came from it. Across the top
+   like the staging banner, but not sticky: it is an offer, not a warning.
+   Under the staging banner on staging, closing the gap that banner leaves. */
+.store-banner {
+  margin: -2rem -1rem 1.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--store-banner-bg);
+  color: var(--store-banner-ink);
+  font-weight: bold;
+  text-align: center;
+}
+
+.store-banner a {
+  color: inherit;
+}
+
+.env-banner + .store-banner {
+  margin-top: -1.5rem;
+}
+
 /* "Production", first in the admin nav on the live site: an admin action
    here is the real thing. */
 nav.admin-nav .env-label {
@@ -492,6 +524,103 @@ nav.admin-nav .nav-count {
   text-align: center;
   color: var(--bg);
   background: var(--warn);
+}
+
+/* Forms (#431): one layout for every form. Each label above its field;
+   fields one readable width, and the full width of a phone; "optional" and
+   help text in a quieter line under the label (.hint); the button ends the
+   form. A form inside a table row or a sentence is marked .inline and keeps
+   flowing, and the theme page's choices (.order) keep their card layout. */
+form:not(.inline, .order) {
+  margin: 0.75rem 0 1.5rem;
+}
+/* A member page centres its column; its forms read left to right in it. */
+body.member form:not(.inline, .order) {
+  max-width: 24rem;
+  margin-inline: auto;
+  text-align: left;
+}
+/* A form that is only a button (disconnect the store account, log out, go
+   back to the default theme) has no fields to line up, so it stays centred
+   like the rest of the column. */
+body.member form:not(.inline, .order):not(:has(label)) {
+  text-align: center;
+}
+form:not(.inline, .order) label {
+  display: block;
+  font-weight: 600;
+  margin: 0.75rem 0 0.3rem;
+}
+form:not(.inline, .order) label:first-of-type {
+  margin-top: 0;
+}
+/* A checkbox's label sits beside it, in ordinary weight. */
+form label:has(> input[type="checkbox"]) {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  font-weight: 400;
+}
+.hint {
+  display: block;
+  font-weight: 400;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+input[type="text"],
+input[type="email"],
+input[type="date"],
+input[type="number"],
+input[type="search"],
+select,
+textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 26rem;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--field-border);
+  border-radius: 0.4rem;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--verde-ink);
+  outline-offset: 1px;
+}
+form:not(.inline, .order) button {
+  margin-top: 0.75rem;
+}
+/* What takes a card or a sign-in away is in the danger colour. Revoking and
+   expelling sit behind a disclosure, and ask once more on a page of their
+   own before they happen. */
+button.danger {
+  background: var(--danger);
+}
+button.quiet {
+  color: var(--verde-ink);
+  background: transparent;
+  border: 1px solid currentColor;
+}
+button.quiet.danger {
+  color: var(--danger);
+}
+details.danger-zone {
+  max-width: 30rem;
+  margin: 0.75rem 0;
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 0.5rem;
+}
+details.danger-zone > summary {
+  padding: 0.2rem 0;
+  color: var(--danger);
+  font-weight: 600;
+  cursor: pointer;
 }
 `;
 
