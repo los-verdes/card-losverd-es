@@ -18,14 +18,32 @@ export class StoreAccountTaken extends Error {}
 export interface StoreAccountLink {
   customerId: number;
   linkedAt: number | null;
+  /**
+   * The store account's email, as the store last stated it, for showing back
+   * to its holder. Null until the store has said (a connection made before it
+   * was kept). Never matched against anything.
+   */
+  email: string | null;
 }
 
 /** The store account connected to this user, if any. */
 export async function storeAccountFor(env: Env, userId: number): Promise<StoreAccountLink | null> {
-  const row = await env.DB.prepare("SELECT bigcommerce_id, bigcommerce_linked_at FROM users WHERE id = ?")
+  const row = await env.DB.prepare("SELECT bigcommerce_id, bigcommerce_linked_at, bigcommerce_email FROM users WHERE id = ?")
     .bind(userId)
-    .first<{ bigcommerce_id: number | null; bigcommerce_linked_at: number | null }>();
-  return row?.bigcommerce_id ? { customerId: row.bigcommerce_id, linkedAt: row.bigcommerce_linked_at } : null;
+    .first<{ bigcommerce_id: number | null; bigcommerce_linked_at: number | null; bigcommerce_email: string | null }>();
+  return row?.bigcommerce_id
+    ? { customerId: row.bigcommerce_id, linkedAt: row.bigcommerce_linked_at, email: row.bigcommerce_email }
+    : null;
+}
+
+/**
+ * Keeps the email shown for a connected store account up to date, from the
+ * store's own verified token. Only ever displayed; a missing email leaves the
+ * last one in place.
+ */
+export async function rememberStoreEmail(env: Env, customerId: number, email: string | null): Promise<void> {
+  if (!email) return;
+  await env.DB.prepare("UPDATE users SET bigcommerce_email = ? WHERE bigcommerce_id = ?").bind(email, customerId).run();
 }
 
 /** The user a store customer is connected to, if any. */
@@ -47,13 +65,21 @@ async function emailOf(env: Env, userId: number): Promise<string | null> {
  * Refuses one connected to somebody else. `byUserId` is who did it: the
  * member themselves, as a rule.
  */
-export async function linkStoreAccount(env: Env, userId: number, customerId: number, byUserId: number): Promise<void> {
+export async function linkStoreAccount(
+  env: Env,
+  userId: number,
+  customerId: number,
+  byUserId: number,
+  email: string | null = null,
+): Promise<void> {
   const holder = await userForStoreCustomer(env, customerId);
   if (holder && holder.id !== userId) throw new StoreAccountTaken(`store customer ${customerId} is connected to another user`);
   const previous = await storeAccountFor(env, userId);
-  if (previous?.customerId === customerId) return;
-  await env.DB.prepare("UPDATE users SET bigcommerce_id = ?, bigcommerce_linked_at = unixepoch('subsec') * 1000 WHERE id = ?")
-    .bind(customerId, userId)
+  if (previous?.customerId === customerId) return rememberStoreEmail(env, customerId, email);
+  await env.DB.prepare(
+    "UPDATE users SET bigcommerce_id = ?, bigcommerce_linked_at = unixepoch('subsec') * 1000, bigcommerce_email = ? WHERE id = ?",
+  )
+    .bind(customerId, email, userId)
     .run();
   await recordAuditEvent(env, {
     action: "store_account.linked",
@@ -67,7 +93,9 @@ export async function linkStoreAccount(env: Env, userId: number, customerId: num
 export async function unlinkStoreAccount(env: Env, userId: number, byUserId: number): Promise<boolean> {
   const previous = await storeAccountFor(env, userId);
   if (!previous) return false;
-  await env.DB.prepare("UPDATE users SET bigcommerce_id = NULL, bigcommerce_linked_at = NULL WHERE id = ?").bind(userId).run();
+  await env.DB.prepare("UPDATE users SET bigcommerce_id = NULL, bigcommerce_linked_at = NULL, bigcommerce_email = NULL WHERE id = ?")
+    .bind(userId)
+    .run();
   await recordAuditEvent(env, {
     action: "store_account.unlinked",
     subjectEmail: await emailOf(env, userId),

@@ -45,6 +45,7 @@ import {
   claimHandoffToken,
   handoffTokenHeldBy,
   linkStoreAccount,
+  rememberStoreEmail,
   unlinkStoreAccount,
   userForStoreCustomer,
 } from "./storeAccount";
@@ -172,14 +173,19 @@ export async function finishPendingStoreLink(
 ): Promise<"linked" | "taken" | "none"> {
   const pending = await readPendingLink(c);
   if (pending === null) return "none";
-  return connectStoreAccount(c, userId, pending.customerId);
+  return connectStoreAccount(c, userId, pending.customerId, pending.email);
 }
 
 /** Connects a verified store customer to a signed-in user, clearing whatever was waiting. */
-async function connectStoreAccount(c: HandoffContext, userId: number, customerId: number): Promise<"linked" | "taken"> {
+async function connectStoreAccount(
+  c: HandoffContext,
+  userId: number,
+  customerId: number,
+  email: string | null,
+): Promise<"linked" | "taken"> {
   clearPendingLink(c);
   try {
-    await linkStoreAccount(envOf(c), userId, customerId, userId);
+    await linkStoreAccount(envOf(c), userId, customerId, userId, email);
   } catch (err) {
     if (!(err instanceof StoreAccountTaken)) throw err;
     recordOutcome("store.handoff", { result: "taken" });
@@ -281,6 +287,7 @@ handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
       recordOutcome("store.handoff", { result: "refused", reason: EXPELLED_REASON });
       return c.redirect(`${LOGIN_PATH}?error=${EXPELLED_REASON}`);
     }
+    await rememberStoreEmail(c.env, customerId, pending.email);
     setSessionCookie(c, await issueSessionToken(c.env.SESSION_SIGNING_KEY, { userId: holder.id, isAdmin: holder.is_admin === 1 }));
     recordOutcome("store.handoff", { result: "signed_in" });
     return c.redirect("/");
@@ -288,7 +295,7 @@ handoff.get(STORE_HANDOFF_CONTINUE_PATH, async (c) => {
 
   // Not connected, and signed in here: connect it to them.
   if (session && !(await isUserExpelled(c.env, session.userId))) {
-    const result = await connectStoreAccount(c, session.userId, customerId);
+    const result = await connectStoreAccount(c, session.userId, customerId, pending.email);
     return c.redirect(result === "linked" ? "/?store=connected" : "/?store=taken");
   }
 

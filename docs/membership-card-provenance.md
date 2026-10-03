@@ -156,7 +156,8 @@ changes who is a member.
   store account once, while signed in to both in the same browser. After that, a "Membership card" link in the store's
   top navbar / account menu signs them straight in to the card site, and their store account pages show their card.
   - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
-    never the recipient's. The store's email appears on the sign-in page only as a hint.
+    never the recipient's. The store's email is only ever shown back to the member: as a hint on the sign-in page,
+    and on their card page with the connected account's customer number, so they can tell which account it is.
   - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
   - **Status:** live on staging; off in production until released.
 

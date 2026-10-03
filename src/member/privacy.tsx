@@ -28,6 +28,10 @@ privacy.get("/", (c) =>
       <ul style="text-align: left">
         <li>From your membership orders: your name, email address and order dates.</li>
         <li>When you sign in with Google or Apple: your email address and the account ID they give us.</li>
+        <li>
+          If you connect your store account: its customer number and email address, so "Membership card" on the store
+          can bring you here.
+        </li>
         <li>A name you choose to show on your card, if you set one.</li>
         <li>If you add your card to Apple Wallet: an ID for your device, so your card can be updated.</li>
       </ul>

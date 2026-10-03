@@ -11,6 +11,7 @@ import {
   claimHandoffToken,
   handoffTokenHeldBy,
   linkStoreAccount,
+  rememberStoreEmail,
   storeAccountFor,
   unlinkStoreAccount,
   userForStoreCustomer,
@@ -174,6 +175,24 @@ describe("connecting a store account", () => {
     expect((await audit()).map((row) => row.detail)).toEqual(["Store customer 1001", "Store customer 1002 (was 1001)"]);
   });
 
+  it("keeps the store's email for showing back: refreshed, kept when the store states none, dropped on disconnect", async () => {
+    const email = async () => (await storeAccountFor(env, USER_ID))?.email;
+
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID, "first@example.com");
+    expect(await email()).toBe("first@example.com");
+
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID, "second@example.com");
+    expect(await email()).toBe("second@example.com");
+    expect(await audit()).toHaveLength(1);
+
+    await rememberStoreEmail(env, CUSTOMER, null);
+    expect(await email()).toBe("second@example.com");
+
+    await unlinkStoreAccount(env, USER_ID, USER_ID);
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
+    expect(await email()).toBeNull();
+  });
+
   it("disconnects, recording who did it, and reports when there was nothing to disconnect", async () => {
     await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
 
@@ -297,6 +316,20 @@ describe("GET /store-handoff/continue", () => {
       expect(header).not.toMatch(/Max-Age|Expires/i);
       expect(header).toMatch(/HttpOnly/);
     }
+  });
+
+  it("keeps the connected account's email as the store states it now", async () => {
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID, "old@example.com");
+
+    await fetchWorker("/store-handoff/continue", { cookies: [await pending()] });
+
+    expect((await storeAccountFor(env, USER_ID))?.email).toBe("shopper@example.com");
+  });
+
+  it("keeps the store's email when it connects the account of somebody signed in here", async () => {
+    await fetchWorker("/store-handoff/continue", { cookies: [await pending(), await sessionCookie(USER_ID)] });
+
+    expect(await storeAccountFor(env, USER_ID)).toMatchObject({ customerId: CUSTOMER, email: "shopper@example.com" });
   });
 
   it("refuses to sign in somebody expelled", async () => {
@@ -543,6 +576,24 @@ describe("the member's page", () => {
     expect(body).toContain("Your store account is connected.");
     expect(body).toContain('action="/store-account/disconnect"');
     expect(await page("?store=taken")).toContain("already connected to someone else");
+  });
+
+  it("names the connected account: its email, its customer number and since when", async () => {
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID, "shopper@example.com");
+    await env.DB.prepare("UPDATE users SET bigcommerce_linked_at = ? WHERE id = ?").bind(Date.UTC(2026, 9, 2, 12), USER_ID).run();
+
+    expect(await page()).toContain(
+      `Connected to <strong>shopper@example.com</strong> on the store (customer #${CUSTOMER}), since Oct 2, 2026.`,
+    );
+  });
+
+  it("says where the email will come from when the store has not stated it yet", async () => {
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
+    await env.DB.prepare("UPDATE users SET bigcommerce_linked_at = NULL WHERE id = ?").bind(USER_ID).run();
+
+    const body = await page();
+
+    expect(body).toContain(`Connected to store customer #${CUSTOMER}. Its email shows here once you next use`);
   });
 
   it("says nothing about store accounts until the environment has an app", async () => {

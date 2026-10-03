@@ -41,7 +41,7 @@ import {
 } from "./artifacts";
 import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
 import { appConfig } from "../bigcommerce/appJwt";
-import { storeAccountFor } from "../bigcommerce/storeAccount";
+import { storeAccountFor, type StoreAccountLink } from "../bigcommerce/storeAccount";
 import { STORE_DISCONNECT_PATH } from "../bigcommerce/storeHandoff";
 import { Page, SUPPORT_EMAIL } from "./layout";
 import {
@@ -210,7 +210,8 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
  * connect through.
  */
 export interface StoreAccountView {
-  connected: boolean;
+  /** The connected store account, or null when there is none. */
+  account: StoreAccountLink | null;
   /** Where "Connect your store account" goes: the store's account page, which runs the handoff. */
   connectHref: string;
   /** What just happened, from the handoff's redirect. */
@@ -226,14 +227,34 @@ const STORE_NOTICES = {
   },
 } as const;
 
+/**
+ * Which store account is connected, so a member with more than one can tell:
+ * its email as the store last stated it, its customer number (what the Merch
+ * Team look it up by), and since when.
+ */
+const StoreAccountDetails: FC<{ account: StoreAccountLink }> = ({ account }) => {
+  const since = account.linkedAt ? `, since ${formatShortDate(new Date(account.linkedAt).toISOString().slice(0, 10))}` : "";
+  return account.email ? (
+    <p>
+      Connected to <strong>{account.email}</strong> on the store (customer #{account.customerId}){since}.
+    </p>
+  ) : (
+    <p>
+      Connected to store customer #{account.customerId}
+      {since}. Its email shows here once you next use "Membership card" on the store.
+    </p>
+  );
+};
+
 const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
   <section style="margin-top: 2rem">
     <h2 style="font-size: 1.1rem">Store account</h2>
     {store.notice && <p style={`color: ${STORE_NOTICES[store.notice].color}`}>{STORE_NOTICES[store.notice].text}</p>}
-    {store.connected ? (
+    {store.account ? (
       <>
+        <StoreAccountDetails account={store.account} />
         <p class="muted">
-          Connected. "Membership card" on the Los Verdes store brings you straight here, without signing in again.
+          "Membership card" on the Los Verdes store brings you straight here, without signing in again.
         </p>
         <form method="post" action={STORE_DISCONNECT_PATH}>
           <button type="submit" class="quiet danger">
@@ -439,7 +460,7 @@ async function storeAccountView(env: Env, userId: number, notice: string | undef
   // (src/bigcommerce/storefront.ts).
   connectHref.hash = "lv-connect";
   return {
-    connected: (await storeAccountFor(env, userId)) !== null,
+    account: await storeAccountFor(env, userId),
     connectHref: connectHref.toString(),
     notice: notice === "connected" || notice === "taken" || notice === "disconnected" ? notice : undefined,
   };
