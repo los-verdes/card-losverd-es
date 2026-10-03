@@ -482,6 +482,17 @@ portal.get("/", requireCurrentMember, async (c) => {
 
 export const NAME_PATH = "/name";
 
+/**
+ * The way back to the card, at the top of the pages reached from it, as well
+ * as the link at their foot: a member who changes their mind should not have
+ * to scroll past everything to leave.
+ */
+const BackToCard: FC = () => (
+  <p class="muted" style="margin: 0 0 0.5rem">
+    <a href="/">&larr; Back to your card</a>
+  </p>
+);
+
 const NameForm: FC<{
   member: CurrentMember;
   current: string | null;
@@ -490,6 +501,7 @@ const NameForm: FC<{
   saved?: boolean;
 }> = ({ member, current, setByAdmin, error, saved }) => (
   <Page title="The name on your card">
+    <BackToCard />
     <h1>The name on your card</h1>
     {saved && <p class="success">Saved. Any passes you have installed will catch up shortly.</p>}
     {error && <p class="danger">{error}</p>}
@@ -598,10 +610,7 @@ const ThemeForm: FC<{
   saved?: boolean;
 }> = ({ options, current, chosen, error, saved }) => (
   <Page title="How your card looks">
-    {/* At the top as well as the foot: the previews make this a long page. */}
-    <p class="muted" style="margin: 0 0 0.5rem">
-      <a href="/">&larr; Back to your card</a>
-    </p>
+    <BackToCard />
     <h1>How your card looks</h1>
     {saved && (
       <p style="color: var(--success)">Saved. Any passes you have installed will catch up shortly.</p>
