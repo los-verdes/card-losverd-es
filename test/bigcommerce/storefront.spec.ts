@@ -51,17 +51,19 @@ function storeWindow({
   memberFails = false,
 } = {}) {
   const assign = vi.fn();
+  // What the store answers, changeable between page load and a click.
+  const store = { token, fails };
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     void init;
-    if (fails) throw new TypeError("network");
+    if (store.fails) throw new TypeError("network");
     if (url === CONFIG.memberUrl) {
       if (memberFails) throw new TypeError("network");
       return { ok: member !== null, text: async () => JSON.stringify(member), json: async () => member };
     }
-    return { ok: token !== null, text: async () => (token === null ? "" : `${token}\n`), json: async () => null };
+    return { ok: store.token !== null, text: async () => (store.token === null ? "" : `${store.token}\n`), json: async () => null };
   });
   const win: StorefrontWindow = { location: { pathname, search, hash, assign }, fetch, sessionStorage: storage };
-  return { win, assign, fetch };
+  return { win, assign, fetch, store };
 }
 
 const formIn = (doc: FakeDocument) => doc.body.children.find((child) => child.tagName === "form");
@@ -76,9 +78,10 @@ function linkIn(doc: FakeDocument, selector: string): FakeElement | undefined {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("the storefront script", () => {
-  it("adds Membership card to the header before Sign in, and to the mobile menu first, pointing at the card site", () => {
+  it("adds Membership card to the header before Account, and to the mobile menu first, pointing at the card site", async () => {
     const doc = storePage();
     run(doc, storeWindow().win);
+    await settle();
 
     const header = doc.querySelector(".navUser-section")!.children;
     expect(header.map((li) => li.textContent)).toEqual(["", "Membership card", "Sign in"]);
@@ -88,6 +91,19 @@ describe("the storefront script", () => {
     const mobile = doc.querySelector(".navPages-list--user")!.children;
     expect(mobile[0].textContent).toBe("Membership card");
     expect(mobile[0].children[0].className).toBe("navPages-action");
+  });
+
+  it.each([
+    ["signed out of the store", { token: null }],
+    ["the store unreachable", { fails: true }],
+    ["an empty answer", { token: "  " }],
+  ])("leaves the header and mobile menu alone with %s: there is no store account to bring in", async (_, options) => {
+    const doc = storePage();
+    run(doc, storeWindow(options).win);
+    await settle();
+
+    expect(linkIn(doc, ".navUser-action")).toBeUndefined();
+    expect(linkIn(doc, ".navPages-action")).toBeUndefined();
   });
 
   it("adds a tab to the account pages' navigation", () => {
@@ -104,17 +120,19 @@ describe("the storefront script", () => {
     await settle();
 
     expect(membership.querySelector(".container")!.children.map((child) => child.tagName)).toEqual(["h1", "div"]);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalledWith(CONFIG.memberUrl, expect.anything());
   });
 
-  it("adds nothing where the theme's markup is missing, and nothing twice", () => {
+  it("adds nothing where the theme's markup is missing, and nothing twice", async () => {
     const bare = storePage({ header: false, mobile: false });
     run(bare, storeWindow({ pathname: "/membership/" }).win);
+    await settle();
     expect(bare.body.children).toHaveLength(0);
 
     const doc = storePage();
     run(doc, storeWindow().win);
     run(doc, storeWindow().win);
+    await settle();
     expect(doc.querySelector(".navUser-section")!.children).toHaveLength(3);
   });
 
@@ -122,6 +140,7 @@ describe("the storefront script", () => {
     const doc = storePage();
     const { win, fetch, assign } = storeWindow({ token: "header.payload.signature" });
     run(doc, win);
+    await settle();
 
     expect(linkIn(doc, ".navUser-action")!.click()).toBe(true);
     await settle();
@@ -134,13 +153,15 @@ describe("the storefront script", () => {
   });
 
   it.each([
-    ["signed out of the store", { token: null }],
+    ["signed out of the store since", { token: null }],
     ["the store unreachable", { fails: true }],
     ["an empty answer", { token: "  " }],
-  ])("goes to the card site's own sign-in with %s", async (_, options) => {
+  ])("goes to the card site's own sign-in when chosen with %s", async (_, options) => {
     const doc = storePage();
-    const { win, assign } = storeWindow(options);
+    const { win, assign, store } = storeWindow();
     run(doc, win);
+    await settle();
+    Object.assign(store, options);
 
     linkIn(doc, ".navPages-action")!.click();
     await settle();
@@ -185,16 +206,16 @@ describe("the storefront script", () => {
     const again = storeWindow({ pathname: "/", token: "a.b.c", storage });
     run(later, again.win);
     await settle();
-    expect(again.fetch).not.toHaveBeenCalled();
+    expect(formIn(later)).toBeUndefined();
   });
 
   it("forgets a Connect after ten minutes", async () => {
     const storage = fakeStorage();
     storage.setItem("lv-card-connect", String(Date.now() - 11 * 60 * 1000));
-    const { win, fetch } = storeWindow({ storage });
-    run(storePage(), win);
+    const doc = storePage();
+    run(doc, storeWindow({ storage }).win);
     await settle();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(formIn(doc)).toBeUndefined();
   });
 
   it("still hands off from the page Connect lands on where session storage is missing or refuses", async () => {
@@ -210,10 +231,10 @@ describe("the storefront script", () => {
 
   it("ignores lookalikes", async () => {
     for (const [hash, search] of [["#lv-connected", ""], ["#other", "?lv_connect=10"]]) {
-      const { win, fetch } = storeWindow({ hash, search });
-      run(storePage(), win);
+      const doc = storePage();
+      run(doc, storeWindow({ hash, search }).win);
       await settle();
-      expect(fetch).not.toHaveBeenCalled();
+      expect(formIn(doc)).toBeUndefined();
     }
   });
 });
