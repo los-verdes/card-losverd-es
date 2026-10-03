@@ -178,6 +178,15 @@ describe("the member-facing page", () => {
     expect(await res.text()).toContain("Jane Doe");
   });
 
+  it("leads back to the card from the top, as well as from the foot", async () => {
+    const body = await (await request("/name")).text();
+    const top = body.indexOf('<a href="/">← Back to your card</a>');
+
+    expect(top).toBeGreaterThan(-1);
+    expect(top).toBeLessThan(body.indexOf("<h1>"));
+    expect(body).toContain('<a href="/">Back to your card</a>');
+  });
+
   it("saves a submitted name and redirects", async () => {
     const res = await request("/name", form({ display_name: "Chuy" }));
 
