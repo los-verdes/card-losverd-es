@@ -44,10 +44,14 @@ side. So the art's subject belongs in the top half, clear of the sides.
 - **2021 (inaugural season).** The scarf's back: the skull and its rings on
   black, darkened 45% on the card. The poster and hero show the skull and its
   rays at the top and middle respectively.
-- **2022 ("Verde hasta la muerte").** The doodle pattern from its source image
-  inside the scarf's print file, at the scale and angle (8 degrees) the scarf
-  used and with its lightness -20, so the colours are the printed ones.
-  Darkened 30% on the card and 25% on the poster.
+- **2022 ("Verde hasta la muerte").** The scarf's doodle pattern, from its
+  source tile (`2022-pattern-quarter.png`), at about half the scale the scarf
+  printed it so its small motifs show. The card is set so the Texas outline,
+  ATX and a sugar skull sit in the open space between the crest, the name and
+  the QR code, darkened to the printed green. The poster and hero carry the
+  scarf's own "VERDE HASTA LA MUERTE" and MMXXII lettering, taken from the
+  print file, over the pattern: in three lines in the poster's top half,
+  clear of the QR code, and in two lines across the hero.
 - **2023 ("i love you verde").** The flags from the scarf's papel picado side,
   lifted off their black and set, with a soft shadow, in two rows ("LOS" and
   the skull, then "VERDES") on the mint of the scarf's other side. Faded 68%

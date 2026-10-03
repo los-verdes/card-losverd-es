@@ -189,7 +189,7 @@ export const YEAR_THEMES: readonly CardTheme[] = [
       passText: "#ffffff",
     },
   }),
-  // "Verde hasta la muerte": the doodle pattern, from its print file, darkened.
+  // "Verde hasta la muerte": the doodle pattern and its motifs, with the scarf's lettering on the poster and hero.
   yearTheme({
     year: 2022,
     label: "2022: Verde hasta la muerte",
