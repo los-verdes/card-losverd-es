@@ -107,7 +107,7 @@ describe("reading MiniBC's membership subscriptions", () => {
     ]);
   });
 
-  it("keeps when and whether it renews, and how to find its member, and nothing personal", async () => {
+  it("keeps when and whether it renews, how to find its member, and its email as a hint, but no other personal detail", async () => {
     mockMinibc({ [PACK]: [[subscription(1)]] });
 
     await readAll();
@@ -118,6 +118,7 @@ describe("reading MiniBC's membership subscriptions", () => {
       order_id: 1001,
       origin_order_id: null,
       store_customer_id: 5001,
+      customer_email: "member1@example.com",
       status: "active",
       signup_on: "2025-02-14",
       next_payment_on: "2027-02-14",
@@ -128,11 +129,13 @@ describe("reading MiniBC's membership subscriptions", () => {
     });
     expect(Object.keys(row).sort()).toEqual(
       [
-        "subscription_id", "order_id", "origin_order_id", "store_customer_id", "sku", "status", "signup_on", "next_payment_on",
-        "paused_on", "cancelled_on", "minibc_modified_at", "seen_at", "missing_since", "updated_at",
+        "subscription_id", "order_id", "origin_order_id", "store_customer_id", "customer_email", "sku", "status", "signup_on",
+        "next_payment_on", "paused_on", "cancelled_on", "minibc_modified_at", "seen_at", "missing_since", "updated_at",
       ].sort(),
     );
-    expect(JSON.stringify(row)).not.toMatch(/example\.com|Test|Member|Visa|4242|Example St/);
+    // The email is the one contact detail kept (#470): no names, card or address.
+    const rest = Object.fromEntries(Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "customer_email"));
+    expect(JSON.stringify(rest)).not.toMatch(/example\.com|Test|Member|Visa|4242|Example St/);
   });
 
   it("updates a subscription read again, as it is cancelled, say", async () => {
@@ -270,5 +273,9 @@ describe("MiniBC's values", () => {
     expect(subscriptionRow(subscription(1, { metadata: null })).origin_order_id).toBeNull();
     expect(subscriptionRow(subscription(1, { status: "" })).status).toBe("unknown");
     expect(subscriptionRow(subscription(1, { customer: undefined })).store_customer_id).toBeNull();
+    // The customer's email, lowercased, kept only to hint at a member (#470).
+    expect(subscriptionRow(subscription(1, { customer: { store_customer_id: 0, email: " Member1@Example.COM " } })).customer_email).toBe("member1@example.com");
+    expect(subscriptionRow(subscription(1, { customer: { store_customer_id: 0, email: "" } })).customer_email).toBeNull();
+    expect(subscriptionRow(subscription(1, { customer: undefined })).customer_email).toBeNull();
   });
 });

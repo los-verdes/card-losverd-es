@@ -897,6 +897,20 @@ describe("their renewal, on their page (#397)", () => {
     expect(await page()).not.toContain("Renewal</th>");
   });
 
+  it("adds a subscription only their address points to, labelled as such, after their own (#470)", async () => {
+    await env.DB.prepare(
+      `INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, customer_email, sku, status, next_payment_on, seen_at)
+       VALUES (62, 9996, NULL, ?, 'LOSV-MEM-0001', 'active', '2027-03-01', 1)`,
+    )
+      .bind(EMAIL)
+      .run();
+
+    const body = await page();
+
+    expect(body).toMatch(/Renewal<\/th><td[^>]*><div>Doesn&#39;t renew automatically<\/div><div><span class="muted">By address only, no order ties it to them: <\/span>Renews automatically on Mar 1, 2027/);
+    expect(body).toContain("(MiniBC subscription 62, a guest checkout)");
+  });
+
   it("says when their card renews, and which subscription says so", async () => {
     await env.DB.prepare("UPDATE members SET expiration_date = '2099-02-14' WHERE email = ?").bind(EMAIL).run();
     await subscribe("active", "2099-02-14");

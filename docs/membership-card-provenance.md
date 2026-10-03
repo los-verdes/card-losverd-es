@@ -242,6 +242,11 @@ This is how we ensure our accounting of membership reflects the authoritative so
   requires updating `MEMBERSHIP_SKUS` in code.
 - **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not
    currently use this information directly when considering membership.
+  - **Matched through orders only:** a subscription belongs to the member its orders lead to, never to an address.
+  - **Address as a hint (see: [#470](https://github.com/los-verdes/card-losverd-es/issues/470)):** when no order
+    matches (most often a renewal started from a guest checkout), the subscription's email is compared with
+    members' addresses. A match is shown apart, labelled as by address only, on the Renewals report and the
+    member's admin page. It never counts as the subscription's member.
 
 ---
 

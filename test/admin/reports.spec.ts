@@ -896,7 +896,32 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(unmatched).toContain("a guest checkout");
 
     const csv = (await (await get("/admin/reports/renewals?section=unmatched&format=csv")).text()).trimEnd().split("\r\n");
-    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594");
+    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594,");
+  });
+
+  it("lists a subscription no order matches but whose address is a member's apart, as a hint (#470)", async () => {
+    // A guest checkout, its starting order not held, under a member's address.
+    await env.DB.prepare(
+      "INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, customer_email, sku, status, next_payment_on, seen_at) VALUES (18, 9997, NULL, 'later@example.com', 'LOSV-MEM-0001', 'active', '2027-05-01', 1)",
+    ).run();
+
+    const body = await (await get("/admin/reports/renewals")).text();
+    const byAddress = section(body, "Same address as a member, no order matches");
+
+    expect(byAddress).toContain("(1)");
+    expect(byAddress).toContain('<a href="/admin/members?q=later%40example.com"');
+    expect(byAddress).toContain("2027-05-01");
+    expect(byAddress).toContain("Renews automatically on May 1, 2027");
+    expect(byAddress).toContain('<a href="/admin/orders/9997"');
+    expect(byAddress).toContain("a guest checkout");
+    // Not matched to anyone, and not their subscription: 16 stays unmatched, 18 moves out.
+    const unmatched = section(body, "Not matched to a member");
+    expect(unmatched).toMatch(/>16<\/td>/);
+    expect(unmatched).not.toMatch(/>18<\/td>/);
+    expect(section(body, "Renewing in the next 30 days")).not.toMatch(/>18<\/td>/);
+
+    const csv = (await (await get("/admin/reports/renewals?section=by-address&format=csv")).text()).trimEnd().split("\r\n");
+    expect(csv[1]).toBe('18,,,,,active,2027-05-01,,,,9997,"Renews automatically on May 1, 2027",LOSV-MEM-0001,,later@example.com');
   });
 
   it("downloads a section as CSV, and refuses one that doesn't exist", async () => {
@@ -904,7 +929,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="renewals-overdue-2026-10-01.csv"');
     const lines = (await res.text()).trimEnd().split("\r\n");
     expect(lines[0]).toBe(
-      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id",
+      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id,address_member_email",
     );
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("lapsed@example.com");

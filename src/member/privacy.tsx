@@ -32,6 +32,10 @@ privacy.get("/", (c) =>
           If you connect your store account: its customer number and email address, so "Membership card" on the store
           can bring you here.
         </li>
+        <li>
+          If your membership renews automatically: the email address on that renewal, to help tell which member it
+          belongs to.
+        </li>
         <li>A name you choose to show on your card, if you set one.</li>
         <li>If you add your card to Apple Wallet: an ID for your device, so your card can be updated.</li>
       </ul>
