@@ -320,8 +320,8 @@ export const GROUP_THEMES: readonly CardTheme[] = [
  * default again (`effectiveTheme`), and sees it once their passes refresh.
  */
 export const SEASONAL_THEMES: readonly CardTheme[] = [
-  // The embroidered patch, over the black-on-green split and the fists
-  // breaking up through the ice from the banners.
+  // The embroidered patches on the banners' black-on-green split: the
+  // lettered one on the card, both on the poster and hero.
   {
     id: "chinga-la-migra",
     label: "Chinga la Migra",
