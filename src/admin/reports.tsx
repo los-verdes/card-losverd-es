@@ -344,7 +344,7 @@ function orderName(row: { first_name?: string | null; last_name?: string | null 
 
 const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: number }> = ({ rows, csvHref, total }) => (
   <ReportTable
-    headings={["Order", "Order email", "Member email", "Started", "Expires", "Channel", "Status"]}
+    headings={["Order", "Order email", "Member", "Started", "Expires", "Channel", "Status"]}
     csvHref={csvHref}
     csvLabel={`Download all ${total} as CSV`}
     rowCount={rows.length}
@@ -356,10 +356,13 @@ const OrdersTable: FC<{ rows: MembershipOrderRow[]; csvHref: string; total: numb
             <OrderLink orderId={row.order_id} />
           </td>
           <td style={cellStyle}>
-            {/* The order's own name over its address, leading to the order; a different member is named beside it. */}
+            {/* The order's own name over its address, leading to the order; the member it counts for beside it. */}
             <OrderLink orderId={row.order_id} email={row.order_email} name={orderName(row)} />
           </td>
-          <td style={cellStyle}>{row.member_email === row.order_email ? "" : <MemberLink email={row.member_email} />}</td>
+          <td style={cellStyle}>
+            {/* Always shown: left blank for the usual order, placed under the member's own address, it read as missing. */}
+            <MemberLink email={row.member_email} />
+          </td>
           <td style={cellStyle}>{row.created_on.slice(0, 10)}</td>
           <td style={cellStyle}>{row.expires_on.slice(0, 10)}</td>
           <td style={cellStyle}>{row.channel_name ?? row.source}</td>

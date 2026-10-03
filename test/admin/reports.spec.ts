@@ -167,6 +167,8 @@ describe("GET /admin/reports/memberships: active", () => {
         /<td[^>]*><a href="\/admin\/orders\/bulk-\d+" class="order-link">Test Member<span class="order-email">bulk\d+@example\.com<\/span><\/a><\/td>/g,
       ),
     ).toHaveLength(MANY);
+    // And the member each counts for, though it is the same address: blank, it read as missing.
+    expect(body.match(/<td[^>]*><a href="\/admin\/members\?q=bulk\d+%40example\.com">bulk\d+@example\.com<\/a><\/td>/g)).toHaveLength(MANY);
     expect(body).toContain("<table data-sortable");
     // The bulk orders and the one current order from beforeEach.
     const csvLink = body.indexOf(`href="/admin/reports/memberships?format=csv&amp;table=active">Download all ${MANY + 1} as CSV`);
