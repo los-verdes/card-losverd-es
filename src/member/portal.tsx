@@ -52,6 +52,7 @@ import {
   setDisplayName,
 } from "./displayName";
 import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
+import { MEMBERSHIP_STORE_URL, arrivedFromStore, storeHomeUrl } from "./storeReturn";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
   ThemeNotAllowed,
@@ -60,25 +61,6 @@ import {
   mayChooseTheme,
   setCardTheme,
 } from "../themes/choice";
-
-// The membership store the legacy no-membership page links to.
-export const MEMBERSHIP_STORE_URL =
-  "https://store.losverdesatx.org/membership/";
-
-/**
- * The store's home page, for the card page's way back to it: this
- * environment's own storefront (the sandbox, on staging), or the store.
- * Members arrive from the store's "Membership card" link and may well have
- * shopping to finish.
- */
-export function storeHomeUrl(env: Env): string {
-  try {
-    if (env.BIGCOMMERCE_STOREFRONT_URL) return new URL("/", env.BIGCOMMERCE_STOREFRONT_URL).toString();
-  } catch {
-    // A malformed setting falls back to the store below.
-  }
-  return new URL("/", MEMBERSHIP_STORE_URL).toString();
-}
 
 type CurrentMember = MemberRecord & { expiration_date: string };
 
@@ -280,7 +262,10 @@ export const MemberCard: FC<{
   canChooseTheme?: boolean;
   /** Their store account, when this environment has a store app. */
   store?: StoreAccountView | null;
-  /** The store's home page (`storeHomeUrl`). */
+  /**
+   * The store's home page (`storeHomeUrl`), for a small link above the card.
+   * Left out for a member who came from the store, whose banner says it.
+   */
   storeUrl?: string;
 }> = ({ member, orders, isAdmin, canChooseTheme = false, store = null, storeUrl }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
@@ -474,7 +459,7 @@ portal.get("/", requireCurrentMember, async (c) => {
       isAdmin={isAdmin}
       canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
       store={await storeAccountView(c.env, c.get("session").userId, c.req.query("store"))}
-      storeUrl={storeHomeUrl(c.env)}
+      storeUrl={arrivedFromStore(c) ? undefined : storeHomeUrl(c.env)}
     />,
   );
 });

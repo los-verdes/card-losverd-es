@@ -17,7 +17,7 @@
  */
 
 import type { FC } from "hono/jsx";
-import { MEMBERSHIP_STORE_URL } from "../member/portal";
+import { MEMBERSHIP_STORE_URL } from "../member/storeReturn";
 import { MEMBERSHIP_COMMITTEE_EMAIL, Page, SUPPORT_EMAIL } from "../member/layout";
 
 export interface LoginPageProps {

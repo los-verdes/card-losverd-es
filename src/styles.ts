@@ -68,6 +68,11 @@ export const APP_CSS = `:root {
      staging looks the same on every device. */
   --env-banner-bg: #ffb000;
   --env-banner-ink: #14181f;
+  /* The way back to the store, for a member who came from it: the verde
+     that carries text, under white (6.78:1). The same in both schemes, like
+     the staging banner. */
+  --store-banner-bg: ${VERDE_INK};
+  --store-banner-ink: #fff;
 
   /* Lets the browser dark-render what we don't control: form fields, the
      canvas behind a short page, scrollbars. Without it those stay white and
@@ -446,6 +451,26 @@ nav.admin-nav a.nav-label {
 }
 
 body.admin .env-banner {
+  margin-top: -1.5rem;
+}
+
+/* The way back to the store, for a member who came from it. Across the top
+   like the staging banner, but not sticky: it is an offer, not a warning.
+   Under the staging banner on staging, closing the gap that banner leaves. */
+.store-banner {
+  margin: -2rem -1rem 1.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--store-banner-bg);
+  color: var(--store-banner-ink);
+  font-weight: bold;
+  text-align: center;
+}
+
+.store-banner a {
+  color: inherit;
+}
+
+.env-banner + .store-banner {
   margin-top: -1.5rem;
 }
 

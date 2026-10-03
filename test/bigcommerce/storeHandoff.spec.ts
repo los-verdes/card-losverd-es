@@ -288,6 +288,17 @@ describe("GET /store-handoff/continue", () => {
     expect(setCookie(res, "lv_store_link")).toBe("lv_store_link=");
   });
 
+  it("marks the browser as having come from the store, until it closes", async () => {
+    for (const cookies of [[await pending()], []]) {
+      const res = await fetchWorker("/store-handoff/continue", { cookies });
+      const header = res.headers.getSetCookie().find((c) => c.startsWith("lv_from_store="))!;
+
+      expect(header.split(";")[0]).toBe("lv_from_store=1");
+      expect(header).not.toMatch(/Max-Age|Expires/i);
+      expect(header).toMatch(/HttpOnly/);
+    }
+  });
+
   it("refuses to sign in somebody expelled", async () => {
     await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
     await env.DB.prepare("INSERT INTO expelled_people (email) VALUES ('jane@example.com')").run();

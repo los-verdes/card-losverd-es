@@ -7,7 +7,8 @@ import { exportPKCS8, generateKeyPair } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
 import worker from "../../src/index";
-import { MEMBERSHIP_STORE_URL, loadCurrentMember, type PortalEnv } from "../../src/member/portal";
+import { loadCurrentMember, type PortalEnv } from "../../src/member/portal";
+import { FROM_STORE_COOKIE, MEMBERSHIP_STORE_URL } from "../../src/member/storeReturn";
 import { getTestCertChain } from "../fixtures/certChain";
 import { outcomesFrom, spyOnOutcomes } from "../fixtures/outcomes";
 import { CARD_WIDTH, CARD_HEIGHT } from "../../src/cardimage/template";
@@ -44,12 +45,13 @@ afterEach(async () => {
   }
 });
 
-async function get(path: string, loggedInAs: number | null = USER_ID) {
+async function get(path: string, loggedInAs: number | null = USER_ID, cookies: string[] = []) {
   const headers = new Headers();
   if (loggedInAs !== null) {
     const token = await issueSessionToken(SESSION_KEY, { userId: loggedInAs, isAdmin: false });
-    headers.set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+    cookies = [`${SESSION_COOKIE_NAME}=${token}`, ...cookies];
   }
+  if (cookies.length) headers.set("Cookie", cookies.join("; "));
   return worker.fetch(
     new Request(`https://card.losverd.es${path}`, { headers, redirect: "manual" }),
     env,
@@ -274,6 +276,31 @@ describe("the admin nav on a member page", () => {
     await insertUser();
 
     expect(await (await get("/no-active-membership")).text()).not.toMatch(ADMIN_NAV);
+  });
+});
+
+describe("the banner back to the store", () => {
+  const BANNER = '<div class="store-banner" role="note"><a href="https://store.example.com/">← Back to the Los Verdes store</a></div>';
+
+  it("runs across every member page once the store handoff has marked the browser, in place of the card's own link", async () => {
+    await seedCurrentMember();
+    const realStore = env.BIGCOMMERCE_STOREFRONT_URL;
+    try {
+      env.BIGCOMMERCE_STOREFRONT_URL = "https://store.example.com/";
+      const card = await (await get("/", USER_ID, [`${FROM_STORE_COOKIE}=1`])).text();
+
+      expect(card).toContain(BANNER);
+      expect(card.split("Back to the Los Verdes store")).toHaveLength(2);
+      expect(await (await get("/privacy-policy", null, [`${FROM_STORE_COOKIE}=1`])).text()).toContain(BANNER);
+    } finally {
+      env.BIGCOMMERCE_STOREFRONT_URL = realStore;
+    }
+  });
+
+  it("is not shown to a member who came some other way", async () => {
+    await seedCurrentMember();
+
+    expect(await (await get("/")).text()).not.toContain('class="store-banner"');
   });
 });
 

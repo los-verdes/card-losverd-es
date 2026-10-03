@@ -13,6 +13,7 @@ import { EnvironmentBanner, titlePrefix } from "../environment";
 import { FORM_BUSY_SCRIPT } from "../formBusy";
 import { SiteFooter } from "../siteFooter";
 import { STYLESHEET_PATH } from "../styles";
+import { StoreBanner } from "./storeReturn";
 import { WebAnalyticsBeacon } from "./webAnalytics";
 
 /** Where members are told to write when something's wrong (the legacy app's contact). */
@@ -47,6 +48,7 @@ export const Page: FC<
     </head>
     <body class="member">
       <EnvironmentBanner />
+      <StoreBanner />
       {nav}
       <main>
         {children}
