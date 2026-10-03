@@ -2,7 +2,7 @@ import "../setup/d1";
 import { createExecutionContext, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE_NAME, issueSessionToken } from "../../src/auth/session";
-import { ADMIN_NAV, AdminNav } from "../../src/admin/nav";
+import { ADMIN_NAV, AdminNav, navHrefFor } from "../../src/admin/nav";
 import { attentionCounts, missingOrders, ordersWithExtraMemberships } from "../../src/admin/reportQueries";
 import { expelledPeople } from "../../src/member/expulsion";
 import { revokedCards } from "../../src/member/revocation";
@@ -68,7 +68,7 @@ describe("the admin navigation", () => {
     // missing order, so "Needs a look" has something in it and is shown.
     await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
     await env.DB.prepare("UPDATE membership_orders SET missing_since = 1700000000000").run();
-    const html = await (await get("/admin/reports")).text();
+    const html = await (await get("/admin/audit")).text();
 
     const labels = [...html.matchAll(/class="nav-label">([^<]+)</g)].map((m) => m[1]);
     expect(labels).toEqual(["Reports", "Needs a look", "Members", "This environment"]);
@@ -94,6 +94,38 @@ describe("the admin navigation", () => {
 
     expect(html).toContain('<span class="nav-label" aria-current="page">Reports</span>');
     expect(html).not.toContain('href="/admin/reports"');
+  });
+
+  it.each([
+    ["/admin/reports", "/admin/reports"],
+    ["/admin/reports/memberships", "/admin/reports/memberships"],
+    ["/admin/reports/consolidations", "/admin/reports/consolidations"],
+    ["/admin/reports/unmatched-renewals", "/admin/reports"],
+    ["/admin/members", "/admin/members"],
+    ["/admin/orders/1001", "/admin/orders"],
+    ["/admin/orders", "/admin/orders"],
+    ["/", "/"],
+    ["/theme", undefined],
+    ["/admin/ordersx", undefined],
+  ] as const)("finds the entry for %s", (path, expected) => {
+    expect(navHrefFor(path)).toBe(expected);
+  });
+
+  it("names the page an admin is on as plain text, rolling an order or a member up to where they are found", async () => {
+    await insertOrder({ id: "1001", email: "a@example.com", created: "2026-01-10T00:00:00Z" });
+
+    const order = await (await get("/admin/orders/1001")).text();
+    expect(order).toContain('<span class="nav-here" aria-current="page">Find an order</span>');
+    expect(navLinks(order)).not.toContain("/admin/orders");
+    expect(navLinks(order)).toContain("/admin/members");
+
+    const member = await (await get("/admin/members?q=a%40example.com")).text();
+    expect(member).toContain('<span class="nav-here" aria-current="page">Find</span>');
+    expect(navLinks(member)).toContain("/admin/orders");
+
+    const index = await (await get("/admin/reports")).text();
+    expect(index).toContain('<span class="nav-label" aria-current="page">Reports</span>');
+    expect(index.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
   it("is on every admin page, not just the reports index", async () => {
