@@ -41,6 +41,20 @@ export function orderPath(orderId: string): string {
   return `/admin/orders/${encodeURIComponent(orderId)}`;
 }
 
+/**
+ * What an order page is, under its title: one order, where a member's page
+ * is one person and every order behind their card. The two are easy to
+ * mistake for each other when arriving from a link.
+ */
+const OrderIntro: FC<{ order: { source: string; member_email: string } }> = ({ order }) => (
+  <p class="muted">
+    One order from the {order.source === "squarespace" ? "old Squarespace store" : "BigCommerce store"} that
+    included a membership: what the order said, and which member it counts towards. A member's card comes from all of
+    their orders together, on{" "}
+    <a href={`/admin/members?q=${encodeURIComponent(order.member_email)}`}>their member page</a>.
+  </p>
+);
+
 /** An order id as a link to its admin page, shortened if it is a long Squarespace one. */
 export const OrderLink: FC<{ orderId: string }> = ({ orderId }) => (
   <a href={orderPath(orderId)} title={fullOrderIdTitle(orderId)}>
@@ -288,6 +302,7 @@ orders.get("/:orderId", async (c) => {
 
   return c.html(
     <AdminPage title={`Membership order ${order.order_id}`}>
+      <OrderIntro order={order} />
       {done && (
         <section style="border: 1px solid var(--verde); padding: 0.5rem 1rem; margin-bottom: 1rem">
           <p>

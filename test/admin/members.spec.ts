@@ -399,6 +399,7 @@ describe("an address with orders and no membership", () => {
 
     expect(body).toContain("No membership is held under this address");
     expect(body).toContain("Orders attributed to it: 1");
+    expect(body).not.toContain("A member: one person");
     expect(body).toContain("membership: 0");
     expect(body).toContain("None of them counts");
     expect(body).toContain('href="/admin/orders/1001"');
@@ -680,6 +681,15 @@ describe("their Slack account on the member page", () => {
 describe("their card, on their page", () => {
   beforeEach(() => {
     env.PASS_SIGNATURE_KEY = "test-pass-signature-key-0123456789";
+  });
+
+  it("says under its title that a member is one person, with their card worked out from every order", async () => {
+    const body = await (await get(`/admin/members?q=${encodeURIComponent(EMAIL)}`)).text();
+    const intro = body.indexOf("A member: one person in Los Verdes, and the card they carry.");
+
+    expect(intro).toBeGreaterThan(body.indexOf("<h1>"));
+    expect(intro).toBeLessThan(body.indexOf("Their card as it looks to them now."));
+    expect(await (await get("/admin/members")).text()).not.toContain("A member: one person");
   });
 
   it("shows the card beside their details, fetched by card number rather than address", async () => {

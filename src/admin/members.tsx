@@ -841,6 +841,13 @@ members.get("/", async (c) => {
 
   return c.html(
     <AdminPage title={title}>
+      {member && (
+        <p class="muted">
+          A member: one person in Los Verdes, and the card they carry. Their card is worked out from all of the
+          membership orders attributed to their address, listed below, together with anything set here by hand. Each
+          order has a page of its own.
+        </p>
+      )}
       {!found && (
         <>
           <p>

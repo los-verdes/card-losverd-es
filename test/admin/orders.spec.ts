@@ -119,6 +119,15 @@ describe("GET /admin/orders/:orderId", () => {
     expect(body).toContain('<form method="get" action="/admin/orders/1001">');
   });
 
+  it("says under its title that it is one order, and that the member's page brings their orders together", async () => {
+    const body = await (await request("/admin/orders/1001")).text();
+    const intro = body.indexOf("One order from the BigCommerce store that included a membership");
+
+    expect(intro).toBeGreaterThan(body.indexOf("<h1>"));
+    expect(intro).toBeLessThan(body.indexOf("buyer@example.com"));
+    expect(body).toContain('on <a href="/admin/members?q=buyer%40example.com">their member page</a>.');
+  });
+
   it("links to the member it is attributed to", async () => {
     const body = await (await request("/admin/orders/1001")).text();
 
