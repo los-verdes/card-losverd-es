@@ -961,16 +961,23 @@ const RENEWAL_SECTIONS: RenewalSection[] = [
       row.member_email !== null && (state.kind === "cancelled" || state.kind === "paused") && (row.expiration_date ?? "") >= today,
   },
   {
+    key: "by-address",
+    title: "Same address as a member, no order matches",
+    about:
+      "No order ties these to a member, but MiniBC's email for the subscription is a member's address: most often a renewal started from a guest checkout, which has no store customer to follow. A hint only, so check the member before relying on it. Reading the starting order in from BigCommerce, on its order page, matches it properly if that order carries a membership.",
+    pick: (row) => row.member_email === null && row.address_member_email !== null,
+  },
+  {
     key: "unmatched",
     title: "Not matched to a member",
     about:
       "No membership order held here started or carries the subscription, and its store customer has no membership order of their own. Usually one bought before these records begin, or under an order since re-attributed. Its order's page here can read that order in from BigCommerce, which matches it if the order carries a membership; its store customer's page in BigCommerce names who pays.",
-    pick: (row) => row.member_email === null,
+    pick: (row) => row.member_email === null && row.address_member_email === null,
   },
 ];
 
 const RENEWAL_COLUMNS = [
-  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next", "sku", "store_customer_id",
+  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next", "sku", "store_customer_id", "address_member_email",
 ] as const;
 
 /** What a subscription is for, from its SKU, saying so when it isn't a membership product this site counts. */
@@ -987,7 +994,10 @@ reports.get("/renewals", async (c) => {
     throw new BadRequest(`section must be one of ${RENEWAL_SECTIONS.map((section) => section.key).join(", ")}`);
   }
   const [rows, lastRead] = await Promise.all([allRenewals(c.env), lastRenewalsRead(c.env)]);
-  const withState = rows.map((row) => ({ row, state: renewalState(row, row.member_email ? row.expiration_date : null, today) }));
+  // A subscription matched only by address says what happens next against that member's card, as a hint.
+  const expirationFor = (row: RenewalRow) =>
+    row.member_email ? row.expiration_date : row.address_member_email ? row.address_expiration_date : null;
+  const withState = rows.map((row) => ({ row, state: renewalState(row, expirationFor(row), today) }));
   const sectionRows = (section: RenewalSection) => withState.filter(({ row, state }) => section.pick(row, state, today, soon));
 
   if (csvSection) {
@@ -1003,9 +1013,10 @@ reports.get("/renewals", async (c) => {
       cancelled_on: row.cancelled_on,
       signup_on: row.signup_on,
       order_id: row.order_id === null ? null : String(row.order_id),
-      what_next: row.member_email ? renewalText(state) : null,
+      what_next: row.member_email || row.address_member_email ? renewalText(state) : null,
       sku: row.sku,
       store_customer_id: row.store_customer_id,
+      address_member_email: row.address_member_email,
     }));
     return new Response(toCsv([...RENEWAL_COLUMNS], csvRows), {
       headers: {
@@ -1022,7 +1033,7 @@ reports.get("/renewals", async (c) => {
       <p>
         What MiniBC, which runs the store's automatic renewals, says about each member's. It changes no membership card: a renewal
         counts once its BigCommerce order is paid, like any other. Subscriptions are matched to members through their
-        orders, never an address.
+        orders, never an address; one no order matches but whose address is a member's is listed apart, as a hint.
       </p>
       <p>
         {c.env.MINIBC_API_KEY ? (
@@ -1048,7 +1059,13 @@ reports.get("/renewals", async (c) => {
             </h2>
             <p class="muted">{section.about}</p>
             <ReportTable
-              headings={section.key === "unmatched" ? ["Subscription", "For", "MiniBC", "Next payment", "Signed up", "Started by order", "Store customer"] : ["Member", "Good through", "What next", "Subscription"]}
+              headings={
+                section.key === "unmatched"
+                  ? ["Subscription", "For", "MiniBC", "Next payment", "Signed up", "Started by order", "Store customer"]
+                  : section.key === "by-address"
+                    ? ["Member, by address only", "Good through", "What next", "Subscription", "Started by order", "Store customer"]
+                    : ["Member", "Good through", "What next", "Subscription"]
+              }
               csvHref={`/admin/reports/renewals?section=${section.key}&format=csv`}
               csvLabel={`Download all ${listed.length} as CSV`}
               empty="None."
@@ -1063,6 +1080,27 @@ reports.get("/renewals", async (c) => {
                       <td style={cellStyle}>{row.status === "inactive" ? "cancelled" : row.status}</td>
                       <td style={cellStyle}>{row.next_payment_on ?? ""}</td>
                       <td style={cellStyle}>{row.signup_on ?? ""}</td>
+                      <td style={cellStyle}>
+                        {row.order_id === null ? (
+                          ""
+                        ) : (
+                          <>
+                            <OrderLink orderId={String(row.order_id)} /> <StoreOrderLink orderId={String(row.order_id)}>store</StoreOrderLink>
+                          </>
+                        )}
+                      </td>
+                      <td style={cellStyle}>
+                        {row.store_customer_id ? <StoreCustomerLink customerId={row.store_customer_id} /> : "a guest checkout"}
+                      </td>
+                    </tr>
+                  ) : section.key === "by-address" ? (
+                    <tr>
+                      <td style={cellStyle}>
+                        <MemberLink email={row.address_member_email!} />
+                      </td>
+                      <td style={cellStyle}>{row.address_expiration_date ?? "no counted orders"}</td>
+                      <td style={`${cellStyle}; white-space: normal; min-width: 14rem; max-width: 32rem`}>{renewalText(state)}</td>
+                      <td style={cellStyle}>{row.subscription_id}</td>
                       <td style={cellStyle}>
                         {row.order_id === null ? (
                           ""

@@ -16,6 +16,12 @@
  * Through an order, it follows that order's attribution: a gift re-attributed
  * to its recipient carries the subscription with it.
  *
+ * One more thing is offered, and only as a hint (#470): for a subscription no
+ * order matches, the member whose address is MiniBC's email for it, if any
+ * (`address_member_email`). That is most often a renewal started from a guest
+ * checkout, which has no store customer to follow. It is shown apart, labelled
+ * as by address only, and never counts as the subscription's member.
+ *
  * All of this is informational. It never changes a card.
  */
 
@@ -41,7 +47,13 @@ export interface RenewalRow {
   last_name: string | null;
   display_name: string | null;
   /** The member's card's "good through" date; null without a member, or without counted orders. */
-  expiration_date: string | null;
+  expiration_date: string | null;  /**
+   * For a subscription no order matches: the member whose address is MiniBC's
+   * email for it, as a hint only. Null when an order matches, or no member has it.
+   */
+  address_member_email: string | null;
+  /** That member's "good through" date, for saying what happens next. */
+  address_expiration_date: string | null;
 }
 
 const RENEWALS_SQL = `
@@ -61,10 +73,12 @@ const RENEWALS_SQL = `
   )
   SELECT m.subscription_id, m.status, m.signup_on, m.next_payment_on, m.paused_on, m.cancelled_on,
          m.order_id, m.store_customer_id, m.sku, m.matched_email AS member_email,
-         mem.member_id, mem.first_name, mem.last_name, dn.display_name, mem.expiration_date
+         mem.member_id, mem.first_name, mem.last_name, dn.display_name, mem.expiration_date,
+         byaddr.email AS address_member_email, byaddr.expiration_date AS address_expiration_date
     FROM matched m
     LEFT JOIN members mem ON mem.email = m.matched_email
-    LEFT JOIN member_display_names dn ON dn.email = m.matched_email`;
+    LEFT JOIN member_display_names dn ON dn.email = m.matched_email
+    LEFT JOIN members byaddr ON m.matched_email IS NULL AND byaddr.email = m.customer_email`;
 
 /** Every subscription MiniBC still lists, each with its member. */
 export async function allRenewals(env: Env): Promise<RenewalRow[]> {
@@ -72,10 +86,14 @@ export async function allRenewals(env: Env): Promise<RenewalRow[]> {
   return results;
 }
 
-/** The subscriptions matched to one member, active first. */
+/**
+ * The subscriptions matched to one member, active first, then any that only
+ * share their address (`address_member_email`), as hints.
+ */
 export async function renewalsForMember(env: Env, email: string): Promise<RenewalRow[]> {
   const { results } = await env.DB.prepare(
-    `${RENEWALS_SQL} WHERE m.matched_email = ?1 ORDER BY m.status = 'active' DESC, m.next_payment_on DESC, m.subscription_id DESC`,
+    `${RENEWALS_SQL} WHERE m.matched_email = ?1 OR byaddr.email = ?1
+     ORDER BY m.matched_email IS NULL, m.status = 'active' DESC, m.next_payment_on DESC, m.subscription_id DESC`,
   )
     .bind(email.trim().toLowerCase())
     .all<RenewalRow>();

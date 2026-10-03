@@ -424,13 +424,20 @@ const StoreAccountCell: FC<{ member: MemberRecord; store: StoreAccountRow | null
     <>{store ? "not connected" : "no account here yet"}</>
   );
 
-/** What MiniBC says about their renewal: one line per subscription, the one that decides it first. */
+/**
+ * What MiniBC says about their renewal: one line per subscription, the one
+ * that decides it first. A subscription only their address points to (#470)
+ * comes last, labelled as such, since no order ties it to them.
+ */
 const RenewalCell: FC<{ member: MemberRecord; renewals: RenewalRow[] }> = ({ member, renewals }) => {
   if (renewals.length === 0) return <>Doesn't renew automatically</>;
+  const matched = renewals.filter((row) => row.member_email !== null);
+  const byAddress = renewals.filter((row) => row.member_email === null);
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
-      {renewals.map((row, i) => {
+      {matched.length === 0 && <div>Doesn't renew automatically</div>}
+      {matched.map((row, i) => {
         const state = renewalState(row, member.expiration_date, today);
         const worrying = state.kind === "overdue" || state.kind === "renews-late";
         return (
@@ -441,6 +448,16 @@ const RenewalCell: FC<{ member: MemberRecord; renewals: RenewalRow[] }> = ({ mem
           </div>
         );
       })}
+      {byAddress.map((row) => (
+        <div>
+          <span class="muted">By address only, no order ties it to them: </span>
+          {renewalText(renewalState(row, member.expiration_date, today))}{" "}
+          <span class="muted">
+            (MiniBC subscription {row.subscription_id}
+            {row.store_customer_id ? "" : ", a guest checkout"})
+          </span>
+        </div>
+      ))}
     </>
   );
 };
