@@ -8,8 +8,12 @@
  * (the store's theme is Cornerstone-based) so it looks like the rest of the
  * store:
  *
- * - the header, next to Sign in / Account, and the same in the mobile menu;
- * - the account pages' navigation, beside Orders and Addresses.
+ * - the header, next to Account, and the same in the mobile menu, once the
+ *   store says somebody is signed in to it: a signed-out visitor or a guest
+ *   has no store account for it to bring in, so it would only lead them to
+ *   another sign-in;
+ * - the account pages' navigation, beside Orders and Addresses, which only
+ *   somebody signed in sees anyway.
  *
  * Choosing it asks the store who is signed in (`current.jwt`) and submits
  * that to the card site's `/store-handoff` (src/bigcommerce/storeHandoff.tsx).
@@ -87,6 +91,11 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     }
   }
 
+  // Who is signed in to the store, asked once for this page: the header
+  // links, a Connect carrying on, and the card on the account pages all wait
+  // on it. Choosing the link asks again, as time may have passed.
+  const signedIn = storeToken();
+
   function submit(token: string): void {
     const form = doc.createElement("form");
     form.method = "POST";
@@ -131,7 +140,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   }
   /** Hands off once the store knows who this is; until then, waits for them to sign in to it. */
   async function connect(): Promise<void> {
-    const token = await storeToken();
+    const token = await signedIn;
     if (!token) return;
     forgetConnect();
     submit(token);
@@ -156,15 +165,17 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     return item;
   }
 
-  // The header, before Sign in / Account.
-  const account = doc.querySelector(".navUser-section .navUser-item--account");
-  if (account && account.parentNode) {
-    account.parentNode.insertBefore(listItem("navUser-item", cardLink("navUser-action", label)), account);
-  }
-
-  // The mobile menu's account links.
-  const mobile = doc.querySelector(".navPages-list--user");
-  if (mobile) mobile.insertBefore(listItem("navPages-item", cardLink("navPages-action", label)), mobile.firstChild);
+  // The header, before Account, and the mobile menu's account links: only
+  // for somebody signed in to the store.
+  void signedIn.then(function (token) {
+    if (!token) return;
+    const account = doc.querySelector(".navUser-section .navUser-item--account");
+    if (account && account.parentNode) {
+      account.parentNode.insertBefore(listItem("navUser-item", cardLink("navUser-action", label)), account);
+    }
+    const mobile = doc.querySelector(".navPages-list--user");
+    if (mobile) mobile.insertBefore(listItem("navPages-item", cardLink("navPages-action", label)), mobile.firstChild);
+  });
 
   // The account pages' navigation.
   const accountNav = doc.querySelector(".navBar--account .navBar-section");
@@ -194,7 +205,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
       : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   }
   async function showCard(after: Element): Promise<void> {
-    const token = await storeToken();
+    const token = await signedIn;
     if (!token) return;
     let data: StoreMemberResponse;
     try {
