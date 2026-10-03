@@ -186,7 +186,7 @@ const expiredLink = (c: Context<{ Bindings: Env }>) =>
 store.get(ARTIFACTS.card, async (c) => {
   const member = await memberFromSignedLink(c, "card");
   if (!member) return expiredLink(c);
-  const png = await renderCardImage(c.env, member);
+  const png = await renderCardImage(c.env, member, undefined, (work) => c.executionCtx.waitUntil(work));
   return new Response(png as Uint8Array<ArrayBuffer>, {
     headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
   });

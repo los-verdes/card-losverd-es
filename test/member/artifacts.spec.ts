@@ -121,6 +121,23 @@ describe("renderCardImage", () => {
     await expect(renderCardImage(env, member)).rejects.toThrow(/templates\/card\/crest\.png \(404\); commit it under assets\//);
   });
 
+  it("hands a new card's cache write to `defer` rather than waiting on it, and still writes it", async () => {
+    await insertMember();
+    const member = (await getMemberById(env, "BC-1"))!;
+    const deferred: Promise<unknown>[] = [];
+
+    const png = await renderCardImage(env, member, undefined, (work) => deferred.push(work));
+
+    expect(deferred).toHaveLength(1);
+    await Promise.all(deferred);
+    const listed = await env.ASSETS.list({ prefix: "cache/card/BC-1/" });
+    expect(listed.objects).toHaveLength(1);
+    // Served from the cache next time, with nothing left to write.
+    const again: Promise<unknown>[] = [];
+    expect(await renderCardImage(env, member, undefined, (work) => again.push(work))).toEqual(png);
+    expect(again).toHaveLength(0);
+  });
+
   it("renders a PNG using the bundled crest", async () => {
     await insertMember();
     const png = await renderCardImage(env, (await getMemberById(env, "BC-1"))!);

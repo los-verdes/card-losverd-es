@@ -23,7 +23,7 @@ import { tracing } from "cloudflare:workers";
 import { CARD_IMAGE_VERSION, type MembershipCardMember } from "../cardimage/template";
 import type { Env } from "../index";
 import { fetchTemplate } from "../templates";
-import { resolveCardTheme } from "../themes/choice";
+import { resolveCardTheme, type Defer } from "../themes/choice";
 import { themeVersion } from "../themes/fingerprint";
 import { applePosterMode, posterAssets } from "../passkit/poster";
 import { buildVerifyPassUrl } from "../lib/passSignature";
@@ -415,11 +415,17 @@ async function cardCacheTag(env: Env, theme: CardTheme, drawn: MembershipCardMem
  * what it shows of the member, the theme, or the drawing
  * (`CARD_IMAGE_VERSION`). The cache is a convenience: failing to read or
  * write it only means the card is drawn.
+ *
+ * With `defer`, a newly drawn card is written to the cache after the
+ * response, rather than before it: the write took about half a second
+ * (median, 2026-10-03), which every first view of a card waited on --
+ * several at once on the theme page.
  */
 export async function renderCardImage(
   env: Env,
   member: MemberRecord,
   requestedTheme?: CardTheme,
+  defer?: Defer,
 ): Promise<Uint8Array> {
   const theme = requestedTheme ?? (await resolveCardTheme(env, member));
   const drawn: MembershipCardMember = {
@@ -440,14 +446,15 @@ export async function renderCardImage(
     console.warn("Card image cache unreadable; drawing instead:", err);
   }
   const png = await drawCardImage(env, drawn, theme);
-  try {
-    await env.ASSETS.put(key, png, {
-      httpMetadata: { contentType: "image/png" },
-      customMetadata: { tag },
-    });
-  } catch (err) {
-    console.warn("Card image cache unwritable; serving the card uncached:", err);
-  }
+  const write = env.ASSETS.put(key, png, {
+    httpMetadata: { contentType: "image/png" },
+    customMetadata: { tag },
+  }).then(
+    () => undefined,
+    (err: unknown) => console.warn("Card image cache unwritable; serving the card uncached:", err),
+  );
+  if (defer) defer(write);
+  else await write;
   return png;
 }
 
