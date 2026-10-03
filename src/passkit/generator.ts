@@ -2,6 +2,7 @@ import { CLASSIC_THEME, appleRgb, type CardThemeColors } from "../themes/cardThe
 import { zipSync } from "fflate";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { signManifestDetached, type PassSigningCredentials } from "./signer";
+import { linkText, passLinks } from "./links";
 
 /** The subset of a `members` row (Phase 2.1) needed to build a pass. */
 export interface MemberPassInput {
@@ -33,6 +34,8 @@ export interface PassKitConfig {
   organizationName: string;
   /** Apple polls this for registration/update checks -- see Phase 4.1/4.2. */
   webServiceURL: string;
+  /** This site's public origin, linked from the back of the pass. */
+  siteUrl: string;
   /**
    * Which environment issued the pass. Shown on the back only when it isn't
    * production, so a member's own card stays uncluttered while a pass
@@ -52,6 +55,11 @@ interface PassField {
   key: string;
   label: string;
   value: string;
+  /**
+   * The value as Wallet shows it, with a link in it; back fields only.
+   * `value` stays as the plain text, for anything that reads the pass without it.
+   */
+  attributedValue?: string;
   textAlignment: PassTextAlignment;
 }
 
@@ -177,7 +185,7 @@ export async function buildManifest(
  * pass, the last detail of a Google one -- so that a member can be asked what
  * theirs says when a pass looks stale. Keep it short and readable aloud.
  */
-export const PASS_CONTENT_VERSION = "2026-09-29.2";
+export const PASS_CONTENT_VERSION = "2026-10-02.1";
 
 /**
  * The moment a membership ends, for the wallets' own expiry fields (#295):
@@ -258,6 +266,16 @@ export function buildPassJson(
       key: "status",
       label: "Status",
       value: member.status === "expired" ? "Expired" : "Revoked",
+      textAlignment: "PKTextAlignmentLeft",
+    });
+  }
+
+  for (const link of passLinks(config.siteUrl)) {
+    backFields.push({
+      key: link.id,
+      label: link.label,
+      value: linkText(link.url),
+      attributedValue: `<a href="${link.url}">${linkText(link.url)}</a>`,
       textAlignment: "PKTextAlignmentLeft",
     });
   }

@@ -2,6 +2,7 @@ import { CLASSIC_THEME, googleHeroPath, type CardTheme } from "../themes/cardThe
 import { SignJWT, importPKCS8 } from "jose";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { PASS_CONTENT_VERSION, membershipEndsAt } from "../passkit/generator";
+import { passLinks } from "../passkit/links";
 
 /**
  * Google Wallet service-account credentials needed to sign a "Save to
@@ -39,6 +40,8 @@ export interface GoogleWalletConfig {
    * publicly reachable -- served by `src/assets.ts`, from the bundled templates.
    */
   logoUri: string;
+  /** This site's public origin, linked from the pass's details. */
+  siteUrl: string;
 }
 
 /**
@@ -102,6 +105,7 @@ export function googleWalletConfig(env: {
     origins: [env.baseUrl],
     ...GOOGLE_WALLET_BRANDING,
     logoUri: new URL(LOGO_ASSET_PATH, env.baseUrl).toString(),
+    siteUrl: env.baseUrl,
   };
 }
 
@@ -131,6 +135,10 @@ interface TextModuleData {
   body: string;
 }
 
+interface LinksModuleData {
+  uris: { id: string; uri: string; description: string }[];
+}
+
 type GenericObjectState = "ACTIVE" | "EXPIRED" | "INACTIVE";
 
 /**
@@ -146,6 +154,8 @@ export interface GenericObject {
   cardTitle: LocalizedString;
   header: LocalizedString;
   textModulesData: TextModuleData[];
+  /** The way back to this site and the group's, listed under the details. */
+  linksModuleData: LinksModuleData;
   barcode: {
     type: "QR_CODE";
     value: string;
@@ -269,6 +279,9 @@ export function buildGenericObject(
     cardTitle: localizedString(config.cardTitle),
     header: localizedString(`${member.firstName} ${member.lastName}`.trim()),
     textModulesData,
+    linksModuleData: {
+      uris: passLinks(config.siteUrl).map((link) => ({ id: link.id, uri: link.url, description: link.label })),
+    },
     barcode: {
       type: "QR_CODE",
       value: member.verifyUrl,

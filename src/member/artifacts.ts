@@ -356,6 +356,7 @@ export async function getApplePassBundle(
         teamIdentifier: env.PASSKIT_TEAM_IDENTIFIER,
         organizationName: env.PASSKIT_ORGANIZATION_NAME,
         webServiceURL: env.PASSKIT_WEB_SERVICE_URL,
+        siteUrl: env.PUBLIC_BASE_URL,
         environment: env.ENVIRONMENT,
       },
       assets,
