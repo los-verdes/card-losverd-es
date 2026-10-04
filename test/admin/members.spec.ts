@@ -764,6 +764,23 @@ describe("their card's theme, on their page", () => {
     env.CARD_THEME_CHOICE = "admins";
   });
 
+  it("names the subgroups they belong to, with the Slack channel behind each (#447)", async () => {
+    expect(await page()).toMatch(/Subgroups<\/th><td[^>]*>none<\/td>/);
+
+    try {
+      await env.DB.prepare("INSERT INTO slack_users (slack_id, email, deleted, synced_at) VALUES ('U0SUBGROUP', ?, 0, 1)").bind(EMAIL).run();
+      await env.DB.prepare("INSERT INTO slack_channel_members VALUES ('los-pringles', 'U0SUBGROUP', 1)").run();
+      await env.DB.prepare("INSERT INTO slack_channel_members VALUES ('verdirojas', 'U0SUBGROUP', 1)").run();
+
+      const body = await page();
+      expect(body).toMatch(/Subgroups<\/th><td[^>]*>Los Pringles \(#los-pringles\), Verdirojas \(#verdirojas\)<\/td>/);
+      expect(body).toContain('<option value="los-pringles">Los Pringles</option>');
+    } finally {
+      await env.DB.exec("DELETE FROM slack_channel_members");
+      await env.DB.exec("DELETE FROM slack_users WHERE slack_id = 'U0SUBGROUP'");
+    }
+  });
+
   it("says what their card is drawn in and why, and offers only the themes they may use", async () => {
     const body = await page();
 

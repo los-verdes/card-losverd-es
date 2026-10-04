@@ -52,6 +52,7 @@ import { MAX_EXPULSION_NOTE_LENGTH, expelPerson, isExpelled, readmitPerson } fro
 import { readWholeAuditLog, type AuditEntry } from "../audit/log";
 import { unlinkStoreAccount } from "../bigcommerce/storeAccount";
 import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
+import { CARD_GROUPS } from "../themes/groups";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
   ThemeNotAllowed,
@@ -254,6 +255,17 @@ async function themeSummary(env: Env, member: MemberRecord): Promise<ThemeSummar
   ]);
   return { options, current: effectiveTheme(options, choice?.theme_id), choice, open };
 }
+
+/**
+ * The subgroups they belong to now, each with the Slack channel that makes it
+ * so: the groups whose themes they may use (`themeOptions()`), so "why can
+ * they pick Los Pringles?" answers itself.
+ */
+const SubgroupsText: FC<{ theme: ThemeSummary }> = ({ theme }) => {
+  const groups = CARD_GROUPS.filter((group) => theme.options.themes.some((option) => option.group === group.id));
+  if (groups.length === 0) return <>none</>;
+  return <>{groups.map((group) => `${group.label} (#${group.slackChannel})`).join(", ")}</>;
+};
 
 /** Any theme's label, including one this member can no longer use. */
 function themeLabel(id: string): string {
@@ -529,6 +541,12 @@ const Summary: FC<{
           <th style={cellStyle}>Slack</th>
           <td style={cellStyle}>
             {slackText(footprint.slack)}
+          </td>
+        </tr>
+        <tr>
+          <th style={cellStyle}>Subgroups</th>
+          <td style={cellStyle}>
+            <SubgroupsText theme={theme} />
           </td>
         </tr>
         <tr>
