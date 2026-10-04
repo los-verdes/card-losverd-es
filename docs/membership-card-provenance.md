@@ -168,7 +168,7 @@ changes who is a member.
     session, and the card page names the connected store account (its email, customer number, and since when).
   - **Going to the store:** the card site's links to the store (the footer, the way back, and "Renew", offered in a
     membership's last 30 days and on the no-membership page) sign a member with a connected store account in to the
-    store. Anyone else gets a plain link.
+    store, landing on their store account page (or the membership page, to renew). Anyone else gets a plain link.
   - **Status:** live in production and on staging since 2026-10-03.
 
 ---

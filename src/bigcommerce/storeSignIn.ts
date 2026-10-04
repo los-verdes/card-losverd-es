@@ -3,7 +3,7 @@
  * go to the store signed in, for a member whose store account is connected.
  *
  * `GET /store/go` (`?to=renew` for the membership page) answers with a
- * redirect. For somebody signed in here whose store account is connected
+ * redirect, to the member's store account page when it can sign them in. For somebody signed in here whose store account is connected
  * (`users.bigcommerce_id`, made only by the store handoff), it goes through
  * BigCommerce's Customer Login API: a JWT naming that customer, signed with
  * the app's client secret, minted per click, good for 30 seconds and once,
@@ -26,8 +26,16 @@ import { recordOutcome } from "../lib/outcome";
 import { appConfig, type AppConfig } from "./appJwt";
 import { storeAccountFor } from "./storeAccount";
 
-/** Where on the store each destination lands. */
-const DESTINATIONS = { shop: "/", renew: "/membership/" } as const;
+/**
+ * Where on the store each destination lands: signed in, and as a plain link.
+ * Somebody signed in lands on their account page, where there is something
+ * to do (orders, addresses, their card); the store's home page is only a
+ * landing page. A plain link can't assume a store account, so it goes home.
+ */
+const DESTINATIONS = {
+  shop: { signedIn: "/account.php", plain: "/" },
+  renew: { signedIn: "/membership/", plain: "/membership/" },
+} as const;
 type Destination = keyof typeof DESTINATIONS;
 
 function destination(value: string | undefined): Destination {
@@ -73,7 +81,7 @@ const storeSignIn = new Hono<{ Bindings: Env }>();
 storeSignIn.get(STORE_GO_PATH, async (c) => {
   const to = destination(c.req.query("to"));
   const store = storeHomeUrl(c.env);
-  const plain = new URL(DESTINATIONS[to], store).toString();
+  const plain = new URL(DESTINATIONS[to].plain, store).toString();
   const app = appConfig(c.env);
   const customerId = app ? await connectedCustomer(c) : null;
   c.header("Cache-Control", "no-store");
@@ -82,7 +90,7 @@ storeSignIn.get(STORE_GO_PATH, async (c) => {
     return c.redirect(plain, 302);
   }
   recordOutcome("store.sign_in", { result: "signed_in", to });
-  return c.redirect(await customerLoginUrl(app, store, customerId, DESTINATIONS[to]), 302);
+  return c.redirect(await customerLoginUrl(app, store, customerId, DESTINATIONS[to].signedIn), 302);
 });
 
 export default storeSignIn;

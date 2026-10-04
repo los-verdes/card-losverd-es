@@ -45,7 +45,7 @@ async function loginClaims(location: string) {
 }
 
 describe("GET /store/go", () => {
-  it("signs a member with a connected store account in to the store, through Customer Login", async () => {
+  it("signs a member with a connected store account in to their store account page, through Customer Login", async () => {
     await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
     const before = Math.floor(Date.now() / 1000);
 
@@ -60,7 +60,8 @@ describe("GET /store/go", () => {
       operation: "customer_login",
       store_hash: env.BIGCOMMERCE_STORE_HASH,
       customer_id: CUSTOMER,
-      redirect_to: "/",
+      // Their account page, not the store's landing page.
+      redirect_to: "/account.php",
     });
     expect(payload.iat).toBeGreaterThanOrEqual(before);
     expect(typeof payload.jti).toBe("string");
