@@ -176,6 +176,8 @@ export interface SlackCrossReferenceRow {
   /** Billing name on the member's latest-expiring order; null for Slack users with none. */
   first_name: string | null;
   last_name: string | null;
+  /** When that latest order was placed, which started the membership it gives. */
+  started_on: string | null;
   /** When that latest order expires (or expired). */
   expires_on: string | null;
   slack_id: string | null;
@@ -211,7 +213,7 @@ export async function slackCrossReference(
   // Bare-column rule again: names come from the latest-expiring order.
   const ctes = `
     WITH memberships AS (
-      SELECT lower(member_email) AS email, first_name, last_name, MAX(expires_on) AS expires_on
+      SELECT lower(member_email) AS email, first_name, last_name, created_on AS started_on, MAX(expires_on) AS expires_on
       FROM membership_orders
       WHERE created_on <= ?1 AND ${COUNTS_AS_MEMBERSHIP} AND ${MEMBER_IN_GOOD_STANDING}
       GROUP BY lower(member_email)
@@ -228,13 +230,13 @@ export async function slackCrossReference(
       FROM slack_users
       WHERE deleted = 0 AND is_bot = 0 AND is_app_user = 0 AND is_workflow_bot = 0 AND email IS NOT NULL
     )`;
-  const inSlack = `SELECT m.email, m.first_name, m.last_name, m.expires_on, s.slack_id, s.slack_name
+  const inSlack = `SELECT m.email, m.first_name, m.last_name, m.started_on, m.expires_on, s.slack_id, s.slack_name
     FROM memberships m JOIN slack s ON s.email = m.email`;
   const [currentIn, currentNotIn, lapsedIn, slackOnly, synced] = await db.batch<Record<string, unknown>>([
     db.prepare(`${ctes} ${inSlack} WHERE m.expires_on > ?1 ORDER BY m.email, s.slack_id`).bind(asOf),
     db
       .prepare(
-        `${ctes} SELECT email, first_name, last_name, expires_on, NULL AS slack_id, NULL AS slack_name
+        `${ctes} SELECT email, first_name, last_name, started_on, expires_on, NULL AS slack_id, NULL AS slack_name
          FROM memberships m
          WHERE expires_on > ?1 AND NOT EXISTS (SELECT 1 FROM slack s WHERE s.email = m.email)
          ORDER BY email`,
@@ -243,7 +245,7 @@ export async function slackCrossReference(
     db.prepare(`${ctes} ${inSlack} WHERE m.expires_on <= ?1 ORDER BY m.expires_on DESC, m.email, s.slack_id`).bind(asOf),
     db
       .prepare(
-        `${ctes} SELECT email, NULL AS first_name, NULL AS last_name, NULL AS expires_on, slack_id, slack_name
+        `${ctes} SELECT email, NULL AS first_name, NULL AS last_name, NULL AS started_on, NULL AS expires_on, slack_id, slack_name
          FROM slack s
          WHERE NOT EXISTS (SELECT 1 FROM memberships m WHERE m.email = s.email)
          ORDER BY email, slack_id`,

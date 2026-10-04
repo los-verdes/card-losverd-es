@@ -71,6 +71,7 @@ const SLACK_COLUMN_HEADINGS = {
   email: "Email",
   first_name: "First name",
   last_name: "Last name",
+  started_on: "Membership started",
   expires_on: "Membership expires",
   slack_id: "Slack ID",
   slack_name: "Slack name",
@@ -79,7 +80,7 @@ const SLACK_COLUMN_HEADINGS = {
 
 type SlackColumn = keyof typeof SLACK_COLUMN_HEADINGS;
 
-const MEMBER_COLUMNS: SlackColumn[] = ["email", "first_name", "last_name", "expires_on"];
+const MEMBER_COLUMNS: SlackColumn[] = ["email", "first_name", "last_name", "started_on", "expires_on"];
 const SLACK_COLUMNS: SlackColumn[] = ["slack_id", "slack_name"];
 
 /**
@@ -913,7 +914,7 @@ reports.get("/slack", async (c) => {
                         );
                       }
                       // Dates shown as days; the CSV keeps the full timestamp.
-                      return <td style={cellStyle}>{value?.slice(0, column === "expires_on" ? 10 : undefined)}</td>;
+                      return <td style={cellStyle}>{value?.slice(0, column === "expires_on" || column === "started_on" ? 10 : undefined)}</td>;
                     })}
                   </tr>
                 ))}
