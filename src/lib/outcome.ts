@@ -34,6 +34,7 @@ export const OUTCOMES = [
   "order.reread",
   "store.handoff",
   "store.member",
+  "store.sign_in",
 ] as const;
 
 export type Outcome = (typeof OUTCOMES)[number];

@@ -15,7 +15,7 @@ describe("the footer on every page", () => {
     const html = await render(page());
 
     expect(html).toContain('<a href="/">Your membership card</a>');
-    expect(html).toContain('<a href="https://store.losverdesatx.org/">Los Verdes store</a>');
+    expect(html).toContain('<a href="/store/go">Los Verdes store</a>');
     expect(html).toContain('<a href="/privacy-policy">Privacy</a>');
     expect(html).toContain(`<a href="${SOURCE_REPOSITORY_URL}">Help improve this site on GitHub</a>`);
   });

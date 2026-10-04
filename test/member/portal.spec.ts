@@ -280,7 +280,7 @@ describe("the admin nav on a member page", () => {
 });
 
 describe("the banner back to the store", () => {
-  const BANNER = '<div class="store-banner" role="note"><a href="https://store.example.com/">← Back to the Los Verdes store</a></div>';
+  const BANNER = '<div class="store-banner" role="note"><a href="/store/go">← Back to the Los Verdes store</a></div>';
 
   it("runs across every member page once the store handoff has marked the browser, in place of the card's own link", async () => {
     await seedCurrentMember();
@@ -305,22 +305,24 @@ describe("the banner back to the store", () => {
 });
 
 describe("GET /", () => {
-  it("leads back to this environment's store, above the card and in the footer, or the store when none is set", async () => {
+  it("leads to the store above the card and in the footer, through the way that signs a connected member in", async () => {
     await seedCurrentMember();
-    const realStore = env.BIGCOMMERCE_STOREFRONT_URL;
-    try {
-      env.BIGCOMMERCE_STOREFRONT_URL = "https://store.example.com/some/page";
-      const card = await (await get("/")).text();
-      expect(card).toContain('<a href="https://store.example.com/">← Back to the Los Verdes store</a>');
-      expect(card).toContain('<a href="https://store.example.com/">Los Verdes store</a>');
+    const card = await (await get("/")).text();
 
-      for (const unset of [undefined, "not a url"]) {
-        env.BIGCOMMERCE_STOREFRONT_URL = unset;
-        expect(await (await get("/")).text()).toContain('<a href="https://store.losverdesatx.org/">');
-      }
-    } finally {
-      env.BIGCOMMERCE_STOREFRONT_URL = realStore;
-    }
+    expect(card).toContain('<a href="/store/go">← Back to the Los Verdes store</a>');
+    expect(card).toContain('<a href="/store/go">Los Verdes store</a>');
+  });
+
+  it("offers renewing only in the last 30 days of the membership, since terms don't add up", async () => {
+    await seedCurrentMember();
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+    const renew = '<a href="/store/go?to=renew">Renew</a>';
+
+    expect(await (await get("/")).text()).not.toContain(renew);
+    await env.DB.prepare("UPDATE members SET expiration_date = ?").bind(inDays(20)).run();
+    expect(await (await get("/")).text()).toContain(renew);
+    await env.DB.prepare("UPDATE members SET expiration_date = ?").bind(inDays(45)).run();
+    expect(await (await get("/")).text()).not.toContain(renew);
   });
 
   it("shows the member's card, wallet links, and a logout button", async () => {
@@ -544,7 +546,7 @@ describe("GET /no-active-membership", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("No current membership was found for <strong>&lt;b&gt;jane&lt;/b&gt;@example.com</strong>");
-    expect(html).toContain(`href="${MEMBERSHIP_STORE_URL}"`);
+    expect(html).toContain('href="/store/go?to=renew"');
     expect(MEMBERSHIP_STORE_URL).toBe("https://store.losverdesatx.org/membership/");
     expect(html).toMatch(/<form method="post" action="\/logout"/);
   });

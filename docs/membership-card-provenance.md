@@ -166,6 +166,9 @@ changes who is a member.
     store account for it to use.
   - **Coming from the store:** every page of the card site offers a way back to the store for the rest of that browser
     session, and the card page names the connected store account (its email, customer number, and since when).
+  - **Going to the store:** the card site's links to the store (the footer, the way back, and "Renew", offered in a
+    membership's last 30 days and on the no-membership page) sign a member with a connected store account in to the
+    store. Anyone else gets a plain link.
   - **Status:** live in production and on staging since 2026-10-03.
 
 ---
