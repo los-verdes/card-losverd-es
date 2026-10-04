@@ -54,6 +54,14 @@ fallthrough = true
 pattern = "card.losverd.es"
 custom_domain = true
 
+# store.losverd.es, a short address for the store: the Worker redirects
+# everything on it to the store, path and query kept (src/index.ts). It had
+# no DNS record of its own when added (2026-10-04), so the Custom Domain
+# could be created by the deploy.
+[[routes]]
+pattern = "store.losverd.es"
+custom_domain = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "card-losverd-es-db-production"

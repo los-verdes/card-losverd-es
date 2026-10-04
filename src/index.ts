@@ -19,6 +19,7 @@ import storeHandoff from "./bigcommerce/storeHandoff";
 import storefront from "./bigcommerce/storefront";
 import storeMember from "./bigcommerce/storeMember";
 import storeSignIn from "./bigcommerce/storeSignIn";
+import { storeHomeUrl } from "./member/storeReturn";
 import { handleServerError } from "./lib/serverError";
 import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
@@ -195,6 +196,18 @@ const app = new Hono<{ Bindings: Env }>();
 // such as the admin nav's counts (src/admin/nav.tsx), without passing it
 // through every page on the way.
 app.use(contextStorage());
+
+/** A short address for the store, served by this Worker only to send people on (wrangler.toml). */
+export const STORE_SHORT_HOST = "store.losverd.es";
+
+// Everything on the short address goes to the store, path and query kept, so
+// store.losverd.es/membership/ lands on the membership page. A 302, so the
+// address can be pointed elsewhere later without browsers having cached it.
+app.use(async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.hostname !== STORE_SHORT_HOST) return next();
+  return c.redirect(new URL(url.pathname + url.search, storeHomeUrl(c.env)).toString(), 302);
+});
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
 
