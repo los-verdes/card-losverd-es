@@ -14,6 +14,7 @@ import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import type { Env } from "../index";
 import { AdminNav } from "../admin/nav";
+import { orderPath } from "../admin/orders";
 import { recordOutcome } from "../lib/outcome";
 import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { fullOrderIdTitle, shortOrderId } from "../lib/orderIds";
@@ -169,10 +170,12 @@ const adminNav = (isAdmin: boolean) => (isAdmin ? <AdminNav current="/" /> : nul
  * a membership that has expired, and leaving it out would make the card's
  * dates look arbitrary.
  */
-export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = ({
-  orders,
-  email,
-}) => (
+export const MembershipHistory: FC<{
+  orders: MemberOrder[];
+  email: string;
+  /** For an admin looking at their own card: each order links to its admin page, handy when testing. */
+  linkOrders?: boolean;
+}> = ({ orders, email, linkOrders = false }) => (
   <section style="margin-top: 2rem">
     <h2 style="font-size: 1.1rem">Membership history</h2>
     {orders.length === 0 ? (
@@ -184,7 +187,11 @@ export const MembershipHistory: FC<{ orders: MemberOrder[]; email: string }> = (
         <div class="order">
           <p style="margin: 0">
             <strong title={fullOrderIdTitle(displayOrderNumber(order.order_id))}>
-              Order #{shortOrderId(displayOrderNumber(order.order_id))}
+              {linkOrders ? (
+                <a href={orderPath(order.order_id)}>Order #{shortOrderId(displayOrderNumber(order.order_id))}</a>
+              ) : (
+                <>Order #{shortOrderId(displayOrderNumber(order.order_id))}</>
+              )}
             </strong>
             {order.product_name ? ` — ${order.product_name}` : ""}
           </p>
@@ -365,7 +372,7 @@ export const MemberCard: FC<{
       </a>
     )}
     {store && <StoreAccount store={store} />}
-    <MembershipHistory orders={orders} email={member.email} />
+    <MembershipHistory orders={orders} email={member.email} linkOrders={isAdmin} />
     <LogoutButton />
   </Page>
 );
@@ -452,7 +459,7 @@ export const NoActiveMembership: FC<{
         you can confirm that address by email instead of signing in again.
       </p>
     )}
-    {orders.length > 0 && <MembershipHistory orders={orders} email={email} />}
+    {orders.length > 0 && <MembershipHistory orders={orders} email={email} linkOrders={isAdmin} />}
     <a href={CLAIM_PATH} class="action">
       I bought my membership under a different address
     </a>
