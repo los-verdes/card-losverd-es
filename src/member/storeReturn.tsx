@@ -34,11 +34,13 @@ export function storeHomeUrl(env: Env): string {
   return new URL("/", MEMBERSHIP_STORE_URL).toString();
 }
 
-/** The store's home page for the request being rendered, or the store's own outside a request. */
-export function currentStoreHomeUrl(): string {
-  const env = tryGetContext<{ Bindings: Env }>()?.env;
-  return env ? storeHomeUrl(env) : new URL("/", MEMBERSHIP_STORE_URL).toString();
-}
+/**
+ * The card site's way to the store (src/bigcommerce/storeSignIn.ts): signed
+ * in, for a member whose store account is connected; a plain link otherwise.
+ * `?to=renew` lands on the membership page.
+ */
+export const STORE_GO_PATH = "/store/go";
+export const STORE_RENEW_PATH = `${STORE_GO_PATH}?to=renew`;
 
 export const FROM_STORE_COOKIE = "lv_from_store";
 
@@ -65,7 +67,7 @@ export const StoreBanner: FC = () => {
   if (!c || !arrivedFromStore(c as unknown as Context)) return null;
   return (
     <div class="store-banner" role="note">
-      <a href={storeHomeUrl(c.env)}>&larr; {STORE_BANNER_TEXT}</a>
+      <a href={STORE_GO_PATH}>&larr; {STORE_BANNER_TEXT}</a>
     </div>
   );
 };

@@ -52,7 +52,7 @@ import {
   setDisplayName,
 } from "./displayName";
 import { CARD_THEMES, type CardTheme } from "../themes/cardTheme";
-import { MEMBERSHIP_STORE_URL, arrivedFromStore, storeHomeUrl } from "./storeReturn";
+import { STORE_GO_PATH, STORE_RENEW_PATH, arrivedFromStore } from "./storeReturn";
 import { getThemeOptions, type ThemeOptions } from "../themes/eligibility";
 import {
   ThemeNotAllowed,
@@ -275,6 +275,18 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
   </section>
 );
 
+/**
+ * Days before a membership runs out that the card offers renewing. Earlier
+ * would cost the member: a renewal's year starts on the day it is bought, and
+ * terms don't add up, so the days left on the old one are lost.
+ */
+export const RENEW_OFFER_DAYS = 30;
+
+export function renewsSoon(expirationDate: string, today: string): boolean {
+  const days = (Date.parse(`${expirationDate.slice(0, 10)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
+  return days <= RENEW_OFFER_DAYS;
+}
+
 export const MemberCard: FC<{
   member: CurrentMember;
   orders: MemberOrder[];
@@ -284,11 +296,13 @@ export const MemberCard: FC<{
   /** Their store account, when this environment has a store app. */
   store?: StoreAccountView | null;
   /**
-   * The store's home page (`storeHomeUrl`), for a small link above the card.
+   * The way to the store (`STORE_GO_PATH`), for a small link above the card.
    * Left out for a member who came from the store, whose banner says it.
    */
   storeUrl?: string;
-}> = ({ member, orders, isAdmin, canChooseTheme = false, store = null, storeUrl }) => (
+  /** Today, `YYYY-MM-DD` (UTC), for whether to offer renewing yet. */
+  today?: string;
+}> = ({ member, orders, isAdmin, canChooseTheme = false, store = null, storeUrl, today = new Date().toISOString().slice(0, 10) }) => (
   <Page title="Membership Card" nav={adminNav(isAdmin)}>
     {storeUrl && (
       <p class="muted" style="margin: 0 0 0.5rem">
@@ -302,7 +316,15 @@ export const MemberCard: FC<{
     {member.member_since && (
       <p>Member since {formatMonthYear(member.member_since)}</p>
     )}
-    <p>Good through {formatShortDate(member.expiration_date)}</p>
+    <p>
+      Good through {formatShortDate(member.expiration_date)}
+      {renewsSoon(member.expiration_date, today) && (
+        <>
+          {" · "}
+          <a href={STORE_RENEW_PATH}>Renew</a>
+        </>
+      )}
+    </p>
     {/*
       Intrinsic dimensions, even though CSS sizes it. Without them the
       browser cannot know the shape until the bytes arrive, so it reserves
@@ -439,7 +461,7 @@ export const NoActiveMembership: FC<{
         ? "Ready to renew? Grab a membership at the Los Verdes store."
         : "Not a member yet, but would like to be? Grab a membership at the Los Verdes store."}
     </p>
-    <a href={MEMBERSHIP_STORE_URL} class="action">
+    <a href={STORE_RENEW_PATH} class="action">
       Visit Membership Store
     </a>
     <p>
@@ -480,7 +502,7 @@ portal.get("/", requireCurrentMember, async (c) => {
       isAdmin={isAdmin}
       canChooseTheme={await mayChooseTheme(c.env, isAdmin)}
       store={await storeAccountView(c.env, c.get("session").userId, c.req.query("store"))}
-      storeUrl={arrivedFromStore(c) ? undefined : storeHomeUrl(c.env)}
+      storeUrl={arrivedFromStore(c) ? undefined : STORE_GO_PATH}
     />,
   );
 });

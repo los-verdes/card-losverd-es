@@ -18,6 +18,7 @@ import bigcommerceApp from "./bigcommerce/app";
 import storeHandoff from "./bigcommerce/storeHandoff";
 import storefront from "./bigcommerce/storefront";
 import storeMember from "./bigcommerce/storeMember";
+import storeSignIn from "./bigcommerce/storeSignIn";
 import { handleServerError } from "./lib/serverError";
 import claimMembership, { CLAIM_PATH } from "./member/claimMembership";
 import emailCard from "./member/email-card";
@@ -212,6 +213,8 @@ app.route("/", storeHandoff);
 app.route("/", storefront);
 // The card on the store (#38, Phase 2): `/store/member` and its signed links.
 app.route("/", storeMember);
+// The store from the card site (#38, Phase 3): `/store/go`, signed in where connected.
+app.route("/", storeSignIn);
 // Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);
