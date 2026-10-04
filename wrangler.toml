@@ -179,6 +179,13 @@ CARD_THEME_CHOICE = "everyone"
 # way, and passes already installed switch on their next update.
 APPLE_POSTER_PASSES = "on"
 
+# Customer Login from the card site's store links (#38, Phase 3): "on" signs a
+# member with a connected store account in to the store; anything else leaves
+# them plain links. Off here until the app is installed on the store: without
+# the install, the store refuses the login and signs the member out instead
+# (found 2026-10-04).
+STORE_CUSTOMER_LOGIN = "off"
+
 # Queue names src/queues/index.ts routes batches by (they differ per
 # environment -- queue names are account-wide).
 ETL_SYNC_QUEUE_NAME = "etl-sync-production"
@@ -301,6 +308,8 @@ CARD_THEME_YEAR_DEFAULTS = "true"
 CARD_THEME_CHOICE = "everyone"
 # On here first, so the posters can be checked on a phone (#384).
 APPLE_POSTER_PASSES = "on"
+# On: the app is installed on the sandbox store.
+STORE_CUSTOMER_LOGIN = "on"
 ETL_SYNC_QUEUE_NAME = "etl-sync-staging"
 ETL_SYNC_DLQ_NAME = "etl-sync-dlq-staging"
 ENVIRONMENT = "staging"
