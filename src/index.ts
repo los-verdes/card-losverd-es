@@ -151,6 +151,10 @@ export interface Env {
   // Not secret -- Apple's iOS 27 poster pass layout (#384): "on" for themes
   // with poster art, anything else for none (src/passkit/poster.ts).
   APPLE_POSTER_PASSES?: string;
+  // Not secret -- "on" lets the card site's store links sign a connected
+  // member in to the store (Customer Login, #38 Phase 3); anything else keeps
+  // them plain links (src/bigcommerce/storeSignIn.ts).
+  STORE_CUSTOMER_LOGIN?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   // Not secret -- the sender, in wrangler.toml `[vars]`.

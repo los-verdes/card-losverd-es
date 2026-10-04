@@ -11,6 +11,10 @@
  * barred, or in an environment without a store app -- is sent to the same
  * page of the store, signed in or not as the store already has them.
  *
+ * Only while `STORE_CUSTOMER_LOGIN` is "on": the store accepts Customer
+ * Login only from an app installed on it, and otherwise signs the member out
+ * and shows its sign-in page, which is worse than a plain link.
+ *
  * It can be followed from anywhere, as a plain link. The worst another site
  * can do with it is sign a member in to their own store account, which also
  * ends any other store session of theirs (as BigCommerce documents).
@@ -68,6 +72,11 @@ export async function customerLoginUrl(
   return new URL(`/login/token/${jwt}`, storeUrl).toString();
 }
 
+/** Whether the store links sign members in at all (`STORE_CUSTOMER_LOGIN`). */
+export function customerLoginEnabled(env: Env): boolean {
+  return env.STORE_CUSTOMER_LOGIN?.trim().toLowerCase() === "on";
+}
+
 /** The store customer to sign in as, for this request: connected, signed in here, and not barred. */
 async function connectedCustomer(c: Context<{ Bindings: Env }>): Promise<number | null> {
   const token = readSessionCookie(c);
@@ -83,7 +92,7 @@ storeSignIn.get(STORE_GO_PATH, async (c) => {
   const store = storeHomeUrl(c.env);
   const plain = new URL(DESTINATIONS[to].plain, store).toString();
   const app = appConfig(c.env);
-  const customerId = app ? await connectedCustomer(c) : null;
+  const customerId = app && customerLoginEnabled(c.env) ? await connectedCustomer(c) : null;
   c.header("Cache-Control", "no-store");
   if (app === null || customerId === null) {
     recordOutcome("store.sign_in", { result: "plain", to });

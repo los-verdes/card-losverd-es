@@ -19,12 +19,14 @@ beforeEach(async () => {
   env.BIGCOMMERCE_APP_CLIENT_SECRET = SECRET;
   env.BIGCOMMERCE_STOREFRONT_URL = STORE;
   env.SESSION_SIGNING_KEY = SESSION_KEY;
+  env.STORE_CUSTOMER_LOGIN = "on";
   await env.DB.prepare("INSERT INTO users (id, email) VALUES (?, 'jane@example.com')").bind(USER_ID).run();
 });
 
 afterEach(async () => {
   env.BIGCOMMERCE_APP_CLIENT_ID = "";
   env.BIGCOMMERCE_APP_CLIENT_SECRET = undefined;
+  env.STORE_CUSTOMER_LOGIN = undefined;
   await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM expelled_people");
   await env.DB.exec("DELETE FROM users");
@@ -84,6 +86,14 @@ describe("GET /store/go", () => {
     await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
     await env.DB.prepare("INSERT INTO expelled_people (email) VALUES ('jane@example.com')").run();
     expect((await go()).headers.get("Location")).toBe(`${STORE}/`);
+  });
+
+  it("is a plain link while STORE_CUSTOMER_LOGIN is off, as production's is until the app is installed", async () => {
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
+    for (const off of ["off", "", undefined]) {
+      env.STORE_CUSTOMER_LOGIN = off;
+      expect((await go()).headers.get("Location")).toBe(`${STORE}/`);
+    }
   });
 
   it("is a plain link where the environment has no store app, to its own store or the store", async () => {
