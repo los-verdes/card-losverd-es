@@ -227,6 +227,16 @@ describe("the admin nav on a member page", () => {
     expect(html).toContain('href="/admin/preflight"');
   });
 
+  it("links an admin's own orders to their admin pages, and nobody else's", async () => {
+    await seedCurrentMember();
+    await insertOrder({ orderId: "104", createdOn: "2023-04-04", expiresOn: "2024-04-03" });
+    const link = '<a href="/admin/orders/104">Order #104</a>';
+
+    expect(await (await get("/")).text()).not.toContain(link);
+    await makeAdmin();
+    expect(await (await get("/")).text()).toContain(link);
+  });
+
   it("does not offer to take an admin to the page they are on", async () => {
     await seedCurrentMember();
     await makeAdmin();
