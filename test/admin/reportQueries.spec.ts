@@ -151,14 +151,14 @@ describe("slackCrossReference", () => {
     const result = await slackCrossReference(env.DB, AS_OF);
 
     expect(result.currentInSlack).toEqual([
-      { email: "renewer@example.com", first_name: "Rene", last_name: "Wer", expires_on: "2027-05-20T00:00:00Z", slack_id: "U01RENEWER", slack_name: "Rene Wer" },
+      { email: "renewer@example.com", first_name: "Rene", last_name: "Wer", started_on: "2026-05-20T00:00:00Z", expires_on: "2027-05-20T00:00:00Z", slack_id: "U01RENEWER", slack_name: "Rene Wer" },
     ]);
     expect(result.currentNotInSlack).toEqual([
-      { email: "moved@example.com", first_name: "Test", last_name: "Member", expires_on: "2027-01-01T00:00:00Z", slack_id: null, slack_name: null },
-      { email: "steady@example.com", first_name: "Test", last_name: "Member", expires_on: "2026-09-09T00:00:00Z", slack_id: null, slack_name: null },
+      { email: "moved@example.com", first_name: "Test", last_name: "Member", started_on: "2026-01-01T00:00:00Z", expires_on: "2027-01-01T00:00:00Z", slack_id: null, slack_name: null },
+      { email: "steady@example.com", first_name: "Test", last_name: "Member", started_on: "2025-09-09T00:00:00Z", expires_on: "2026-09-09T00:00:00Z", slack_id: null, slack_name: null },
     ]);
     expect(result.lapsedInSlack).toEqual([
-      { email: "lapsed@example.com", first_name: "Lap", last_name: "Sed", expires_on: "2025-03-01T00:00:00Z", slack_id: "U02LAPSED", slack_name: "u02lapsed" },
+      { email: "lapsed@example.com", first_name: "Lap", last_name: "Sed", started_on: "2024-03-01T00:00:00Z", expires_on: "2025-03-01T00:00:00Z", slack_id: "U02LAPSED", slack_name: "u02lapsed" },
     ]);
     // Void, test, and not-yet-placed orders don't count; nor does a bare order email.
     expect(result.slackWithoutOrders).toEqual(

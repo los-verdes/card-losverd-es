@@ -6,6 +6,7 @@ const lapsed = (email: string) => ({
   email,
   first_name: null,
   last_name: null,
+  started_on: "2024-05-01T00:00:00Z",
   expires_on: "2025-05-01T00:00:00Z",
   slack_id: "U1",
   slack_name: null,

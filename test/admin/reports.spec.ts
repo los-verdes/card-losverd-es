@@ -311,11 +311,12 @@ describe("GET /admin/reports/slack", () => {
     expect(body).toMatch(/Slack accounts last synced <time datetime="2026-06-01T00:00:00Z"[^>]*>12 hours ago \(May 31, 2026, 7:00 PM CDT\)<\/time>\./);
     expect(body).toContain("Current members in Slack (1)");
     // One cell per member, their card's name over their address; no billing-name columns.
-    expect(body).toMatch(/<th[^>]*>Member<\/th><th[^>]*>Membership expires<\/th><th[^>]*>Slack ID<\/th>/);
+    expect(body).toMatch(/<th[^>]*>Member<\/th><th[^>]*>Membership started<\/th><th[^>]*>Membership expires<\/th><th[^>]*>Slack ID<\/th>/);
     expect(body).not.toContain(">First name</th>");
-    expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com" class="member-link">Jo Ined<span class="member-email">joined@example\.com<\/span><\/a><\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
+    expect(body).toMatch(/<a href="\/admin\/members\?q=joined%40example\.com" class="member-link">Jo Ined<span class="member-email">joined@example\.com<\/span><\/a><\/td><td[^>]*>2026-01-10<\/td><td[^>]*>2027-01-10<\/td><td[^>]*>U01JOINED<\/td>/);
     expect(body).toContain("Current members not in Slack (1)");
-    expect(body).toMatch(/nameless@example\.com<\/a><\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
+    // When their current membership started, beside when it runs out.
+    expect(body).toMatch(/nameless@example\.com<\/a><\/td><td[^>]*>2026-04-01<\/td><td[^>]*>2027-04-01<\/td><\/tr>/);
     expect(body).toContain("Lapsed members in Slack (1)");
     expect(body).toContain("&lt;img src=x&gt;");
     expect(body).not.toContain("<img src=x>");
@@ -360,8 +361,8 @@ describe("GET /admin/reports/slack", () => {
 
     const current = await (await get("/admin/reports/slack?table=current-in-slack&format=csv")).text();
     expect(current.split("\r\n").slice(0, 2)).toEqual([
-      "email,first_name,last_name,expires_on,slack_id,slack_name",
-      "joined@example.com,Jo,Ined,2027-01-10T00:00:00Z,U01JOINED,Jo Ined",
+      "email,first_name,last_name,started_on,expires_on,slack_id,slack_name",
+      "joined@example.com,Jo,Ined,2026-01-10T00:00:00Z,2027-01-10T00:00:00Z,U01JOINED,Jo Ined",
     ]);
   });
 
@@ -1007,7 +1008,7 @@ describe("GET /admin/reports/slack, with MiniBC's renewals read", () => {
 
   it("downloads each group, and still the whole lapsed list an older link asks for", async () => {
     const group = (await (await get("/admin/reports/slack?table=lapsed-in-slack-renewal-on&format=csv")).text()).trimEnd().split("\r\n");
-    expect(group[0]).toBe("email,first_name,last_name,expires_on,slack_id,slack_name,renewal");
+    expect(group[0]).toBe("email,first_name,last_name,started_on,expires_on,slack_id,slack_name,renewal");
     expect(group).toHaveLength(2);
     expect(group[1]).toContain("lapsed@example.com");
 
