@@ -181,10 +181,10 @@ APPLE_POSTER_PASSES = "on"
 
 # Customer Login from the card site's store links (#38, Phase 3): "on" signs a
 # member with a connected store account in to the store; anything else leaves
-# them plain links. Off here until the app is installed on the store: without
-# the install, the store refuses the login and signs the member out instead
-# (found 2026-10-04).
-STORE_CUSTOMER_LOGIN = "off"
+# them plain links. It needs the app installed on the store: without the
+# install, the store refuses the login and signs the member out instead
+# (found 2026-10-04), so turn this off if the app is ever uninstalled.
+STORE_CUSTOMER_LOGIN = "on"
 
 # Queue names src/queues/index.ts routes batches by (they differ per
 # environment -- queue names are account-wide).
