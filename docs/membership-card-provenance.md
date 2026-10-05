@@ -165,7 +165,8 @@ changes who is a member.
   - **The store's header link** appears only to somebody signed in to the store; a guest or signed-out visitor has no
     store account for it to use.
   - **Coming from the store:** every page of the card site offers a way back to the store for the rest of that browser
-    session, and the card page names the connected store account (its email, customer number, and since when).
+    session, and the card page names the connected store account (its email, customer number, and since when), with
+    "Open my store account" to go to it already signed in while store sign-in is on.
   - **Going to the store:** the card site's links to the store (the footer, the way back, and "Renew", offered in a
     membership's last 30 days and on the no-membership page) can sign a member with a connected store account in to
     the store, landing on their store account page (or the membership page, to renew). That needs the app installed on

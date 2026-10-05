@@ -43,6 +43,7 @@ import {
 import { CARD_WIDTH, CARD_HEIGHT } from "../cardimage/template";
 import { appConfig } from "../bigcommerce/appJwt";
 import { storeAccountFor, type StoreAccountLink } from "../bigcommerce/storeAccount";
+import { customerLoginEnabled } from "../bigcommerce/storeSignIn";
 import { STORE_DISCONNECT_PATH } from "../bigcommerce/storeHandoff";
 import { Page, SUPPORT_EMAIL } from "./layout";
 import {
@@ -221,6 +222,12 @@ export interface StoreAccountView {
   account: StoreAccountLink | null;
   /** Where "Connect your store account" goes: the store's account page, which runs the handoff. */
   connectHref: string;
+  /**
+   * Where "Open my store account" goes (`STORE_GO_PATH`), signing the member
+   * in to the store on the way; absent while store sign-in is switched off,
+   * when the same link would only reach the store's home page.
+   */
+  openHref?: string;
   /** What just happened, from the handoff's redirect. */
   notice?: "connected" | "taken" | "disconnected";
 }
@@ -260,9 +267,23 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
     {store.account ? (
       <>
         <StoreAccountDetails account={store.account} />
-        <p class="muted">
-          "Membership card" on the Los Verdes store brings you straight here, without signing in again.
-        </p>
+        {store.openHref ? (
+          <>
+            <p class="muted">
+              "Membership card" on the Los Verdes store brings you straight here, and "Open my store account" takes you
+              there, both without signing in again.
+            </p>
+            <p>
+              <a href={store.openHref} class="action">
+                Open my store account
+              </a>
+            </p>
+          </>
+        ) : (
+          <p class="muted">
+            "Membership card" on the Los Verdes store brings you straight here, without signing in again.
+          </p>
+        )}
         <form method="post" action={STORE_DISCONNECT_PATH}>
           <button type="submit" class="quiet danger">
             Disconnect my store account
@@ -491,6 +512,7 @@ async function storeAccountView(env: Env, userId: number, notice: string | undef
   return {
     account: await storeAccountFor(env, userId),
     connectHref: connectHref.toString(),
+    openHref: customerLoginEnabled(env) ? STORE_GO_PATH : undefined,
     notice: notice === "connected" || notice === "taken" || notice === "disconnected" ? notice : undefined,
   };
 }
