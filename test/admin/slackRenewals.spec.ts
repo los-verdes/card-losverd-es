@@ -48,6 +48,8 @@ describe("splitLapsedByRenewal", () => {
 
     expect(split.renewalOn).toHaveLength(1);
     expect(split.renewalOn[0].renewal).toContain("automatic renewal is still on");
+    // The card ran out on 1 May 2025, 398 days before the next payment.
+    expect(split.renewalOn[0].expiry_minus_renewal_days).toBe(-398);
     expect(split.renewalOff).toEqual([]);
   });
 
@@ -59,6 +61,7 @@ describe("splitLapsedByRenewal", () => {
     );
 
     expect(split.renewalOff.map((row) => row.renewal)).toEqual(["Automatic renewal paused since Apr 1, 2025"]);
+    expect(split.renewalOff[0].expiry_minus_renewal_days).toBeNull();
   });
 
   it("matches addresses whatever their case, and leaves a subscription with no member out", () => {
@@ -69,6 +72,6 @@ describe("splitLapsedByRenewal", () => {
     );
 
     expect(split.renewalOn.map((row) => row.email)).toEqual(["pat@example.com"]);
-    expect(split.noRenewal).toEqual([{ ...lapsed("sam@example.com"), renewal: null }]);
+    expect(split.noRenewal).toEqual([{ ...lapsed("sam@example.com"), renewal: null, expiry_minus_renewal_days: null }]);
   });
 });

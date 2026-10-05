@@ -17,12 +17,14 @@
  * feeds here.
  */
 
-import { renewalState, renewalText, type RenewalRow } from "../minibc/renewals";
+import { expiryMinusRenewalDays, renewalState, renewalText, type RenewalRow } from "../minibc/renewals";
 import type { SlackCrossReferenceRow } from "./reportQueries";
 
 export interface LapsedWithRenewal extends SlackCrossReferenceRow {
   /** What MiniBC says, in a line; null when no subscription matched. */
   renewal: string | null;
+  /** The card's last day minus MiniBC's next payment, in days (expiryMinusRenewalDays); null where there is none. */
+  expiry_minus_renewal_days: number | null;
 }
 
 export interface LapsedByRenewal {
@@ -60,7 +62,7 @@ export function splitLapsedByRenewal(
   for (const row of lapsed) {
     const subscriptions = byEmail.get(row.email.toLowerCase());
     if (!subscriptions) {
-      split.noRenewal.push({ ...row, renewal: null });
+      split.noRenewal.push({ ...row, renewal: null, expiry_minus_renewal_days: null });
       continue;
     }
     const subscription = leading(subscriptions);
@@ -68,6 +70,8 @@ export function splitLapsedByRenewal(
     (state.kind === "paused" || state.kind === "cancelled" ? split.renewalOff : split.renewalOn).push({
       ...row,
       renewal: renewalText(state),
+      // The card's last day, else the "Membership expires" the table shows beside it.
+      expiry_minus_renewal_days: expiryMinusRenewalDays(subscription, subscription.expiration_date ?? row.expires_on?.slice(0, 10) ?? null),
     });
   }
   return split;

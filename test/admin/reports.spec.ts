@@ -880,6 +880,27 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(section(body, "Not matched to a member")).toMatch(/>16<\/td>/);
   });
 
+  it("shows the card's last day minus the next payment where a renewal is still to come", async () => {
+    const body = await (await get("/admin/reports/renewals")).text();
+    const delta = ">Expiry − renewal (days)</th>";
+
+    // Ran out 14 Sep, next payment 14 Oct; card ends 20 Oct, renews 20 Nov; both on 15 Oct.
+    expect(section(body, "Membership card ran out, automatic renewal still on")).toContain(delta);
+    // Sorted by a value clear of zero, since the table sort ignores a minus sign.
+    expect(section(body, "Membership card ran out, automatic renewal still on")).toMatch(/data-sort="99970">-30<\/td>/);
+    expect(section(body, "Renews after the membership card runs out")).toMatch(/>-31<\/td>/);
+    expect(section(body, "Renewing in the next 30 days")).toMatch(/>0<\/td>/);
+    // Nothing to come for a cancelled one, nor anyone's card for an unmatched one.
+    expect(section(body, "Cancelled or paused, membership card still current")).not.toContain(delta);
+    expect(section(body, "Not matched to a member")).not.toContain(delta);
+
+    // A plain negative number in the download, not one guarded as a formula.
+    const csv = (await (await get("/admin/reports/renewals?section=late&format=csv")).text()).trimEnd().split("\r\n");
+    expect(csv[1]).toMatch(/^12,late@example.com,BC-2,Test Member,2026-10-20,active,2026-11-20,-31,/);
+    const stopped = (await (await get("/admin/reports/renewals?section=stopped&format=csv")).text()).trimEnd().split("\r\n");
+    expect(stopped[1]).toMatch(/^15,stopped@example.com,BC-5,Test Member,2026-12-01,inactive,,,/);
+  });
+
   it("says what an unmatched subscription is for, and links its order and who pays", async () => {
     await env.DB.prepare(
       "INSERT INTO minibc_subscriptions (subscription_id, order_id, store_customer_id, sku, status, next_payment_on, seen_at) VALUES (17, 9998, 5594, 'LOSV-MEM-0002', 'active', '2027-02-01', 1)",
@@ -897,7 +918,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(unmatched).toContain("a guest checkout");
 
     const csv = (await (await get("/admin/reports/renewals?section=unmatched&format=csv")).text()).trimEnd().split("\r\n");
-    expect(csv).toContain("17,,,,,active,2027-02-01,,,,9998,,LOSV-MEM-0002,5594,");
+    expect(csv).toContain("17,,,,,active,2027-02-01,,,,,9998,,LOSV-MEM-0002,5594,");
   });
 
   it("lists a subscription no order matches but whose address is a member's apart, as a hint (#470)", async () => {
@@ -913,6 +934,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(byAddress).toContain('<a href="/admin/members?q=later%40example.com"');
     expect(byAddress).toContain("2027-05-01");
     expect(byAddress).toContain("Renews automatically on May 1, 2027");
+    expect(byAddress).toMatch(/>0<\/td>/);
     expect(byAddress).toContain('<a href="/admin/orders/9997"');
     expect(byAddress).toContain("a guest checkout");
     // Not matched to anyone, and not their subscription: 16 stays unmatched, 18 moves out.
@@ -922,7 +944,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(section(body, "Renewing in the next 30 days")).not.toMatch(/>18<\/td>/);
 
     const csv = (await (await get("/admin/reports/renewals?section=by-address&format=csv")).text()).trimEnd().split("\r\n");
-    expect(csv[1]).toBe('18,,,,,active,2027-05-01,,,,9997,"Renews automatically on May 1, 2027",LOSV-MEM-0001,,later@example.com');
+    expect(csv[1]).toBe('18,,,,,active,2027-05-01,0,,,,9997,"Renews automatically on May 1, 2027",LOSV-MEM-0001,,later@example.com');
   });
 
   it("downloads a section as CSV, and refuses one that doesn't exist", async () => {
@@ -930,7 +952,7 @@ describe("GET /admin/reports/renewals (#397)", () => {
     expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="renewals-overdue-2026-10-01.csv"');
     const lines = (await res.text()).trimEnd().split("\r\n");
     expect(lines[0]).toBe(
-      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id,address_member_email",
+      "subscription_id,member_email,member_id,name,good_through,status,next_payment_on,expiry_minus_renewal_days,paused_on,cancelled_on,signup_on,order_id,what_next,sku,store_customer_id,address_member_email",
     );
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("lapsed@example.com");
@@ -995,6 +1017,9 @@ describe("GET /admin/reports/slack, with MiniBC's renewals read", () => {
     const on = section(body, "Lapsed members in Slack, automatic renewal still on (1)");
     expect(on).toContain("lapsed@example.com");
     expect(on).toContain("Automatic renewal</th>");
+    expect(on).toContain("Expiry − renewal (days)</th>");
+    // Expired 1 Mar 2025, next payment 5 Jun 2026.
+    expect(on).toMatch(/>-461<\/td>/);
     // The Renewals report's own wording, whatever it says; the date is the point.
     expect(on).toMatch(/automatic renewal is still on: [^<]*Jun 5, 2026/);
     const off = section(body, "Lapsed members in Slack, automatic renewal cancelled or paused (1)");
@@ -1004,11 +1029,12 @@ describe("GET /admin/reports/slack, with MiniBC's renewals read", () => {
     expect(never).toContain("never@example.com");
     // Nothing to say about a renewal that doesn't exist.
     expect(never).not.toContain("Automatic renewal</th>");
+    expect(off).not.toContain("Expiry − renewal (days)</th>");
   });
 
   it("downloads each group, and still the whole lapsed list an older link asks for", async () => {
     const group = (await (await get("/admin/reports/slack?table=lapsed-in-slack-renewal-on&format=csv")).text()).trimEnd().split("\r\n");
-    expect(group[0]).toBe("email,first_name,last_name,started_on,expires_on,slack_id,slack_name,renewal");
+    expect(group[0]).toBe("email,first_name,last_name,started_on,expires_on,slack_id,slack_name,renewal,expiry_minus_renewal_days");
     expect(group).toHaveLength(2);
     expect(group[1]).toContain("lapsed@example.com");
 

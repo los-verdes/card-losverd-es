@@ -171,7 +171,6 @@ export async function ordersByYearAndProduct(db: D1Database): Promise<{ year: st
 }
 
 export interface SlackCrossReferenceRow {
-  [key: string]: string | null;
   email: string;
   /** Billing name on the member's latest-expiring order; null for Slack users with none. */
   first_name: string | null;

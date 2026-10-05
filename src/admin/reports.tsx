@@ -23,7 +23,16 @@ import { OrderLink } from "./orders";
 import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, sortKey } from "./when";
 import { splitLapsedByRenewal, type LapsedByRenewal } from "./slackRenewals";
-import { allRenewals, lastRenewalsRead, renewalState, renewalText, type RenewalRow, type RenewalState } from "../minibc/renewals";
+import {
+  allRenewals,
+  expiryMinusRenewalDays,
+  expiryMinusRenewalText,
+  lastRenewalsRead,
+  renewalState,
+  renewalText,
+  type RenewalRow,
+  type RenewalState,
+} from "../minibc/renewals";
 import {
   activeMemberships,
   attentionCounts,
@@ -76,6 +85,7 @@ const SLACK_COLUMN_HEADINGS = {
   slack_id: "Slack ID",
   slack_name: "Slack name",
   renewal: "Automatic renewal",
+  expiry_minus_renewal_days: "Expiry − renewal (days)",
 };
 
 type SlackColumn = keyof typeof SLACK_COLUMN_HEADINGS;
@@ -116,7 +126,7 @@ interface ShownSlackTable {
   title: string;
   columns: SlackColumn[];
   members: boolean;
-  rows: Record<string, string | null>[];
+  rows: Record<string, string | number | null>[];
 }
 
 /** The tables the page shows, in order: the lapsed one split when MiniBC's renewals are known. */
@@ -126,12 +136,16 @@ function slackTables(result: SlackCrossReference, lapsed: LapsedByRenewal | null
       return LAPSED_BY_RENEWAL.map((group) => ({
         key: group.key,
         title: group.title,
-        columns: [...table.columns, ...(group.field === "noRenewal" ? [] : (["renewal"] as SlackColumn[]))],
+        columns: [
+          ...table.columns,
+          ...(group.field === "noRenewal" ? [] : (["renewal"] as SlackColumn[])),
+          ...(group.field === "renewalOn" ? (["expiry_minus_renewal_days"] as SlackColumn[]) : []),
+        ],
         members: true,
-        rows: lapsed[group.field] as unknown as Record<string, string | null>[],
+        rows: lapsed[group.field] as unknown as Record<string, string | number | null>[],
       }));
     }
-    return [{ ...table, rows: result[table.field] as unknown as Record<string, string | null>[] }];
+    return [{ ...table, rows: result[table.field] as unknown as Record<string, string | number | null>[] }];
   });
 }
 
@@ -906,15 +920,20 @@ reports.get("/slack", async (c) => {
                   <tr>
                     {columns.map((column) => {
                       const value = row[column];
-                      if (column === "email" && table.members && value) {
+                      if (column === "email" && table.members && typeof value === "string") {
                         return (
                           <td style={cellStyle}>
                             <MemberLink email={value} />
                           </td>
                         );
                       }
+                      if (column === "expiry_minus_renewal_days") return <ExpiryDeltaCell days={typeof value === "number" ? value : null} />;
                       // Dates shown as days; the CSV keeps the full timestamp.
-                      return <td style={cellStyle}>{value?.slice(0, column === "expires_on" || column === "started_on" ? 10 : undefined)}</td>;
+                      return (
+                        <td style={cellStyle}>
+                          {typeof value === "string" ? value.slice(0, column === "expires_on" || column === "started_on" ? 10 : undefined) : value}
+                        </td>
+                      );
                     })}
                   </tr>
                 ))}
@@ -927,29 +946,45 @@ reports.get("/slack", async (c) => {
   );
 });
 
+/**
+ * A membership card's last day minus MiniBC's next payment, signed. The
+ * table sort compares numbers without their sign, so the cell sorts by the
+ * days shifted well clear of zero instead.
+ */
+const ExpiryDeltaCell: FC<{ days: number | null }> = ({ days }) => (
+  <td style={cellStyle} data-sort={days === null ? undefined : String(100_000 + days)}>
+    {expiryMinusRenewalText(days)}
+  </td>
+);
+
 /** One section of the Renewals report, and which subscriptions it lists. */
 interface RenewalSection {
   key: string;
   title: string;
   about: string;
+  /** Whether its table shows the card's last day minus MiniBC's next payment: where a renewal can still be to come. */
+  delta?: true;
   pick: (row: RenewalRow, state: RenewalState, today: string, soon: string) => boolean;
 }
 
 const RENEWAL_SECTIONS: RenewalSection[] = [
   {
     key: "overdue",
+    delta: true,
     title: "Membership card ran out, automatic renewal still on",
     about: "The renewal payment failed, or is still to be tried: the member has no current membership card until it goes through.",
     pick: (row, state) => row.member_email !== null && state.kind === "overdue",
   },
   {
     key: "late",
+    delta: true,
     title: "Renews after the membership card runs out",
     about: "MiniBC's next payment is more than a day after the membership card's last day, most often after an earlier failed payment, so the membership lapses in between.",
     pick: (row, state) => row.member_email !== null && state.kind === "renews-late",
   },
   {
     key: "soon",
+    delta: true,
     title: "Renewing in the next 30 days",
     about: "On time: MiniBC's next payment is on or just after the membership card's last day.",
     pick: (row, state, _today, soon) => row.member_email !== null && state.kind === "renews" && state.on <= soon,
@@ -963,6 +998,7 @@ const RENEWAL_SECTIONS: RenewalSection[] = [
   },
   {
     key: "by-address",
+    delta: true,
     title: "Same address as a member, no order matches",
     about:
       "No order ties these to a member, but MiniBC's email for the subscription is a member's address: most often a renewal started from a guest checkout, which has no store customer to follow. A hint only, so check the member before relying on it. Reading the starting order in from BigCommerce, on its order page, matches it properly if that order carries a membership.",
@@ -978,7 +1014,7 @@ const RENEWAL_SECTIONS: RenewalSection[] = [
 ];
 
 const RENEWAL_COLUMNS = [
-  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next", "sku", "store_customer_id", "address_member_email",
+  "subscription_id", "member_email", "member_id", "name", "good_through", "status", "next_payment_on", "expiry_minus_renewal_days", "paused_on", "cancelled_on", "signup_on", "order_id", "what_next", "sku", "store_customer_id", "address_member_email",
 ] as const;
 
 /** What a subscription is for, from its SKU, saying so when it isn't a membership product this site counts. */
@@ -1010,6 +1046,7 @@ reports.get("/renewals", async (c) => {
       good_through: row.expiration_date,
       status: row.status,
       next_payment_on: row.next_payment_on,
+      expiry_minus_renewal_days: csvSection.delta ? expiryMinusRenewalDays(row, expirationFor(row)) : null,
       paused_on: row.paused_on,
       cancelled_on: row.cancelled_on,
       signup_on: row.signup_on,
@@ -1035,6 +1072,10 @@ reports.get("/renewals", async (c) => {
         What MiniBC, which runs the store's automatic renewals, says about each member's. It changes no membership card: a renewal
         counts once its BigCommerce order is paid, like any other. Subscriptions are matched to members through their
         orders, never an address; one no order matches but whose address is a member's is listed apart, as a hint.
+      </p>
+      <p>
+        Expiry − renewal is the membership card's last day minus MiniBC's next payment, in days: negative when the card runs
+        out before the renewal, positive when the renewal comes first.
       </p>
       <p>
         {c.env.MINIBC_API_KEY ? (
@@ -1064,8 +1105,8 @@ reports.get("/renewals", async (c) => {
                 section.key === "unmatched"
                   ? ["Subscription", "For", "MiniBC", "Next payment", "Signed up", "Started by order", "Store customer"]
                   : section.key === "by-address"
-                    ? ["Member, by address only", "Good through", "What next", "Subscription", "Started by order", "Store customer"]
-                    : ["Member", "Good through", "What next", "Subscription"]
+                    ? ["Member, by address only", "Good through", ...(section.delta ? ["Expiry − renewal (days)"] : []), "What next", "Subscription", "Started by order", "Store customer"]
+                    : ["Member", "Good through", ...(section.delta ? ["Expiry − renewal (days)"] : []), "What next", "Subscription"]
               }
               csvHref={`/admin/reports/renewals?section=${section.key}&format=csv`}
               csvLabel={`Download all ${listed.length} as CSV`}
@@ -1100,6 +1141,7 @@ reports.get("/renewals", async (c) => {
                         <MemberLink email={row.address_member_email!} />
                       </td>
                       <td style={cellStyle}>{row.address_expiration_date ?? "no counted orders"}</td>
+                      {section.delta && <ExpiryDeltaCell days={expiryMinusRenewalDays(row, expirationFor(row))} />}
                       <td style={`${cellStyle}; white-space: normal; min-width: 14rem; max-width: 32rem`}>{renewalText(state)}</td>
                       <td style={cellStyle}>{row.subscription_id}</td>
                       <td style={cellStyle}>
@@ -1121,6 +1163,7 @@ reports.get("/renewals", async (c) => {
                         <MemberLink email={row.member_email!} />
                       </td>
                       <td style={cellStyle}>{row.expiration_date ?? "no counted orders"}</td>
+                      {section.delta && <ExpiryDeltaCell days={expiryMinusRenewalDays(row, expirationFor(row))} />}
                       <td style={`${cellStyle}; white-space: normal; min-width: 14rem; max-width: 32rem`}>{renewalText(state)}</td>
                       <td style={cellStyle}>{row.subscription_id}</td>
                     </tr>

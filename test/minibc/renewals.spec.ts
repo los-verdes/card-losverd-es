@@ -1,7 +1,15 @@
 import "../setup/d1";
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { allRenewals, lastRenewalsRead, renewalState, renewalText, renewalsForMember } from "../../src/minibc/renewals";
+import {
+  allRenewals,
+  expiryMinusRenewalDays,
+  expiryMinusRenewalText,
+  lastRenewalsRead,
+  renewalState,
+  renewalText,
+  renewalsForMember,
+} from "../../src/minibc/renewals";
 
 async function insertOrder(o: {
   id: string;
@@ -152,6 +160,28 @@ describe("what a subscription means for the card", () => {
     expect(renewalState(active("2026-11-01"), "2026-09-14", TODAY)).toEqual({ kind: "overdue", cardEnded: "2026-09-14", nextTry: "2026-11-01" });
     expect(renewalState(active("2026-11-01"), null, TODAY)).toEqual({ kind: "overdue", cardEnded: null, nextTry: "2026-11-01" });
     expect(renewalState(active(null), "2027-02-14", TODAY)).toEqual({ kind: "overdue", cardEnded: null, nextTry: null });
+  });
+
+  it("gives the card's last day minus the next payment: negative when the card runs out first", () => {
+    expect(expiryMinusRenewalDays({ status: "active", next_payment_on: "2027-03-14" }, "2027-02-14")).toBe(-28);
+    expect(expiryMinusRenewalDays({ status: "active", next_payment_on: "2027-02-14" }, "2027-02-14")).toBe(0);
+    expect(expiryMinusRenewalDays({ status: "active", next_payment_on: "2027-02-10" }, "2027-02-14")).toBe(4);
+  });
+
+  it("has no difference without a renewal to come or a card to compare", () => {
+    expect(expiryMinusRenewalDays({ status: "paused", next_payment_on: "2027-03-14" }, "2027-02-14")).toBeNull();
+    expect(expiryMinusRenewalDays({ status: "inactive", next_payment_on: "2027-03-14" }, "2027-02-14")).toBeNull();
+    expect(expiryMinusRenewalDays({ status: "active", next_payment_on: null }, "2027-02-14")).toBeNull();
+    expect(expiryMinusRenewalDays({ status: "active", next_payment_on: "2027-03-14" }, null)).toBeNull();
+  });
+
+  it.each([
+    [4, "+4"],
+    [0, "0"],
+    [-28, "-28"],
+    [null, ""],
+  ])("shows a difference of %j days as %j", (days, text) => {
+    expect(expiryMinusRenewalText(days)).toBe(text);
   });
 
   it("is paused or cancelled as MiniBC says, whatever the card", () => {
