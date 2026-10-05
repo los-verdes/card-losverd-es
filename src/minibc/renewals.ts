@@ -141,6 +141,22 @@ export function renewalState(row: Pick<RenewalRow, "status" | "next_payment_on" 
     : { kind: "renews", on: row.next_payment_on };
 }
 
+/**
+ * The membership card's last day minus MiniBC's next payment, in days:
+ * negative when the card runs out before the renewal, positive when the
+ * renewal comes first. Null unless the subscription is active and both dates
+ * are known.
+ */
+export function expiryMinusRenewalDays(row: Pick<RenewalRow, "status" | "next_payment_on">, expiration: string | null): number | null {
+  if (row.status !== "active" || !expiration || !row.next_payment_on) return null;
+  return daysBetween(row.next_payment_on, expiration);
+}
+
+/** The same, as a table shows it: signed, "+3", "-12" or "0". */
+export function expiryMinusRenewalText(days: number | null): string {
+  return days === null ? "" : days > 0 ? `+${days}` : String(days);
+}
+
 /** A state in a line an admin reads: what happens next, and when. */
 export function renewalText(state: RenewalState): string {
   const date = (iso: string | null) => (iso ? formatShortDate(iso) : "no date");
