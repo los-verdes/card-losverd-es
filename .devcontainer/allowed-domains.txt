@@ -10,11 +10,13 @@
 .github.com
 .githubusercontent.com
 
-# Anthropic: Claude Code, its sign-in and updates, and the claude.ai
-# connectors (mcp-proxy.anthropic.com)
+# Anthropic: Claude Code, its sign-in and updates, the claude.ai connectors
+# (mcp-proxy.anthropic.com), and the Artifact tool, which reads a published
+# page from its frame host before updating it (*.frame.claudeusercontent.com)
 .anthropic.com
 .claude.ai
 .claude.com
+.claudeusercontent.com
 sentry.io
 statsig.com
 
