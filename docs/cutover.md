@@ -310,9 +310,11 @@ subscription, and the scheduler jobs are gone. The old site had already
 stopped working properly, so nothing was lost by switching it off early.
 What remains, on purpose:
 
-- **The Cloud SQL instance** -- kept a couple more weeks, then destroyed.
-  It is also what the Data Studio report reads, so the reporting gate above
-  still applies to it.
+- **The Cloud SQL instance** -- kept a couple more weeks, then deleted by
+  hand on 2026-10-05, which also ended the Data Studio report that read it.
+  The archived Terraform still lists it (`cloud_sql_db.tf`), so its state
+  needs those entries dropped rather than destroyed again
+  ([#370](https://github.com/los-verdes/card-losverd-es/issues/370)).
 - **The statics bucket, the OAuth client and the Wallet components** --
   kept indefinitely. Google sign-in was checked after the turndown and
   still works against the same client.
