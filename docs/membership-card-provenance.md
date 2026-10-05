@@ -169,7 +169,7 @@ changes who is a member.
   - **Going to the store:** the card site's links to the store (the footer, the way back, and "Renew", offered in a
     membership's last 30 days and on the no-membership page) can sign a member with a connected store account in to
     the store, landing on their store account page (or the membership page, to renew). That needs the app installed on
-    the store, so for now production's links are plain links for everyone; staging's sign members in.
+    the store, which it is in both environments since 2026-10-05.
   - **Status:** live in production and on staging since 2026-10-03.
 
 ---
