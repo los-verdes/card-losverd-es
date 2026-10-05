@@ -596,6 +596,35 @@ describe("the member's page", () => {
     expect(body).toContain(`Connected to store customer #${CUSTOMER}. Its email shows here once you next use`);
   });
 
+  it("opens the connected store account, signed in, while store sign-in is on", async () => {
+    await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
+    const was = env.STORE_CUSTOMER_LOGIN;
+    try {
+      env.STORE_CUSTOMER_LOGIN = "on";
+      const on = await page();
+      expect(on).toContain('<a href="/store/go" class="action">Open my store account</a>');
+      expect(on).toContain("and &quot;Open my store account&quot; takes you there, both without signing in again.");
+
+      // Switched off, the same link would only reach the store's home page.
+      env.STORE_CUSTOMER_LOGIN = "off";
+      const off = await page();
+      expect(off).not.toContain("Open my store account");
+      expect(off).toContain("brings you straight here, without signing in again.");
+    } finally {
+      env.STORE_CUSTOMER_LOGIN = was;
+    }
+  });
+
+  it("offers nothing to open before a store account is connected", async () => {
+    const was = env.STORE_CUSTOMER_LOGIN;
+    try {
+      env.STORE_CUSTOMER_LOGIN = "on";
+      expect(await page()).not.toContain("Open my store account");
+    } finally {
+      env.STORE_CUSTOMER_LOGIN = was;
+    }
+  });
+
   it("says nothing about store accounts until the environment has an app", async () => {
     env.BIGCOMMERCE_APP_CLIENT_ID = "";
     expect(await page()).not.toContain("Store account");

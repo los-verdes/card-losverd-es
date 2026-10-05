@@ -88,7 +88,7 @@ describe("GET /store/go", () => {
     expect((await go()).headers.get("Location")).toBe(`${STORE}/`);
   });
 
-  it("is a plain link while STORE_CUSTOMER_LOGIN is off, as production's is until the app is installed", async () => {
+  it("is a plain link while STORE_CUSTOMER_LOGIN is off, as it must be whenever the app is not installed", async () => {
     await linkStoreAccount(env, USER_ID, CUSTOMER, USER_ID);
     for (const off of ["off", "", undefined]) {
       env.STORE_CUSTOMER_LOGIN = off;
