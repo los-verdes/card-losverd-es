@@ -40,6 +40,10 @@ if (!token || !accountId) {
   process.exit(2);
 }
 
+// `losverd.es`, the zone the card site and `store.losverd.es` live in
+// (terraform/store_redirect.tf pins the same id).
+const zoneId = process.env.CLOUDFLARE_ZONE_ID ?? "cfca911256d6cf6240686a6f7f8dc74c";
+
 // Each probe names the permission group to add in the Cloudflare dashboard
 // when it fails, and what stops working without it -- so a failure says what
 // to do rather than only what went wrong.
@@ -67,6 +71,21 @@ const PROBES = [
     path: `/accounts/${accountId}/workers/scripts`,
     group: "Account > Workers Scripts > Edit",
     usedBy: "wrangler deploy",
+  },
+  {
+    name: "DNS",
+    path: `/zones/${zoneId}/dns_records?per_page=1`,
+    group: "Zone > DNS > Edit (losverd.es)",
+    usedBy: "terraform apply (cloudflare_dns_record, store.losverd.es)",
+  },
+  {
+    name: "Single Redirect",
+    path: `/zones/${zoneId}/rulesets/phases/http_request_dynamic_redirect/entrypoint`,
+    // 10003: allowed to look, but the zone has no redirect rules yet, which is
+    // the state before the first apply creates them.
+    okCodes: [10003],
+    group: "Zone > Single Redirect > Edit (losverd.es)",
+    usedBy: "terraform apply (cloudflare_ruleset, the store.losverd.es redirect)",
   },
 ];
 
@@ -170,11 +189,11 @@ for (const probe of PROBES) {
   // 404 with code 7003 means the path didn't route, which for these
   // account-scoped endpoints means the account id is wrong -- worth telling
   // apart from a permission the token lacks, since the fix is different.
-  const badAccount =
-    response.status === 404 && response.body?.errors?.[0]?.code === 7003;
+  const code = response.body?.errors?.[0]?.code;
+  const badAccount = probe.path.startsWith("/accounts/") && response.status === 404 && code === 7003;
   results.push({
     ...probe,
-    ok: response.body?.success === true,
+    ok: response.body?.success === true || (probe.okCodes ?? []).includes(code),
     badAccount,
     why: reason(response),
   });

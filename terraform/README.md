@@ -27,8 +27,10 @@ The minimum this token needs, derived from what Terraform and the Deploy workflo
 | Account > **Workers R2 Storage** > Edit | `cloudflare_r2_bucket` |
 | Account > **Queues** > Edit | `cloudflare_queue`; `wrangler deploy` configuring queue consumers |
 | Account > **Workers Scripts** > Edit | `wrangler deploy` |
+| Zone > **DNS** > Edit, on `losverd.es` | `cloudflare_dns_record` (`store.losverd.es`) |
+| Zone > **Single Redirect** > Edit, on `losverd.es` | `cloudflare_ruleset` (the `store.losverd.es` redirect) |
 
-Plus zone-level access to `losverd.es` for Workers routes, which is what `wrangler deploy` uses to attach the `card.losverd.es` Custom Domain. The token has no DNS-records permission and needs none: Cloudflare creates the Custom Domain's record itself.
+Plus zone-level access to `losverd.es` for Workers routes, which is what `wrangler deploy` uses to attach the `card.losverd.es` Custom Domain. Cloudflare creates the Custom Domain's record itself; the DNS permission above is for `store.losverd.es` alone.
 
 `just cloudflare-token-check` checks a token against that list before it is swapped in. It is read-only -- it lists each resource type rather than creating anything -- so it is safe to run against a candidate token at any time, and it names the group to add for anything missing. It proves each group is *granted*; it cannot prove the group is scoped to Edit rather than Read, because only a write does that. Deploy to staging to prove the rest.
 
@@ -45,3 +47,5 @@ The endpoint URL in `_config.tf` contains the account id. Moving accounts means 
 ## DNS
 
 `card.losverd.es` is not defined here. It is a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`), and Cloudflare manages its DNS record and certificate as part of the Worker deploy.
+
+`store.losverd.es` is (`store_redirect.tf`): a short address for the store, redirecting every request to `store.losverdesatx.org` with path and query kept, as a 302. It is a proxied placeholder record and a zone Redirect Rule, so the card site carries nothing for it. That ruleset is the zone's only one for redirects, so a redirect added in the dashboard is undone by the next apply; add it to the ruleset's `rules` instead. The rest of the `losverd.es` zone (its other records, mail settings) is still managed in the dashboard.
