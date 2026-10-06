@@ -1,6 +1,6 @@
 name = "card-losverd-es-production"
 main = "src/index.ts"
-compatibility_date = "2026-09-15"
+compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Workers Logs: keeps every invocation's console output and uncaught errors
