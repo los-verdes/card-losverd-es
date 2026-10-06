@@ -154,32 +154,74 @@ export async function attributeOrder(
   adminUserId: number,
   note: string | null,
 ): Promise<AttributionResult> {
-  const previousMemberEmail = order.member_email;
-  await env.DB.batch([
-    env.DB.prepare("UPDATE membership_orders SET member_email = ?, updated_at = unixepoch('subsec') * 1000 WHERE order_id = ?").bind(
-      memberEmail,
-      order.order_id,
-    ),
-    env.DB.prepare(
-      `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(order.order_id, previousMemberEmail, memberEmail, adminUserId, note),
-  ]);
+  return attributeOrders(env, [order], memberEmail, adminUserId, note);
+}
+
+/**
+ * Every order attributed to `email`, newest first: what moving all of an
+ * address's orders to another one would move.
+ */
+export async function listAttributableOrders(db: D1Database, email: string): Promise<AttributableOrder[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT order_id, source, order_email, member_email, first_name, last_name, sku, status,
+              created_on, expires_on, missing_since, membership_units, customer_id, (${COUNTS_AS_MEMBERSHIP}) AS counts
+       FROM membership_orders WHERE member_email = ? ORDER BY created_on DESC, order_id DESC`,
+    )
+    .bind(email)
+    .all<AttributableOrder>();
+  return results;
+}
+
+/**
+ * `attributeOrder` for several orders at once, all attributed to the same
+ * address now: an address's old orders moved to the one its member uses
+ * today. Each order gets its own attribution row and audit entry, exactly
+ * as if moved one by one, but the two cards are re-derived, and their passes
+ * pushed, once.
+ */
+export async function attributeOrders(
+  env: Env,
+  orders: readonly AttributableOrder[],
+  memberEmail: string,
+  adminUserId: number,
+  note: string | null,
+): Promise<AttributionResult> {
+  const previousMemberEmail = orders[0].member_email;
+  if (orders.some((order) => order.member_email !== previousMemberEmail)) {
+    throw new Error("attributeOrders: every order must be attributed to the same address");
+  }
+  await env.DB.batch(
+    orders.flatMap((order) => [
+      env.DB.prepare("UPDATE membership_orders SET member_email = ?, updated_at = unixepoch('subsec') * 1000 WHERE order_id = ?").bind(
+        memberEmail,
+        order.order_id,
+      ),
+      env.DB.prepare(
+        `INSERT INTO membership_order_attributions (order_id, previous_member_email, member_email, admin_user_id, note)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(order.order_id, previousMemberEmail, memberEmail, adminUserId, note),
+    ]),
+  );
 
   // Only needed for a brand-new member whose order history doesn't say
   // (e.g. a Squarespace-era order with no name); see MemberFallback.
+  const named = orders.find((order) => order.first_name || order.last_name) ?? orders[0];
   const fallback = {
-    firstName: order.first_name ?? "",
-    lastName: order.last_name ?? "",
+    firstName: named.first_name ?? "",
+    lastName: named.last_name ?? "",
   };
-  await recordAuditEvent(env, {
-    action: "order.reattributed",
-    subjectEmail: memberEmail,
-    actorEmail: await actorEmail(env, adminUserId),
-    detail:
-      `Order ${order.order_id} moved from ${previousMemberEmail}` +
-      (note ? ` -- ${note}` : ""),
-  });
+  const actor = await actorEmail(env, adminUserId);
+  for (const order of orders) {
+    await recordAuditEvent(env, {
+      action: "order.reattributed",
+      subjectEmail: memberEmail,
+      actorEmail: actor,
+      detail:
+        `Order ${order.order_id} moved from ${previousMemberEmail}` +
+        (note ? ` -- ${note}` : ""),
+    });
+  }
   const previous = await refreshMemberFromOrders(env, previousMemberEmail, fallback);
   const current = await refreshMemberFromOrders(env, memberEmail, fallback);
   for (const result of [previous, current]) {

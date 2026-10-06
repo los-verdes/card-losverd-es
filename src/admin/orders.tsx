@@ -35,7 +35,7 @@ import { AdminPage, MemberLink, cellStyle } from "./layout";
 import { StoreCustomerLink, StoreOrderLink } from "./storeLinks";
 import { When, dayText } from "./when";
 
-const MAX_NOTE_LENGTH = 500;
+export const MAX_NOTE_LENGTH = 500;
 
 export function orderPath(orderId: string): string {
   return `/admin/orders/${encodeURIComponent(orderId)}`;
@@ -133,7 +133,7 @@ function parseAttribution(order: AttributableOrder, rawEmail: unknown, rawNote: 
   return { email, note: note || null };
 }
 
-const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, footprint }) => {
+export const Footprint: FC<{ email: string; footprint: EmailFootprint }> = ({ email, footprint }) => {
   const { member, memberOrders, placedOrders, login, slack } = footprint;
   const nowhere = !member && memberOrders.total === 0 && placedOrders === 0 && !login && !slack;
   return (

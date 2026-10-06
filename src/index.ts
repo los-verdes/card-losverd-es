@@ -8,6 +8,7 @@ import adminRevocations from "./admin/revocations";
 import adminAudit from "./admin/audit";
 import adminAdmins from "./admin/admins";
 import adminOrders from "./admin/orders";
+import adminMoveOrders from "./admin/moveOrders";
 import adminPreflight from "./admin/preflight";
 import adminReports from "./admin/reports";
 import { authConfig, landOnSessionBridge } from "./auth/authjs";
@@ -247,6 +248,7 @@ app.route("/assets", assets);
 app.route("/admin/reports", adminReports);
 // Admin order page: attribute an order to someone other than its purchaser.
 app.route("/admin/orders", adminOrders);
+app.route("/admin/move-orders", adminMoveOrders);
 // Admin: correct a member's "member since" date where the orders can't say.
 app.route("/admin/member-since", adminMemberSince);
 
