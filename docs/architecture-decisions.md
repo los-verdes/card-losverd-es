@@ -1,7 +1,8 @@
 # Architecture decisions
 
 Why this service is built the way it is. These decisions were made before the
-rewrite began and have not changed since. Decisions made during the build are
+rewrite began and, but for the one reversal recorded below, have not changed
+since. Decisions made during the build are
 recorded where they apply -- in code comments at the point they matter, and
 in the issues that settled them. This file is for the few that shaped
 everything else.
@@ -31,12 +32,10 @@ what makes the rest of the architecture affordable.
 
 ## Cloudflare Workers, D1 and R2, rather than staying on GCP
 
-The legacy stack ran on Cloud Run, Cloud SQL PostgreSQL, a load balancer, a
-VPC connector, Firestore, Pub/Sub and Cloud Scheduler. Each of those is a
-component to configure, pay for and reason about, and several exist only to
-let the others talk to each other -- the VPC connector and the connection
-pooler are infrastructure whose entire purpose is working around Cloud SQL's
-connection limits.
+The legacy stack ran on Cloud Run, Cloud SQL PostgreSQL, Firestore, Pub/Sub
+and Cloud Scheduler. Each of those is a component to configure, pay for and
+reason about, and the database in particular brought Cloud SQL's connection
+limits and an instance that costs money whether or not anyone is using it.
 
 The replacement is Workers, D1 and R2, with Queues for asynchronous work and
 Cron Triggers for scheduled jobs. It removes the connection-limit problem
@@ -46,7 +45,7 @@ region of $0-5.
 | Concern | Legacy | Now | Why |
 | :--- | :--- | :--- | :--- |
 | Runtime | Python/Flask on Cloud Run | TypeScript/Hono on Workers | No containers to maintain, no cold-start cost |
-| Datastore | Cloud SQL PostgreSQL | D1 (SQLite) | No connection limits, poolers or VPC connectors; no idle cost |
+| Datastore | Cloud SQL PostgreSQL | D1 (SQLite) | No connection limits; no idle cost |
 | Assets and passes | Container disk / GCS | R2 | S3-compatible, no egress fees |
 | Async work | Pub/Sub to a second Cloud Run app | One Queue per environment, plus a DLQ | One deployable instead of two |
 | Scheduled jobs | Cloud Scheduler to Pub/Sub | Cron Triggers | Direct equivalent, no extra service |

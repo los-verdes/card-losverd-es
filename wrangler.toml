@@ -237,13 +237,13 @@ crons = ["0 */6 * * *", "15 */6 * * *", "45 4 * * SUN", "0 9 * * SUN", "30 0 * *
 
 # =============================================================================
 # Staging: a separate Worker (`card-losverd-es-staging`) with its own D1, R2,
-# queues (terraform/staging.tf), vars, and secrets, pointed at the test
+# queues (terraform/, one of each per environment), vars, and secrets, pointed at the test
 # BigCommerce store. Deploy with `just deploy staging`; set its secrets with
 # `wrangler secret put NAME --env staging`.
 #
 # Named environments do NOT inherit top-level vars or bindings (only settings
 # like `main`, `compatibility_*`, and `rules`) -- that once silently shipped a
-# Worker with no bindings at all (see the migration plan's Handoff note). So
+# Worker with no bindings at all. So
 # everything below is spelled out in full, and `just check-wrangler-envs` (run
 # in CI) fails if staging's var/binding names drift from production's, or if
 # staging ever points at a production resource.

@@ -1,7 +1,7 @@
 # BigCommerce Order Ingestion — Design
 
 Design for the "Order Ingestion" row of the Target Architecture Overview in
-the migration plan (tracked separately from this repo). Follows the
+the migration plan (its phase index is [`migration-plan.md`](migration-plan.md)). Follows the
 conventions already established by Phase 2.3 (Member Auth) and Phase 2.5
 (Async/Background Processing) — in particular, this is the producer Phase
 2.5.5 already names for the `etl-sync` Cloudflare Queue.
@@ -10,7 +10,10 @@ Guiding constraint (Phase 2.2): **D1 is a refreshable cache of BigCommerce,
 not a system of record.** Every write described below is an idempotent
 upsert keyed on stable identifiers, never a careful stateful migration —
 drift is expected and self-heals on the next webhook delivery or scheduled
-resync.
+resync. That holds for what the store says. D1 is now the only record of
+Squarespace-era orders and of what admins and members set here
+(attributions, overrides, revocations), since the legacy database was
+deleted on 2026-10-05.
 
 ## 1. Worker routes
 
@@ -18,13 +21,13 @@ resync.
 
 ### `POST /bigcommerce/order-webhook`
 
-Mirrors today's `member_card/routes/bigcommerce.py::order_webhook`, ported
+Mirrors the legacy app's `member_card/routes/bigcommerce.py::order_webhook`, ported
 to Workers:
 
 1. Parse the JSON body. Reject (400) if it isn't valid JSON or is missing
-   `data`, `data.type`, `producer`, `scope`, or `store_id`.
+   `data.type`, `producer`, or `store_id`.
 2. Derive `storeHash` from `producer` (`"stores/{hash}"`) and compare
-   against the configured `BIGCOMMERCE_STORE_HASH` secret. Mismatch → 403.
+   against the configured `BIGCOMMERCE_STORE_HASH` var. Mismatch → 403.
 3. **Validate the webhook's authenticity.** BigCommerce does not sign
    webhook payload bodies with a computable HMAC the way e.g. Shopify does
    — the mechanism the existing Python app actually relies on (see
@@ -55,7 +58,7 @@ to Workers:
    - Verified against real deliveries: the sandbox store's webhook drives
      staging, and production's has pointed at `card.losverd.es` since the
      cutover. The specs (`sync.spec.ts`/`routes.spec.ts`) exercise the same
-     pure `signWebhookToken`/`verifyWebhookSignature` helpers against a
+     pure `signWebhookToken`/`verifyWebhookAuthorization` helpers against a
      locally generated key.
 4. If `data.type === "order"`, check `data.id` is a positive integer, which
    is all a BigCommerce order id ever is. Reject (400) otherwise. The id is
@@ -70,17 +73,15 @@ to Workers:
 5. Enqueue `{ type: "sync_bigcommerce_order", orderId: data.id, storeHash }`
    onto `ETL_SYNC_QUEUE` (see §3) and return `200` immediately — **no inline
    sync work happens in the request**, matching Phase 2.5.5's stated
-   design and today's Python behavior of acking fast and syncing
+   design and the legacy Python app's behavior of acking fast and syncing
    out-of-band.
 6. Any other `data.type` (e.g. `customer`) is logged and acked 200 with no
-   further action — same as today's Python `else` branch (`No handler
-   available for {data_type}`), since only orders drive membership state
-   today.
+   further action — same as the legacy Python app's `else` branch (`No handler
+   available for {data_type}`), since only orders drive membership state.
 
-No other BigCommerce OAuth/install routes (`/bigcommerce/callback`,
-`/bigcommerce/load`, `/bigcommerce/uninstall`, `/bigcommerce/remove-user`)
-are in scope here — those belong to the single-tenant admin-app-install
-flow, which is a Member Auth / admin-tooling concern, not order ingestion.
+The store app's install callbacks (`/bigcommerce/app/auth`, `/load`,
+`/uninstall`, in `src/bigcommerce/app.tsx`) belong to the store integration
+(#38), not order ingestion.
 
 ## 2. Idempotent upsert into `members`
 
@@ -109,7 +110,7 @@ deliver them chronologically.
 | `first_name` / `last_name` | Billing name on the member's latest counted order | Same field the Python `insert_order_as_membership()` uses. Falls back to the stored name (or, for a new row, the synced order's) when that order has none, e.g. a Squarespace-era row. |
 | `email` | `membership_orders.member_email` (lower-cased; the billing email unless re-pointed) | Matches `customer_email = order["billing_address"]["email"].lower()` in `member_card/bigcommerce.py`. |
 | `expiration_date` | Latest counted order's `created_on + 365 days`, `YYYY-MM-DD`; `NULL` if no order counts | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Can move earlier, when a renewal is refunded. |
-| `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders once the legacy export has loaded them. `member_since_overrides` still wins when a pass is rendered. |
+| `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders, which the one-time legacy import loaded. `member_since_overrides` still wins when a pass is rendered. |
 | `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data — a resync must never rotate it out from under an already-installed pass. |
 | `last_updated_at` | `Date.now()`, only when a pass-visible field changed | Cache-validation timestamp Apple's polling endpoint (`Phase 4.2`) compares against. |
 | `created_at` | DB default | Untouched on update. |
@@ -165,20 +166,20 @@ enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 `terraform/queues.tf`, with their bindings in `wrangler.toml`:
 
 * `src/queues/etlSync.ts` defines the `EtlSyncMessage` discriminated union
-  (verbatim from Phase 2.5.4) and `enqueueEtlSync(env, message)` — a thin
+  (begun in Phase 2.5.4) and `enqueueEtlSync(env, message)` — a thin
   wrapper around `env.ETL_SYNC_QUEUE.send(message)`.
 * `src/queues/etlSync.ts` also exports the `queue()` consumer entrypoint
   (`handleEtlSyncBatch`), which dispatches each message's `type` to the
   matching `sync.ts` function and acks/retries per-message exactly as
   Phase 2.5.2 specifies. `src/queues/index.ts` routes the Worker's single
-  `queue()` entrypoint to it by queue name, and acks + logs anything that
-  reaches `etl-sync-dlq`.
+  `queue()` entrypoint to it by queue name, and acks, logs and raises a Slack alert for
+  anything that reaches `etl-sync-dlq`.
 
 ### Card emails for new orders
 
 When the webhook path (and only the webhook path) sees an order that counts
-as a membership -- any of the paid statuses, the same list the card itself
-goes by -- the member is emailed their card once
+as a membership -- the paid statuses (`PAID_BIGCOMMERCE_STATUSES`), which are
+the card's list less `Partially Refunded` -- the member is emailed their card once
 (`src/email/newOrder.ts`). Emailing in bulk would be a disaster -- a
 backfill, resync or data reload would mail hundreds of existing members -- so three guards each stop that on their own:
 
@@ -197,10 +198,12 @@ retried, keeping "at most one email per order"; that member can still use
 ## 4. Scheduled full resync (`src/scheduled.ts`)
 
 Per Phase 2.5.3, a `scheduled()` handler maps each cron trigger to an
-`EtlSyncMessage` and enqueues it (same `enqueueEtlSync` helper). A fourth
-job, `run_slack_members_etl`, shares the queue but is not BigCommerce's
-concern; see [`reporting.md`](reporting.md). Of the three BigCommerce jobs,
-one is implemented fully:
+`EtlSyncMessage` and enqueues it (same `enqueueEtlSync` helper). Other
+scheduled jobs share the queue but are not BigCommerce's concern:
+`run_slack_members_etl` (see [`reporting.md`](reporting.md)), the weekly
+readiness check, the daily pass-expiry sweep and the hourly ops watch. Of
+the jobs here, `sync_subscriptions_etl` and `sync_minibc_subscriptions_etl`
+are implemented in full; `sync_customers_etl` is a stub and not scheduled.
 
 * **`sync_subscriptions_etl` — fully implemented** (`src/bigcommerce/sync.ts::syncSubscriptionsEtl`).
   Chosen as the one full example because it's the direct self-healing
@@ -264,7 +267,8 @@ one is implemented fully:
     ended, and fires when a running one has made no progress for two hours,
     or none has finished for eight days.
 
-  Start a full resync by hand with `just etl-run <env> full-resync`, which
+  Start a full resync by hand with `just etl-run <env> full-resync` (with
+  `--yes-production` for production), which
   enqueues `{ "type": "sync_subscriptions_etl", "loadAll": true }`.
 * **`sync_customers_etl` — stubbed, and not scheduled.** High-level: page through
   `GET /v2/customers`, and for any customer whose email matches an
@@ -282,9 +286,9 @@ one is implemented fully:
   (`GET /v3/orders/{id}/metafields?namespace=minibc&key=subscription_id`)
   into `membership_orders.minibc_subscription_id`, with `minibc_checked_at`
   recording when it asked. An order is not asked again once it has one, or
-  once it was asked a day or more after it was placed and had none. Nothing
-  reads it yet: it is what later ties a MiniBC subscription to the member
-  whose orders carry it (#397). A failed read is logged and asked again on
+  once it was asked a day or more after it was placed and had none. It is the
+  first way a MiniBC subscription is tied to a member (`src/minibc/renewals.ts`,
+  #397). A failed read is logged and asked again on
   the next sync; it never fails the order's own sync.
 * **`sync_minibc_subscriptions_etl` — MiniBC's membership subscriptions,
   twice a day** (`40 */12 * * *`, `src/minibc/subscriptions.ts`, #397). Reads
@@ -292,17 +296,17 @@ one is implemented fully:
   `POST /subscriptions/search` (50 a page, ten pages a message, chained like
   the resync) into `minibc_subscriptions`: status, signup, next payment,
   paused and cancelled dates, the order that started it and the store
-  customer paying for it -- none of its names, email, addresses or payment
-  details. A subscription a complete read no longer lists is flagged
+  customer paying for it -- none of its names, addresses or payment details. Its
+  email is kept only as a hint at the member for a subscription no order
+  matches (#470), and never matches anything. A subscription a complete read no longer lists is flagged
   (`missing_since`), not deleted. It is informational only: renewals already
   arrive as the BigCommerce orders MiniBC creates, and nothing here changes a
   card or emails anyone. Without `MINIBC_API_KEY` (staging) it logs that and
   stops. The key can also cancel subscriptions and charge cards; the client
-  only searches. Admins seeing it is the next part of #397.
+  only searches. Admins see it on the Renewals report and each member's admin page (see
+  [`reporting.md`](reporting.md)).
 
 ## 5. What's deferred
 
 * **`sync_customers_etl`'s implementation** — stubbed with a high-level
   description (§4).
-* **Admin app-install/OAuth routes** (`/bigcommerce/callback`, `/load`,
-  `/uninstall`, `/remove-user`) — out of scope for order ingestion; see §1.

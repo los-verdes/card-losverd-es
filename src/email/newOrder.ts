@@ -27,7 +27,10 @@
  * wallet passes go by. Deliberately the same list and not a second one: a
  * card that verifies is a card its member should have been told about, and
  * while these two disagreed, every order left sitting in `Shipped` had a
- * working membership card nobody had mentioned to them.
+ * working membership card nobody had mentioned to them. The one difference is
+`Partially Refunded`, which the card also counts while some of the order
+stands (`PARTIALLY_REFUNDED_STATUS`): such an order was paid, and emailed
+about, before anything was refunded.
  *
  * It waited for `Completed` until 2026-09-22, to let the email follow the
  * membership pack out the door. In this store `Completed` is set by hand and

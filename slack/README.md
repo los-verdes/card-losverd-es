@@ -11,13 +11,19 @@ exists only in a console is configuration nobody can review.
 
 ## What the Worker actually does with Slack
 
-Two outbound calls, and nothing else:
+Outbound calls only, and nothing else:
 
 - **`users.list`** (`src/slack/membersEtl.ts`) — copies the workspace's user
   list into D1 so members can be cross-referenced against Slack accounts by
   email. Needs `users:read`, and `users:read.email` for the addresses.
-- **An incoming webhook** (`src/slack/alert.ts`) — where dead-letter and
-  weekly readiness alerts are posted. Created by the `incoming-webhook` scope
+- **`conversations.list` and `conversations.members`**
+  (`src/slack/channelMembers.ts`) — copy who is in each subgroup's channel,
+  for the subgroup card themes. Needs `channels:read`; the channels are
+  public, so the bot does not join them.
+- **An incoming webhook** (`src/slack/alert.ts`) — where the Worker's alerts
+  are posted: dead letters, the weekly readiness check, the hourly
+  operational watch, and sync findings such as an order the store no longer
+  returns. Created by the `incoming-webhook` scope
   at install time.
 
 **Nothing inbound.** There is no request URL, no event subscription and no
@@ -42,7 +48,7 @@ stored as separate Worker secrets:
 
 | Produced at install | Worker secret | Used by |
 | :--- | :--- | :--- |
-| Bot user OAuth token (`xoxb-…`) | `SLACK_BOT_TOKEN` | the members ETL |
+| Bot user OAuth token (`xoxb-…`) | `SLACK_BOT_TOKEN` | the Slack sync (users and subgroup channels) |
 | Incoming webhook URL | `SLACK_ALERT_WEBHOOK_URL` | alerts |
 
 Both go into the environment's 1Password item and reach the Worker through
