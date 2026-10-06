@@ -63,6 +63,7 @@ import {
   mayChooseTheme,
   setCardTheme,
 } from "../themes/choice";
+import { themeLeaderboard, type ThemeLeaderboard } from "../themes/leaderboard";
 
 type CurrentMember = MemberRecord & { expiration_date: string };
 
@@ -645,12 +646,6 @@ portal.post(NAME_PATH, requireCurrentMember, csrf(), async (c) => {
 export const THEME_PATH = "/theme";
 
 /**
- * Choosing how the card looks (#333): every theme the member may use, each
- * previewed as their own card, and a button to use it. The card page links
- * here only for somebody `mayChooseTheme()` allows -- admins first, while the
- * themes are tried out -- and anybody else is shown a 404.
- */
-/**
  * The themes with the one the card is in now first, so the page opens on
  * what the member has rather than making them scroll to find it; the rest
  * keep their order (classic, then years).
@@ -659,13 +654,52 @@ export function currentFirst(themes: readonly CardTheme[], current: CardTheme): 
   return [...themes.filter((theme) => theme.id === current.id), ...themes.filter((theme) => theme.id !== current.id)];
 }
 
+/**
+ * How many members carry each theme (`themeLeaderboard`), as a bar per theme
+ * sized by its share of current members, marking the row this member is in.
+ */
+const ThemeLeaderboardSection: FC<{ board: ThemeLeaderboard; mine: CardTheme | null }> = ({ board, mine }) => (
+  <section id="leaderboard" class="order leaderboard">
+    <h2>What members are carrying</h2>
+    <p class="muted">Every current membership card, by the theme it's drawn in.</p>
+    {board.tallies.map(({ theme, members }) => {
+      const share = board.total === 0 ? 0 : Math.round((members / board.total) * 100);
+      return (
+        <div class="tally">
+          <p>
+            <span>
+              {theme ? <strong>{theme.label}</strong> : <strong>Default (not picked)</strong>}
+              {theme?.seasonal ? " (seasonal)" : ""}
+              {theme?.id === mine?.id ? " (you)" : ""}
+            </span>
+            <span>
+              {members} ({share}%)
+            </span>
+          </p>
+          <div class="bar" style={`width: ${share}%`} />
+        </div>
+      );
+    })}
+  </section>
+);
+
+/**
+ * Choosing how the card looks (#333): every theme the member may use, each
+ * previewed as their own card, and a button to use it, then how many members
+ * carry each theme. The card page links here only for somebody
+ * `mayChooseTheme()` allows -- admins first, while the themes are tried out
+ * -- and anybody else is shown a 404.
+ */
 const ThemeForm: FC<{
   options: ThemeOptions;
   current: CardTheme;
   chosen: boolean;
+  board: ThemeLeaderboard;
+  /** The row of the leaderboard this member is counted in: their stored choice, or null for the default. */
+  counted: CardTheme | null;
   error?: string;
   saved?: boolean;
-}> = ({ options, current, chosen, error, saved }) => (
+}> = ({ options, current, chosen, board, counted, error, saved }) => (
   <Page title="How your card looks">
     <BackToCard />
     <h1>How your card looks</h1>
@@ -679,6 +713,9 @@ const ThemeForm: FC<{
       any year you bought a membership, and of any subgroup you belong to, as
       well as the classic look.
       {options.themes.some((theme) => theme.seasonal) && " Seasonal themes are open to every member, while they last."}
+    </p>
+    <p>
+      <a href="#leaderboard">See what everyone else is carrying</a>
     </p>
     {currentFirst(options.themes, current).map((theme) => (
       <form method="post" action={THEME_PATH} class="order">
@@ -711,6 +748,7 @@ const ThemeForm: FC<{
         <button type="submit">Go back to your default ({options.defaultTheme.label})</button>
       </form>
     )}
+    <ThemeLeaderboardSection board={board} mine={counted} />
     <p>
       <a href="/">Back to your card</a>
     </p>
@@ -727,10 +765,12 @@ async function themePage(
   member: CurrentMember,
   extra: { error?: string; saved?: boolean } = {},
 ) {
-  const options = await getThemeOptions(env, member);
+  const [options, board] = await Promise.all([getThemeOptions(env, member), themeLeaderboard(env)]);
   return (
     <ThemeForm
       options={options}
+      board={board}
+      counted={CARD_THEMES.find((theme) => theme.id === member.card_theme) ?? null}
       current={effectiveTheme(options, member.card_theme)}
       chosen={options.themes.some((theme) => theme.id === member.card_theme)}
       {...extra}

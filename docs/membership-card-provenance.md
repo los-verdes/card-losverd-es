@@ -140,6 +140,8 @@ Members can choose a theme to change how their card looks: the colours and scarf
   own is not).
 - **On the passes:** Apple Wallet on iOS 27 shows the theme's artwork as poster art behind the pass; Google Wallet shows
   it as an image across the pass. Passes already installed update themselves when the theme changes.
+- **Leaderboard:** the theme page shows every member how many current memberships carry each theme, and how many have
+  not picked one ("default"). Counts only, never names; lapsed, revoked and expelled members are not counted.
 
 ---
 

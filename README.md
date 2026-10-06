@@ -30,7 +30,7 @@ Deliberately dropped from the previous site: Squarespace integration, Yahoo logi
 | Path | What it is | Auth |
 | :--- | :--- | :--- |
 | `/` , `/card.png`, `/passes/apple.pkpass`, `/passes/google` | Member portal: your card, card image, and wallet passes (`src/member/portal.tsx`) | Logged-in current member |
-| `/theme` | Choose the theme the card is drawn in, from those the member may use: classic, the themes of years they bought a membership, and the themes of subgroups they belong to (`src/member/portal.tsx`, `src/themes/`) | Logged-in current member, while `CARD_THEME_CHOICE` allows it |
+| `/theme` | Choose the theme the card is drawn in, from those the member may use: classic, the themes of years they bought a membership, and the themes of subgroups they belong to; beneath them, a leaderboard of how many current members carry each theme, counts only (`src/member/portal.tsx`, `src/themes/`) | Logged-in current member, while `CARD_THEME_CHOICE` allows it |
 | `/name` | Set the name your card shows -- a nickname, or a correction the orders will never catch up with (`src/member/portal.tsx`) | Logged-in current member |
 | `/login`, `/logout`, `/api/auth/*` | Login with Google or Apple via Auth.js, bridged to a signed `lv_session` cookie. `/login` also offers `/email-card`, for anyone who has neither account (`src/auth/`) | Public |
 | `/email-card` | No-login fallback: emails a member their card. Turnstile-protected and rate limited; never reveals whether an address is a member (`src/member/email-card.tsx`) | Public |
