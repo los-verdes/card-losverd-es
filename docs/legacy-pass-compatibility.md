@@ -1,6 +1,6 @@
 # Legacy Wallet Pass Compatibility — Audit & Decisions
 
-The migration plan's Phase 2.2 originally committed to carrying
+The migration plan originally committed to carrying
 already-installed Apple Wallet passes across the cutover ("existing members keep
 receiving push updates ... with no reinstall required"). This doc records
 what the legacy `digital-membership` app actually embeds in those passes,
@@ -42,7 +42,7 @@ is unique, with a single `membership_card_id`).
   (§3.1).
 * **Pass type / team identifiers** — `wrangler.toml` now sets them to the
   legacy values (previously `REPLACE_WITH_...` placeholders). Note the
-  original plan's Phase 4.7 example topic `pass.es.losverd.membership` is wrong;
+  migration plan's example APNs topic `pass.es.losverd.membership` was wrong;
   the real APNs topic is `pass.es.losverd.card`.
 * **`passesUpdatedSince` tags.** Legacy-format (non-numeric) tags are
   already handled safely: the new route's `Number(...)` yields `NaN`, which
@@ -119,16 +119,16 @@ this one would answer 401. So a serial that is a known legacy card (its
 is acknowledged instead -- `200` to register and unregister, with nothing
 stored, and `304` when a newer copy is asked for -- and the phone stops
 retrying (`src/passkit/legacyPasses.ts`). In the week after cutover that
-was about thirty old passes on about thirty phones. Consequence: the plan's Phase 2.2
+was about thirty old passes on about thirty phones. Consequence: the migration plan's
 **pass-state migration (`auth_token` / `devices` / `registrations`) is
 dropped**, since it only existed to keep installed passes updating. Passes
-issued by this stack do receive updates (Phase 4.7 APNs), confirmed on a real
+issued by this stack do receive updates (APNs pushes), confirmed on a real
 device against production.
 
 **D2 — QR signature key: reuse the legacy key.** `PASS_SIGNATURE_KEY` is set
 to the legacy `SECRET_KEY * 5` value, so existing QR codes keep verifying.
 It's still a separate secret from `SESSION_SIGNING_KEY`, which was the
-point of Phase 2.3.1's split. Rotation goes through an overlap window; see `docs/pass-signature-rotation.md`.
+point of splitting the legacy app's single `SECRET_KEY`. Rotation goes through an overlap window; see `docs/pass-signature-rotation.md`.
 To make old codes *useful* (not just signature-valid), the port carries the
 legacy card lookup (§3.3):
 

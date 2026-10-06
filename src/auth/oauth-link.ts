@@ -1,5 +1,5 @@
 /**
- * Links an OAuth login to a `users` row (the migration plan's Phase 2.3.2),
+ * Links an OAuth login to a `users` row,
  * replacing python-social-auth's `UserSocialAuth` table and pipeline. Called
  * once per OAuth sign-in, from Auth.js's `jwt` callback (src/auth/authjs.ts).
  */

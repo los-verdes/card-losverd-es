@@ -6,15 +6,11 @@ import { passLinks } from "../passkit/links";
 
 /**
  * Google Wallet service-account credentials needed to sign a "Save to
- * Google Wallet" JWT (Phase 5.2). Mirrors the shape of
- * `PassSigningCredentials` in `../passkit/signer.ts`: a real Google Wallet
- * service-account key isn't available in this environment yet (see the
- * migration plan's Phase 0.2 credential inventory), so this module accepts
- * the credentials as parameters rather than reading Worker secrets
- * directly. It works against any valid RS256 key pair -- including a
- * throwaway test key -- so it's fully testable today and becomes real the
- * moment the real service-account JSON is populated into Worker secrets, no
- * code change needed.
+ * Google Wallet" JWT. Mirrors the shape of `PassSigningCredentials` in
+ * `../passkit/signer.ts`: this module takes the credentials as parameters
+ * rather than reading Worker secrets directly, so it works against any valid
+ * RS256 key pair -- the real service account's from Worker secrets, or a
+ * throwaway test key.
  */
 export interface GoogleWalletCredentials {
   /** The service account JSON's `client_email` field -- becomes the JWT `iss` claim. */
@@ -27,7 +23,7 @@ export interface GoogleWalletCredentials {
 export interface GoogleWalletConfig {
   /** Google Wallet Issuer ID (numeric, assigned via the Google Pay & Wallet Console). */
   issuerId: string;
-  /** Suffix identifying the `GenericClass`; the full class id is `${issuerId}.${classSuffix}` (Phase 5.1, e.g. `los_verdes_member_v1`). */
+  /** Suffix identifying the `GenericClass`; the full class id is `${issuerId}.${classSuffix}` (e.g. `los_verdes_member_v1`). */
   classSuffix: string;
   /** Origins allowed to render the "Save to Google Wallet" button -- the JWT's `origins` claim. */
   origins: string[];
@@ -109,14 +105,14 @@ export function googleWalletConfig(env: {
   };
 }
 
-/** The subset of a `members` row (Phase 2.1) needed to build a Google Wallet object. */
+/** The subset of a `members` row needed to build a Google Wallet object. */
 export interface MemberWalletInput {
   memberId: string; // == the GenericObject id suffix and the QR code's alternate text
   firstName: string;
   lastName: string;
   status: "active" | "expired" | "revoked";
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
-  /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
+  /** ISO8601 date (YYYY-MM-DD), or null if not known. */
   memberSince: string | null;
   /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
   verifyUrl: string;
@@ -143,7 +139,7 @@ type GenericObjectState = "ACTIVE" | "EXPIRED" | "INACTIVE";
 
 /**
  * The subset of Google Wallet's `GenericObject` resource this project
- * populates -- see Phase 5.1/5.2. Field structure mirrors
+ * populates. Field structure mirrors
  * `../passkit/generator.ts`'s `PassJson` (name as the prominent header,
  * member-since/expiry as secondary text, status folded into a single
  * field) adapted to Google Wallet's own object shape rather than Apple's.
@@ -234,8 +230,8 @@ function objectState(status: MemberWalletInput["status"]): GenericObjectState {
 }
 
 /**
- * Builds the `GenericObject` payload for a real Los Verdes membership pass
- * (Phase 5.1). Pure function of its inputs, mirroring
+ * Builds the `GenericObject` payload for a real Los Verdes membership pass.
+ * Pure function of its inputs, mirroring
  * `passkit/generator.ts#buildPassJson`'s shape and conventions (conditional
  * member-since/expiry fields, QR code encoding the signed `/verify-pass` URL
  * with the member id as its alternate text).
@@ -308,7 +304,7 @@ export function buildGenericObject(
 }
 
 /**
- * Builds the full "Save to Google Wallet" JWT payload (Phase 5.2) -- the
+ * Builds the full "Save to Google Wallet" JWT payload -- the
  * `iss`/`aud`/`typ`/`origins` envelope around a single `genericObjects`
  * entry. Pure and synchronous so it's independently testable from signing.
  */
@@ -355,8 +351,7 @@ export function buildSkinnySaveToWalletPayload(
 
 /**
  * Signs a "Save to Google Wallet" payload with RS256, using Web Crypto via
- * `jose` (per the migration plan's Phase 5.2 -- no Google API client library
- * needed). `credentials.privateKeyPem` is expected to be the service account
+ * `jose` (no Google API client library needed). `credentials.privateKeyPem` is expected to be the service account
  * JSON's `private_key` field verbatim (PKCS#8 PEM), which is exactly what
  * Google issues and what `jose#importPKCS8` expects.
  */
@@ -385,7 +380,7 @@ export async function signSaveToWalletJwt(
   );
 }
 
-/** Builds the "Save to Google Wallet" link (Phase 5.2, step 3) from a signed JWT. */
+/** Builds the "Save to Google Wallet" link from a signed JWT. */
 export function buildSaveToWalletUrl(signedJwt: string): string {
   return `https://pay.google.com/gp/v/save/${signedJwt}`;
 }

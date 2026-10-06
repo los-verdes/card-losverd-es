@@ -876,7 +876,7 @@ export interface SubscriptionsEtlCursor {
 }
 
 export interface SubscriptionsEtlOptions {
-  /** Skip the modified-since filter entirely - a full historical resync (Phase 2.2's initial cache population). */
+  /** Skip the modified-since filter entirely: a full resync of every order in the store. */
   loadAll?: boolean;
   /** The previous message's continuation; absent starts a new chain. */
   cursor?: SubscriptionsEtlCursor;
@@ -906,10 +906,8 @@ async function startSubscriptionsEtlChain(
 }
 
 /**
- * Scheduled full/incremental resync (Phase 2.5.3's `sync_subscriptions_etl`
- * cron message) - the one fully-implemented example of the three scheduled
- * ETL jobs named in Phase 2.5.3 (see docs/bigcommerce-ingestion.md section
- * 4 for why this one and not the other two). Walks BigCommerce's v2 orders
+ * Scheduled full/incremental resync (the `sync_subscriptions_etl` cron
+ * message; see docs/bigcommerce-ingestion.md section 4). Walks BigCommerce's v2 orders
  * list in id order, filtered to orders modified since the last successful
  * run (minus a trailing overlap window), and runs every membership order
  * through the same idempotent `applyMembershipOrder` path as the webhook
@@ -1151,9 +1149,9 @@ export async function recheckUnlistedOrders(
  * Stub - see docs/bigcommerce-ingestion.md section 4 for the intended
  * design (page BigCommerce's `/v2/customers`, backfill identity fields for
  * existing `members` rows). Deferred: the identity fields it would
- * reconcile (`bigcommerce_id`, user linkage) belong to the Member Auth
- * `users`/`oauth_identities` schema (Phase 2.3), which hasn't landed yet -
- * there's nothing on today's `members` table for this to write that
+ * reconcile (`users.bigcommerce_id`) is written by the store handoff
+ * instead, only when the member connects their own store account (#38), and
+ * there's nothing on the `members` table for this to write that
  * `syncSubscriptionsEtl` doesn't already cover.
  */
 export async function syncCustomersEtl(env: Env): Promise<void> {

@@ -1,5 +1,5 @@
-// Production card layout, promoted from the Phase 1.0.2 risk spike
-// (src/spikes/card-rendering/template.ts) -- re-authored against Satori's
+// Production card layout, promoted from the card-rendering risk spike
+// (PR #4) -- re-authored against Satori's
 // supported CSS subset (flexbox only -- no CSS grid, no arbitrary
 // selectors, no `calc()`/viewport units), inspired by the old Python app's
 // `member_card/templates/card_image.html.j2` + `macros.html.j2`

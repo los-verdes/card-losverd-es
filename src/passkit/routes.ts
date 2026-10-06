@@ -115,7 +115,7 @@ passkit.get(
 
 /**
  * 4.3 Deliver Latest Pass Version. `getApplePassBundle` serves from the
- * Phase 3.3 R2 cache when available and only signs on a miss.
+ * R2 pass cache when available and only signs on a miss.
  */
 passkit.get("/v1/passes/:passTypeIdentifier/:serialNumber", async (c) => {
   const { serialNumber } = c.req.param();

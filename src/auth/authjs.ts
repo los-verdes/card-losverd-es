@@ -1,5 +1,5 @@
 /**
- * OAuth login via Auth.js (the migration plan's Phase 2.3.2), mounted at
+ * OAuth login (Google and Sign in with Apple) via Auth.js, mounted at
  * `/api/auth/*` by `src/index.ts`. Auth.js owns the protocol details: the
  * state/nonce/PKCE checks, ID token verification, and Apple's cross-site
  * `form_post` callback.

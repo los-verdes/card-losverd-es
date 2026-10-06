@@ -1,12 +1,10 @@
 # BigCommerce Order Ingestion — Design
 
-Design for the "Order Ingestion" row of the Target Architecture Overview in
-the migration plan (its phase index is [`migration-plan.md`](migration-plan.md)). Follows the
-conventions already established by Phase 2.3 (Member Auth) and Phase 2.5
-(Async/Background Processing) — in particular, this is the producer Phase
-2.5.5 already names for the `etl-sync` Cloudflare Queue.
+How orders get from the BigCommerce store into D1: the webhook, the
+`etl-sync` Cloudflare Queue it feeds, and the scheduled resyncs that repair
+whatever a webhook missed.
 
-Guiding constraint (Phase 2.2): **D1 is a refreshable cache of BigCommerce,
+Guiding constraint: **D1 is a refreshable cache of BigCommerce,
 not a system of record.** Every write described below is an idempotent
 upsert keyed on stable identifiers, never a careful stateful migration —
 drift is expected and self-heals on the next webhook delivery or scheduled
@@ -42,7 +40,7 @@ to Workers:
    (`crypto.subtle` + timing-safe compare, not `===`). Mismatch → 401.
    - **New dedicated secret, not reused:** `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`.
      The old app reused Flask's single `SECRET_KEY` for this (and for
-     session signing, and for QR verification). Phase 2.3.1 already
+     session signing, and for QR verification). This site already
      splits that single key into `SESSION_SIGNING_KEY` and
      `PASS_SIGNATURE_KEY` for the same reason; this design adds a third,
      purpose-specific secret rather than resurrecting the old
@@ -72,8 +70,8 @@ to Workers:
    dead-letters.
 5. Enqueue `{ type: "sync_bigcommerce_order", orderId: data.id, storeHash }`
    onto `ETL_SYNC_QUEUE` (see §3) and return `200` immediately — **no inline
-   sync work happens in the request**, matching Phase 2.5.5's stated
-   design and the legacy Python app's behavior of acking fast and syncing
+   sync work happens in the request**, matching the legacy Python app's
+   behavior of acking fast and syncing
    out-of-band.
 6. Any other `data.type` (e.g. `customer`) is logged and acked 200 with no
    further action — same as the legacy Python app's `else` branch (`No handler
@@ -112,7 +110,7 @@ deliver them chronologically.
 | `expiration_date` | Latest counted order's `created_on + 365 days`, `YYYY-MM-DD`; `NULL` if no order counts | Directly ports `AnnualMembership.expiry_date` (`created_on + timedelta(days=365)`). Can move earlier, when a renewal is refunded. |
 | `member_since` | Earliest counted order's `created_on`, `YYYY-MM-DD`; `NULL` if no order counts | Includes Squarespace-era orders, which the one-time legacy import loaded. `member_since_overrides` still wins when a pass is rendered. |
 | `auth_token` | Preserved unchanged on update; freshly generated (`crypto.randomUUID()`) only on insert | `auth_token` is Apple PassKit device-auth state, not BigCommerce data — a resync must never rotate it out from under an already-installed pass. |
-| `last_updated_at` | `Date.now()`, only when a pass-visible field changed | Cache-validation timestamp Apple's polling endpoint (`Phase 4.2`) compares against. |
+| `last_updated_at` | `Date.now()`, only when a pass-visible field changed | Cache-validation timestamp Apple's update-polling endpoint compares against. |
 | `created_at` | DB default | Untouched on update. |
 
 Whether a membership is active or expired is not stored: it is answered from
@@ -160,18 +158,18 @@ provenance document.
 
 ## 3. Integration with the `etl-sync` queue
 
-Per Phase 2.5.4/2.5.5, the webhook route's only job is to validate and
+The webhook route's only job is to validate and
 enqueue `{ type: "sync_bigcommerce_order", orderId, storeHash }` onto
 `ETL_SYNC_QUEUE`. The `etl-sync` and `etl-sync-dlq` queues are provisioned by
 `terraform/queues.tf`, with their bindings in `wrangler.toml`:
 
 * `src/queues/etlSync.ts` defines the `EtlSyncMessage` discriminated union
-  (begun in Phase 2.5.4) and `enqueueEtlSync(env, message)` — a thin
+  and `enqueueEtlSync(env, message)` — a thin
   wrapper around `env.ETL_SYNC_QUEUE.send(message)`.
 * `src/queues/etlSync.ts` also exports the `queue()` consumer entrypoint
   (`handleEtlSyncBatch`), which dispatches each message's `type` to the
-  matching `sync.ts` function and acks/retries per-message exactly as
-  Phase 2.5.2 specifies. `src/queues/index.ts` routes the Worker's single
+  matching `sync.ts` function and acks or retries each message on its
+  own, so one failure doesn't retry the rest of its batch. `src/queues/index.ts` routes the Worker's single
   `queue()` entrypoint to it by queue name, and acks, logs and raises a Slack alert for
   anything that reaches `etl-sync-dlq`.
 
@@ -197,7 +195,7 @@ retried, keeping "at most one email per order"; that member can still use
 
 ## 4. Scheduled full resync (`src/scheduled.ts`)
 
-Per Phase 2.5.3, a `scheduled()` handler maps each cron trigger to an
+A `scheduled()` handler maps each cron trigger to an
 `EtlSyncMessage` and enqueues it (same `enqueueEtlSync` helper). Other
 scheduled jobs share the queue but are not BigCommerce's concern:
 `run_slack_members_etl` (see [`reporting.md`](reporting.md)), the weekly
@@ -207,15 +205,15 @@ are implemented in full; `sync_customers_etl` is a stub and not scheduled.
 
 * **`sync_subscriptions_etl` — fully implemented** (`src/bigcommerce/sync.ts::syncSubscriptionsEtl`).
   Chosen as the one full example because it's the direct self-healing
-  counterpart to the webhook path and the one Phase 2.2 leans on hardest
-  ("a scheduled resync can always repair drift"): it walks
+  counterpart to the webhook path and the one the guiding constraint above
+  leans on hardest ("a scheduled resync can always repair drift"): it walks
   `GET /v2/orders` for a trailing window (`min_date_modified`, mirroring
   `member_card/bigcommerce.py::bigcommerce_orders_etl`'s "last run time
   minus 12 hours" overlap window, using a D1-stored watermark in place of
   Postgres's `table_metadata`), or the whole store with `loadAll`, and runs
   every membership order through the exact same `refreshMemberFromOrders()`
   path §2 describes. Concurrency is capped at 1 by the `etl-sync` queue
-  config (Phase 2.5.1) so this can never race a webhook-triggered
+  config so this can never race a webhook-triggered
   `sync_bigcommerce_order` on the same D1 rows.
 
   **A run is a chain of queue messages** (#57), because the store has more

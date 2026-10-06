@@ -193,7 +193,7 @@ describe("buildGenericObject", () => {
 });
 
 describe("buildSaveToWalletPayload", () => {
-  it("wraps a single genericObjects entry with the Phase 5.2 iss/aud/typ/origins envelope", () => {
+  it("wraps a single genericObjects entry in the save link's iss/aud/typ/origins envelope", () => {
     const payload = buildSaveToWalletPayload(
       makeMember(),
       CONFIG,

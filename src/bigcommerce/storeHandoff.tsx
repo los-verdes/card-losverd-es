@@ -1,5 +1,5 @@
 /**
- * The store handoff (#38, Phase 1): "Membership card" on the store signs a
+ * The store handoff (#38): "Membership card" on the store signs a
  * member in here, connecting their store account the first time.
  *
  * The storefront script fetches the store's `current.jwt` and submits it as a

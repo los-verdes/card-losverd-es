@@ -1,12 +1,12 @@
-# Cloudflare Queues for async/background work (migration plan Phase 2.5).
+# Cloudflare Queues for async/background work.
 # Requires the Workers Paid plan. Only the queues themselves live here;
 # producer/consumer bindings are declared in wrangler.toml and managed by
 # `wrangler deploy`, alongside the Worker code that uses them. The Deploy
 # workflow runs `terraform apply` before `wrangler deploy`, so these exist
 # before the Worker config references them.
 #
-# `member-actions` (Phase 2.5.1) isn't provisioned yet -- nothing produces
-# to it until the card-image backfill is built.
+# A `member-actions` queue was planned and retired before it was built: card
+# images render on request, so there is nothing to fan out.
 #
 # Unlike the D1 database and R2 bucket, these have no `prevent_destroy`:
 # they hold only in-flight messages, and renames update in place.

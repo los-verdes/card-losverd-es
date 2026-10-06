@@ -1,5 +1,5 @@
 /**
- * The card on the store (#38, Phase 2): what the storefront script
+ * The card on the store (#38): what the storefront script
  * (src/bigcommerce/storefront.ts) needs to draw a member's card on their
  * store account page and the membership page.
  *
@@ -16,7 +16,7 @@
  *   is cached (#395), so the image is cheap to serve.
  *
  * Changing the name or theme, or emailing the card, happens on the card
- * site, through the Phase 1 handoff.
+ * site, through the store handoff (src/bigcommerce/storeHandoff.tsx).
  */
 
 import { Hono, type Context } from "hono";

@@ -11,8 +11,8 @@ export interface PassSigningCredentials {
 
 /**
  * Produces a PKCS#7 **detached** signature over `manifestBytes` (the
- * `.pkpass` bundle's `manifest.json`), per Phase 4.6. Promoted from the
- * Phase 1.0.1 risk spike (PR #2), which established that node-forge can
+ * `.pkpass` bundle's `manifest.json`), as Apple's pass format requires.
+ * Promoted from the PKCS#7 signing risk spike (PR #2), which established that node-forge can
  * produce a structurally valid detached signature inside workerd at all; the
  * spike itself has since been retired, its throwaway certificate generator
  * kept on as `test/fixtures/certChain.ts`.

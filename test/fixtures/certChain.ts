@@ -37,7 +37,7 @@ function commonAttrs(commonName: string): forge.pki.CertificateField[] {
 /**
  * Generates (and memoizes) a throwaway self-signed root CA + leaf cert.
  * Memoized because a real deployment loads its Apple-issued cert chain once
- * from Worker secrets rather than regenerating it per request -- Phase 4.6's
+ * from Worker secrets rather than regenerating it per request -- the
  * actual per-request hot path is only the PKCS#7 *signing* step (see
  * src/passkit/signer.ts), not certificate generation.
  */
