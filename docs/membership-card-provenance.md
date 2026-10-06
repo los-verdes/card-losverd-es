@@ -114,19 +114,18 @@ that is tracked in the table below:
 - **Card Number & QR Code:** The QR code links to a page that says whether the membership is current right now (a public
   scan sees only "Valid" or "Not a current membership"). Cards issued by the old site still scan. The card number is
   assigned once and never changes.
+- **Member Since:** The month + year of the oldest counted order or a manual override.
 
-### "Member Since" Precedence
+#### "Member Since" Precedence
 
 Given that folks are passionate about their "member since" dates, we have options for adjusting this value. When
 determining the "Member Since" date, the site uses this order:
 
 1. `Manual Admin Override` - A date set by an admin manually; recorded in the audit logs
-2. `Legacy Import Override` - Historical join dates imported from the old site. Those that matched the member's
-   orders, or belonged to someone with no Squarespace-era order, have been removed: on 2026-10-02 that was every one.
-3. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
+2. `Earliest Counted Order` - Timestamp of the earliest qualifying order on file; the default option if the preceding
    options don't fit
 
-Only a manual override can be removed by an admin; an imported date can be corrected over but not removed.
+A manual override can also be removed by an admin.
 
 ### Card Themes
 
