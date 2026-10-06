@@ -18,10 +18,9 @@ import { syncMinibcSubscriptions, type MinibcCursor } from "../minibc/subscripti
 import { refreshInstalledPasses, type PassRefreshAudience, type PassRefreshCursor } from "../member/passRefresh";
 
 /**
- * `etl-sync` queue message schema, per the migration plan's Phase 2.5.4.
- * Kept in its own module so both the BigCommerce
- * webhook route (producer) and this queue's consumer/scheduled trigger
- * (Phase 2.5.3) share one definition.
+ * `etl-sync` queue message schema. Kept in its own module so both the
+ * BigCommerce webhook route (producer) and this queue's consumer/scheduled
+ * trigger share one definition.
  */
 export type EtlSyncMessage =
   | { type: "sync_bigcommerce_order"; orderId: string; storeHash: string }
@@ -166,7 +165,7 @@ async function dispatchEtlSyncMessage(
  * `etl-sync` queue consumer, routed from `src/queues/index.ts`.
  *
  * Handles ack/retry per-message (not letting one failure fail the whole
- * batch), per Phase 2.5.2's `etl-sync` consumer, whose concurrency is
+ * batch). The `etl-sync` consumer's concurrency is
  * capped at 1 so this and a webhook-triggered sync never race each other's
  * D1 writes.
  */

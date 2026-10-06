@@ -59,7 +59,7 @@ binding = "DB"
 database_name = "card-losverd-es-db-production"
 database_id = "2205f64b-4273-45b7-91e3-a544b686392c"
 # Wrangler defaults to looking for a top-level `migrations/` directory --
-# ours lives at src/db/migrations (see Phase 2.1). Without this, `wrangler
+# ours lives at src/db/migrations. Without this, `wrangler
 # d1 migrations apply` fails with "No migrations present at .../migrations"
 # -- this is why every Deploy workflow run has failed since the very first
 # merge to main.
@@ -102,7 +102,7 @@ BIGCOMMERCE_CLIENT_ID = "fsnukglh18ksbdvd1g5xh7f6hfpe2p8"
 BIGCOMMERCE_STOREFRONT_URL = "https://store.losverdesatx.org"
 BIGCOMMERCE_APP_CLIENT_ID = "g1vpjmv5bbedb6in9nzenavswbi18f9"
 
-# Apple PassKit identifiers (Phase 4) - not secret, safe to commit (both are
+# Apple PassKit identifiers - not secret, safe to commit (both are
 # embedded in every issued pass). These are the legacy app's real values
 # (`APPLE_DEVELOPER_PASS_TYPE_ID` / `APPLE_DEVELOPER_TEAM_ID` in
 # digital-membership): the pass type ID must match the Apple Pass Type ID
@@ -114,7 +114,7 @@ PASSKIT_ORGANIZATION_NAME = "Los Verdes"
 PASSKIT_WEB_SERVICE_URL = "https://card.losverd.es/passkit"
 # Public origin for the signed /verify-pass URLs in membership card QR codes.
 PUBLIC_BASE_URL = "https://card.losverd.es"
-# Google Wallet (Phase 5). The issuer ID is the legacy app's. The legacy
+# Google Wallet. The issuer ID is the legacy app's. The legacy
 # pass used a *loyalty* class; this stack issues *generic* objects, so this
 # generic class must be created in the Google Pay & Wallet Console.
 GOOGLE_WALLET_ISSUER_ID = "3388000000022031577"
@@ -123,7 +123,7 @@ GOOGLE_WALLET_CLASS_SUFFIX = "los_verdes_member_v1"
 # APPLE_PASS_KEY_PEM, APPLE_WWDR_CERT_PEM) are secrets with no placeholder,
 # for the same reasons as the BigCommerce secrets above.
 
-# Sign in with Apple identifiers (Phase 2.3.2, src/auth/authjs.ts) - not
+# Sign in with Apple identifiers (src/auth/authjs.ts) - not
 # secret, the legacy app's real values. The key ID/private key and Google
 # OAuth credentials are secrets with deliberately no placeholder here (see
 # SESSION_SIGNING_KEY in src/index.ts): set via `wrangler secret put`.
@@ -179,7 +179,7 @@ CARD_THEME_CHOICE = "everyone"
 # way, and passes already installed switch on their next update.
 APPLE_POSTER_PASSES = "on"
 
-# Customer Login from the card site's store links (#38, Phase 3): "on" signs a
+# Customer Login from the card site's store links (#38): "on" signs a
 # member with a connected store account in to the store; anything else leaves
 # them plain links. It needs the app installed on the store: without the
 # install, the store refuses the login and signs the member out instead
@@ -202,7 +202,7 @@ WEB_ANALYTICS_TOKEN = "f90077d858e64cec9a68fadc25dd1d0d"
 # cutover, once the job has earned trust (src/admin/readinessAlert.ts).
 READINESS_POST_WHEN_HEALTHY = "true"
 
-# Cloudflare Queues (Phase 2.5.2). The queues themselves are provisioned by
+# Cloudflare Queues. The queues themselves are provisioned by
 # terraform/queues.tf; bindings live here. src/index.ts's queue() handler
 # routes batches by queue name.
 [[queues.producers]]
@@ -211,7 +211,7 @@ binding = "ETL_SYNC_QUEUE"
 
 # Concurrency 1: a webhook-triggered order sync and a scheduled full resync
 # never race each other's D1 writes, and BigCommerce rate limits aren't hit
-# by parallel syncs (Phase 2.5.1).
+# by parallel syncs.
 [[queues.consumers]]
 queue = "etl-sync-production"
 max_batch_size = 1

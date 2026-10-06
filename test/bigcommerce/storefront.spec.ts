@@ -239,7 +239,7 @@ describe("the storefront script", () => {
   });
 });
 
-describe("the card on the store (Phase 2)", () => {
+describe("the card on the store", () => {
   const CURRENT: StoreMemberResponse = {
     connected: true,
     member: {

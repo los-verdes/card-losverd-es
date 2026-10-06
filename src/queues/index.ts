@@ -9,7 +9,7 @@ function messageType(body: unknown): string {
 }
 
 /**
- * Dead-letter consumer (Phase 2.5.2): messages that exhausted their queue's
+ * Dead-letter consumer: messages that exhausted their queue's
  * retries. Each is logged in full and acked, so it is visible in Workers Logs
  * rather than silently lost, and one alert per batch goes to Slack.
  *

@@ -5,7 +5,8 @@
  * the same library that signed, while still being malformed to everything
  * else -- including iOS, which simply refuses the pass with no explanation.
  *
- * Originally written for the Phase 1.0.1 risk spike (PR #2). It now exercises
+ * Originally written for the risk spike that proved PKCS#7 pass signing on
+ * Workers before anything else was built (PR #2). It now exercises
  * the real signer, `src/passkit/signer.ts`, with the same throwaway
  * certificate chain the tests use.
  *

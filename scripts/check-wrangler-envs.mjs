@@ -5,7 +5,7 @@
 // 1. Drift: named environments inherit neither vars nor bindings from the
 //    top-level (production) config, so a var or binding added only at the top
 //    level silently disappears from the environment. (A Worker once shipped
-//    with no bindings at all this way -- see the migration plan's Handoff note.)
+//    with no bindings at all this way.)
 // 2. Leaks: an environment accidentally pointing at a production resource
 //    (D1 database, R2 bucket, queue, Google Wallet class, route or custom
 //    domain) or reusing production's Worker name. Routes are the one thing

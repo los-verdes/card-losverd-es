@@ -1,5 +1,5 @@
 /**
- * The store from the card site (#38, Phase 3): links on the card site that
+ * The store from the card site (#38): links on the card site that
  * go to the store signed in, for a member whose store account is connected.
  *
  * `GET /store/go` (`?to=renew` for the membership page) answers with a

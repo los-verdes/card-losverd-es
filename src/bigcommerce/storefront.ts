@@ -28,7 +28,7 @@
  * page first finds the customer signed in: at once if they already were, or
  * after they sign in to the store.
  *
- * On the account pages it also shows the member's card itself (Phase 2): it
+ * On the account pages it also shows the member's card itself: it
  * asks `/store/member` with the store's token, and draws the card with its
  * wallet buttons, or says the membership ran out, or offers to connect the
  * store account. Changing the name or theme, or emailing the card, links

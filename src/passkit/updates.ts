@@ -23,7 +23,7 @@ function apnsConfig(env: Env): ApnsConfig | null {
 
 /**
  * Tells every device with this pass installed to fetch the latest version
- * (plan Phase 4.7). Call after a pass-visible change to a member; the pass
+ * (an APNs push). Call after a pass-visible change to a member; the pass
  * itself is regenerated lazily, since the R2 cache is keyed to
  * `last_updated_at`.
  *

@@ -10,7 +10,7 @@
  * itself runs inside `waitUntil` along with the rest of the work, so neither
  * the response body nor its timing depends on it.
  *
- * No queue (migration plan Phase 2.5.1): a delivery failure is logged and not
+ * No queue, deliberately: a delivery failure is logged and not
  * retried; the member can simply submit the form again.
  *
  * Bot protection is Cloudflare Turnstile (src/email/turnstile.ts), replacing

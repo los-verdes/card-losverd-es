@@ -47,7 +47,7 @@ describe("renderMembershipCardPng", () => {
     // A ~1050x660 rendered card should be comfortably more than a few KB;
     // this guards against a "successful" render that's actually a blank or
     // near-blank image (e.g. Satori's remote-image-fetch-fails-silently
-    // failure mode the migration plan warns about).
+    // failure mode, recorded in src/cardimage/render.ts).
     expect(png.byteLength).toBeGreaterThan(5_000);
   });
 

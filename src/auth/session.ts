@@ -1,9 +1,9 @@
 /**
- * Stateless signed session cookie (the migration plan's Phase 2.3.1).
+ * Stateless signed session cookie.
  *
  * The session is an HS256 JWT signed with `SESSION_SIGNING_KEY` -- a fresh
- * secret, deliberately *not* the legacy app's `SECRET_KEY` (see Phase
- * 2.3.1 for why that key's two jobs are being split). No D1 session table:
+ * secret, deliberately *not* the legacy app's `SECRET_KEY`, which did two
+ * unrelated jobs (signing sessions and QR codes) that are now split. No D1 session table:
  * logout clears the cookie, and a session can't be force-expired early.
  * That tradeoff is accepted in exchange for zero session-store reads on
  * the hot path.

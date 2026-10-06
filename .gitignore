@@ -19,7 +19,7 @@ crash.*.log
 # and a stale one sitting in a working tree is how two versions get shared.
 .provenance-gdoc.md
 
-# Phase 1.0.1 spike build artifact (see justfile's verify-pkcs7-openssl)
+# Build artifact of the PKCS#7 signing check (see justfile's verify-pkcs7-openssl)
 .verify-pkcs7-bundle.mjs
 
 # Claude Code scratch state (background-agent worktrees, etc.) - not part of

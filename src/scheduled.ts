@@ -2,7 +2,7 @@ import type { Env } from "./index";
 import { enqueueEtlSync, type EtlSyncMessage } from "./queues/etlSync";
 
 /**
- * Cron string -> etl-sync message, per the migration plan's Phase 2.5.3.
+ * Cron string -> etl-sync message.
  * Exactly the crons in `[triggers].crons` in `wrangler.toml`, for both
  * environments; a test holds the three together, so a job cannot be mapped
  * here and never scheduled, or scheduled and never mapped.

@@ -52,7 +52,7 @@ export interface Env {
   // verification fails closed without the signing key.
   BIGCOMMERCE_ACCESS_TOKEN: string;
   BIGCOMMERCE_WEBHOOK_SIGNING_KEY: string;
-  // etl-sync queue producer (Phase 2.5.2; terraform/queues.tf, wrangler.toml).
+  // etl-sync queue producer (terraform/queues.tf, wrangler.toml).
   ETL_SYNC_QUEUE: Queue<EtlSyncMessage>;
   // Not secret -- this environment's queue names, which src/queues/index.ts
   // routes batches by.
@@ -61,7 +61,7 @@ export interface Env {
   // Not secret -- what this environment calls itself in anything a person
   // reads (src/slack/alert.ts).
   ENVIRONMENT: string;
-  // Not secret -- public pass/branding identifiers, see Phase 4.
+  // Not secret -- public pass/branding identifiers (src/passkit/).
   PASSKIT_PASS_TYPE_IDENTIFIER: string;
   PASSKIT_TEAM_IDENTIFIER: string;
   PASSKIT_ORGANIZATION_NAME: string;
@@ -69,25 +69,25 @@ export interface Env {
   // Not secret -- this service's public origin (no trailing slash), used to
   // build the signed /verify-pass URLs encoded in membership card QR codes.
   PUBLIC_BASE_URL: string;
-  // Secret -- real Apple-issued cert/key/WWDR chain, per Phase 0.2/4.6. No
+  // Secret -- real Apple-issued cert/key/WWDR chain for pass signing. No
   // wrangler.toml placeholders; pass signing fails without them.
   APPLE_PASS_CERT_PEM: string;
   APPLE_PASS_KEY_PEM: string;
   APPLE_WWDR_CERT_PEM: string;
-  // Secret -- HS256 key for the `lv_session` cookie (Phase 2.3.1). Freshly
+  // Secret -- HS256 key for the `lv_session` cookie (src/auth/session.ts). Freshly
   // generated, NOT the legacy app's SECRET_KEY. Deliberately not given a
   // placeholder in wrangler.toml `[vars]`: set via `wrangler secret put`
   // (or `.dev.vars` locally). An unset key fails closed -- session
   // middleware throws rather than signing with an empty key.
   SESSION_SIGNING_KEY: string;
-  // APNs token auth for Wallet pass-update pushes (Phase 4.7): the Key ID and
+  // APNs token auth for Wallet pass-update pushes: the Key ID and
   // `.p8` private key of an APNs auth key from the Apple Developer portal.
   // Optional -- pushes are skipped (with a warning) until both are set via
   // `wrangler secret put`; no wrangler.toml placeholders, same convention as
   // SESSION_SIGNING_KEY.
   APNS_KEY_ID?: string;
   APNS_PRIVATE_KEY_PEM?: string;
-  // OAuth login via Auth.js (Phase 2.3.2, src/auth/authjs.ts). AUTH_SECRET
+  // OAuth login via Auth.js (src/auth/authjs.ts). AUTH_SECRET
   // encrypts Auth.js's own cookies (required; unset fails closed). Provider
   // credentials are optional -- a provider is only offered once they're set.
   // All secrets, set via `wrangler secret put` with no wrangler.toml
@@ -111,7 +111,7 @@ export interface Env {
   // Set only while rotating PASS_SIGNATURE_KEY: also accepted at
   // /verify-pass, never used to sign (docs/pass-signature-rotation.md).
   PASS_SIGNATURE_KEY_PREVIOUS?: string;
-  // Google Wallet (Phase 5, src/member/artifacts.ts). Issuer ID and class
+  // Google Wallet (src/google/, src/member/artifacts.ts). Issuer ID and class
   // suffix are non-secret vars in wrangler.toml; the service account's
   // `client_email` and `private_key` are secrets (no placeholders) -- the
   // "Save to Google Wallet" link fails closed until both are set.
@@ -152,7 +152,7 @@ export interface Env {
   // with poster art, anything else for none (src/passkit/poster.ts).
   APPLE_POSTER_PASSES?: string;
   // Not secret -- "on" lets the card site's store links sign a connected
-  // member in to the store (Customer Login, #38 Phase 3); anything else keeps
+  // member in to the store (Customer Login, #38); anything else keeps
   // them plain links (src/bigcommerce/storeSignIn.ts).
   STORE_CUSTOMER_LOGIN?: string;
   TURNSTILE_SECRET_KEY?: string;
@@ -215,11 +215,11 @@ app.route("/bigcommerce", bigcommerce);
 app.route("/", storeHandoff);
 // The script the store runs on every page, adding "Membership card" (#38).
 app.route("/", storefront);
-// The card on the store (#38, Phase 2): `/store/member` and its signed links.
+// The card on the store (#38): `/store/member` and its signed links.
 app.route("/", storeMember);
-// The store from the card site (#38, Phase 3): `/store/go`, signed in where connected.
+// The store from the card site (#38): `/store/go`, signed in where connected.
 app.route("/", storeSignIn);
-// Member login flows (Phase 2.3): /login, /login/complete, and Auth.js at
+// Member login flows: /login, /login/complete, and Auth.js at
 // /api/auth/* (whose callback URLs are registered with each provider).
 app.route("/", auth);
 // Registered before the handler it wraps, so it can rewrite where a
@@ -227,7 +227,7 @@ app.route("/", auth);
 app.use("/api/auth/callback/*", landOnSessionBridge);
 app.use("/api/auth/*", initAuthConfig(authConfig), authHandler());
 
-// Apple PassKit Web Service API (Phase 4). Mounted at `/passkit` to match
+// Apple PassKit Web Service API (src/passkit/). Mounted at `/passkit` to match
 // the real `webServiceURL` value discovered in the legacy app's own passes
 // ("https://card.losverd.es/passkit") -- Apple appends `/v1/...` to
 // whatever `webServiceURL` a pass declares.

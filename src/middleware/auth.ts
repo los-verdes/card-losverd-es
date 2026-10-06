@@ -1,11 +1,11 @@
 /**
- * PassKit device-token authorization (the migration plan's Phase
- * 4.1/4.3/4.4): Apple devices authenticate to the web service
+ * PassKit device-token authorization, for the web service's registration,
+ * pass-delivery and unregistration endpoints: Apple devices authenticate to the web service
  * with `Authorization: ApplePass <authenticationToken>`, where the token is
  * the one baked into the member's `pass.json` at issuance
- * (`members.auth_token`). This file also holds Phase 2.3.4's
+ * (`members.auth_token`). This file also holds the
  * `requireAuth`/`requireAdmin`/`requireActiveMembership` member-session
- * middleware (per Phase 2.3.8 of the plan) -- unrelated concerns sharing one
+ * middleware -- unrelated concerns sharing one
  * file by convention (all "authorization middleware"), not by any shared
  * code.
  */

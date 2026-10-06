@@ -4,14 +4,14 @@ import { formatMonthYear, formatShortDate } from "../lib/dateFormat";
 import { signManifestDetached, type PassSigningCredentials } from "./signer";
 import { linkText, passLinks } from "./links";
 
-/** The subset of a `members` row (Phase 2.1) needed to build a pass. */
+/** The subset of a `members` row needed to build a pass. */
 export interface MemberPassInput {
   memberId: string; // == the pass's serialNumber
   firstName: string;
   lastName: string;
   status: "active" | "expired" | "revoked";
   expirationDate: string | null; // ISO8601 date (YYYY-MM-DD), or null if unset
-  /** ISO8601 date (YYYY-MM-DD), or null if not yet known/backfilled (Phase 2.2). */
+  /** ISO8601 date (YYYY-MM-DD), or null if not known. */
   memberSince: string | null;
   authToken: string;
   /** Signed `/verify-pass` URL encoded in the QR code (`buildVerifyPassUrl`). */
@@ -32,7 +32,7 @@ export interface PassKitConfig {
   passTypeIdentifier: string;
   teamIdentifier: string;
   organizationName: string;
-  /** Apple polls this for registration/update checks -- see Phase 4.1/4.2. */
+  /** Apple calls this to register devices and check for updates (src/passkit/routes.ts). */
   webServiceURL: string;
   /** This site's public origin, linked from the back of the pass. */
   siteUrl: string;
@@ -135,7 +135,7 @@ async function sha1Hex(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
-/** Builds `manifest.json`: `{ filename: sha1Hex }` for every file in the bundle, per Phase 4.6. */
+/** Builds `manifest.json`: `{ filename: sha1Hex }` for every file in the bundle, as Apple's pass format requires. */
 export async function buildManifest(
   files: Record<string, Uint8Array>,
 ): Promise<Uint8Array> {
@@ -374,7 +374,7 @@ export function buildPassJson(
 
 /**
  * Assembles and signs a complete `.pkpass` bundle (pass.json + manifest.json
- * + signature + asset files, zipped) per Phase 4.3/4.6. Pure function of its
+ * + signature + asset files, zipped). Pure function of its
  * inputs -- no R2/D1 I/O -- so the eventual HTTP route only has to handle
  * fetching those inputs and caching/streaming the result.
  */
@@ -434,7 +434,7 @@ const THEME_METADATA = "theme";
 const UNTAGGED_THEME = "classic@1";
 
 /**
- * Reads a previously-generated `.pkpass` from R2's Phase 3.3 cache, or
+ * Reads a previously-generated `.pkpass` from the R2 pass cache, or
  * `null` on a miss or when it was generated from an older member version.
  */
 export async function getCachedPass(
@@ -456,7 +456,7 @@ export async function getCachedPass(
   return new Uint8Array(await object.arrayBuffer());
 }
 
-/** Writes a generated `.pkpass` to R2's Phase 3.3 cache, tagged with its member version. */
+/** Writes a generated `.pkpass` to the R2 pass cache, tagged with its member version. */
 export async function putCachedPass(
   bucket: R2Bucket,
   passTypeIdentifier: string,
@@ -476,8 +476,7 @@ export async function putCachedPass(
 }
 
 /**
- * Invalidates a member's cached `.pkpass` (Phase 3.3: "When a member record
- * is modified ... delete or overwrite the corresponding R2 cache key").
+ * Invalidates a member's cached `.pkpass`, for when their record changes.
  * Deleting rather than immediately regenerating keeps this cheap to call
  * from any write path (e.g. the BigCommerce sync) -- the next `GET
  * /v1/passes/...` request regenerates on the resulting cache miss.

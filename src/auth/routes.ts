@@ -29,7 +29,7 @@ const AUTHJS_SESSION_COOKIES = [
 ];
 
 /**
- * Phase 2.3.2: where `requireAuth` sends logged-out users.
+ * Where `requireAuth` sends logged-out users.
  *
  * This used to redirect straight to Auth.js's provider picker. It renders our
  * own page instead, because that redirect offered signing in and nothing
@@ -135,7 +135,7 @@ auth.get(LOGIN_COMPLETE_PATH, initAuthConfig(authConfig), async (c) => {
 });
 
 /**
- * Phase 2.3.1: logout just clears `lv_session` (sessions are stateless, so
+ * Logout just clears `lv_session` (sessions are stateless, so
  * there's nothing server-side to revoke), and the store banner's cookie. POST-only with an Origin check, so
  * another site can't log a member out by embedding a link or form.
  */

@@ -3,8 +3,8 @@
 // `[[rules]]`). None of these are resolved at runtime — Wrangler/esbuild
 // inlines the bytes at build time, which is required on Workers since
 // dynamic WASM compilation is blocked (see src/cardimage/render.ts for the
-// `@resvg/resvg-wasm` import). Originally introduced for the Phase 1.0.2
-// card-rendering spike; now shared by the production src/cardimage/ module
+// `@resvg/resvg-wasm` import). Originally introduced for the card-rendering
+// risk spike; now shared by the production src/cardimage/ module
 // and its test fixture (test/fixtures/sample-logo.png).
 
 declare module '*.wasm' {

@@ -1,6 +1,5 @@
 /**
- * APNs client for Apple Wallet pass-update pushes (the migration plan's Phase
- * 4.7), using token-based auth: an ES256 JWT signed with an APNs auth key
+ * APNs client for Apple Wallet pass-update pushes, using token-based auth: an ES256 JWT signed with an APNs auth key
  * (`.p8`) from the Apple Developer portal.
  *
  * Wallet pass pushes are content-free: an empty `{}` payload on the pass
