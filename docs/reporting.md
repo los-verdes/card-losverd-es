@@ -44,7 +44,10 @@ alike:
    card, orders, login, Slack) as a typo check; confirming updates
    `member_email`, appends a row to `membership_order_attributions` (who,
    when, from, to, note), and re-derives both people's cards. Attributing it
-   back to `order_email` undoes it; the history keeps both.
+   back to `order_email` undoes it; the history keeps both. Every order
+   attributed to one address can be moved to another at once on
+   `/admin/move-orders` (linked from a member page listing more than one
+   order), with the same review step and one history row per order.
 
 ### What counts as a membership
 

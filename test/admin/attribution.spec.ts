@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attributeOrder,
+  attributeOrders,
   emailFootprint,
   getAttributableOrder,
   listAttributions,
@@ -202,5 +203,17 @@ describe("emailMemberCard", () => {
     await emailMemberCard(env, "lapsed@example.com", { kind: "attribution" });
 
     expect(mail.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("attributeOrders", () => {
+  it("refuses orders attributed to different addresses, changing nothing", async () => {
+    await insertOrder({ id: "1", email: "one@example.com", created: "2098-01-15T00:00:00Z" });
+    await insertOrder({ id: "2", email: "two@example.com", created: "2098-01-15T00:00:00Z" });
+
+    await expect(attributeOrders(env, [await order("1"), await order("2")], "new@example.com", ADMIN_ID, null)).rejects.toThrow(
+      "every order must be attributed to the same address",
+    );
+    expect((await order("1")).member_email).toBe("one@example.com");
   });
 });

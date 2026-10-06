@@ -78,6 +78,7 @@ import {
   type MemberSinceSubject,
 } from "./memberSince";
 import { OrderLink, RereadButton, orderPath, rereadMessage } from "./orders";
+import { moveOrdersPath } from "./moveOrders";
 import { renewalState, renewalText, renewalsForMember, type RenewalRow } from "../minibc/renewals";
 
 const members = new Hono<AuthEnv & { Bindings: Env }>();
@@ -640,37 +641,49 @@ const Summary: FC<{
     {orders.length === 0 ? (
       <p>No orders are attributed to this address.</p>
     ) : (
-      <OrdersTable orders={orders} />
+      <OrdersTable email={member.email} orders={orders} />
     )}
   </>
 );
 
-const OrdersTable: FC<{ orders: MemberOrder[] }> = ({ orders }) => (
-  <table style="border-collapse: collapse; font-size: 0.9rem">
-    <thead>
-      <tr>
-        {["Order", "Product", "Status", "Placed", "Counts", ""].map((h) => (
-          <th style={cellStyle}>{h}</th>
-        ))}
-      </tr>
-    </thead>
-    <tbody>
-      {orders.map((order) => (
+/**
+ * An address's orders. With more than one, a link to move them all to
+ * another address at once (src/admin/moveOrders.tsx), rather than from each
+ * order's own page in turn.
+ */
+const OrdersTable: FC<{ email: string; orders: MemberOrder[] }> = ({ email, orders }) => (
+  <>
+    <table style="border-collapse: collapse; font-size: 0.9rem">
+      <thead>
         <tr>
-          <td style={cellStyle}>
-            <OrderLink orderId={order.order_id} /> <StoreOrderLink orderId={order.order_id} source={order.source}>store</StoreOrderLink>
-          </td>
-          <td style={cellStyle}>{order.product_name ?? ""}</td>
-          <td style={cellStyle}>{order.status ?? ""}</td>
-          <td style={cellStyle}>{order.created_on.slice(0, 10)}</td>
-          <td style={cellStyle}>{order.counts ? "yes" : "no"}</td>
-          <td style={cellStyle}>
-            {order.source === "bigcommerce" && <RereadButton orderId={order.order_id} from="member" />}
-          </td>
+          {["Order", "Product", "Status", "Placed", "Counts", ""].map((h) => (
+            <th style={cellStyle}>{h}</th>
+          ))}
         </tr>
-      ))}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {orders.map((order) => (
+          <tr>
+            <td style={cellStyle}>
+              <OrderLink orderId={order.order_id} /> <StoreOrderLink orderId={order.order_id} source={order.source}>store</StoreOrderLink>
+            </td>
+            <td style={cellStyle}>{order.product_name ?? ""}</td>
+            <td style={cellStyle}>{order.status ?? ""}</td>
+            <td style={cellStyle}>{order.created_on.slice(0, 10)}</td>
+            <td style={cellStyle}>{order.counts ? "yes" : "no"}</td>
+            <td style={cellStyle}>
+              {order.source === "bigcommerce" && <RereadButton orderId={order.order_id} from="member" />}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    {orders.length > 1 && (
+      <p>
+        <a href={moveOrdersPath({ from: email })}>Move all {orders.length} orders to another address</a>
+      </p>
+    )}
+  </>
 );
 
 /** An order placed with an address and since pointed at somebody else. */
@@ -701,10 +714,11 @@ async function ordersMovedAway(db: D1Database, email: string): Promise<MovedOrde
  * simply not been built yet.
  */
 const OrdersWithoutMember: FC<{
+  email: string;
   footprint: EmailFootprint;
   orders: MemberOrder[];
   moved: MovedOrder[];
-}> = ({ footprint, orders, moved }) => (
+}> = ({ email, footprint, orders, moved }) => (
   <>
     <p>
       <strong>No membership is held under this address</strong>, but it is not unknown.
@@ -726,7 +740,7 @@ const OrdersWithoutMember: FC<{
         </p>
       )
     )}
-    {orders.length > 0 && <OrdersTable orders={orders} />}
+    {orders.length > 0 && <OrdersTable email={email} orders={orders} />}
     {moved.length > 0 && (
       <>
         <h3>Placed with this address, and since pointed at somebody else</h3>
