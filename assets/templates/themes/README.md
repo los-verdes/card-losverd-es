@@ -1,4 +1,4 @@
-# Year theme artwork
+# Card theme artwork
 
 Each year's card theme (`YEAR_THEMES` in `src/themes/cardTheme.ts`) takes its
 artwork from that year's membership scarf. The scarf designs themselves are
@@ -103,11 +103,52 @@ id here rather than a year.
   and ROJAS on the Verdirojas scarf, from flatbed scans stitched together.
   The border is the watermelon's red.
 
-## Adding a year
+## Adding a theme
 
-A pull request with that year's files here and an entry in `YEAR_THEMES`:
-its label, and colours whose text passes the contrast check. The Apple and
-Google passes use the theme's background colour as it is, so pick it from the
-artwork's own ground. Nothing needs bumping when a theme's images or
-colours change: its version is a hash of them (`src/themes/fingerprint.ts`),
-so cached passes are rebuilt and Google fetches the new hero by themselves.
+A new year's theme or a subgroup's goes in as one pull request, in roughly
+this order.
+
+1. **Cut the art.** The five files in the table above, under
+   `assets/templates/themes/<id>/`, where `<id>` is the year (`2027`) or the
+   subgroup's id (`los-pringles`). Work from the print file where there is
+   one. Tone the card's art for the text that sits over it, and keep the
+   poster's subject in its top half, clear of the sides (Legibility, above).
+   Everything under `assets/templates/` is bundled with the Worker, so there
+   is nothing to register or upload.
+2. **Add the entry** in `src/themes/cardTheme.ts`.
+   - **A year:** `yearTheme({ year, label, colors })` in `YEAR_THEMES`, in
+     year order, labelled `"<year>: <name>"`. It finds the files under the
+     year's folder by itself.
+   - **A subgroup:** first the subgroup in `CARD_GROUPS`
+     (`src/themes/groups.ts`): an id, a label, and the Slack channel whose
+     members are the subgroup. The channel must be public; the Slack sync
+     reads its members on its next run, every six hours. Then a theme in
+     `GROUP_THEMES` whose `group` is that id, with its `artwork` paths under
+     the subgroup's folder (Los Pringles' entry is the pattern).
+   - **Colours,** six of them as `#rrggbb`. The background is the one most
+     worth getting right: both passes use it as it is, so take it from the
+     art's own ground.
+3. **Run `just test-coverage`.** For every theme it checks that each artwork
+   slot is filled at the size its surface needs, that each file it names is
+   committed, and that its colours pass contrast: 3:1 for the card's title
+   and name, 4.5:1 for everything else, and the card number against the QR
+   code's white. It does not look at the art.
+4. **Look at it.** Once it is on staging, a member's admin page previews
+   their card in each theme they may use: try one with a long name. Install
+   the pass on an iPhone (iOS 27 shows the poster) and save it to Google
+   Wallet on an Android phone, since neither wallet can be checked any other
+   way.
+5. **Say how it was made,** in "How each year was made" or "Subgroup
+   themes" above, so the next person can redo it from the same source.
+
+Nothing needs bumping when a theme's images or colours change: its version
+is a hash of them (`src/themes/fingerprint.ts`), so cached passes are rebuilt
+and Google fetches the new hero by themselves.
+
+**Who sees it.** A year's theme is offered to every member with a counted
+membership order placed that year, and a subgroup's to the members in its
+channel. While year themes are the default (`CARD_THEME_YEAR_DEFAULTS`), a
+new year's theme also becomes the card of every member whose "member since"
+year it is and who has not chosen one. Their card image changes at once;
+passes already on phones change at their next update, or straight away after
+`just etl-run <env> refresh-passes-admins` and then `refresh-passes`.
