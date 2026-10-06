@@ -139,6 +139,36 @@ describe("the theme page", () => {
   });
 });
 
+describe("the leaderboard", () => {
+  it("counts current members by theme, marking the row this member is counted in", async () => {
+    await env.DB.prepare(
+      `INSERT INTO members (member_id, first_name, last_name, email, expiration_date, auth_token, last_updated_at)
+       VALUES ('LV-2', 'Sam', 'Roe', 'sam@example.com', '2099-01-01', 'token', 1),
+              ('LV-3', 'Ana', 'Poe', 'ana@example.com', '2000-01-01', 'token', 1)`,
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO member_card_themes (email, theme_id, source) VALUES ('sam@example.com', 'chinga-la-migra', 'member'), ('ana@example.com', '2021', 'member')",
+    ).run();
+
+    const before = await (await request(THEME_PATH)).text();
+    expect(before).toContain('<a href="#leaderboard">See what everyone else is carrying</a>');
+    expect(before).toContain('<section id="leaderboard"');
+    expect(before).toContain("<strong>Default (not picked)</strong> (you)");
+    expect(before).toContain("<strong>Chinga la Migra</strong> (seasonal)<");
+    expect(before).toContain("1 (50%)");
+    expect(before).toContain('style="width: 50%"');
+    // Ana's membership has lapsed, so 2021 is nobody's yet.
+    expect(before.slice(before.indexOf('id="leaderboard"'))).not.toContain("2021: Inaugural season");
+
+    await setCardTheme(env, (await getMemberByEmail(env, EMAIL))!, "2021", "member", USER_ID);
+
+    const page = await (await request(THEME_PATH)).text();
+    const after = page.slice(page.indexOf('id="leaderboard"'));
+    expect(after).toContain("<strong>2021: Inaugural season</strong> (you)");
+    expect(after).not.toContain("Default (not picked)");
+  });
+});
+
 describe("choosing", () => {
   it("saves their choice as their own, and says so", async () => {
     const outcomes = spyOnOutcomes();

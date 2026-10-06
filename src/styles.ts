@@ -341,6 +341,27 @@ button[aria-disabled="true"]::before {
   text-align: left;
 }
 
+/* The theme leaderboard (src/member/portal.tsx): a row per theme, its name
+   and count on one line and a bar beneath sized by its share of members. */
+.leaderboard h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.leaderboard .tally p {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.leaderboard .bar {
+  min-width: 2px;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--verde-ink);
+}
+
 .muted {
   margin: 0.25rem 0 0;
   color: var(--muted);
