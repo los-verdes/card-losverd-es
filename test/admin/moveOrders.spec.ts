@@ -221,6 +221,23 @@ describe("POST /admin/move-orders", () => {
     expect(await memberEmailOf("1001")).toBe(OLD);
   });
 
+  it("warns, sends nothing, and says so afterwards for an address this environment won't email", async () => {
+    env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+    try {
+      const review = await (await request(`/admin/move-orders?from=${OLD}&to=${NEW}`)).text();
+      expect(review).toContain("This environment only sends email to losverd.es (EMAIL_RECIPIENT_ALLOWLIST)");
+
+      const res = await post(confirmFields(["1001", "1002", "1003"], [["email_card", "on"]]));
+      const page = await (await request(res.headers.get("Location")!)).text();
+
+      expect(res.headers.get("Location")).toContain("&not_emailed=1");
+      expect(page).toContain("Their card was not emailed. This environment only sends email to losverd.es");
+      expect(page).not.toContain("on its way by email");
+    } finally {
+      env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    }
+  });
+
   it("emails the new member their card once when asked", async () => {
     const chain = getTestCertChain();
     env.EMAIL_RECIPIENT_ALLOWLIST = "*";

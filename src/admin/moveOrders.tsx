@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import { emailMemberCard } from "../email/card";
+import { recipientWithheldNotice } from "../email/send";
 import type { Env } from "../index";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
@@ -100,6 +101,11 @@ moveOrders.get("/", async (c) => {
             Moved {c.req.query("count")} order(s) from {from} to <strong>{movedTo}</strong>.
             {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
           </p>
+          {c.req.query("not_emailed") === "1" && (
+            <p style="color: var(--warn)">
+              Their card was not emailed. {recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, movedTo, { showList: true })}
+            </p>
+          )}
           <Footprint email={movedTo} footprint={toFootprint} />
           <Footprint email={from} footprint={fromFootprint} />
         </section>
@@ -113,6 +119,7 @@ moveOrders.get("/", async (c) => {
   const orders = await listAttributableOrders(c.env.DB, from);
   const proposed = c.req.query("to") === undefined ? null : parseMove(from, c.req.query("to"), c.req.query("note"));
   const review = proposed && "to" in proposed ? { ...proposed, footprint: await emailFootprint(c.env.DB, proposed.to) } : null;
+  const withheld = review && recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, review.to, { showList: true });
   const back = `/admin/members?q=${encodeURIComponent(from)}`;
 
   return c.html(
@@ -144,6 +151,7 @@ moveOrders.get("/", async (c) => {
             </label>
             {!orders.some((order) => order.counts) && " (nothing will be sent: none of these counts as a membership)"}
           </p>
+          {withheld && <p style="color: var(--warn)">{withheld}</p>}
           <button type="submit">Confirm</button> <a href={moveOrdersPath({ from })}>Cancel</a>
         </form>
       ) : (
@@ -191,11 +199,12 @@ moveOrders.post("/", csrf(), async (c) => {
   const { current } = await attributeOrders(c.env, orders, input.to, c.get("session").userId, input.note);
   // Only the new member, only when they have a card, only this once.
   const emailing = form.email_card === "on" && current !== null;
-  if (emailing) {
+  const allowed = recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, input.to, { showList: true }) === null;
+  if (emailing && allowed) {
     c.executionCtx.waitUntil(emailMemberCard(c.env, input.to, { kind: "attribution" }));
   }
   const params: Record<string, string> = { from, moved_to: input.to, count: String(orders.length) };
-  if (emailing) params.emailed = "1";
+  if (emailing) params[allowed ? "emailed" : "not_emailed"] = "1";
   return c.redirect(moveOrdersPath(params), 303);
 });
 

@@ -18,6 +18,7 @@ import { isMembershipCurrent } from "../member/artifacts";
 import { isWellFormedEmail } from "../member/email-card";
 import { requireAdmin, type AuthEnv } from "../middleware/auth";
 import { emailMemberCard } from "../email/card";
+import { recipientWithheldNotice } from "../email/send";
 import { readOrderFromStore } from "../bigcommerce/sync";
 import { isValidOrderId } from "../bigcommerce/routes";
 import { recordOutcome } from "../lib/outcome";
@@ -316,6 +317,8 @@ orders.get("/:orderId", async (c) => {
     ? { previous: attributedFrom, previousFootprint: await emailFootprint(c.env.DB, attributedFrom), currentFootprint: await emailFootprint(c.env.DB, order.member_email) }
     : null;
   const review = proposed && "email" in proposed ? { ...proposed, footprint: await emailFootprint(c.env.DB, proposed.email) } : null;
+  // Said before confirming, and again after, rather than left to the logs.
+  const withheld = recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, review?.email ?? order.member_email, { showList: true });
 
   return c.html(
     <AdminPage title={`Membership order ${order.order_id}`}>
@@ -326,6 +329,7 @@ orders.get("/:orderId", async (c) => {
             Attributed to <strong>{order.member_email}</strong> (previously {done.previous}).
             {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
           </p>
+          {c.req.query("not_emailed") === "1" && <p style="color: var(--warn)">Their card was not emailed. {withheld}</p>}
           <Footprint email={order.member_email} footprint={done.currentFootprint} />
           <Footprint email={done.previous} footprint={done.previousFootprint} />
         </section>
@@ -355,6 +359,7 @@ orders.get("/:orderId", async (c) => {
             </label>
             {!order.counts && " (nothing will be sent: this order doesn't count as a membership)"}
           </p>
+          {withheld && <p style="color: var(--warn)">{withheld}</p>}
           <button type="submit">Confirm</button> <a href={path}>Cancel</a>
         </form>
       ) : (
@@ -390,11 +395,12 @@ orders.post("/:orderId/member", csrf(), async (c) => {
   const { previousMemberEmail, current } = await attributeOrder(c.env, order, input.email, c.get("session").userId, input.note);
   // Only the new member, only when they have a card, only this once.
   const emailing = form.email_card === "on" && current !== null;
-  if (emailing) {
+  const allowed = recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, input.email, { showList: true }) === null;
+  if (emailing && allowed) {
     c.executionCtx.waitUntil(emailMemberCard(c.env, input.email, { kind: "attribution" }));
   }
   const params = new URLSearchParams({ attributed_from: previousMemberEmail });
-  if (emailing) params.set("emailed", "1");
+  if (emailing) params.set(allowed ? "emailed" : "not_emailed", "1");
   return c.redirect(`${orderPath(order.order_id)}?${params}`, 303);
 });
 

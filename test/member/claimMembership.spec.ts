@@ -259,6 +259,23 @@ describe("requesting a claim link", () => {
     expect(confirmUrlFrom(messages)).toContain("/claim-membership/confirm?token=");
   });
 
+  it("says when this environment won't email the address", async () => {
+    env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    forbidFetch();
+
+    const res = await submit("jane@example.com");
+
+    expect(res.body).toContain("only sends email to a few test addresses, so nothing will be sent to that address.");
+    expect(mail.sent).toHaveLength(0);
+  });
+
+  it("does not, for an address it will email", async () => {
+    forbidFetch();
+
+    expect((await submit("jane@example.com")).body).not.toContain("nothing will be sent");
+  });
+
   it("says nothing about the membership in the email", async () => {
     // Someone who types an address they don't own learns only that mail was
     // sent. Naming the member, the tier or the expiry here would undo the

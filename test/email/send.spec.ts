@@ -3,6 +3,7 @@ import {
   ALLOW_ANY_RECIPIENT,
   allowsRecipient,
   parseRecipientAllowlist,
+  recipientWithheldNotice,
   sendEmail,
   type EmailMessage,
 } from "../../src/email/send";
@@ -108,6 +109,32 @@ describe("who an environment may email", () => {
 
   it("exports the wildcard rather than spelling it in each caller", () => {
     expect(ALLOW_ANY_RECIPIENT).toBe("*");
+  });
+});
+
+describe("recipientWithheldNotice", () => {
+  it("is null for an address the environment may email", () => {
+    expect(recipientWithheldNotice("*", "anyone@example.com", { showList: true })).toBeNull();
+    expect(recipientWithheldNotice("losverd.es", "card-test@losverd.es", { showList: false })).toBeNull();
+  });
+
+  it("names the list, for an admin page", () => {
+    expect(recipientWithheldNotice("losverd.es, a@example.org", "jane@example.com", { showList: true })).toBe(
+      "This environment only sends email to losverd.es, a@example.org (EMAIL_RECIPIENT_ALLOWLIST), so nothing will be sent to that address.",
+    );
+  });
+
+  it("keeps the list to itself on a public page, since an entry can be somebody's address", () => {
+    const notice = recipientWithheldNotice("a@example.org", "jane@example.com", { showList: false });
+
+    expect(notice).toBe("This copy of the site only sends email to a few test addresses, so nothing will be sent to that address.");
+    expect(notice).not.toContain("example.org");
+  });
+
+  it("says when the environment sends no email at all", () => {
+    expect(recipientWithheldNotice("", "jane@example.com", { showList: false })).toBe(
+      "This environment sends no email (EMAIL_RECIPIENT_ALLOWLIST is empty), so nothing will be sent to that address.",
+    );
   });
 });
 

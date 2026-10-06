@@ -26,6 +26,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import { readSessionCookie, verifySessionToken } from "../auth/session";
 import { recordCardSend, sendMembershipCardEmail } from "../email/card";
+import { recipientWithheldNotice } from "../email/send";
 import {
   TURNSTILE_RESPONSE_FIELD,
   verifyTurnstileToken,
@@ -144,9 +145,15 @@ const Unavailable: FC = () => (
   </Page>
 );
 
-const RequestReceived: FC = () => (
+/**
+ * `withheld`: this environment's allow-list will hold the message back
+ * (`recipientWithheldNotice`). Shown whether or not the address is a
+ * member's, so it says nothing about membership; production never shows it.
+ */
+const RequestReceived: FC<{ withheld: string | null }> = ({ withheld }) => (
   <Page title="Email My Card">
     <h1>Check your email</h1>
+    {withheld && <p style="color: var(--warn)">{withheld}</p>}
     <p>
       If there's a current Los Verdes membership for that address, we've sent
       the membership card to it. It should arrive within a few minutes.
@@ -288,7 +295,9 @@ emailCard.post("/", csrf(), async (c) => {
   c.executionCtx.waitUntil(
     deliverCardByEmail(c.env, email, new Date().toISOString()),
   );
-  return c.html(<RequestReceived />);
+  return c.html(
+    <RequestReceived withheld={recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, email, { showList: false })} />,
+  );
 });
 
 export default emailCard;
