@@ -141,9 +141,9 @@ order again, so a 404 during an outage does not leave a mark to tidy up by
 hand.
 
 Two things it does not cover. It catches **deletion**, not **archival**: an
-archived order stops appearing in the order list, but the store still returns
-it when asked for by id, so the weekly resync's check of absent orders reads
-it, applies it again, and nothing notices.
+archived order is still returned, by the order list and by its own id, marked
+as deleted, which the sync does not read, so it is applied again and nothing
+notices.
 And there is deliberately no button here to stop a flagged order counting --
 that is a revocation of a membership, recorded on `/admin/revocations` after a
 Membership Committee decision

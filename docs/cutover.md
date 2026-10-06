@@ -286,8 +286,7 @@ rest, is
 >   `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` is one of them, destroying it breaks
 >   Google Wallet passes.
 >
-> So destroy by target (Cloud Run, Cloud SQL, the VPC connector, the load
-> balancer, the scheduler jobs), keep billing on the project, and leave the
+> So destroy by target (Cloud Run, Cloud SQL, the scheduler jobs), keep billing on the project, and leave the
 > rest until the OAuth client and Wallet service account have an
 > organisation-owned home
 > ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)).
@@ -304,9 +303,9 @@ was deleted on 2026-10-05:
   database is what ends it.
 
 Then: pause the Cloud Scheduler jobs; take a final export of the Cloud SQL
-instance to cold storage as a historical record rather than for restore;
-destroy the Cloud Run service, Cloud SQL instance, VPC connector and load
-balancer; and confirm the billing account shows no daily burn.
+instance to cold storage as a historical record rather than for restore
+(taken 2026-10-02); destroy the Cloud Run service and the Cloud SQL instance;
+and confirm the billing account shows no daily burn.
 
 **Where this stands (2026-10-05).** The turndown has started
 ([digital-membership#77](https://github.com/los-verdes/digital-membership/pull/77)):
