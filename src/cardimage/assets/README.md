@@ -44,4 +44,5 @@ tar -xzOf fontsource-bungee-<version>.tgz package/files/bungee-latin-400-normal.
 Then update the version and hash in the table above, refresh
 `bungee-LICENSE.txt` from the same release, and check a rendered card image:
 the card layout is measured with this font, so a different subset or weight
-moves the text.
+moves the text. Bump `CARD_IMAGE_VERSION` in `src/cardimage/template.ts` in
+the same change, or cards already drawn and cached keep the old face.

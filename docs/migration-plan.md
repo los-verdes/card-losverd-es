@@ -13,8 +13,8 @@ comments still cite it. The decisions that shaped the whole project are in
 
 ## Phase 0 -- Repository archiving and state baseline
 
-**0.1** The legacy repository's state at the point of migration is preserved
-on the branch `archive/gcp-production` and the tag `v-legacy-gcp`.
+**0.1** The legacy repository, `los-verdes/digital-membership`, is archived
+(2026-09-28), with its history on `main`.
 
 **0.2** An inventory of the legacy schema, pass assets, credentials and
 operational logs. One decision from it still matters: **APNs uses `.p8`
@@ -34,7 +34,7 @@ were capable of invalidating the whole approach:
 - **PKCS#7 pass signing on Workers**, validated against `openssl smime
   -verify` and a real device rather than this codebase's own tests -- a
   subtly wrong ASN.1 structure passes a round-trip test and still fails
-  Wallet. `just verify-pkcs7` keeps that independent check available.
+  Wallet. `just verify-pkcs7-openssl` keeps that independent check available.
 - **Card image rendering** with Satori and `@resvg/resvg-wasm`, replacing a
   headless browser. Three Workers-specific constraints came out of it, all
   now recorded where they would be undone: WASM must be statically imported
@@ -49,8 +49,8 @@ the README's secrets section.
 
 ## Phase 2 -- D1 schema and data
 
-**2.1** The schema. Superseded by `src/db/schema.sql` and the migrations
-beside it, which are what actually runs.
+**2.1** The schema. Superseded by the migrations in `src/db/migrations/`,
+which are what actually runs.
 
 **2.2** How D1 gets populated: BigCommerce sync as the ongoing source, plus
 a one-time export of what only the legacy Postgres holds. Two decisions
@@ -72,7 +72,8 @@ legacy `SECRET_KEY` -- which had two unrelated jobs. `src/auth/authjs.ts`
 covers the OAuth bridge, and `src/middleware/auth.ts` the middleware.
 
 Dropped during this phase: Yahoo login, the BigCommerce storefront SSO
-handoff, and the provider-disconnect flow.
+handoff, and the provider-disconnect flow. Signing in between the store and
+this site came back later, built differently (#38).
 
 ## Phase 2.5 -- Queues and scheduled work
 
@@ -89,9 +90,10 @@ producer call sites. Superseded by `wrangler.toml`, `src/scheduled.ts` and
 ## Phase 3 -- R2
 
 Bucket layout, asset upload, and the pass cache. Superseded by
-`src/assets.ts`, `just r2-upload-templates`, and the caching in
-`src/passkit/generator.ts` -- which keys on both the member's
-`last_updated_at` and a pass content version, so that changing what a pass
+`src/templates.ts` (template images are bundled with the Worker from
+`assets/templates/`), `src/assets.ts`, and the caching in
+`src/passkit/generator.ts` -- which keys on the member's `last_updated_at`, a
+pass content version, and the card theme, so that changing what a pass
 contains reaches members whose own details have not changed.
 
 ## Phase 4 -- Apple PassKit web service
@@ -120,7 +122,7 @@ test.
 
 ## Phase 7 -- CI and deployment
 
-Both workflows are built and in use; `.github/workflows/` is the reference,
+The CI and Deploy workflows are built and in use; `.github/workflows/` is the reference,
 and the README describes what each run does. The house rule that makes
 deploy-on-merge safe is that migrations are additive, so a deploy never
 needs to be ordered against a schema change.
@@ -128,4 +130,5 @@ needs to be ordered against a schema change.
 ## Phase 8 -- Cutover
 
 Done on 2026-09-21. See [`cutover.md`](cutover.md) for the record, and for
-decommissioning GCP, which is still ahead.
+decommissioning GCP, which is partly done: the old site and its database are
+gone, and the project stays until #158 and #370 are settled.

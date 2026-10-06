@@ -1,6 +1,6 @@
 # Terraform (Cloudflare resources)
 
-Manages the durable Cloudflare resources this service depends on: the D1 database, R2 bucket, and queues, for both production and staging, each a fully separate set created via `for_each` over `local.environments` (`environments.tf`). The `staging` Worker points at the test BigCommerce store. Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the existing `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
+Manages the durable Cloudflare resources this service depends on: the D1 database, R2 bucket, and queues, for both production and staging, each a fully separate set created via `for_each` over `local.environments` (`locals.tf`). The `staging` Worker points at the test BigCommerce store. Worker code deployment itself is handled by Wrangler in `.github/workflows/deploy.yml`, not Terraform -- this mirrors the archived `digital-membership` repo's split between Terraform-managed infrastructure and CI/CD-managed application deploys.
 
 ## Setup
 
@@ -17,7 +17,7 @@ Local runs go through the `just tf` wrapper, which shells out via `op run` to pu
 
 `.github/workflows/deploy.yml`'s `CLOUDFLARE_API_TOKEN` secret and this Terraform config's `CLOUDFLARE_API_TOKEN` env var are the same token. In the Los Verdes account it is **`github-actions-terraform-applier`**, an account-owned API token set to expire annually.
 
-Account-owned rather than user-owned is the point of it. A user-owned token belongs to whoever created it and stops working when they leave or lose access; this one belongs to the account, which is why the project moved to one ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Least privilege for every credential here is tracked on [#15](https://github.com/los-verdes/card-losverd-es/issues/15).
+Account-owned rather than user-owned is the point of it. A user-owned token belongs to whoever created it and stops working when they leave or lose access; this one belongs to the account, which is why the project moved to one ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)). Least privilege for every credential here was reviewed in [#15](https://github.com/los-verdes/card-losverd-es/issues/15), closed 2026-09-28.
 
 The minimum this token needs, derived from what Terraform and the Deploy workflow actually call:
 
@@ -28,7 +28,7 @@ The minimum this token needs, derived from what Terraform and the Deploy workflo
 | Account > **Queues** > Edit | `cloudflare_queue`; `wrangler deploy` configuring queue consumers |
 | Account > **Workers Scripts** > Edit | `wrangler deploy` |
 
-Plus zone-level access to `losverd.es` for Workers routes, which is what `wrangler deploy` uses to attach the `card.losverd.es` Custom Domain. The token has no DNS-records permission and needs none: Cloudflare creates the Custom Domain's record itself.
+Plus zone-level access to `losverd.es` for Workers routes, which is what `wrangler deploy` uses to attach the `card.losverd.es` and `stagingcard.losverd.es` Custom Domains. The token has no DNS-records permission and needs none: Cloudflare creates the Custom Domain's record itself.
 
 `just cloudflare-token-check` checks a token against that list before it is swapped in. It is read-only -- it lists each resource type rather than creating anything -- so it is safe to run against a candidate token at any time, and it names the group to add for anything missing. It proves each group is *granted*; it cannot prove the group is scoped to Edit rather than Read, because only a write does that. Deploy to staging to prove the rest.
 
@@ -44,4 +44,6 @@ The endpoint URL in `_config.tf` contains the account id. Moving accounts means 
 
 ## DNS
 
-`card.losverd.es` is not defined here. It is a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`), and Cloudflare manages its DNS record and certificate as part of the Worker deploy.
+`card.losverd.es` and `stagingcard.losverd.es` are not defined here. Each is a Workers Custom Domain, declared in `wrangler.toml` (`[[routes]]`, `[[env.staging.routes]]`), and Cloudflare manages its DNS record and certificate as part of the Worker deploy.
+
+`store.losverd.es`, a short address that redirects to the store, is a Redirect Rule and a DNS record set in the Cloudflare dashboard, not in this repository. The zone has one ruleset for redirect rules, so if redirects are ever brought into Terraform, that rule has to come with them or the first apply removes it.

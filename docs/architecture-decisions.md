@@ -1,7 +1,8 @@
 # Architecture decisions
 
 Why this service is built the way it is. These decisions were made before the
-rewrite began and have not changed since. Decisions made during the build are
+rewrite began and, but for the one reversal recorded below, have not changed
+since. Decisions made during the build are
 recorded where they apply -- in code comments at the point they matter, and
 in the issues that settled them. This file is for the few that shaped
 everything else.

@@ -42,7 +42,7 @@ is unique, with a single `membership_card_id`).
   (§3.1).
 * **Pass type / team identifiers** — `wrangler.toml` now sets them to the
   legacy values (previously `REPLACE_WITH_...` placeholders). Note the
-  plan's Phase 4.7 example topic `pass.es.losverd.membership` is wrong;
+  original plan's Phase 4.7 example topic `pass.es.losverd.membership` is wrong;
   the real APNs topic is `pass.es.losverd.card`.
 * **`passesUpdatedSince` tags.** Legacy-format (non-numeric) tags are
   already handled safely: the new route's `Number(...)` yields `NaN`, which
@@ -129,19 +129,18 @@ device against production.
 to the legacy `SECRET_KEY * 5` value, so existing QR codes keep verifying.
 It's still a separate secret from `SESSION_SIGNING_KEY`, which was the
 point of Phase 2.3.1's split. Rotation goes through an overlap window; see `docs/pass-signature-rotation.md`.
-To make old codes *useful* (not just signature-valid), the port needs the
+To make old codes *useful* (not just signature-valid), the port carries the
 legacy card lookup (§3.3):
 
-* The one-time Postgres export that already has to happen for the
-  `member_since` backfill also exports legacy cards —
-  `(serial_number uuid, user email, member_since, member_until)` — into an
-  additive read-only D1 table (e.g. `legacy_membership_cards`).
+* The one-time Postgres export carried legacy cards —
+  `(serial_number uuid, user email, member_since, member_until)` — into the
+  additive, read-only D1 table `legacy_membership_cards`.
 * `/verify-pass/:serial?signature=` verifies with `PASS_SIGNATURE_KEY`,
-  then resolves the serial against `legacy_membership_cards` (and, once new
-  passes carry signed URLs, against `members`).
-* New passes should also switch from a bare-serial barcode to a signed
-  verify URL, using the same key.
+  then resolves the serial against both `legacy_membership_cards` and
+  `members`.
+* New passes carry the same kind of signed verify URL rather than a bare
+  serial, using the same key.
 
-**D3 — Google object ids: accept the change.** Google Wallet object updates
-don't exist today; adding them for new-stack passes is a tracked
-enhancement.
+**D3 — Google object ids: accept the change.** Passes from this site have
+their Google objects updated when a member's details change (#28,
+`src/member/walletUpdates.ts`); legacy objects are left as they are.

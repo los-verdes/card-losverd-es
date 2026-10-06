@@ -1,9 +1,9 @@
 # Cutover runbook
 
 **Done: `card.losverd.es` moved to this stack on 2026-09-21.** This file is
-kept as the record of how it was done, and for the two pieces still ahead:
-sweeping Squarespace out of the code (section 4) and decommissioning GCP
-(section 5), each with gates recorded below. Sections 1 to 3 describe steps
+kept as the record of how it was done, and for the one piece still ahead:
+decommissioning what remains of GCP (section 5), with its gates recorded
+below. Sweeping Squarespace out of the code (section 4) is done. Sections 1 to 3 describe steps
 already carried out, in the imperative they were written in; their rollback
 notes no longer apply, since the previous site is offline.
 
@@ -40,8 +40,8 @@ called out where they appear.
 
 ## 1. Validate on staging
 
-Staging (`card-losverd-es-staging.los-verdes.workers.dev`, BigCommerce
-sandbox store `kouyh8feen`) is where every path gets exercised first:
+Staging (`stagingcard.losverd.es`, BigCommerce sandbox store
+`kouyh8feen`) is where every path gets exercised first:
 webhook delivery, order sync, login with Google and with Apple, the portal,
 the card image, both wallet passes, `/email-card`, `/verify-pass`, and the
 admin reports.
@@ -77,7 +77,8 @@ populated before anyone is pointed at it.
    schedules `[env.staging.triggers]` already runs. Doing this now
    means D1 is populated and syncing before any member sees the new stack.
 6. **Squash the migrations, if that is still wanted**
-   ([#201](https://github.com/los-verdes/card-losverd-es/issues/201)). A
+   ([#201](https://github.com/los-verdes/card-losverd-es/issues/201)).
+   Done: squashed in #243 and again in #264. A
    squash rewrites what "already applied" means, so it is only safe while
    every database can be thrown away and rebuilt from scratch.
 
@@ -208,7 +209,8 @@ the Cloudflare-hosted `losverd.es` zone.
    rather than the plan.
 3. **Update the production store's `store/order/*` webhook header** to the
    token computed from the new `BIGCOMMERCE_WEBHOOK_SIGNING_KEY`:
-   `just bigcommerce-ensure-webhook production --cutover`. The existing
+   `just bigcommerce-ensure-webhook production --cutover` (the `--cutover`
+   flag has since been removed; the recipe needs no flag now). The existing
    subscription carries the legacy app's token, so until this is done the
    Worker answers 401 to every delivery. This is the easiest step to forget,
    because nothing looks broken -- BigCommerce retries for a while and the
@@ -251,6 +253,8 @@ left to freeze -- the BigCommerce rule would rescore almost every Squarespace
 order, and the 2019--2022 figures would change without anyone deciding they
 should.
 
+Done: the freeze is migration 0004 (#286), and the sweep followed it (#288).
+
 ## 5. Decommission GCP
 
 Through the legacy repository's own `terraform/` configuration -- targeted
@@ -288,7 +292,8 @@ rest, is
 > organisation-owned home
 > ([#158](https://github.com/los-verdes/card-losverd-es/issues/158)).
 
-Two gates first, both genuinely blocking:
+Two gates first, both genuinely blocking. Both were met before the database
+was deleted on 2026-10-05:
 
 - **The legacy export has run and been verified.** This is the last moment
   at which Postgres's Squarespace-derived history is recoverable at all. Do
@@ -303,7 +308,7 @@ instance to cold storage as a historical record rather than for restore;
 destroy the Cloud Run service, Cloud SQL instance, VPC connector and load
 balancer; and confirm the billing account shows no daily burn.
 
-**Where this stands (2026-09-22).** The turndown has started
+**Where this stands (2026-10-05).** The turndown has started
 ([digital-membership#77](https://github.com/los-verdes/digital-membership/pull/77)):
 the Cloud Run service and its domain mapping, the Pub/Sub topic and
 subscription, and the scheduler jobs are gone. The old site had already

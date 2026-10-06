@@ -56,7 +56,7 @@ active revocation or expulsion flag (`isMembershipCurrent()`).
 
 ### Qualifying Statuses
 
-Orders must carry an explicit paid status (`PAID_BIGCOMMERCE_STATUSES`) to grant membership:
+Orders must carry an explicit paid status to grant membership (`COUNTS_AS_MEMBERSHIP` in `src/lib/membershipOrders.ts`):
 
 - **Qualifying:** `Awaiting Fulfillment`, `Awaiting Shipment`, `Partially Shipped`, `Shipped`, `Completed`, and
   `Partially Refunded` while the membership itself wasn't refunded.
@@ -64,8 +64,7 @@ Orders must carry an explicit paid status (`PAID_BIGCOMMERCE_STATUSES`) to grant
 
 *Note on partial refunds:* the store reports how much of each line item was refunded, so a Partially Refunded order
 counts while its membership wasn't refunded (a refunded scarf leaves the membership in place) and stops counting once it
-was. Until an order is next read from the store, which the weekly full sync does for every order, its refund is unknown
-and it doesn't count.
+was. If the store doesn't say how much of an order was refunded, it doesn't count.
 
 ### Membership Lifecycle
 
@@ -171,7 +170,8 @@ changes who is a member.
     membership's last 30 days and on the no-membership page) can sign a member with a connected store account in to
     the store, landing on their store account page (or the membership page, to renew). That needs the app installed on
     the store, which it is in both environments since 2026-10-05.
-  - **Status:** live in production and on staging since 2026-10-03.
+  - **Status:** complete (#38). Live in both environments: the store's links since 2026-10-03, and signing in to the
+    store from the card site since 2026-10-05.
 
 ---
 
@@ -194,9 +194,9 @@ address they no longer use. (Ideally folks purchase memberships under their own 
 
 ### Membership Order Criteria
 
-An order counts as a membership order when a line item matches an entry in `MEMBERSHIP_SKUS`: `LOSV-MEM-0001` (physical
-pack with merchandise) or `LOSV-DIGI-5000` (digital-only). Both SKUs generate identical memberships and cards.
-Non-matching orders are ignored.
+An order counts as a membership order when a line item matches an entry in `MEMBERSHIP_PRODUCTS` (from which
+`MEMBERSHIP_SKUS` is built): `LOSV-MEM-0001` (physical pack with merchandise) or `LOSV-DIGI-5000` (digital-only).
+Both SKUs generate identical memberships and cards. Non-matching orders are ignored.
 
 ### One Membership per Order Constraint
 
@@ -238,7 +238,7 @@ This is how we ensure our accounting of membership reflects the authoritative so
   duplicate state.
 - **Direct overwrite:** Ingested store fields replace local copies rather than merging.
 - **Routine reconciliation:** A routine sync runs every six hours for recent changes, and a full-store sync runs weekly
-  early Sunday morning.
+  early on Sunday, UTC (late Saturday evening in Austin).
 - **Missing orders:** If an order disappears from BigCommerce, it is flagged under "Missing from BigCommerce" rather
   than deleted, preserving current cards. (Again, this isn't expected to happen.)
 - **Manual resync:** Admins can trigger a manual fetch for any single order via the **Re-read from BigCommerce** button
@@ -251,7 +251,7 @@ This is how we ensure our accounting of membership reflects the authoritative so
 - **Archived orders:** Archiving (soft deleting) an order in BigCommerce does not remove or flag it locally; it
   continues counting toward membership.
 - **Unlisted SKUs:** Orders using an unlisted SKU will not issue cards or trigger reports. Adding new membership tiers
-  requires updating `MEMBERSHIP_SKUS` in code.
+  requires updating `MEMBERSHIP_PRODUCTS` in code.
 - **MiniBC renewals:** Recurring subscriptions managed through MiniBC are tracked and reported on but we do not
    currently use this information directly when considering membership.
   - **Matched through orders only:** a subscription belongs to the member its orders lead to, never to an address.
