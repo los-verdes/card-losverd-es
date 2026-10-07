@@ -28,7 +28,9 @@
  * page first finds the customer signed in: at once if they already were, or
  * after they sign in to the store.
  *
- * On the account pages it also shows the member's card itself: it
+ * On the account pages it also shows the member's card itself, at the foot
+ * of the page's content above the store's footer (every account section
+ * shows it, so at the top it pushed each section's own content down): it
  * asks `/store/member` with the store's token, and draws the card with its
  * wallet buttons, or says the membership ran out, or offers to connect the
  * store account. Changing the name or theme, or emailing the card, links
@@ -204,7 +206,8 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
       ? iso
       : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   }
-  async function showCard(after: Element): Promise<void> {
+  /** Draws the card as the last thing in the account navigation's container: the foot of the page's content. */
+  async function showCard(accountNav: Element): Promise<void> {
     const token = await signedIn;
     if (!token) return;
     let data: StoreMemberResponse;
@@ -261,7 +264,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
       more.appendChild(cardLink("", "Change the name or theme, or email yourself the card"));
       panel.appendChild(more);
     }
-    if (after.parentNode) after.parentNode.insertBefore(panel, after.nextSibling);
+    if (accountNav.parentNode) accountNav.parentNode.appendChild(panel);
   }
 
   const accountBar = doc.querySelector(".navBar--account");

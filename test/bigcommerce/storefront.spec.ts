@@ -22,7 +22,20 @@ function storePage({ header = true, mobile = true, accountNav = false, heading =
   }
   if (mobile) doc.body.appendChild(el("ul.navPages-list.navPages-list--user", el("li.navPages-item", el("a.navPages-action", "Sign in"))));
   if (accountNav) {
-    doc.body.appendChild(el("nav.navBar.navBar--sub.navBar--account", el("ul.navBar-section", el("li.navBar-item", el("a.navBar-action", "Orders")))));
+    // An account page: the section's heading, its navigation and its content
+    // in the page's container, then the footer outside it.
+    doc.body.appendChild(
+      el(
+        "div.body",
+        el(
+          "div.container",
+          el("h1.page-heading", "Orders"),
+          el("nav.navBar.navBar--sub.navBar--account", el("ul.navBar-section", el("li.navBar-item", el("a.navBar-action", "Orders")))),
+          el("div.account.account--fixed"),
+        ),
+      ),
+    );
+    doc.body.appendChild(el("footer.footer"));
   }
   if (heading) doc.body.appendChild(el("div.container", el("h1.page-heading", heading), el("div.page")));
   return doc;
@@ -256,7 +269,7 @@ describe("the card on the store", () => {
   const LAPSED: StoreMemberResponse = { connected: true, member: { name: "Jane Doe", cardNumber: "BC-1", goodThrough: "2026-02-14", memberSince: null, current: false } };
   const panelIn = (doc: FakeDocument) => doc.querySelector(".lv-card-panel");
 
-  it("draws the card, its wallet buttons and a way to change it, under the account navigation", async () => {
+  it("draws the card, its wallet buttons and a way to change it, at the foot of the account page above the footer", async () => {
     const doc = storePage({ accountNav: true });
     const { win, fetch } = storeWindow({ pathname: "/account.php", token: "a.b.c", member: CURRENT });
     run(doc, win);
@@ -264,8 +277,11 @@ describe("the card on the store", () => {
 
     expect(fetch).toHaveBeenCalledWith(CONFIG.memberUrl, { headers: { Authorization: "Bearer a.b.c" }, credentials: "omit" });
     const panel = panelIn(doc)!;
-    const children = doc.body.children;
-    expect(children.indexOf(panel)).toBe(children.indexOf(doc.querySelector(".navBar--account")!) + 1);
+    const container = doc.querySelector(".body .container")!;
+    expect(panel.parentNode).toBe(container);
+    expect(container.children.at(-1)).toBe(panel);
+    expect(container.children.indexOf(panel)).toBeGreaterThan(container.children.indexOf(doc.querySelector(".account")!));
+    expect(doc.body.children.at(-1)).toBe(doc.querySelector(".footer"));
     const image = panel.children.find((child) => child.tagName === "img")!;
     expect(image.getAttribute("src")).toBe(CURRENT.member!.cardImageUrl);
     expect(image.getAttribute("alt")).toBe("Los Verdes membership card for Jane Doe");
