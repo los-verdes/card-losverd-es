@@ -6,7 +6,7 @@
  * `wrangler.toml` as a `send_email` binding named EMAIL, and the sending
  * domain has to be onboarded in the same Cloudflare account.
  *
- * Two things worth knowing about what goes out:
+ * Three things worth knowing about what goes out:
  *
  * 1. **No unsubscribe link.** Every card email is transactional -- someone
  *    asked for it, bought a membership, or had an order attributed to them --
@@ -24,9 +24,9 @@
  *    which are comment syntax in an address unless the name is quoted. Handing
  *    the parts over separately leaves nothing to quote or parse.
  *    https://developers.cloudflare.com/email-service/api/send-emails/workers-api/
+ * 3. **Attachments go in as bytes.** See `BindingAttachment.content`.
  */
 
-import { bytesToBase64 } from "../lib/base64";
 import type { EmailAddress, EmailMessage } from "./send";
 
 /**
@@ -43,8 +43,13 @@ export interface SendEmailBinding {
 }
 
 interface BindingAttachment {
-  /** Base64, not bytes. */
-  content: string;
+  /**
+   * The file's bytes, never a base64 string. The binding takes a string as
+   * the file's literal contents and encodes it again: from 2026-09-21 every
+   * card email's PNG and Apple pass arrived as base64 text that no mail app
+   * could open (seen in a delivered message's source, 2026-10-07).
+   */
+  content: Uint8Array;
   filename: string;
   type: string;
   disposition: "attachment";
@@ -82,7 +87,7 @@ export function buildBindingMessage(message: EmailMessage): BindingMessage {
     text: message.text,
     html: message.html,
     attachments: message.attachments?.map((attachment) => ({
-      content: bytesToBase64(attachment.content),
+      content: attachment.content,
       filename: attachment.filename,
       type: attachment.type,
       disposition: "attachment",

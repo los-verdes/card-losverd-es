@@ -275,9 +275,10 @@ describe("POST /email-card", () => {
         { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "attachment" },
         { filename: "los-verdes-membership-card.pkpass", type: "application/vnd.apple.pkpass", disposition: "attachment" },
       ]);
-      const decode = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
-      expect(Array.from(decode(attachments[0].content).slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
-      const pass = JSON.parse(strFromU8(unzipSync(decode(attachments[1].content))["pass.json"]));
+      // The files themselves: a PNG and a zip, not base64 text of them, which
+      // the binding would take literally and nobody could open.
+      expect(Array.from(attachments[0].content.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+      const pass = JSON.parse(strFromU8(unzipSync(attachments[1].content)["pass.json"]));
       expect(pass.serialNumber).toBe("BC-1");
 
       for (const part of [message.text, message.html]) {
