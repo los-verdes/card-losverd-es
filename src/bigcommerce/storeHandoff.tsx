@@ -208,8 +208,8 @@ const TryAgain: FC<{ storeUrl: string | null }> = ({ storeUrl }) => (
   <Page title="Back to the store">
     <h1>That link has run out</h1>
     <p>
-      The link from the store only works for a few minutes. Go back to the store and choose "Membership card"
-      again.
+      The link from the store only works for a few minutes. Go back to your account on the store and choose
+      "Membership card" again.
     </p>
     {storeUrl && (
       <a href={storeUrl} class="action">

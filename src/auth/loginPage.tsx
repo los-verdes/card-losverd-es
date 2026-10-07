@@ -89,15 +89,15 @@ export const LoginPage: FC<LoginPageProps> = ({
 
     {connectingStore && !blocked && (
       <p style="color: var(--success)">
-        Sign in once to connect your store account. After that, "Membership card" on the store brings you
-        straight to your card.
+        Sign in once to connect your store account. After that, "Membership card" in your store account brings
+        you straight to your card.
       </p>
     )}
     {storeLinkSpent && !blocked && (
       <p>
         Sign in to see your card. The store's link was already used a few minutes ago, and each link only
-        signs you in once. In a few minutes, if your store account is connected, "Membership card" on the store
-        will bring you straight to your card again.
+        signs you in once. In a few minutes, if your store account is connected, "Membership card" in your store
+        account will bring you straight to your card again.
       </p>
     )}
     {connectingStore && !blocked && storeEmail && (
