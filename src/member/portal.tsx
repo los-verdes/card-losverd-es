@@ -256,7 +256,7 @@ const StoreAccountDetails: FC<{ account: StoreAccountLink }> = ({ account }) => 
   ) : (
     <p>
       Connected to store customer #{account.customerId}
-      {since}. Its email shows here once you next use "Membership card" on the store.
+      {since}. Its email shows here once you next use "Membership card" in your Los Verdes store account.
     </p>
   );
 };
@@ -271,8 +271,8 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
         {store.openHref ? (
           <>
             <p class="muted">
-              "Membership card" on the Los Verdes store brings you straight here, and "Open my store account" takes you
-              there, both without signing in again.
+              "Membership card" in your Los Verdes store account brings you straight here, and "Open my store account"
+              takes you there, both without signing in again.
             </p>
             <p>
               <a href={store.openHref} class="action">
@@ -282,7 +282,7 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
           </>
         ) : (
           <p class="muted">
-            "Membership card" on the Los Verdes store brings you straight here, without signing in again.
+            "Membership card" in your Los Verdes store account brings you straight here, without signing in again.
           </p>
         )}
         <form method="post" action={STORE_DISCONNECT_PATH}>
@@ -294,7 +294,7 @@ const StoreAccount: FC<{ store: StoreAccountView }> = ({ store }) => (
     ) : (
       <>
         <p class="muted">
-          Connect the account you shop with, and "Membership card" on the store brings you straight here.
+          Connect the account you shop with, and "Membership card" in your store account brings you straight here.
         </p>
         <a href={store.connectHref} class="action">
           Connect your store account

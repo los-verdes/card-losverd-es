@@ -29,8 +29,8 @@ privacy.get("/", (c) =>
         <li>From your membership orders: your name, email address and order dates.</li>
         <li>When you sign in with Google or Apple: your email address and the account ID they give us.</li>
         <li>
-          If you connect your store account: its customer number and email address, so "Membership card" on the store
-          can bring you here.
+          If you connect your store account: its customer number and email address, so "Membership card" in your store
+          account can bring you here.
         </li>
         <li>
           If your membership renews automatically: the email address on that renewal, to help tell which member it
