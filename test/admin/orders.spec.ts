@@ -361,6 +361,41 @@ describe("emailing the new member their card", () => {
     expect(body).toContain("Their card is on its way by email.");
   });
 
+  describe("to an address this environment won't email", () => {
+    beforeEach(() => {
+      env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+    });
+    afterEach(() => {
+      env.EMAIL_RECIPIENT_ALLOWLIST = "*";
+    });
+
+    it("warns at the review, naming the allow-list", async () => {
+      const body = await (await request("/admin/orders/1001?email=friend@example.com")).text();
+
+      expect(body).toContain(
+        "This environment only sends email to losverd.es (EMAIL_RECIPIENT_ALLOWLIST), so nothing will be sent to that address.",
+      );
+    });
+
+    it("does not warn about an address it will email", async () => {
+      const body = await (await request("/admin/orders/1001?email=card-test@losverd.es")).text();
+
+      expect(body).not.toContain("EMAIL_RECIPIENT_ALLOWLIST");
+    });
+
+    it("sends nothing, and says so afterwards rather than that the card is on its way", async () => {
+      forbidFetch();
+
+      const res = await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
+      const body = await (await request(res.headers.get("Location")!)).text();
+
+      expect(res.headers.get("Location")).toContain("email_withheld=1");
+      expect(sentTo()).toEqual([]);
+      expect(body).not.toContain("on its way by email");
+      expect(body).toContain("Their card was not emailed. This environment only sends email to losverd.es");
+    });
+  });
+
   it("sends nothing when the box is unchecked", async () => {
     forbidFetch();
 

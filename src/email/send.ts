@@ -86,6 +86,33 @@ export function allowsRecipient(
 }
 
 /**
+ * What to tell somebody who is about to have a message sent to `address`
+ * that this environment will withhold, or null when it may send. The
+ * suppression itself is only logged (`sendEmail`), which on staging left an
+ * admin testing a flow digging through the logs to learn why nothing came;
+ * a page that sends says so instead. Production's list is `*`, so there it
+ * never shows.
+ *
+ * `showList` names the configured entries, for admin pages. A public page
+ * leaves them out: an entry can be a whole address, and nobody filling in a
+ * public form needs to know whose.
+ */
+export function recipientWithheldNotice(
+  raw: string | undefined,
+  address: string,
+  { showList }: { showList: boolean },
+): string | null {
+  if (allowsRecipient(raw, address)) return null;
+  const entries = parseRecipientAllowlist(raw);
+  if (entries.length === 0) {
+    return "This environment sends no email (EMAIL_RECIPIENT_ALLOWLIST is empty), so nothing will be sent to that address.";
+  }
+  return showList
+    ? `This environment only sends email to ${entries.join(", ")} (EMAIL_RECIPIENT_ALLOWLIST), so nothing will be sent to that address.`
+    : "This copy of the site only sends email to a few test addresses, so nothing will be sent to that address.";
+}
+
+/**
  * What became of a message: sent; `not-allowed`, withheld by this
  * environment's allow-list; or `suppressed`, refused by Cloudflare because the
  * address is on the account's suppression list.

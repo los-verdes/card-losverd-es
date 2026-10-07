@@ -169,6 +169,20 @@ describe("POST /email-card", () => {
       expect(recipientOf(email.sent[0])).toBe("jane@example.com");
     });
 
+    it("says when this environment won't email the address, for member and stranger alike", async () => {
+      env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockUpstreams();
+
+      const member = await submitEmail("jane@example.com");
+      const stranger = await submitEmail("nobody@example.com");
+
+      expect(member.body).toContain("only sends email to a few test addresses, so nothing will be sent to that address.");
+      expect(member.body).not.toContain("losverd.es (EMAIL_RECIPIENT_ALLOWLIST)");
+      expect(stranger).toEqual(member);
+      expect(email.sent).toHaveLength(0);
+    });
+
     it("puts a card somebody asked for in that person's audit log", async () => {
       // It used not to: this path skipped the one function that wrote it, so
       // "has anything been sent to this person" missed every requested card.

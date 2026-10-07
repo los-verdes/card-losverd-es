@@ -30,6 +30,7 @@ import { csrf } from "hono/csrf";
 import type { FC } from "hono/jsx";
 import type { Session } from "../auth/session";
 import { sendClaimLinkEmail } from "../email/claimLink";
+import { recipientWithheldNotice } from "../email/send";
 import type { Env } from "../index";
 import {
   consumeRateLimit,
@@ -114,9 +115,11 @@ const ClaimForm: FC<{ error?: string; signedInWithRelay?: boolean }> = ({
   </Page>
 );
 
-const LinkSent: FC = () => (
+/** `withheld`: as on the email-card page, shown whatever the address holds, and never in production. */
+const LinkSent: FC<{ withheld: string | null }> = ({ withheld }) => (
   <Page title="Check Your Email">
     <h1>Check your email</h1>
+    {withheld && <p style="color: var(--warn)">{withheld}</p>}
     <p>
       If there's a current Los Verdes membership for that address, we've sent it
       a link to confirm it's yours. It should arrive within a few minutes.
@@ -225,7 +228,7 @@ claim.post("/", requireAuth, csrf(), async (c) => {
   }
 
   c.executionCtx.waitUntil(sendClaimLink(c.env, email, userId));
-  return c.html(<LinkSent />);
+  return c.html(<LinkSent withheld={recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, email, { showList: false })} />);
 });
 
 claim.get("/confirm", requireAuth, async (c) => {
