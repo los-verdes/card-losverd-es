@@ -34,6 +34,11 @@ export interface EmailAttachment {
   /** MIME type, e.g. `image/png`. */
   type: string;
   content: Uint8Array;
+  /**
+   * Shown in the message itself rather than only attached: the HTML refers
+   * to it as `cid:<contentId>`.
+   */
+  contentId?: string;
 }
 
 export interface EmailMessage {

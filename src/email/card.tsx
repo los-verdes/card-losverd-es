@@ -1,7 +1,8 @@
 /**
  * The membership-card email itself: the message a member receives with their
- * card image and Apple Wallet pass attached (plus a Google Wallet link when
- * that's configured). Shared by the two places that send it:
+ * card image shown in it (inline, so it can also be saved) and their Apple
+ * Wallet pass attached, plus a Save to Google Wallet button when that's
+ * configured. Shared by the two places that send it:
  *
  * - `/email-card`, the no-login fallback a member requests themselves
  *   (src/member/email-card.tsx);
@@ -20,6 +21,7 @@ import type { Env } from "../index";
 import { recordAuditEventBestEffort } from "../audit/log";
 import { formatShortDate } from "../lib/dateFormat";
 import { SUPPORT_EMAIL } from "../member/layout";
+import { VERDE_INK } from "../styles";
 import {
   buildGoogleWalletSaveUrl,
   isGoogleWalletConfigured,
@@ -50,7 +52,7 @@ const EMAIL_REASONS: Record<CardEmailReason["kind"], string> = {
   "new-order": "Their new order completed",
 };
 
-interface CardEmailProps {
+export interface CardEmailProps {
   name: string;
   memberId: string;
   expirationDate: string;
@@ -60,10 +62,13 @@ interface CardEmailProps {
   baseUrl: string;
 }
 
+/** How the HTML refers to the card image, which travels inline (`cid:`) rather than only attached. */
+export const CARD_IMAGE_CONTENT_ID = "membership-card";
+
 function opening(reason: CardEmailReason): string {
   return reason.kind === "request"
-    ? "Your requested membership card is attached. Gracias!"
-    : "Your Los Verdes membership card is attached. Gracias!";
+    ? "Here's the membership card you asked for. Gracias!"
+    : "Here's your Los Verdes membership card. Gracias!";
 }
 
 const FOOTERS = {
@@ -77,63 +82,154 @@ function footer(props: CardEmailProps): string {
     : FOOTERS[props.reason.kind];
 }
 
+/*
+ * Email HTML is its own dialect: one centred table no wider than 600px,
+ * every style inline (Gmail drops <style> in some views, Outlook most of
+ * CSS), and colours stated on each cell so a client's dark mode has
+ * something definite to invert. The page's own tokens (src/styles.ts) are
+ * the source of the colours.
+ */
+const INK = "#14181f";
+const MUTED = "#555555";
+const PAGE = "#eef5f0";
+const RULE = "#d8e8dd";
+const FONT = "font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+const Detail: FC<{ label: string; value: string }> = ({ label, value }) => (
+  <tr>
+    <td style={`${FONT}; padding: 8px 0; border-bottom: 1px solid ${RULE}; color: ${MUTED}; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em`}>
+      {label}
+    </td>
+    <td align="right" style={`${FONT}; padding: 8px 0; border-bottom: 1px solid ${RULE}; color: ${INK}; font-size: 16px; font-weight: 600`}>
+      {value}
+    </td>
+  </tr>
+);
+
+const Button: FC<{ href: string; label: string; primary?: boolean }> = ({ href, label, primary }) => (
+  <a
+    href={href}
+    style={`${FONT}; display: inline-block; padding: 12px 22px; margin: 4px 0; border-radius: 999px; font-size: 15px; font-weight: 600; text-decoration: none; ${
+      primary ? `background-color: ${INK}; color: #ffffff; border: 2px solid ${INK}` : `background-color: #ffffff; color: ${VERDE_INK}; border: 2px solid ${VERDE_INK}`
+    }`}
+  >
+    {label}
+  </a>
+);
+
 const CardEmail: FC<CardEmailProps> = (props) => (
   <html lang="en">
-    <body style="font-family: system-ui, sans-serif">
-      <h1>{EMAIL_SUBJECT}</h1>
-      <p>{opening(props.reason)}</p>
-      <h2>Los Verdes Membership Card</h2>
-      <p>
-        {props.name}
-        <br />
-        Good through {formatShortDate(props.expirationDate)}
-        <br />
-        Member ID: {props.memberId}
-      </p>
-      <h2>Downloads</h2>
-      <ul>
-        <li>Image: {CARD_IMAGE_FILENAME} (attached)</li>
-        <li>Apple Wallet: {APPLE_PASS_FILENAME} (attached)</li>
-        {props.googleWalletUrl && (
-          <li>
-            Google Wallet:{" "}
-            <a href={props.googleWalletUrl}>Save to Google Wallet</a>
-          </li>
-        )}
-      </ul>
-      <p>
-        Visit online at{" "}
-        <a href={props.baseUrl}>{new URL(props.baseUrl).host}</a>
-      </p>
-      <p style="font-size: 0.8em; color: #393939">
-        This Los Verdes digital membership card is intended for {props.name}. If
-        you are not {props.name}, please feel free to delete this email or
-        contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for
-        assistance. {footer(props)}
-      </p>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="color-scheme" content="light dark" />
+      <meta name="supported-color-schemes" content="light dark" />
+      <title>{EMAIL_SUBJECT}</title>
+    </head>
+    <body style={`margin: 0; padding: 0; background-color: ${PAGE}`}>
+      {/* The preview line a mail app shows beside the subject. */}
+      <div style="display: none; max-height: 0; overflow: hidden; opacity: 0">
+        Your Los Verdes membership card, good through {formatShortDate(props.expirationDate)}.
+      </div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style={`background-color: ${PAGE}`}>
+        <tr>
+          <td align="center" style="padding: 24px 12px">
+            <table
+              role="presentation"
+              width="100%"
+              cellpadding="0"
+              cellspacing="0"
+              style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden"
+            >
+              <tr>
+                <td style={`${FONT}; background-color: ${VERDE_INK}; padding: 18px 24px; color: #ffffff`}>
+                  <img
+                    src={`${props.baseUrl}/assets/crest.png`}
+                    width="40"
+                    height="40"
+                    alt=""
+                    style="display: inline-block; vertical-align: middle; border: 0; margin-right: 12px"
+                  />
+                  <span style="font-size: 20px; font-weight: 700; vertical-align: middle; color: #ffffff">Los Verdes</span>
+                </td>
+              </tr>
+              <tr>
+                <td style={`${FONT}; padding: 28px 24px 8px; color: ${INK}`}>
+                  <h1 style={`${FONT}; margin: 0 0 8px; font-size: 24px; line-height: 1.25; color: ${INK}`}>Your membership card</h1>
+                  <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.5">{opening(props.reason)}</p>
+                  <img
+                    src={`cid:${CARD_IMAGE_CONTENT_ID}`}
+                    width="552"
+                    alt={`Los Verdes membership card for ${props.name}`}
+                    style="display: block; width: 100%; max-width: 552px; height: auto; border: 0; border-radius: 12px"
+                  />
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0 8px">
+                    <Detail label="Name" value={props.name} />
+                    <Detail label="Good through" value={formatShortDate(props.expirationDate)} />
+                    <Detail label="Card number" value={props.memberId} />
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style={`${FONT}; padding: 16px 24px 28px; color: ${INK}`}>
+                  <h2 style={`${FONT}; margin: 0 0 8px; font-size: 18px; color: ${INK}`}>Put it on your phone</h2>
+                  {props.googleWalletUrl && (
+                    <p style="margin: 0 0 8px">
+                      <Button href={props.googleWalletUrl} label="Save to Google Wallet" primary />
+                    </p>
+                  )}
+                  <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.5">
+                    On an iPhone, open the attached <strong>{APPLE_PASS_FILENAME}</strong> to add it to Apple Wallet.
+                  </p>
+                  <p style="margin: 0">
+                    <Button href={props.baseUrl} label="See your card online" />
+                  </p>
+                  <p style={`margin: 8px 0 0; font-size: 13px; color: ${MUTED}`}>
+                    <a href={props.baseUrl} style={`color: ${VERDE_INK}`}>
+                      {new URL(props.baseUrl).host}
+                    </a>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style={`${FONT}; background-color: #f6f8f7; border-top: 1px solid ${RULE}; padding: 18px 24px; font-size: 12px; line-height: 1.5; color: ${MUTED}`}>
+                  This Los Verdes digital membership card is intended for {props.name}. If you are not {props.name}, please
+                  feel free to delete this email or contact{" "}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={`color: ${VERDE_INK}`}>
+                    {SUPPORT_EMAIL}
+                  </a>{" "}
+                  for assistance. {footer(props)}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     </body>
   </html>
 );
 
-function cardEmailText(props: CardEmailProps): string {
+/** The message's HTML body. */
+export async function cardEmailHtml(props: CardEmailProps): Promise<string> {
+  return `<!doctype html>${await (<CardEmail {...props} />)}`;
+}
+
+export function cardEmailText(props: CardEmailProps): string {
   return [
-    EMAIL_SUBJECT,
+    "Your Los Verdes membership card",
     "",
     opening(props.reason),
     "",
-    "Los Verdes Membership Card",
-    "--------------------------",
     props.name,
     `Good through ${formatShortDate(props.expirationDate)}`,
-    `Member ID: ${props.memberId}`,
+    `Card number ${props.memberId}`,
     "",
-    "Downloads",
-    "---------",
-    `- Image: ${CARD_IMAGE_FILENAME} (attached)`,
-    `- Apple Wallet: ${APPLE_PASS_FILENAME} (attached)`,
-    ...(props.googleWalletUrl
-      ? [`- Google Wallet: ${props.googleWalletUrl}`]
-      : []),
+    `Your card is attached as ${CARD_IMAGE_FILENAME}.`,
+    "",
+    "Put it on your phone",
+    "--------------------",
+    ...(props.googleWalletUrl ? [`- Google Wallet: ${props.googleWalletUrl}`] : []),
+    `- Apple Wallet: on an iPhone, open the attached ${APPLE_PASS_FILENAME}.`,
     "",
     `Visit online at: ${props.baseUrl}`,
     "",
@@ -192,12 +288,13 @@ export async function sendMembershipCardEmail(
     to: { email: member.email, name: props.name },
     subject: EMAIL_SUBJECT,
     text: cardEmailText(props),
-    html: `<!doctype html>${await (<CardEmail {...props} />)}`,
+    html: await cardEmailHtml(props),
     attachments: [
       {
         filename: CARD_IMAGE_FILENAME,
         type: "image/png",
         content: cardImage,
+        contentId: CARD_IMAGE_CONTENT_ID,
       },
       {
         filename: APPLE_PASS_FILENAME,
