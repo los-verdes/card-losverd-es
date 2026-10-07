@@ -230,7 +230,7 @@ describe("POST /admin/move-orders", () => {
       const res = await post(confirmFields(["1001", "1002", "1003"], [["email_card", "on"]]));
       const page = await (await request(res.headers.get("Location")!)).text();
 
-      expect(res.headers.get("Location")).toContain("&not_emailed=1");
+      expect(res.headers.get("Location")).toContain("&email_withheld=1");
       expect(page).toContain("Their card was not emailed. This environment only sends email to losverd.es");
       expect(page).not.toContain("on its way by email");
     } finally {

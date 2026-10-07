@@ -389,7 +389,7 @@ describe("emailing the new member their card", () => {
       const res = await post("/admin/orders/1001/member", { email: "friend@example.com", email_card: "on" });
       const body = await (await request(res.headers.get("Location")!)).text();
 
-      expect(res.headers.get("Location")).toContain("not_emailed=1");
+      expect(res.headers.get("Location")).toContain("email_withheld=1");
       expect(sentTo()).toEqual([]);
       expect(body).not.toContain("on its way by email");
       expect(body).toContain("Their card was not emailed. This environment only sends email to losverd.es");

@@ -101,7 +101,7 @@ moveOrders.get("/", async (c) => {
             Moved {c.req.query("count")} order(s) from {from} to <strong>{movedTo}</strong>.
             {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
           </p>
-          {c.req.query("not_emailed") === "1" && (
+          {c.req.query("email_withheld") === "1" && (
             <p style="color: var(--warn)">
               Their card was not emailed. {recipientWithheldNotice(c.env.EMAIL_RECIPIENT_ALLOWLIST, movedTo, { showList: true })}
             </p>
@@ -204,7 +204,7 @@ moveOrders.post("/", csrf(), async (c) => {
     c.executionCtx.waitUntil(emailMemberCard(c.env, input.to, { kind: "attribution" }));
   }
   const params: Record<string, string> = { from, moved_to: input.to, count: String(orders.length) };
-  if (emailing) params[allowed ? "emailed" : "not_emailed"] = "1";
+  if (emailing) params[allowed ? "emailed" : "email_withheld"] = "1";
   return c.redirect(moveOrdersPath(params), 303);
 });
 

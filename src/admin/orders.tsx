@@ -329,7 +329,7 @@ orders.get("/:orderId", async (c) => {
             Attributed to <strong>{order.member_email}</strong> (previously {done.previous}).
             {c.req.query("emailed") === "1" && " Their card is on its way by email."} Their cards now:
           </p>
-          {c.req.query("not_emailed") === "1" && <p style="color: var(--warn)">Their card was not emailed. {withheld}</p>}
+          {c.req.query("email_withheld") === "1" && <p style="color: var(--warn)">Their card was not emailed. {withheld}</p>}
           <Footprint email={order.member_email} footprint={done.currentFootprint} />
           <Footprint email={done.previous} footprint={done.previousFootprint} />
         </section>
@@ -400,7 +400,7 @@ orders.post("/:orderId/member", csrf(), async (c) => {
     c.executionCtx.waitUntil(emailMemberCard(c.env, input.email, { kind: "attribution" }));
   }
   const params = new URLSearchParams({ attributed_from: previousMemberEmail });
-  if (emailing) params.set(allowed ? "emailed" : "not_emailed", "1");
+  if (emailing) params.set(allowed ? "emailed" : "email_withheld", "1");
   return c.redirect(`${orderPath(order.order_id)}?${params}`, 303);
 });
 
