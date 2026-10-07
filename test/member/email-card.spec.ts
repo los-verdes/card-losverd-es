@@ -169,6 +169,20 @@ describe("POST /email-card", () => {
       expect(recipientOf(email.sent[0])).toBe("jane@example.com");
     });
 
+    it("says when this environment won't email the address, for member and stranger alike", async () => {
+      env.EMAIL_RECIPIENT_ALLOWLIST = "losverd.es";
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockUpstreams();
+
+      const member = await submitEmail("jane@example.com");
+      const stranger = await submitEmail("nobody@example.com");
+
+      expect(member.body).toContain("only sends email to a few test addresses, so nothing will be sent to that address.");
+      expect(member.body).not.toContain("losverd.es (EMAIL_RECIPIENT_ALLOWLIST)");
+      expect(stranger).toEqual(member);
+      expect(email.sent).toHaveLength(0);
+    });
+
     it("puts a card somebody asked for in that person's audit log", async () => {
       // It used not to: this path skipped the one function that wrote it, so
       // "has anything been sent to this person" missed every requested card.
@@ -257,7 +271,7 @@ describe("POST /email-card", () => {
       }
     });
 
-    it("sends the card image and Apple pass as attachments, without a Google link when unconfigured", async () => {
+    it("sends the card image inline and attached, and the Apple pass attached, without a Google link when unconfigured", async () => {
       mockUpstreams();
 
       await submitEmail("  Jane@Example.COM ");
@@ -271,19 +285,23 @@ describe("POST /email-card", () => {
       expect(message.subject).toBe("Los Verdes Membership Card Details");
 
       const attachments = message.attachments!;
-      expect(attachments.map(({ filename, type, disposition }) => ({ filename, type, disposition }))).toEqual([
-        { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "attachment" },
-        { filename: "los-verdes-membership-card.pkpass", type: "application/vnd.apple.pkpass", disposition: "attachment" },
+      expect(attachments.map(({ filename, type, disposition, contentId }) => ({ filename, type, disposition, contentId }))).toEqual([
+        { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "inline", contentId: "membership-card" },
+        { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "attachment", contentId: undefined },
+        { filename: "los-verdes-membership-card.pkpass", type: "application/vnd.apple.pkpass", disposition: "attachment", contentId: undefined },
       ]);
+      // The card shows in the message itself, by the inline image's id.
+      expect(message.html).toContain('src="cid:membership-card"');
       // The files themselves: a PNG and a zip, not base64 text of them, which
       // the binding would take literally and nobody could open.
       expect(Array.from(attachments[0].content.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
-      const pass = JSON.parse(strFromU8(unzipSync(attachments[1].content)["pass.json"]));
+      expect(attachments[1].content).toEqual(attachments[0].content);
+      const pass = JSON.parse(strFromU8(unzipSync(attachments[2].content)["pass.json"]));
       expect(pass.serialNumber).toBe("BC-1");
 
       for (const part of [message.text, message.html]) {
         expect(part).toContain("Jane Doe");
-        expect(part).toContain("Good through Mar 4, 2099");
+        expect(part).toContain("Mar 4, 2099");
         expect(part).toContain("BC-1");
         expect(part).not.toContain("Google Wallet");
       }
@@ -326,7 +344,8 @@ describe("POST /email-card", () => {
       const { text, html } = email.sent[0];
       expect(text).toContain("Visit online at: https://staging.example.test\n");
       expect(text).toContain("made at https://staging.example.test/email-card at:");
-      expect(html).toContain('<a href="https://staging.example.test">staging.example.test</a>');
+      expect(html).toMatch(/<a href="https:\/\/staging\.example\.test"[^>]*>staging\.example\.test<\/a>/);
+      expect(html).toContain('src="https://staging.example.test/assets/crest.png"');
       expect(html).toContain("https://staging.example.test/email-card at:");
       for (const part of [text, html]) {
         expect(part).not.toContain("card.losverd.es");

@@ -49,6 +49,17 @@ describe("the message handed to the binding", () => {
     ]);
   });
 
+  it("hands an attachment with a content id over inline, for the HTML to show", () => {
+    const built = buildBindingMessage({
+      ...MESSAGE,
+      attachments: [{ filename: "card.png", type: "image/png", content: new Uint8Array([1]), contentId: "card" }],
+    });
+
+    expect(built.attachments).toEqual([
+      { content: new Uint8Array([1]), filename: "card.png", type: "image/png", disposition: "inline", contentId: "card" },
+    ]);
+  });
+
   it("carries both a text and an HTML body", () => {
     const built = buildBindingMessage(MESSAGE);
 

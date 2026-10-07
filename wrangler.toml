@@ -292,9 +292,11 @@ AUTH_APPLE_ID = "es.losverd.card.staging"
 APPLE_SIGNIN_TEAM_ID = "KJHZP635V9"
 # Staging may only email test mailboxes, so realistic member data is safe to
 # hold here (#155). `losverd.es` runs Cloudflare Email Routing, so addresses
-# like card-test@losverd.es are routing rules rather than real accounts.
-# Anything else is suppressed and logged; it never throws.
-EMAIL_RECIPIENT_ALLOWLIST = "losverd.es"
+# like card-test@losverd.es are routing rules rather than real accounts;
+# `jeffhogan.me` is a maintainer's own domain, for checking delivery to a
+# mailbox outside losverd.es. Anything else is suppressed and logged, and the
+# page that would have sent it says so; it never throws.
+EMAIL_RECIPIENT_ALLOWLIST = "losverd.es jeffhogan.me"
 EMAIL_FROM_ADDRESS = "verde-bot@losverd.es"
 EMAIL_FROM_NAME = "Los Verdes (verde-bot staging)"
 CLAIM_RECIPIENT_DAILY_LIMIT = "25"

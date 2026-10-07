@@ -42,7 +42,7 @@ export interface SendEmailBinding {
   send(message: BindingMessage): Promise<unknown>;
 }
 
-interface BindingAttachment {
+type BindingAttachment = {
   /**
    * The file's bytes, never a base64 string. The binding takes a string as
    * the file's literal contents and encodes it again: from 2026-09-21 every
@@ -52,8 +52,7 @@ interface BindingAttachment {
   content: Uint8Array;
   filename: string;
   type: string;
-  disposition: "attachment";
-}
+} & ({ disposition: "attachment"; contentId?: undefined } | { disposition: "inline"; contentId: string });
 
 /** The binding's own address shape; a bare string is also accepted. */
 /**
@@ -86,12 +85,9 @@ export function buildBindingMessage(message: EmailMessage): BindingMessage {
     subject: message.subject,
     text: message.text,
     html: message.html,
-    attachments: message.attachments?.map((attachment) => ({
-      content: attachment.content,
-      filename: attachment.filename,
-      type: attachment.type,
-      disposition: "attachment",
-    })),
+    attachments: message.attachments?.map(({ content, filename, type, contentId }): BindingAttachment =>
+      contentId ? { content, filename, type, disposition: "inline", contentId } : { content, filename, type, disposition: "attachment" },
+    ),
   };
 }
 
