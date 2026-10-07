@@ -163,6 +163,9 @@ const CardEmail: FC<CardEmailProps> = (props) => (
                     alt={`Los Verdes membership card for ${props.name}`}
                     style="display: block; width: 100%; max-width: 552px; height: auto; border: 0; border-radius: 12px"
                   />
+                  <p style={`margin: 8px 0 0; font-size: 13px; color: ${MUTED}`}>
+                    Also attached as <strong>{CARD_IMAGE_FILENAME}</strong>, to save.
+                  </p>
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0 8px">
                     <Detail label="Name" value={props.name} />
                     <Detail label="Good through" value={formatShortDate(props.expirationDate)} />
@@ -295,6 +298,14 @@ export async function sendMembershipCardEmail(
         type: "image/png",
         content: cardImage,
         contentId: CARD_IMAGE_CONTENT_ID,
+      },
+      // The same image again as an ordinary attachment: an inline image is
+      // not listed for download by every mail app, and the card is the one
+      // thing a member is most likely to want to keep.
+      {
+        filename: CARD_IMAGE_FILENAME,
+        type: "image/png",
+        content: cardImage,
       },
       {
         filename: APPLE_PASS_FILENAME,

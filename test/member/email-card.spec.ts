@@ -257,7 +257,7 @@ describe("POST /email-card", () => {
       }
     });
 
-    it("sends the card image inline and the Apple pass attached, without a Google link when unconfigured", async () => {
+    it("sends the card image inline and attached, and the Apple pass attached, without a Google link when unconfigured", async () => {
       mockUpstreams();
 
       await submitEmail("  Jane@Example.COM ");
@@ -273,6 +273,7 @@ describe("POST /email-card", () => {
       const attachments = message.attachments!;
       expect(attachments.map(({ filename, type, disposition, contentId }) => ({ filename, type, disposition, contentId }))).toEqual([
         { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "inline", contentId: "membership-card" },
+        { filename: "los-verdes-membership-card.png", type: "image/png", disposition: "attachment", contentId: undefined },
         { filename: "los-verdes-membership-card.pkpass", type: "application/vnd.apple.pkpass", disposition: "attachment", contentId: undefined },
       ]);
       // The card shows in the message itself, by the inline image's id.
@@ -280,7 +281,8 @@ describe("POST /email-card", () => {
       // The files themselves: a PNG and a zip, not base64 text of them, which
       // the binding would take literally and nobody could open.
       expect(Array.from(attachments[0].content.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
-      const pass = JSON.parse(strFromU8(unzipSync(attachments[1].content)["pass.json"]));
+      expect(attachments[1].content).toEqual(attachments[0].content);
+      const pass = JSON.parse(strFromU8(unzipSync(attachments[2].content)["pass.json"]));
       expect(pass.serialNumber).toBe("BC-1");
 
       for (const part of [message.text, message.html]) {
