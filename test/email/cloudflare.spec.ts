@@ -36,7 +36,7 @@ describe("the message handed to the binding", () => {
     expect(built.to).toEqual({ email: "member@example.com", name: "Jane Doe" });
   });
 
-  it("base64-encodes attachments and marks them as attachments", () => {
+  it("hands attachments over as their bytes, never base64 text, marked as attachments", () => {
     const built = buildBindingMessage({
       ...MESSAGE,
       attachments: [
@@ -45,7 +45,7 @@ describe("the message handed to the binding", () => {
     });
 
     expect(built.attachments).toEqual([
-      { content: "AQID", filename: "card.png", type: "image/png", disposition: "attachment" },
+      { content: new Uint8Array([1, 2, 3]), filename: "card.png", type: "image/png", disposition: "attachment" },
     ]);
   });
 
