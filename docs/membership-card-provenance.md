@@ -157,13 +157,11 @@ changes who is a member.
   whether an address belongs to a member.
 - **Store accounts (see: [#38](https://github.com/los-verdes/card-losverd-es/issues/38)):** a member can connect their
   store account once, while signed in to both in the same browser. After that, a "Membership card" link in the store's
-  top navbar / account menu signs them straight in to the card site, and their store account pages show their card.
+  account menu signs them straight in to the card site, and their store account pages show their card.
   - **Never matched by email or orders:** only the member makes the connection, so a gift buyer reaches their own card,
     never the recipient's. The store's email is only ever shown back to the member: as a hint on the sign-in page,
     and on their card page with the connected account's customer number, so they can tell which account it is.
   - **Disconnecting:** by the member on their card page, or by an admin on the member page. Both are logged.
-  - **The store's header link** appears only to somebody signed in to the store; a guest or signed-out visitor has no
-    store account for it to use.
   - **Coming from the store:** every page of the card site offers a way back to the store for the rest of that browser
     session, and the card page names the connected store account (its email, customer number, and since when), with
     "Open my store account" to go to it already signed in while store sign-in is on.

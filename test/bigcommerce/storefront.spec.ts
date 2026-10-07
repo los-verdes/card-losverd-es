@@ -91,39 +91,25 @@ function linkIn(doc: FakeDocument, selector: string): FakeElement | undefined {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("the storefront script", () => {
-  it("adds Membership card to the header before Account, and to the mobile menu first, pointing at the card site", async () => {
+  it("leaves the header and mobile menu as the store has them, and asks the store nothing, on an ordinary page", async () => {
     const doc = storePage();
-    run(doc, storeWindow().win);
+    const { win, fetch } = storeWindow({ token: "a.b.c" });
+    run(doc, win);
     await settle();
 
-    const header = doc.querySelector(".navUser-section")!.children;
-    expect(header.map((li) => li.textContent)).toEqual(["", "Membership card", "Sign in"]);
-    expect(header[1].className).toBe("navUser-item");
-    expect(header[1].children[0]).toMatchObject({ className: "navUser-action", href: CONFIG.cardUrl });
-
-    const mobile = doc.querySelector(".navPages-list--user")!.children;
-    expect(mobile[0].textContent).toBe("Membership card");
-    expect(mobile[0].children[0].className).toBe("navPages-action");
+    expect(doc.querySelector(".navUser-section")!.children.map((li) => li.textContent)).toEqual(["", "Sign in"]);
+    expect(doc.querySelector(".navPages-list--user")!.children.map((li) => li.textContent)).toEqual(["Sign in"]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["signed out of the store", { token: null }],
-    ["the store unreachable", { fails: true }],
-    ["an empty answer", { token: "  " }],
-  ])("leaves the header and mobile menu alone with %s: there is no store account to bring in", async (_, options) => {
-    const doc = storePage();
-    run(doc, storeWindow(options).win);
-    await settle();
-
-    expect(linkIn(doc, ".navUser-action")).toBeUndefined();
-    expect(linkIn(doc, ".navPages-action")).toBeUndefined();
-  });
-
-  it("adds a tab to the account pages' navigation", () => {
+  it("adds a tab to the account pages' navigation, pointing at the card site", () => {
     const doc = storePage({ accountNav: true });
     run(doc, storeWindow({ pathname: "/account.php" }).win);
 
-    expect(doc.querySelector(".navBar--account .navBar-section")!.children.map((li) => li.textContent)).toEqual(["Orders", "Membership card"]);
+    const tabs = doc.querySelector(".navBar--account .navBar-section")!.children;
+    expect(tabs.map((li) => li.textContent)).toEqual(["Orders", "Membership card"]);
+    expect(tabs[1].className).toBe("navBar-item");
+    expect(tabs[1].children[0]).toMatchObject({ className: "navBar-action", href: CONFIG.cardUrl });
   });
 
   it("leaves the membership category page as the store has it", async () => {
@@ -142,20 +128,20 @@ describe("the storefront script", () => {
     await settle();
     expect(bare.body.children).toHaveLength(0);
 
-    const doc = storePage();
+    const doc = storePage({ accountNav: true });
     run(doc, storeWindow().win);
     run(doc, storeWindow().win);
     await settle();
-    expect(doc.querySelector(".navUser-section")!.children).toHaveLength(3);
+    expect(doc.querySelector(".navBar--account .navBar-section")!.children).toHaveLength(2);
   });
 
   it("submits the store's token to the card site when somebody signed in to the store chooses it", async () => {
-    const doc = storePage();
+    const doc = storePage({ accountNav: true });
     const { win, fetch, assign } = storeWindow({ token: "header.payload.signature" });
     run(doc, win);
     await settle();
 
-    expect(linkIn(doc, ".navUser-action")!.click()).toBe(true);
+    expect(linkIn(doc, ".navBar-action")!.click()).toBe(true);
     await settle();
 
     expect(fetch).toHaveBeenCalledWith("/customer/current.jwt?app_client_id=app-client-id", { credentials: "same-origin" });
@@ -170,13 +156,13 @@ describe("the storefront script", () => {
     ["the store unreachable", { fails: true }],
     ["an empty answer", { token: "  " }],
   ])("goes to the card site's own sign-in when chosen with %s", async (_, options) => {
-    const doc = storePage();
+    const doc = storePage({ accountNav: true });
     const { win, assign, store } = storeWindow();
     run(doc, win);
     await settle();
     Object.assign(store, options);
 
-    linkIn(doc, ".navPages-action")!.click();
+    linkIn(doc, ".navBar-action")!.click();
     await settle();
 
     expect(assign).toHaveBeenCalledWith(CONFIG.cardUrl);
