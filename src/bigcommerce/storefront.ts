@@ -4,16 +4,13 @@
  * Manager. Its contents live here, so changing it is a deploy of this site,
  * never an edit in the store's control panel.
  *
- * It adds "Membership card" in two places, using the theme's own classes
- * (the store's theme is Cornerstone-based) so it looks like the rest of the
- * store:
- *
- * - the header, next to Account, and the same in the mobile menu, once the
- *   store says somebody is signed in to it: a signed-out visitor or a guest
- *   has no store account for it to bring in, so it would only lead them to
- *   another sign-in;
- * - the account pages' navigation, beside Orders and Addresses, which only
- *   somebody signed in sees anyway.
+ * It adds "Membership card" to the account pages' navigation, beside Orders
+ * and Addresses, using the theme's own classes (the store's theme is
+ * Cornerstone-based) so it looks like the rest of the store. Only there: the
+ * card sits among the account's own sections, as it does on the account page
+ * itself, rather than beside Account in the header, where it was until
+ * 2026-10-07 and ranked above everything the store sells. Only somebody
+ * signed in sees those pages anyway.
  *
  * Choosing it asks the store who is signed in (`current.jwt`) and submits
  * that to the card site's `/store-handoff` (src/bigcommerce/storeHandoff.tsx).
@@ -93,10 +90,15 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     }
   }
 
-  // Who is signed in to the store, asked once for this page: the header
-  // links, a Connect carrying on, and the card on the account pages all wait
-  // on it. Choosing the link asks again, as time may have passed.
-  const signedIn = storeToken();
+  // Who is signed in to the store, asked at most once for this page, and
+  // only by what needs it -- a Connect carrying on, and the card on the
+  // account pages -- so an ordinary store page asks nothing. Choosing the
+  // link asks again, as time may have passed.
+  let whoIsSignedIn: Promise<string> | null = null;
+  function signedIn(): Promise<string> {
+    if (!whoIsSignedIn) whoIsSignedIn = storeToken();
+    return whoIsSignedIn;
+  }
 
   function submit(token: string): void {
     const form = doc.createElement("form");
@@ -142,7 +144,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   }
   /** Hands off once the store knows who this is; until then, waits for them to sign in to it. */
   async function connect(): Promise<void> {
-    const token = await signedIn;
+    const token = await signedIn();
     if (!token) return;
     forgetConnect();
     submit(token);
@@ -166,18 +168,6 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
     item.appendChild(link);
     return item;
   }
-
-  // The header, before Account, and the mobile menu's account links: only
-  // for somebody signed in to the store.
-  void signedIn.then(function (token) {
-    if (!token) return;
-    const account = doc.querySelector(".navUser-section .navUser-item--account");
-    if (account && account.parentNode) {
-      account.parentNode.insertBefore(listItem("navUser-item", cardLink("navUser-action", label)), account);
-    }
-    const mobile = doc.querySelector(".navPages-list--user");
-    if (mobile) mobile.insertBefore(listItem("navPages-item", cardLink("navPages-action", label)), mobile.firstChild);
-  });
 
   // The account pages' navigation.
   const accountNav = doc.querySelector(".navBar--account .navBar-section");
@@ -208,7 +198,7 @@ export function storefrontMain(config: StorefrontConfig, win: StorefrontWindow, 
   }
   /** Draws the card as the last thing in the account navigation's container: the foot of the page's content. */
   async function showCard(accountNav: Element): Promise<void> {
-    const token = await signedIn;
+    const token = await signedIn();
     if (!token) return;
     let data: StoreMemberResponse;
     try {
