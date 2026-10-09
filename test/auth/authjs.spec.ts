@@ -570,3 +570,22 @@ describe("landing on the session bridge after an OAuth callback", () => {
     expect(res.headers.get("Location")).toBeNull();
   });
 });
+
+describe("opening a provider's sign-in step by address", () => {
+  // Auth.js starts a sign-in only from a POST carrying its CSRF token, and
+  // answers a GET of the same address with its own "Server error" page. A
+  // member reaches that GET with the back button or a reload partway through
+  // signing in (seen in production 2026-10-06, both providers).
+  it.each(["google", "apple"])("sends a GET for %s back to the login page, to try again", async (provider) => {
+    const res = await request(`/api/auth/signin/${provider}?callbackUrl=%2Flogin%2Fcomplete`);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("/login?error=interrupted");
+  });
+
+  it("says on the login page that the sign-in didn't complete", async () => {
+    const body = await (await request("/login?error=interrupted")).text();
+
+    expect(body).toContain("That sign-in didn&#39;t complete. Trying again often works.");
+  });
+});
