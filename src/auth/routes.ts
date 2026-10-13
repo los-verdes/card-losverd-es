@@ -56,6 +56,20 @@ auth.get(LOGIN_PATH, async (c) => {
 });
 
 /**
+ * A GET of the address that starts a provider's sign-in. Auth.js starts one
+ * only from the POST its sign-in page makes, with a CSRF token, and answers a
+ * GET with its own "Server error" page -- which tells a member the site is
+ * broken when all that happened is the back button or a reload partway
+ * through signing in (seen in production 2026-10-06, Google and Apple
+ * alike). The login page says the sign-in didn't complete and offers it
+ * again. Mounted ahead of Auth.js (src/index.ts), so it answers first.
+ */
+auth.get("/api/auth/signin/:provider", (c) => {
+  recordOutcome("signin.refused", { reason: "interrupted" });
+  return c.redirect(`${LOGIN_PATH}?error=interrupted`, 303);
+});
+
+/**
  * The session bridge: exchanges the Auth.js session from an OAuth sign-in
  * for this app's `lv_session`, then clears the Auth.js session so
  * `lv_session` is the only live session. The linked user id was stashed in
